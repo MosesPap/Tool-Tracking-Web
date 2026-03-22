@@ -990,6 +990,11 @@
         }
         function hasConsecutiveDuty(dayKey, person, groupNum, simulatedAssignments = null) {
             const date = new Date(dayKey + 'T00:00:00');
+            if (isNaN(date.getTime())) return false;
+            // Calendar day before / after a missing period: treat like cross-type adjacency (no duty on buffer).
+            if (isPersonOnMissingPeriodBufferDay(person, groupNum, date)) {
+                return true;
+            }
             const currentDayType = getDayType(date);
             
             // Get day type category for current day
@@ -4403,10 +4408,16 @@
                     }
                     return null;
                 };
-                const findThirdNormalOnOrAfter = (sortedNormalKeys, thresholdKey) => {
+                // Counts the 3rd normal day on/after threshold that is a valid duty day for this person
+                // (skips inside-missing + buffer days so return-from-missing "3 normals after" stays correct).
+                const findThirdNormalOnOrAfter = (sortedNormalKeys, thresholdKey, personNameForSkip = null, groupNumForSkip = null) => {
                     let count = 0;
                     for (const dk of sortedNormalKeys) {
                         if (dk < thresholdKey) continue;
+                        if (personNameForSkip != null && groupNumForSkip != null) {
+                            const dObj = dateKeyToDate(dk);
+                            if (isPersonMissingOnDate(personNameForSkip, groupNumForSkip, dObj, 'normal')) continue;
+                        }
                         count++;
                         if (count === 3) return dk;
                     }
@@ -4805,7 +4816,7 @@
                             }
                             let track = entry.track;
                             if (!track) {
-                                const thirdNorm = findThirdNormalOnOrAfter(sortedNormal, returnKey);
+                                const thirdNorm = findThirdNormalOnOrAfter(sortedNormal, returnKey, personName, groupNum);
                                 if (!thirdNorm) return true;
                                 track = getTrackFromDow(dateKeyToDate(thirdNorm).getDay());
                             }
@@ -4823,7 +4834,7 @@
                                 updatedAssignments[dk][groupNum] = replacement;
                                 storeAssignmentReason(dk, groupNum, replacement, 'shift', '', personName, null, { returnFromMissing: true, clearedEarlyReturnAssignment: true, targetKey: null, missingEnd: pEndKey, preClearedForReinsertion: true });
                             }
-                            const thirdNormalKey = findThirdNormalOnOrAfter(sortedNormal, returnKey);
+                            const thirdNormalKey = findThirdNormalOnOrAfter(sortedNormal, returnKey, personName, groupNum);
                             if (!thirdNormalKey) return true;
                             let targetKey = findFirstMatchingTrackOnOrAfter(sortedNormal, thirdNormalKey, track);
                             const tryDeferred = (candidateKey) => {
@@ -4976,7 +4987,7 @@
                                     const returnInCalcMonth = (returnKey >= calcStartKey && returnKey <= calcEndKey);
 
                                     // Count 3 normal days starting at returnKey (on-or-after), then find nearest track day on/after that (used for forward and for deferred).
-                                    const thirdNormalKey = findThirdNormalOnOrAfter(sortedNormal, returnKey);
+                                    const thirdNormalKey = findThirdNormalOnOrAfter(sortedNormal, returnKey, personName, groupNum);
                                     const returnDate = dateKeyToDate(returnKey);
 
                                     const tryTargetKey = (candidateKey) => {
@@ -10425,50 +10436,58 @@
             
             alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
-        function isPersonStrictlyMissingOnDate(person, groupNum, date) {
-            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
+        /**
+         * Add/subtract whole calendar days to a YYYY-MM-DD key (for missing-period buffer edges).
+         */
+        function addCalendarDaysToDateKeyForMissing(dk, days) {
+            if (typeof dk !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
+            const d = new Date(dk + 'T00:00:00');
+            if (isNaN(d.getTime())) return null;
+            d.setDate(d.getDate() + (days || 0));
+            return formatDateKey(d);
+        }
+        /**
+         * True on the calendar day immediately before a missing period starts or after it ends
+         * (no duty on those days; used together with inside-period missing checks).
+         */
+        function isPersonOnMissingPeriodBufferDay(person, groupNum, date) {
+            const groupData = groups[groupNum] || { missingPeriods: {} };
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             if (missingPeriods.length === 0) return false;
-
             const checkDate = new Date(date);
+            if (isNaN(checkDate.getTime())) return false;
             checkDate.setHours(0, 0, 0, 0);
-
-            return missingPeriods.some(period => {
+            const dateKey = formatDateKey(checkDate);
+            return missingPeriods.some((period) => {
                 const start = new Date(period.start + 'T00:00:00');
                 const end = new Date(period.end + 'T00:00:00');
-                return checkDate >= start && checkDate <= end;
-            });
-        }
-        function isPersonBlockedByMissingBufferOnDate(person, groupNum, date) {
-            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
-            const missingPeriods = groupData.missingPeriods?.[person] || [];
-            if (missingPeriods.length === 0) return false;
-            const addDaysToDateKeySafe = (dk, days) => {
-                const d = new Date(dk + 'T00:00:00');
-                if (isNaN(d.getTime())) return null;
-                d.setDate(d.getDate() + days);
-                return (typeof formatDateKey === 'function') ? formatDateKey(d) : null;
-            };
-
-            const checkDateKey = typeof formatDateKey === 'function'
-                ? formatDateKey(new Date(date))
-                : null;
-            if (!checkDateKey) return false;
-
-            return missingPeriods.some(period => {
-                const pStartKey = inputValueToDateKey(period?.start);
-                const pEndKey = inputValueToDateKey(period?.end);
-                if (!pStartKey || !pEndKey) return false;
-                const dayBeforeStartKey = addDaysToDateKeySafe(pStartKey, -1);
-                const dayAfterEndKey = addDaysToDateKeySafe(pEndKey, 1);
-                return checkDateKey === dayBeforeStartKey || checkDateKey === dayAfterEndKey;
+                if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+                const sk = formatDateKey(start);
+                const ek = formatDateKey(end);
+                const beforeKey = addCalendarDaysToDateKeyForMissing(sk, -1);
+                const afterKey = addCalendarDaysToDateKeyForMissing(ek, 1);
+                return (beforeKey && dateKey === beforeKey) || (afterKey && dateKey === afterKey);
             });
         }
         function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
+            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
-            if (isPersonStrictlyMissingOnDate(person, groupNum, date)) return true;
-            // Treat day-before-start and day-after-end as hard conflicts for assignment/swaps.
-            return isPersonBlockedByMissingBufferOnDate(person, groupNum, date);
+            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            if (missingPeriods.length === 0) return false;
+            
+            const checkDate = new Date(date);
+            checkDate.setHours(0, 0, 0, 0);
+            if (isNaN(checkDate.getTime())) return false;
+            
+            const insidePeriod = missingPeriods.some(period => {
+                const start = new Date(period.start + 'T00:00:00');
+                const end = new Date(period.end + 'T00:00:00');
+                if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+                return checkDate >= start && checkDate <= end;
+            });
+            if (insidePeriod) return true;
+            // Day before absence starts / day after absence ends: no duty (same checks as swaps & baseline skips).
+            return isPersonOnMissingPeriodBufferDay(person, groupNum, checkDate);
         }
         function findNextEligiblePersonAfterMissing({
             dateKey,
