@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.407 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.408 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -106,6 +106,14 @@
             border-radius: 8px;
             outline: 2px dashed rgba(108, 117, 125, 0.85);
             outline-offset: 6px;
+        }
+        .calendar-section.calendar-view-missing-disabled {
+            background: rgba(255, 243, 224, 0.35);
+        }
+        .calendar-missing-disabled-view .duty-missing-disabled-cell {
+            font-size: 0.72rem;
+            line-height: 1.15;
+            margin-bottom: 1px;
         }
 
         /* =========================================================
@@ -1609,7 +1617,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.407</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.408</span></h4>
             </div>
             <div class="d-flex align-items-center flex-wrap gap-3 title-bar-stats" style="font-size: 1.25em; font-weight: 500; opacity: 0.98;">
                 <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
@@ -1679,6 +1687,11 @@
                              title="Όταν είναι ενεργό, δεν μπορεί να ξεκινήσει ο «Υπολογισμός Υπηρεσιών» για τον μήνα που βλέπετε. Ξεκλειδώστε για επανυπολογισμό.">
                             <input class="form-check-input flex-shrink-0" type="checkbox" role="switch" id="monthCalculationLockToggle" style="cursor: pointer;">
                             <label class="form-check-label small text-nowrap ms-2 mb-0 user-select-none" for="monthCalculationLockToggle" style="cursor: pointer;"><i class="fas fa-lock me-1 text-secondary"></i>Κλείδωμα μήνα</label>
+                        </div>
+                        <div class="form-check form-switch mb-0 ms-sm-2 d-flex align-items-center flex-shrink-0"
+                             title="Εμφανίζει μόνο όσους είναι απόντες ή απενεργοποιημένοι για τον τύπο υπηρεσίας της ημέρας (ανά ομάδα).">
+                            <input class="form-check-input flex-shrink-0" type="checkbox" role="switch" id="calendarMissingDisabledToggle" style="cursor: pointer;">
+                            <label class="form-check-label small text-nowrap ms-2 mb-0 user-select-none" for="calendarMissingDisabledToggle" style="cursor: pointer;"><i class="fas fa-user-slash me-1 text-secondary"></i>Μόνο απόντες/απενεργ.</label>
                         </div>
                     </div>
                 </div>

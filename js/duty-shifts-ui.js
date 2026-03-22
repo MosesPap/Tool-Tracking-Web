@@ -3785,6 +3785,26 @@
             el.checked = isMonthCalculationLocked(mk);
         }
 
+        let _calendarMissingDisabledToggleAttached = false;
+        function attachCalendarMissingDisabledToggleOnce() {
+            if (_calendarMissingDisabledToggleAttached) return;
+            const el = document.getElementById('calendarMissingDisabledToggle');
+            if (!el) return;
+            _calendarMissingDisabledToggleAttached = true;
+            try {
+                const v = localStorage.getItem('dutyShiftsCalendarShowMissingDisabledOnly');
+                el.checked = v === '1' || v === 'true';
+            } catch (_) {
+                el.checked = false;
+            }
+            el.addEventListener('change', () => {
+                try {
+                    localStorage.setItem('dutyShiftsCalendarShowMissingDisabledOnly', el.checked ? '1' : '0');
+                } catch (_) {}
+                if (typeof renderCalendar === 'function') renderCalendar();
+            });
+        }
+
         function renderCalendar() {
             const calendarGrid = document.getElementById('calendarGrid');
             const currentMonthYear = document.getElementById('currentMonthYear');
@@ -3795,6 +3815,9 @@
             }
 
             _attachCalendarMonthPickerClick();
+            attachMonthCalculationLockToggleOnce();
+            syncMonthCalculationLockToggle();
+            attachCalendarMissingDisabledToggleOnce();
             
             // NOTE: criticalAssignments are treated as history only and must not be injected into the calendar.
             
@@ -3939,20 +3962,63 @@
                 // Get holiday name (special holiday first, then Orthodox/Cyprus holiday)
                 const holidayName = specialHolidayNameByDate.get(key) || getOrthodoxHolidayNameAuto(date);
                 
+                const dayTypeCategory = (dayType === 'special-holiday')
+                    ? 'special'
+                    : (dayType === 'weekend-holiday')
+                        ? 'weekend'
+                        : (dayType === 'semi-normal-day')
+                            ? 'semi'
+                            : 'normal';
+                const dateObjCal = new Date(key + 'T00:00:00');
+                const showMdOnly = document.getElementById('calendarMissingDisabledToggle')?.checked === true;
+                
                 // Parse assignment, sort by hierarchy (lower rank = higher = first), then display with numbering
                 let displayAssignmentHtml = '';
-                if (assignment) {
+                let mdHighlightNorms = null;
+                const mdNorm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                if (showMdOnly) {
+                    mdHighlightNorms = [];
+                    const rows = [];
+                    for (let g = 1; g <= 4; g++) {
+                        const plist = (groups[g] || {})[dayTypeCategory] || [];
+                        if (!Array.isArray(plist)) continue;
+                        for (const personName of plist) {
+                            if (!personName || !String(personName).trim()) continue;
+                            const miss =
+                                typeof isPersonMissingOnDate === 'function' &&
+                                isPersonMissingOnDate(personName, g, dateObjCal, dayTypeCategory);
+                            const dis =
+                                typeof isPersonDisabledForDuty === 'function' &&
+                                isPersonDisabledForDuty(personName, g, dayTypeCategory);
+                            if (!miss && !dis) continue;
+                            let tag = 'Απενεργοπ.';
+                            if (miss && dis) tag = 'Απ.+Απεν.';
+                            else if (miss) tag = 'Απουσία';
+                            rows.push({ personName: String(personName).trim(), groupNum: g, tag });
+                            mdHighlightNorms.push(mdNorm(personName));
+                        }
+                    }
+                    rows.sort(
+                        (a, b) =>
+                            a.groupNum - b.groupNum ||
+                            (a.personName || '').localeCompare(b.personName || '', 'el')
+                    );
+                    displayAssignmentHtml = '<div class="duty-person-container calendar-missing-disabled-view">';
+                    if (rows.length === 0) {
+                        displayAssignmentHtml += '<div class="duty-person small text-muted fst-italic">—</div>';
+                    } else {
+                        for (const row of rows) {
+                            const tit = `${row.tag} · Ομάδα ${row.groupNum}`;
+                            const badgeClass =
+                                row.tag === 'Απενεργοπ.' ? 'bg-secondary' : 'bg-warning text-dark';
+                            displayAssignmentHtml += `<div class="duty-person duty-missing-disabled-cell text-dark" title="${escapeHtml(tit)}">${row.groupNum}. ${escapeHtml(row.personName)} <span class="badge ${badgeClass}" style="font-size:0.58rem;vertical-align:middle;">${escapeHtml(row.tag)}</span></div>`;
+                        }
+                    }
+                    displayAssignmentHtml += '</div>';
+                } else if (assignment) {
                     const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
                     const parts = assignmentStr.split(',').map(p => p.trim()).filter(p => p);
                     if (parts.length > 0) {
-                        const dayTypeCategory = (dayType === 'special-holiday')
-                            ? 'special'
-                            : (dayType === 'weekend-holiday')
-                                ? 'weekend'
-                                : (dayType === 'semi-normal-day')
-                                    ? 'semi'
-                                    : 'normal';
-                        const dateObj = new Date(key + 'T00:00:00');
                         const swapColors = [
                             { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.12)' },
                             { border: '#00E676', bg: 'rgba(0, 230, 118, 0.12)' },
@@ -3996,7 +4062,7 @@
                                         } else {
                                             const isBaselineDisabledOrMissing = dayTypeCategory === 'normal' &&
                                                 (isPersonDisabledForDuty(baselinePerson, g, dayTypeCategory) ||
-                                                 isPersonMissingOnDate(baselinePerson, g, dateObj, dayTypeCategory));
+                                                 isPersonMissingOnDate(baselinePerson, g, dateObjCal, dayTypeCategory));
                                             underline = !isBaselineDisabledOrMissing;
                                         }
                                     }
@@ -4042,8 +4108,17 @@
                     ${displayAssignmentHtml}
                 `;
 
-                if (selectedDutyHighlightPerson && personIsAssignedInAssignment(assignment, selectedDutyHighlightPerson)) {
-                    dayDiv.classList.add('person-duty-highlight');
+                if (selectedDutyHighlightPerson) {
+                    const hn = mdNorm(selectedDutyHighlightPerson);
+                    if (
+                        showMdOnly &&
+                        mdHighlightNorms &&
+                        mdHighlightNorms.some((x) => x === hn)
+                    ) {
+                        dayDiv.classList.add('person-duty-highlight');
+                    } else if (!showMdOnly && personIsAssignedInAssignment(assignment, selectedDutyHighlightPerson)) {
+                        dayDiv.classList.add('person-duty-highlight');
+                    }
                 }
                 
                 // Add click handler AFTER setting innerHTML to ensure it's not removed
@@ -4083,12 +4158,16 @@
             
             grid.appendChild(frag);
 
-            attachMonthCalculationLockToggleOnce();
-            syncMonthCalculationLockToggle();
             const calSec = document.querySelector('.calendar-section');
             if (calSec && typeof getMonthKeyFromDate === 'function' && typeof isMonthCalculationLocked === 'function') {
                 const mk = getMonthKeyFromDate(currentDate);
                 calSec.classList.toggle('calendar-month-locked', isMonthCalculationLocked(mk));
+            }
+            if (calSec) {
+                calSec.classList.toggle(
+                    'calendar-view-missing-disabled',
+                    document.getElementById('calendarMissingDisabledToggle')?.checked === true
+                );
             }
         }
         function showHierarchyPopup(dayDiv, container) {
