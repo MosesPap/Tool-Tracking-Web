@@ -658,9 +658,12 @@
             totalSteps: 4,
             startDate: null,
             endDate: null,
-            preserveExisting: true,
             dayTypeLists: null,
-            /** Captured before month recalc clear; used to restore manual modal / mutual swap / alternate replacement. */
+            /** Group numbers (1–4) to recalculate with pure rotation; complement groups are preserved for the month. */
+            recalcGroupNums: null,
+            /** Captured before month clear: assignments/reasons/rotation for groups not in recalcGroupNums. */
+            groupPreserveSnapshot: null,
+            /** @deprecated — no longer used; manual/swap overlay disabled for selected recalc groups. */
             dutyProtectionSnapshot: null
         };
         
@@ -2413,6 +2416,173 @@
                     setAssignmentForDate(dk, newStr);
                 }
             }
+        }
+
+        /**
+         * Capture per-date assignment maps (only preserveGroupNums), reasons, baselines, lastRotation slice, critical lines.
+         * Used when recalculating only some groups for a month.
+         */
+        function captureGroupPreserveSnapshot(startDate, endDate, preserveGroupNums) {
+            const snap = {
+                specialHolidayAssignments: {},
+                weekendAssignments: {},
+                semiNormalAssignments: {},
+                normalDayAssignments: {},
+                rotationBaselineSpecialAssignments: {},
+                rotationBaselineWeekendAssignments: {},
+                rotationBaselineSemiAssignments: {},
+                rotationBaselineNormalAssignments: {},
+                assignmentReasons: {},
+                lastRotationPositions: { normal: {}, semi: {}, weekend: {}, special: {} },
+                criticalAssignments: {}
+            };
+            if (!startDate || !endDate || !Array.isArray(preserveGroupNums) || preserveGroupNums.length === 0) {
+                return snap;
+            }
+            const preserveSet = new Set(preserveGroupNums.map((g) => parseInt(g, 10)).filter((g) => g >= 1 && g <= 4));
+            const monthKeysInRange = new Set();
+
+            const copyPartialFromStore = (srcObj, destSnap, dateKey) => {
+                if (!srcObj || !srcObj[dateKey]) return;
+                const map = extractGroupAssignmentsMap(srcObj[dateKey]);
+                const partial = {};
+                for (const g of preserveSet) {
+                    if (map[g]) partial[g] = map[g];
+                }
+                if (Object.keys(partial).length > 0) destSnap[dateKey] = partial;
+            };
+
+            const di = new Date(startDate);
+            while (di <= endDate) {
+                const dk = formatDateKey(di);
+                monthKeysInRange.add(dk.substring(0, 7));
+                copyPartialFromStore(specialHolidayAssignments, snap.specialHolidayAssignments, dk);
+                copyPartialFromStore(weekendAssignments, snap.weekendAssignments, dk);
+                copyPartialFromStore(semiNormalAssignments, snap.semiNormalAssignments, dk);
+                copyPartialFromStore(normalDayAssignments, snap.normalDayAssignments, dk);
+                copyPartialFromStore(rotationBaselineSpecialAssignments, snap.rotationBaselineSpecialAssignments, dk);
+                copyPartialFromStore(rotationBaselineWeekendAssignments, snap.rotationBaselineWeekendAssignments, dk);
+                copyPartialFromStore(rotationBaselineSemiAssignments, snap.rotationBaselineSemiAssignments, dk);
+                copyPartialFromStore(rotationBaselineNormalAssignments, snap.rotationBaselineNormalAssignments, dk);
+
+                const ar = assignmentReasons?.[dk];
+                if (ar && typeof ar === 'object') {
+                    const frag = {};
+                    for (const g of preserveSet) {
+                        const gk = String(g);
+                        if (ar[gk]) {
+                            try {
+                                frag[gk] = JSON.parse(JSON.stringify(ar[gk]));
+                            } catch (_) {
+                                frag[gk] = ar[gk];
+                            }
+                        }
+                    }
+                    if (Object.keys(frag).length > 0) snap.assignmentReasons[dk] = frag;
+                }
+
+                const crit = criticalAssignments?.[dk];
+                if (Array.isArray(crit) && crit.length > 0) {
+                    const kept = crit.filter((entry) => {
+                        const m = String(entry).match(/\(Ομάδα\s*(\d+)\)\s*$/);
+                        return m && preserveSet.has(parseInt(m[1], 10));
+                    });
+                    if (kept.length > 0) snap.criticalAssignments[dk] = kept;
+                }
+
+                di.setDate(di.getDate() + 1);
+            }
+
+            for (const mk of monthKeysInRange) {
+                for (const dayType of ['normal', 'semi', 'weekend', 'special']) {
+                    const byType = lastRotationPositions?.[dayType];
+                    const monthBlock = byType && typeof byType === 'object' ? byType[mk] : null;
+                    if (!monthBlock || typeof monthBlock !== 'object') continue;
+                    const partial = {};
+                    for (const g of preserveSet) {
+                        const v = monthBlock[g] ?? monthBlock[String(g)];
+                        if (v != null && String(v).trim()) partial[g] = String(v).trim();
+                    }
+                    if (Object.keys(partial).length > 0) {
+                        if (!snap.lastRotationPositions[dayType][mk]) snap.lastRotationPositions[dayType][mk] = {};
+                        Object.assign(snap.lastRotationPositions[dayType][mk], partial);
+                    }
+                }
+            }
+
+            return snap;
+        }
+
+        /**
+         * Merge preserved group slots into duty stores and related state after executeCalculation fills from temp.
+         */
+        function mergeGroupPreserveSnapshotInExecute(snapshot, preserveGroupNums) {
+            if (!snapshot || !Array.isArray(preserveGroupNums) || preserveGroupNums.length === 0) return;
+            const preserveSet = new Set(preserveGroupNums.map((g) => parseInt(g, 10)).filter((g) => g >= 1 && g <= 4));
+
+            const mergeStore = (targetObj, snapPart) => {
+                if (!snapPart || typeof snapPart !== 'object') return;
+                for (const dk of Object.keys(snapPart)) {
+                    const partial = snapPart[dk];
+                    if (!partial || typeof partial !== 'object') continue;
+                    const map = extractGroupAssignmentsMap(targetObj[dk]);
+                    for (const g of preserveSet) {
+                        if (partial[g]) map[g] = partial[g];
+                    }
+                    const merged = groupMapToAssignmentString(map);
+                    if (merged) targetObj[dk] = merged;
+                    else delete targetObj[dk];
+                }
+            };
+
+            mergeStore(specialHolidayAssignments, snapshot.specialHolidayAssignments);
+            mergeStore(weekendAssignments, snapshot.weekendAssignments);
+            mergeStore(semiNormalAssignments, snapshot.semiNormalAssignments);
+            mergeStore(normalDayAssignments, snapshot.normalDayAssignments);
+            mergeStore(rotationBaselineSpecialAssignments, snapshot.rotationBaselineSpecialAssignments);
+            mergeStore(rotationBaselineWeekendAssignments, snapshot.rotationBaselineWeekendAssignments);
+            mergeStore(rotationBaselineSemiAssignments, snapshot.rotationBaselineSemiAssignments);
+            mergeStore(rotationBaselineNormalAssignments, snapshot.rotationBaselineNormalAssignments);
+
+            for (const dk of Object.keys(snapshot.assignmentReasons || {})) {
+                const frag = snapshot.assignmentReasons[dk];
+                if (!assignmentReasons[dk]) assignmentReasons[dk] = {};
+                for (const gStr of Object.keys(frag)) {
+                    try {
+                        assignmentReasons[dk][gStr] = JSON.parse(JSON.stringify(frag[gStr]));
+                    } catch (_) {
+                        assignmentReasons[dk][gStr] = frag[gStr];
+                    }
+                }
+            }
+
+            for (const dk of Object.keys(snapshot.criticalAssignments || {})) {
+                const kept = snapshot.criticalAssignments[dk];
+                const existing = Array.isArray(criticalAssignments[dk]) ? [...criticalAssignments[dk]] : [];
+                const filtered = existing.filter((entry) => {
+                    const m = String(entry).match(/\(Ομάδα\s*(\d+)\)\s*$/);
+                    return !(m && preserveSet.has(parseInt(m[1], 10)));
+                });
+                criticalAssignments[dk] = [...filtered, ...kept];
+                if (criticalAssignments[dk].length === 0) delete criticalAssignments[dk];
+            }
+
+            for (const dayType of ['normal', 'semi', 'weekend', 'special']) {
+                const snapByMonth = snapshot.lastRotationPositions?.[dayType];
+                if (!snapByMonth || typeof snapByMonth !== 'object') continue;
+                if (!lastRotationPositions[dayType]) lastRotationPositions[dayType] = {};
+                for (const mk of Object.keys(snapByMonth)) {
+                    const partial = snapByMonth[mk];
+                    if (!lastRotationPositions[dayType][mk] || typeof lastRotationPositions[dayType][mk] !== 'object') {
+                        lastRotationPositions[dayType][mk] = { ...partial };
+                    } else {
+                        for (const g of preserveSet) {
+                            if (partial[g] != null) lastRotationPositions[dayType][mk][g] = partial[g];
+                        }
+                    }
+                }
+            }
+
         }
 
         // Transfer auto-positioning reference date selection (per duty type):
@@ -4812,18 +4982,17 @@
             const currentYear = currentDate.getFullYear();
             const currentMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
             const startMonthInput = document.getElementById('calculateStartMonth');
-            const endMonthInput = document.getElementById('calculateEndMonth');
-            const preserveCheckbox = document.getElementById('preserveExistingAssignments');
             
             if (startMonthInput) {
                 startMonthInput.value = `${currentYear}-${currentMonth}`;
             }
-            if (endMonthInput) {
-                endMonthInput.value = '';
-            }
-            if (preserveCheckbox) {
-                // Default view should be UNCHECKED
-                preserveCheckbox.checked = false;
+            for (let g = 1; g <= 4; g++) {
+                const cb = document.getElementById(`recalcGroup${g}`);
+                const lb = document.getElementById(`recalcGroupLabel${g}`);
+                if (cb) cb.checked = true;
+                if (lb && typeof getGroupName === 'function') {
+                    lb.textContent = `${getGroupName(g)}`;
+                }
             }
 
             // Make month picker open when clicking anywhere on the month fields (label/container too)
@@ -4891,7 +5060,6 @@
             };
 
             installFor('calculateStartMonth');
-            installFor('calculateEndMonth');
         }
 
         // Calculate duties for selected months

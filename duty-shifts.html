@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.401 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.402 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -1602,7 +1602,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.401</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.402</span></h4>
             </div>
             <div class="d-flex align-items-center flex-wrap gap-3 title-bar-stats" style="font-size: 1.25em; font-weight: 500; opacity: 0.98;">
                 <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
@@ -2237,22 +2237,30 @@
                 <div class="modal-body">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <small>Επιλέξτε τον μήνα ή τους μήνες για τους οποίους θέλετε να υπολογιστούν οι υπηρεσίες. Οι υπηρεσίες προηγούμενων μηνών δεν θα επηρεαστούν.</small>
+                        <small>Επιλέξτε μήνα και μία ή περισσότερες ομάδες. Για τις επιλεγμένες ομάδες ο υπολογισμός γίνεται από καθαρή περιστροφή (χωρίς χειροκίνητες αλλαγές, αμοιβαίες ανταλλαγές ή αντικατάσταση επιλαχών). Οι μη επιλεγμένες ομάδες διατηρούν τις τρέχουσες αναθέσεις για τον μήνα. Προηγούμενοι μήνες δεν επηρεάζονται.</small>
                     </div>
                     <div class="mb-3">
-                        <label for="calculateStartMonth" class="form-label">Από Μήνα</label>
+                        <label for="calculateStartMonth" class="form-label">Μήνας υπολογισμού</label>
                         <input type="month" class="form-control" id="calculateStartMonth" required>
                     </div>
                     <div class="mb-3">
-                        <label for="calculateEndMonth" class="form-label">Έως Μήνα (Προαιρετικό)</label>
-                        <input type="month" class="form-control" id="calculateEndMonth">
-                        <small class="text-muted">Αφήστε κενό για υπολογισμό μόνο του επιλεγμένου μήνα</small>
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="preserveExistingAssignments">
-                        <label class="form-check-label" for="preserveExistingAssignments">
-                            Διατήρηση υπαρχουσών αναθέσεων (μη αντικατάσταση)
-                        </label>
+                        <label class="form-label d-block">Ομάδες προς επαναϋπολογισμό</label>
+                        <div class="form-check">
+                            <input class="form-check-input recalc-group-cb" type="checkbox" id="recalcGroup1" value="1" checked>
+                            <label class="form-check-label" for="recalcGroup1" id="recalcGroupLabel1">Ομάδα 1</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input recalc-group-cb" type="checkbox" id="recalcGroup2" value="2" checked>
+                            <label class="form-check-label" for="recalcGroup2" id="recalcGroupLabel2">Ομάδα 2</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input recalc-group-cb" type="checkbox" id="recalcGroup3" value="3" checked>
+                            <label class="form-check-label" for="recalcGroup3" id="recalcGroupLabel3">Ομάδα 3</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input recalc-group-cb" type="checkbox" id="recalcGroup4" value="4" checked>
+                            <label class="form-check-label" for="recalcGroup4" id="recalcGroupLabel4">Ομάδα 4</label>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">

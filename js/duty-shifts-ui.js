@@ -4632,18 +4632,17 @@
             const currentYear = currentDate.getFullYear();
             const currentMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
             const startMonthInput = document.getElementById('calculateStartMonth');
-            const endMonthInput = document.getElementById('calculateEndMonth');
-            const preserveCheckbox = document.getElementById('preserveExistingAssignments');
             
             if (startMonthInput) {
                 startMonthInput.value = `${currentYear}-${currentMonth}`;
             }
-            if (endMonthInput) {
-                endMonthInput.value = '';
-            }
-            if (preserveCheckbox) {
-                // Default view should be UNCHECKED
-                preserveCheckbox.checked = false;
+            for (let g = 1; g <= 4; g++) {
+                const cb = document.getElementById(`recalcGroup${g}`);
+                const lb = document.getElementById(`recalcGroupLabel${g}`);
+                if (cb) cb.checked = true;
+                if (lb && typeof getGroupName === 'function') {
+                    lb.textContent = `${getGroupName(g)}`;
+                }
             }
 
             // Make month picker open when clicking anywhere on the month fields (label/container too)
@@ -4709,7 +4708,6 @@
             };
 
             installFor('calculateStartMonth');
-            installFor('calculateEndMonth');
         }
         function showStepByStepCalculation() {
             calculationSteps.currentStep = 1;
