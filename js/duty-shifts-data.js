@@ -2203,28 +2203,34 @@
             return null;
         }
 
-        /** Replace who holds groupNum in an assignment string; append slot if missing and newPersonName is non-empty. */
-        function replaceAssignedPersonForGroupInAssignmentString(assignmentStr, groupNum, newPersonName) {
-            const g = Number.isFinite(groupNum) ? groupNum : parseInt(groupNum, 10);
-            if (!Number.isFinite(g) || g < 1 || g > 4) return assignmentStr || '';
-            const parts = String(assignmentStr || '').split(',').map(p => p.trim()).filter(Boolean);
-            const out = [];
-            let found = false;
-            for (const part of parts) {
-                const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
-                if (m && parseInt(m[2], 10) === g) {
-                    if (newPersonName && String(newPersonName).trim()) {
-                        out.push(`${String(newPersonName).trim()} (Ομάδα ${g})`);
-                        found = true;
-                    }
-                } else {
-                    out.push(part);
+        /** Build canonical assignment string from group → name map (groups 1–4 in order). */
+        function groupMapToAssignmentString(map) {
+            const parts = [];
+            for (let g = 1; g <= 4; g++) {
+                const nm = map && map[g];
+                if (nm != null && String(nm).trim()) {
+                    parts.push(`${String(nm).trim()} (Ομάδα ${g})`);
                 }
             }
-            if (!found && newPersonName && String(newPersonName).trim()) {
-                out.push(`${String(newPersonName).trim()} (Ομάδα ${g})`);
+            return parts.join(', ');
+        }
+
+        /**
+         * Replace who holds groupNum using a parsed group map (handles object-shaped assignments and odd spacing).
+         * Omits the group slot if newPersonName is empty.
+         */
+        function replaceAssignedPersonForGroupInAssignmentString(assignmentStr, groupNum, newPersonName) {
+            const g = Number.isFinite(groupNum) ? groupNum : parseInt(groupNum, 10);
+            if (!Number.isFinite(g) || g < 1 || g > 4) {
+                return groupMapToAssignmentString(extractGroupAssignmentsMap(assignmentStr));
             }
-            return out.join(', ');
+            const map = extractGroupAssignmentsMap(assignmentStr);
+            if (newPersonName != null && String(newPersonName).trim()) {
+                map[g] = String(newPersonName).trim();
+            } else {
+                delete map[g];
+            }
+            return groupMapToAssignmentString(map);
         }
 
         /** True if this person+group is a locked critical (Απόβαση) assignment on that date. */

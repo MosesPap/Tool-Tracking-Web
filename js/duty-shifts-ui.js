@@ -5792,7 +5792,7 @@
                             <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-swap-${person.group}" value="mutual_swap" ${defaultChangeMode === 'mutual_swap' ? 'checked' : ''}>
                             <label class="form-check-label" for="duty-mode-swap-${person.group}">Αμοιβαία Αλλαγή</label>
                         </div>
-                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αμοιβαία Αλλαγή:</strong> αντιμετάθεση με το άτομο που επιλέγετε — ενημερώνεται και η άλλη ημέρα (ίδιος τύπος υπηρεσίας) όπου αυτός/αυτή είναι ήδη ανατεθειμένος/η στην ίδια ομάδα.</small>
+                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση:</strong> αλλάζει μόνο αυτή η ημέρα (ο προηγούμενος δεν μεταφέρεται αλλού). <strong>Αμοιβαία Αλλαγή:</strong> ανταλλαγή δύο ημερών — ο προηγούμενος ανατίθεται ακριβώς εκεί που ήταν ο νέος (ίδιος τύπος υπηρεσίας / ομάδα).</small>
                     </div>`;
                 
                 content += `
@@ -5909,25 +5909,45 @@
                 if (!plansByOtherKey.has(p.otherKey)) plansByOtherKey.set(p.otherKey, []);
                 plansByOtherKey.get(p.otherKey).push(p);
             }
+            // Build "other day" strings via group map (same as Firestore object/string shapes) so B is always
+            // removed from the other date and A is written once — avoids B appearing on two days.
+            const pendingOtherKeyStrings = new Map();
             for (const [otherKey, plans] of plansByOtherKey) {
-                let str = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(otherKey) : '';
-                if (str == null) str = '';
-                str = typeof str === 'string' ? str : String(str);
+                const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(otherKey) : null;
+                const map = typeof extractGroupAssignmentsMap === 'function'
+                    ? extractGroupAssignmentsMap(raw)
+                    : {};
                 for (const p of plans) {
-                    const cur = typeof parseAssignedPersonForGroupFromAssignment === 'function'
-                        ? (parseAssignedPersonForGroupFromAssignment(str, p.group) || '').trim()
-                        : '';
+                    const cur = (map[p.group] || '').toString().trim();
                     if (normPerson(cur) !== normPerson(p.newPerson)) {
                         alert('Η ανάθεση στην άλλη ημερομηνία δεν ταιριάζει πλέον· ακυρώθηκε η αποθήκευση. Δοκιμάστε ξανά.');
                         return;
                     }
-                    if (typeof replaceAssignedPersonForGroupInAssignmentString === 'function') {
-                        str = replaceAssignedPersonForGroupInAssignmentString(str, p.group, p.prevPerson);
+                    map[p.group] = String(p.prevPerson).trim();
+                }
+                const finalStr = typeof groupMapToAssignmentString === 'function'
+                    ? groupMapToAssignmentString(map)
+                    : '';
+                for (const p of plans) {
+                    const check = typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                        ? (parseAssignedPersonForGroupFromAssignment(finalStr, p.group) || '').trim()
+                        : '';
+                    if (normPerson(check) !== normPerson(p.prevPerson)) {
+                        alert(`Αποτυχία ενημέρωσης της άλλης ημέρας (${otherKey}): ο/η ${p.prevPerson} δεν ανατέθηκε στην Ομάδα ${p.group}. Ακυρώθηκε η αποθήκευση.`);
+                        return;
+                    }
+                    if (normPerson(check) === normPerson(p.newPerson)) {
+                        alert(`Σφάλμα αμοιβαίας αλλαγής: ο/η ${p.newPerson} παραμένει στην ${otherKey}. Ακυρώθηκε η αποθήκευση.`);
+                        return;
                     }
                 }
+                pendingOtherKeyStrings.set(otherKey, finalStr);
+            }
+            for (const [otherKey, finalStr] of pendingOtherKeyStrings) {
                 if (typeof setAssignmentForDate === 'function') {
-                    setAssignmentForDate(otherKey, str);
+                    setAssignmentForDate(otherKey, finalStr);
                 }
+                const plans = plansByOtherKey.get(otherKey) || [];
                 for (const p of plans) {
                     if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
                         clearAssignmentReasonForPersonOnDate(otherKey, p.group, p.newPerson);
