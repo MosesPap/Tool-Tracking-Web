@@ -10429,12 +10429,41 @@
             alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
         /**
-         * True on the calendar day immediately before a missing period starts, or the day after it ends.
-         * Those days must not get duty and must not be targets of swaps onto that person (handled via isPersonMissingOnDate).
-         * dutyCategory reserved for future per-type rules; currently all duty types respect the same buffer.
+         * Maps getDayType() values to duty list categories used in assignments.
+         */
+        function dutyCategoryFromCalendarDayType(dayType) {
+            if (dayType === 'special-holiday') return 'special';
+            if (dayType === 'weekend-holiday') return 'weekend';
+            if (dayType === 'semi-normal-day') return 'semi';
+            return 'normal';
+        }
+
+        /**
+         * Resolves the duty category for an assignment: uses dutyCategory when valid, else calendar day type of dateKey.
+         */
+        function resolveDutyCategoryForBuffer(dateKey, dutyCategory = null) {
+            let c = dutyCategory;
+            if (c) {
+                if (c === 'special-holiday') c = 'special';
+                else if (c === 'weekend-holiday') c = 'weekend';
+                else if (c === 'semi-normal-day') c = 'semi';
+                else if (c === 'normal-day') c = 'normal';
+                if (c === 'special' || c === 'weekend' || c === 'semi' || c === 'normal') return c;
+            }
+            if (!dateKey || typeof dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return 'normal';
+            const dt = getDayType(new Date(dateKey + 'T00:00:00'));
+            return dutyCategoryFromCalendarDayType(dt);
+        }
+
+        /**
+         * Missing "buffer" days (no duty / no swap onto this person):
+         * - Day BEFORE period start (calendar): always blocked for any duty type on that date.
+         * - Day AFTER period end (calendar): blocked only when that assignment day's duty category
+         *   differs from the duty category of the LAST day of the missing period (e.g. normal missing ends Thu →
+         *   block semi on Fri; weekend ends Sun → block normal on Mon). If the next day is the SAME category
+         *   (e.g. normal missing Mon–Tue → Wed normal), the person returns to rotation — not blocked.
          */
         function isPersonOnMissingAdjacentBufferDay(person, groupNum, date, dutyCategory = null) {
-            void dutyCategory;
             const groupData = groups[groupNum] || {};
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             if (missingPeriods.length === 0) return false;
@@ -10450,6 +10479,8 @@
             }
             if (!checkKey) return false;
 
+            const assignCat = resolveDutyCategoryForBuffer(checkKey, dutyCategory);
+
             for (const period of missingPeriods) {
                 const startKey = period.start;
                 const endKey = period.end;
@@ -10457,7 +10488,13 @@
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(startKey) || !/^\d{4}-\d{2}-\d{2}$/.test(endKey)) continue;
                 const beforeKey = formatDateKey(shiftDate(new Date(startKey + 'T00:00:00'), -1));
                 const afterKey = formatDateKey(shiftDate(new Date(endKey + 'T00:00:00'), 1));
-                if (checkKey === beforeKey || checkKey === afterKey) return true;
+                if (checkKey === beforeKey) return true;
+                if (checkKey === afterKey) {
+                    const lastMissingDayType = getDayType(new Date(endKey + 'T00:00:00'));
+                    const lastCat = dutyCategoryFromCalendarDayType(lastMissingDayType);
+                    if (lastCat === assignCat) return false;
+                    return true;
+                }
             }
             return false;
         }
