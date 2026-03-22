@@ -468,9 +468,6 @@
                 const r = (mp.reason || '').trim();
                 return r || 'Κώλυμα/Απουσία';
             }
-            if (typeof isPersonOnMissingAdjacentBufferDay === 'function' && isPersonOnMissingAdjacentBufferDay(person, groupNum, dateObj, dutyCategory)) {
-                return 'Ημέρα πριν/μετά απουσίας (χωρίς υπηρεσία)';
-            }
             return 'Κώλυμα/Απουσία';
         }
         function buildUnavailableReplacementReason({ skippedPersonName, replacementPersonName, dateObj, groupNum, dutyCategory = null }) {
@@ -10428,77 +10425,6 @@
             
             alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
-        /**
-         * Maps getDayType() values to duty list categories used in assignments.
-         */
-        function dutyCategoryFromCalendarDayType(dayType) {
-            if (dayType === 'special-holiday') return 'special';
-            if (dayType === 'weekend-holiday') return 'weekend';
-            if (dayType === 'semi-normal-day') return 'semi';
-            return 'normal';
-        }
-
-        /**
-         * Resolves the duty category for an assignment: uses dutyCategory when valid, else calendar day type of dateKey.
-         */
-        function resolveDutyCategoryForBuffer(dateKey, dutyCategory = null) {
-            let c = dutyCategory;
-            if (c) {
-                if (c === 'special-holiday') c = 'special';
-                else if (c === 'weekend-holiday') c = 'weekend';
-                else if (c === 'semi-normal-day') c = 'semi';
-                else if (c === 'normal-day') c = 'normal';
-                if (c === 'special' || c === 'weekend' || c === 'semi' || c === 'normal') return c;
-            }
-            if (!dateKey || typeof dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return 'normal';
-            const dt = getDayType(new Date(dateKey + 'T00:00:00'));
-            return dutyCategoryFromCalendarDayType(dt);
-        }
-
-        /**
-         * Missing "buffer" days (no duty / no swap onto this person):
-         * - Day BEFORE period start (calendar): always blocked for any duty type on that date.
-         * - Day AFTER period end (calendar): blocked only when that assignment day's duty category
-         *   differs from the duty category of the LAST day of the missing period (e.g. normal missing ends Thu →
-         *   block semi on Fri; weekend ends Sun → block normal on Mon). If the next day is the SAME category
-         *   (e.g. normal missing Mon–Tue → Wed normal), the person returns to rotation — not blocked.
-         */
-        function isPersonOnMissingAdjacentBufferDay(person, groupNum, date, dutyCategory = null) {
-            const groupData = groups[groupNum] || {};
-            const missingPeriods = groupData.missingPeriods?.[person] || [];
-            if (missingPeriods.length === 0) return false;
-
-            let checkKey = null;
-            if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-                checkKey = date;
-            } else {
-                const d = new Date(date);
-                if (isNaN(d.getTime())) return false;
-                d.setHours(0, 0, 0, 0);
-                checkKey = formatDateKey(d);
-            }
-            if (!checkKey) return false;
-
-            const assignCat = resolveDutyCategoryForBuffer(checkKey, dutyCategory);
-
-            for (const period of missingPeriods) {
-                const startKey = period.start;
-                const endKey = period.end;
-                if (!startKey || !endKey) continue;
-                if (!/^\d{4}-\d{2}-\d{2}$/.test(startKey) || !/^\d{4}-\d{2}-\d{2}$/.test(endKey)) continue;
-                const beforeKey = formatDateKey(shiftDate(new Date(startKey + 'T00:00:00'), -1));
-                const afterKey = formatDateKey(shiftDate(new Date(endKey + 'T00:00:00'), 1));
-                if (checkKey === beforeKey) return true;
-                if (checkKey === afterKey) {
-                    const lastMissingDayType = getDayType(new Date(endKey + 'T00:00:00'));
-                    const lastCat = dutyCategoryFromCalendarDayType(lastMissingDayType);
-                    if (lastCat === assignCat) return false;
-                    return true;
-                }
-            }
-            return false;
-        }
-
         function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
@@ -10508,13 +10434,40 @@
             const checkDate = new Date(date);
             checkDate.setHours(0, 0, 0, 0);
             
-            const inside = missingPeriods.some(period => {
+            return missingPeriods.some(period => {
                 const start = new Date(period.start + 'T00:00:00');
                 const end = new Date(period.end + 'T00:00:00');
                 return checkDate >= start && checkDate <= end;
             });
-            if (inside) return true;
-            return isPersonOnMissingAdjacentBufferDay(person, groupNum, date, dutyCategory);
+        }
+        /**
+         * Calendar day immediately before missing start or after missing end (buffer days).
+         * Used to highlight final assignments that fall on those days (recommended no-duty buffer).
+         * @returns {'before'|'after'|null}
+         */
+        function getPersonMissingBufferAssignmentFlag(person, groupNum, assignmentDateKey) {
+            if (!person || !groupNum || !assignmentDateKey) return null;
+            if (typeof assignmentDateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(assignmentDateKey)) return null;
+            const groupData = groups[groupNum] || {};
+            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            if (!Array.isArray(missingPeriods) || missingPeriods.length === 0) return null;
+            const addDays = (dk, days) => {
+                if (!dk || typeof dk !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
+                const d = new Date(dk + 'T00:00:00');
+                if (isNaN(d.getTime())) return null;
+                d.setDate(d.getDate() + (days || 0));
+                return formatDateKey(d);
+            };
+            for (const period of missingPeriods) {
+                const pStartKey = typeof inputValueToDateKey === 'function' ? inputValueToDateKey(period?.start) : null;
+                const pEndKey = typeof inputValueToDateKey === 'function' ? inputValueToDateKey(period?.end) : null;
+                if (!pStartKey || !pEndKey) continue;
+                const dayBeforeStart = addDays(pStartKey, -1);
+                const dayAfterEnd = addDays(pEndKey, 1);
+                if (dayBeforeStart && assignmentDateKey === dayBeforeStart) return 'before';
+                if (dayAfterEnd && assignmentDateKey === dayAfterEnd) return 'after';
+            }
+            return null;
         }
         function findNextEligiblePersonAfterMissing({
             dateKey,
