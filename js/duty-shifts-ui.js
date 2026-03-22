@@ -3897,7 +3897,6 @@
                             let underline = false;
                             let isSwap = false;
                             let swapStyle = '';
-                            let missingBuffer = null;
                             if (personName && g >= 1 && g <= 4) {
                                 const r = getAssignmentReason(key, g, personName);
                                 if (r && r.type === 'swap') {
@@ -3926,15 +3925,16 @@
                                         }
                                     }
                                 }
-                                if (typeof getPersonMissingBufferAssignmentFlag === 'function') {
-                                    missingBuffer = getPersonMissingBufferAssignmentFlag(personName, g, key);
-                                }
                             }
-                            entries.push({ personName, nameOnly, rank, underline, isSwap, swapStyle, groupNum: g, missingBuffer });
+                            entries.push({ personName, nameOnly, rank, underline, isSwap, swapStyle, groupNum: g });
                         }
                         // Store hierarchy-ordered entries for popup (sorted by rank) - do this BEFORE sorting by group
                         const hierarchyOrderedEntries = [...entries].sort((a, b) => (a.rank - b.rank) || (a.personName || '').localeCompare(b.personName || ''));
-                        const hierarchyData = JSON.stringify(hierarchyOrderedEntries.map(e => ({ name: e.nameOnly, rank: e.rank })));
+                        const hierarchyData = JSON.stringify(hierarchyOrderedEntries.map(e => ({
+                            name: e.nameOnly,
+                            rank: e.rank,
+                            bufferWarning: !!(e.personName && e.groupNum >= 1 && e.groupNum <= 4 && typeof isPersonOnMissingBufferDay === 'function' && isPersonOnMissingBufferDay(e.personName, e.groupNum, key))
+                        })));
                         // Sort by group order (1, 2, 3, 4) for display
                         const entriesByGroup = [...entries].sort((a, b) => {
                             const groupA = a.groupNum || 999;
@@ -3943,19 +3943,15 @@
                         });
                         
                         displayAssignmentHtml = '<div class="duty-person-container" data-hierarchy-order="' + escapeHtml(hierarchyData) + '">';
+                        const missingBufferTitle = 'Προειδοποίηση: Η ημέρα είναι αμέσως πριν την έναρξη ή αμέσως μετά το τέλος περιόδου απουσίας.';
                         entriesByGroup.forEach((e, idx) => {
                             const cls = e.isSwap ? 'duty-person-swapped' : 'duty-person';
                             const groupDisplay = e.groupNum && e.groupNum >= 1 && e.groupNum <= 4 ? e.groupNum : '';
-                            let mbClass = '';
-                            let mbTitle = '';
-                            if (e.missingBuffer === 'before') {
-                                mbClass = ' duty-person-missing-buffer';
-                                mbTitle = ` title="${escapeHtml('Ημέρα αμέσως πριν την έναρξη περιόδου απουσίας (συνιστάται αποχή).')}"`;
-                            } else if (e.missingBuffer === 'after') {
-                                mbClass = ' duty-person-missing-buffer';
-                                mbTitle = ` title="${escapeHtml('Ημέρα αμέσως μετά τη λήξη περιόδου απουσίας (συνιστάται αποχή).')}"`;
-                            }
-                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}${mbClass}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}${mbTitle}>${groupDisplay}. ${e.nameOnly}</div>`;
+                            const showBufferWarn = e.personName && e.groupNum >= 1 && e.groupNum <= 4 && typeof isPersonOnMissingBufferDay === 'function' && isPersonOnMissingBufferDay(e.personName, e.groupNum, key);
+                            const bufferIcon = showBufferWarn
+                                ? ` <i class="fas fa-exclamation-triangle duty-missing-buffer-warn" title="${escapeHtml(missingBufferTitle)}" aria-label="${escapeHtml(missingBufferTitle)}"></i>`
+                                : '';
+                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${escapeHtml(e.nameOnly)}${bufferIcon}</div>`;
                         });
                         if (shouldShowHeavyIndicators && assignmentReasons[key]) {
                             displayAssignmentHtml += `<div class="duty-person-swapped" title="Υπάρχουν λόγοι αλλαγής/παράλειψης">*</div>`;
@@ -4027,8 +4023,14 @@
                 // Create popup element
                 hierarchyPopup = document.createElement('div');
                 hierarchyPopup.className = 'hierarchy-popup';
+                const missingBufferTitlePopup = 'Προειδοποίηση: Η ημέρα είναι αμέσως πριν την έναρξη ή αμέσως μετά το τέλος περιόδου απουσίας.';
                 hierarchyPopup.innerHTML = '<div class="hierarchy-popup-content"><div class="hierarchy-popup-title">Ιεραρχική Σειρά</div><div class="hierarchy-popup-list">' +
-                    entries.map((e, idx) => `<div class="hierarchy-popup-item">${idx + 1}. ${escapeHtml(e.name)}</div>`).join('') +
+                    entries.map((e, idx) => {
+                        const buf = e.bufferWarning
+                            ? ` <i class="fas fa-exclamation-triangle text-warning" title="${escapeHtml(missingBufferTitlePopup)}" aria-label="${escapeHtml(missingBufferTitlePopup)}"></i>`
+                            : '';
+                        return `<div class="hierarchy-popup-item">${idx + 1}. ${escapeHtml(e.name)}${buf}</div>`;
+                    }).join('') +
                     '</div></div>';
                 
                 document.body.appendChild(hierarchyPopup);
@@ -5711,17 +5713,12 @@
                         reasonBadge = `<span class="badge bg-info ms-2" title="${displayReason}"><i class="fas fa-exchange-alt me-1"></i>Αλλαγή${reason.swappedWith ? ` με ${reason.swappedWith}` : ''}</span>`;
                     }
                 }
-                let missingBufferBadge = '';
-                if (person.name && person.group && typeof getPersonMissingBufferAssignmentFlag === 'function') {
-                    const buf = getPersonMissingBufferAssignmentFlag(person.name, person.group, key);
-                    if (buf === 'before') {
-                        missingBufferBadge = `<span class="badge bg-dark border border-warning text-warning ms-2" title="${escapeHtml('Ημέρα αμέσως πριν την έναρξη περιόδου απουσίας (συνιστάται αποχή).')}"><i class="fas fa-exclamation-triangle me-1"></i>Προ απουσίας</span>`;
-                    } else if (buf === 'after') {
-                        missingBufferBadge = `<span class="badge bg-dark border border-warning text-warning ms-2" title="${escapeHtml('Ημέρα αμέσως μετά τη λήξη περιόδου απουσίας (συνιστάται αποχή).')}"><i class="fas fa-exclamation-triangle me-1"></i>Μετά απουσίας</span>`;
-                    }
-                }
                 
                 const groupName = person.group ? getGroupName(person.group) : 'Άγνωστη Ομάδα';
+                const missingBufferDay = person.name && person.group && typeof isPersonOnMissingBufferDay === 'function' && isPersonOnMissingBufferDay(person.name, person.group, key);
+                const missingBufferBadge = missingBufferDay
+                    ? '<span class="badge bg-warning text-dark ms-2" title="Η ημέρα είναι αμέσως πριν την έναρξη ή αμέσως μετά το τέλος περιόδου απουσίας."><i class="fas fa-exclamation-triangle me-1"></i>Ημέρα γύρω από απουσία</span>'
+                    : '';
                 const criticalClass = isCritical ? 'border-danger bg-light' : '';
                 const criticalLabel = isCritical ? '<span class="badge bg-danger ms-2"><i class="fas fa-lock me-1"></i>Κρίσιμη (Απόβαση)</span>' : '';
                 const disabledAttr = isCritical ? 'disabled' : '';
@@ -5784,7 +5781,7 @@
                 
                 content += `
                     <div class="mb-3 border rounded duty-person-card ${criticalClass}" ${disabledTitle}>
-                        <label class="form-label">Ομάδα ${person.group}: ${groupName}${criticalLabel}${reasonBadge}${missingBufferBadge}</label>
+                        <label class="form-label">Ομάδα ${person.group}: ${groupName}${criticalLabel}${missingBufferBadge}${reasonBadge}</label>
                         <select class="form-select duty-person-select" 
                                 data-index="${index}" 
                                 data-group="${person.group}" 

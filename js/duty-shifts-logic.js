@@ -10441,33 +10441,41 @@
             });
         }
         /**
-         * Calendar day immediately before missing start or after missing end (buffer days).
-         * Used to highlight final assignments that fall on those days (recommended no-duty buffer).
-         * @returns {'before'|'after'|null}
+         * True if the given calendar day is immediately before any missing-period start
+         * or immediately after any missing-period end (buffer / rest days around absence).
+         * Used to warn when someone is still assigned on those days.
+         * @param {string} person
+         * @param {number} groupNum
+         * @param {Date|string} date - Date or YYYY-MM-DD
          */
-        function getPersonMissingBufferAssignmentFlag(person, groupNum, assignmentDateKey) {
-            if (!person || !groupNum || !assignmentDateKey) return null;
-            if (typeof assignmentDateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(assignmentDateKey)) return null;
+        function isPersonOnMissingBufferDay(person, groupNum, date) {
+            if (!person || !Number.isFinite(groupNum) || groupNum < 1) return false;
             const groupData = groups[groupNum] || {};
             const missingPeriods = groupData.missingPeriods?.[person] || [];
-            if (!Array.isArray(missingPeriods) || missingPeriods.length === 0) return null;
-            const addDays = (dk, days) => {
-                if (!dk || typeof dk !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
-                const d = new Date(dk + 'T00:00:00');
-                if (isNaN(d.getTime())) return null;
-                d.setDate(d.getDate() + (days || 0));
-                return formatDateKey(d);
-            };
-            for (const period of missingPeriods) {
-                const pStartKey = typeof inputValueToDateKey === 'function' ? inputValueToDateKey(period?.start) : null;
-                const pEndKey = typeof inputValueToDateKey === 'function' ? inputValueToDateKey(period?.end) : null;
-                if (!pStartKey || !pEndKey) continue;
-                const dayBeforeStart = addDays(pStartKey, -1);
-                const dayAfterEnd = addDays(pEndKey, 1);
-                if (dayBeforeStart && assignmentDateKey === dayBeforeStart) return 'before';
-                if (dayAfterEnd && assignmentDateKey === dayAfterEnd) return 'after';
+            if (missingPeriods.length === 0) return false;
+
+            let dateKey;
+            if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
+                dateKey = date.trim();
+            } else {
+                const d = date instanceof Date ? date : new Date(date);
+                if (isNaN(d.getTime())) return false;
+                dateKey = formatDateKey(d);
             }
-            return null;
+
+            return missingPeriods.some(period => {
+                if (!period || !period.start || !period.end) return false;
+                const start = new Date(period.start + 'T00:00:00');
+                const end = new Date(period.end + 'T00:00:00');
+                if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+                const dayBeforeStart = new Date(start);
+                dayBeforeStart.setDate(dayBeforeStart.getDate() - 1);
+                const dayAfterEnd = new Date(end);
+                dayAfterEnd.setDate(dayAfterEnd.getDate() + 1);
+                const beforeKey = formatDateKey(dayBeforeStart);
+                const afterKey = formatDateKey(dayAfterEnd);
+                return dateKey === beforeKey || dateKey === afterKey;
+            });
         }
         function findNextEligiblePersonAfterMissing({
             dateKey,
