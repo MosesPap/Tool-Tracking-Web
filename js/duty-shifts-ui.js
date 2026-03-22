@@ -5792,6 +5792,7 @@
                             <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-swap-${person.group}" value="mutual_swap" ${defaultChangeMode === 'mutual_swap' ? 'checked' : ''}>
                             <label class="form-check-label" for="duty-mode-swap-${person.group}">Αμοιβαία Αλλαγή</label>
                         </div>
+                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αμοιβαία Αλλαγή:</strong> αντιμετάθεση με το άτομο που επιλέγετε — ενημερώνεται και η άλλη ημέρα (ίδιος τύπος υπηρεσίας) όπου αυτός/αυτή είναι ήδη ανατεθειμένος/η στην ίδια ομάδα.</small>
                     </div>`;
                 
                 content += `
@@ -5867,6 +5868,73 @@
                 }
             });
             
+            const normPerson = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            
+            // Αμοιβαία Αλλαγή: swap assignees between this day and the other duty day where the selected person is assigned (same group + duty type).
+            const mutualSwapPlans = [];
+            for (const select of selects) {
+                if (select.dataset.isCritical === 'true') continue;
+                const group = parseInt(select.dataset.group, 10);
+                if (!Number.isFinite(group)) continue;
+                const prevPerson = typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                    ? (parseAssignedPersonForGroupFromAssignment(prevStr, group) || '').trim()
+                    : '';
+                const newVal = select.value.trim();
+                const modeEl = container.querySelector(`input[name="duty-change-mode-${group}"]:checked`);
+                const mode = modeEl ? modeEl.value : 'replacement';
+                if (mode !== 'mutual_swap' || normPerson(prevPerson) === normPerson(newVal) || !newVal) continue;
+                if (!prevPerson) {
+                    alert('Για αμοιβαία αλλαγή πρέπει να υπάρχει ήδη ανατεθειμένο άτομο σε αυτή την ημέρα (ώστε να αντιμετατεθεί με το νέο). Επιλέξτε Αντικατάσταση ή επιλέξτε πρώτα το προηγούμενο άτομο.');
+                    return;
+                }
+                const dutyCat = typeof getDutyCategoryForDateKey === 'function'
+                    ? getDutyCategoryForDateKey(dayKey)
+                    : 'normal';
+                const otherKey = typeof findOtherDateKeyForPersonInGroupDutyCategory === 'function'
+                    ? findOtherDateKeyForPersonInGroupDutyCategory(newVal, group, dayKey, dutyCat)
+                    : null;
+                if (!otherKey) {
+                    alert(`Δεν βρέθηκε άλλη ημέρα (ίδιος τύπος υπηρεσίας) όπου ο/η «${newVal}» είναι ανατεθειμένος/η στην Ομάδα ${group}.\nΓια απλή αλλαγή χωρίς αντιμετάθεση δύο ημερών, επιλέξτε «Αντικατάσταση».`);
+                    return;
+                }
+                if (typeof isPersonGroupCriticalAssignment === 'function' && isPersonGroupCriticalAssignment(otherKey, newVal, group)) {
+                    alert(`Η ανάθεση του/της «${newVal}» την ${otherKey} είναι κρίσιμη (Απόβαση) και δεν μπορεί να αλλάξει για αμοιβαία αλλαγή.`);
+                    return;
+                }
+                mutualSwapPlans.push({ group, prevPerson, newPerson: newVal, otherKey });
+            }
+            
+            const plansByOtherKey = new Map();
+            for (const p of mutualSwapPlans) {
+                if (!plansByOtherKey.has(p.otherKey)) plansByOtherKey.set(p.otherKey, []);
+                plansByOtherKey.get(p.otherKey).push(p);
+            }
+            for (const [otherKey, plans] of plansByOtherKey) {
+                let str = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(otherKey) : '';
+                if (str == null) str = '';
+                str = typeof str === 'string' ? str : String(str);
+                for (const p of plans) {
+                    const cur = typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                        ? (parseAssignedPersonForGroupFromAssignment(str, p.group) || '').trim()
+                        : '';
+                    if (normPerson(cur) !== normPerson(p.newPerson)) {
+                        alert('Η ανάθεση στην άλλη ημερομηνία δεν ταιριάζει πλέον· ακυρώθηκε η αποθήκευση. Δοκιμάστε ξανά.');
+                        return;
+                    }
+                    if (typeof replaceAssignedPersonForGroupInAssignmentString === 'function') {
+                        str = replaceAssignedPersonForGroupInAssignmentString(str, p.group, p.prevPerson);
+                    }
+                }
+                if (typeof setAssignmentForDate === 'function') {
+                    setAssignmentForDate(otherKey, str);
+                }
+                for (const p of plans) {
+                    if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
+                        clearAssignmentReasonForPersonOnDate(otherKey, p.group, p.newPerson);
+                    }
+                }
+            }
+            
             // Persist to the correct day-type store (normal/semi/weekend/special) so getAssignmentForDate
             // and saveData() see the change; dutyAssignments is updated inside set/delete helpers.
             if (newAssignments.length > 0) {
@@ -5877,12 +5945,32 @@
                 delete dutyAssignments[currentEditingDayKey];
             }
             
-            // Update assignmentReasons when assignee changed: Αντικατάσταση (skip) vs Αμοιβαία Αλλαγή (swap)
-            const normPerson = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const mutualGroupsDone = new Set(mutualSwapPlans.map(p => p.group));
+            if (typeof storeAssignmentReason === 'function') {
+                for (const p of mutualSwapPlans) {
+                    const pairId = typeof getNextSwapPairIdForAssignmentReasons === 'function'
+                        ? getNextSwapPairIdForAssignmentReasons()
+                        : Date.now();
+                    const dateObjA = new Date(dayKey + 'T00:00:00');
+                    const dateObjB = new Date(p.otherKey + 'T00:00:00');
+                    const strA = dateObjA.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    const strB = dateObjB.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    const reasonHere = `Αμοιβαία αλλαγή: ο/η ${p.newPerson} ανατέθηκε εδώ (${getGreekDayName(dateObjA)} ${strA}) αντί του/της ${p.prevPerson}· ο/η ${p.prevPerson} μεταφέρθηκε στην ${getGreekDayName(dateObjB)} ${strB}.`;
+                    const reasonThere = `Αμοιβαία αλλαγή: ο/η ${p.prevPerson} ανατέθηκε εδώ (${getGreekDayName(dateObjB)} ${strB}) αντί του/της ${p.newPerson}· ο/η ${p.newPerson} μεταφέρθηκε στην ${getGreekDayName(dateObjA)} ${strA}.`;
+                    if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
+                        clearAssignmentReasonForPersonOnDate(dayKey, p.group, p.prevPerson);
+                    }
+                    storeAssignmentReason(dayKey, p.group, p.newPerson, 'swap', reasonHere, p.prevPerson, pairId, { manualDayModal: true, mutualTwoDaySwap: true, otherDateKey: p.otherKey });
+                    storeAssignmentReason(p.otherKey, p.group, p.prevPerson, 'swap', reasonThere, p.newPerson, pairId, { manualDayModal: true, mutualTwoDaySwap: true, otherDateKey: dayKey });
+                }
+            }
+            
+            // Αντικατάσταση (skip) and reasons for groups that did not use mutual swap
             selects.forEach(select => {
                 if (select.dataset.isCritical === 'true') return;
                 const group = parseInt(select.dataset.group, 10);
                 if (!Number.isFinite(group)) return;
+                if (mutualGroupsDone.has(group)) return;
                 const prevPerson = typeof parseAssignedPersonForGroupFromAssignment === 'function'
                     ? (parseAssignedPersonForGroupFromAssignment(prevStr, group) || '').trim()
                     : '';
@@ -5898,20 +5986,13 @@
                 const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 if (typeof storeAssignmentReason !== 'function') return;
                 if (mode === 'mutual_swap') {
-                    const pairId = typeof getNextSwapPairIdForAssignmentReasons === 'function'
-                        ? getNextSwapPairIdForAssignmentReasons()
-                        : Date.now();
-                    const reason = prevPerson
-                        ? `Χειροκίνητη αμοιβαία αλλαγή: Ανατέθηκε ο/η ${newVal} αντί του/της ${prevPerson} (${getGreekDayName(dateObj)} ${dateStr}).`
-                        : `Χειροκίνητη αμοιβαία αλλαγή: Ανατέθηκε ο/η ${newVal} (${getGreekDayName(dateObj)} ${dateStr}).`;
-                    storeAssignmentReason(dayKey, group, newVal, 'swap', reason, prevPerson || null, pairId, { manualDayModal: true });
-                } else {
-                    const reason = prevPerson
-                        ? `Χειροκίνητη αντικατάσταση: Αντικατέστησε τον/την ${prevPerson} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${newVal}.`
-                        : `Χειροκίνητη ανάθεση: ${newVal} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}.`;
-                    const meta = prevPerson ? { manualAlternateReplacement: true, manualDayModal: true } : { manualDayModal: true };
-                    storeAssignmentReason(dayKey, group, newVal, 'skip', reason, prevPerson || null, null, meta);
+                    return;
                 }
+                const reason = prevPerson
+                    ? `Χειροκίνητη αντικατάσταση: Αντικατέστησε τον/την ${prevPerson} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${newVal}.`
+                    : `Χειροκίνητη ανάθεση: ${newVal} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}.`;
+                const meta = prevPerson ? { manualAlternateReplacement: true, manualDayModal: true } : { manualDayModal: true };
+                storeAssignmentReason(dayKey, group, newVal, 'skip', reason, prevPerson || null, null, meta);
             });
             
             // Preserve all original critical assignments

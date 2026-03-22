@@ -2169,6 +2169,80 @@
             return null;
         }
 
+        /** Duty category string for a date key: special | weekend | semi | normal (matches getAssignmentForDate routing). */
+        function getDutyCategoryForDateKey(dateKey) {
+            const d = new Date(dateKey + 'T00:00:00');
+            if (isNaN(d.getTime())) return 'normal';
+            const dayType = getDayType(d);
+            if (typeof isSpecialHoliday === 'function' && isSpecialHoliday(d)) return 'special';
+            if (dayType === 'special-holiday') return 'special';
+            if (dayType === 'weekend-holiday') return 'weekend';
+            if (dayType === 'semi-normal-day') return 'semi';
+            return 'normal';
+        }
+
+        /**
+         * Find another calendar day (same duty category store) where personName is assigned for groupNum.
+         * Excludes excludeDateKey (the day being edited).
+         */
+        function findOtherDateKeyForPersonInGroupDutyCategory(personName, groupNum, excludeDateKey, dayTypeCategory) {
+            if (!personName || !Number.isFinite(groupNum) || groupNum < 1) return null;
+            const map = getAssignmentsForDayType(dayTypeCategory);
+            if (!map || typeof map !== 'object') return null;
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const target = norm(personName);
+            const keys = Object.keys(map).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+            for (const dk of keys) {
+                if (dk === excludeDateKey) continue;
+                const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dk) : null;
+                if (!raw) continue;
+                const str = typeof raw === 'string' ? raw : String(raw);
+                const assigned = parseAssignedPersonForGroupFromAssignment(str, groupNum);
+                if (assigned && norm(assigned) === target) return dk;
+            }
+            return null;
+        }
+
+        /** Replace who holds groupNum in an assignment string; append slot if missing and newPersonName is non-empty. */
+        function replaceAssignedPersonForGroupInAssignmentString(assignmentStr, groupNum, newPersonName) {
+            const g = Number.isFinite(groupNum) ? groupNum : parseInt(groupNum, 10);
+            if (!Number.isFinite(g) || g < 1 || g > 4) return assignmentStr || '';
+            const parts = String(assignmentStr || '').split(',').map(p => p.trim()).filter(Boolean);
+            const out = [];
+            let found = false;
+            for (const part of parts) {
+                const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                if (m && parseInt(m[2], 10) === g) {
+                    if (newPersonName && String(newPersonName).trim()) {
+                        out.push(`${String(newPersonName).trim()} (Ομάδα ${g})`);
+                        found = true;
+                    }
+                } else {
+                    out.push(part);
+                }
+            }
+            if (!found && newPersonName && String(newPersonName).trim()) {
+                out.push(`${String(newPersonName).trim()} (Ομάδα ${g})`);
+            }
+            return out.join(', ');
+        }
+
+        /** True if this person+group is a locked critical (Απόβαση) assignment on that date. */
+        function isPersonGroupCriticalAssignment(dateKey, personName, groupNum) {
+            const list = criticalAssignments?.[dateKey];
+            if (!Array.isArray(list) || !personName || !Number.isFinite(groupNum)) return false;
+            const n = typeof normalizePersonKey === 'function' ? normalizePersonKey(personName) : String(personName || '').trim();
+            for (const entry of list) {
+                const m = String(entry).match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                if (m && parseInt(m[2], 10) === groupNum) {
+                    const name = m[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
+                    const nn = typeof normalizePersonKey === 'function' ? normalizePersonKey(name) : name.trim();
+                    if (nn === n) return true;
+                }
+            }
+            return false;
+        }
+
         // Helper: normalize an "assignment" value to a { groupNum -> personName } map.
         // Supports:
         // - string: "Name (Ομάδα 1), Name (Ομάδα 2)..."
