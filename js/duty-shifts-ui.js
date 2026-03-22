@@ -5848,9 +5848,12 @@
                 }
             });
             
-            // Update dutyAssignments
+            // Persist to the correct day-type store (normal/semi/weekend/special) so getAssignmentForDate
+            // and saveData() see the change; dutyAssignments is updated inside set/delete helpers.
             if (newAssignments.length > 0) {
-                dutyAssignments[currentEditingDayKey] = newAssignments.join(', ');
+                setAssignmentForDate(currentEditingDayKey, newAssignments.join(', '));
+            } else if (typeof deleteAssignmentForDate === 'function') {
+                deleteAssignmentForDate(currentEditingDayKey);
             } else {
                 delete dutyAssignments[currentEditingDayKey];
             }
