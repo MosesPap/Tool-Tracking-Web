@@ -1420,14 +1420,32 @@
             if (dateEl) {
                 const d = new Date();
                 dateEl.value = formatDateKey(d);
+                dateEl.disabled = false;
             }
 
             wirePersonActionsReopenListeners();
             reopenPersonActionsModalWhenClosed = true;
             const actionsModal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
             if (actionsModal) actionsModal.hide();
+            setAlternateReplacementLoading(false);
             const modal = new bootstrap.Modal(document.getElementById('alternateReplacementModal'));
             modal.show();
+        }
+
+        function setAlternateReplacementLoading(loading) {
+            const overlay = document.getElementById('alternateReplacementLoadingOverlay');
+            const applyBtn = document.getElementById('alternateReplacementApplyBtn');
+            const cancelBtn = document.getElementById('alternateReplacementCancelBtn');
+            const closeBtn = document.getElementById('alternateReplacementModalCloseBtn');
+            const dateInp = document.getElementById('alternateReplacementDate');
+            if (overlay) {
+                overlay.classList.toggle('d-none', !loading);
+                overlay.setAttribute('aria-busy', loading ? 'true' : 'false');
+            }
+            if (applyBtn) applyBtn.disabled = !!loading;
+            if (cancelBtn) cancelBtn.disabled = !!loading;
+            if (closeBtn) closeBtn.disabled = !!loading;
+            if (dateInp) dateInp.disabled = !!loading;
         }
 
         async function confirmAlternateReplacement() {
@@ -1440,9 +1458,14 @@
                 alert('Παρακαλώ επιλέξτε έγκυρη ημερομηνία.');
                 return;
             }
-            await applyAlternateReplacementForDate(groupNum, personName, dateKey);
-            const modal = bootstrap.Modal.getInstance(document.getElementById('alternateReplacementModal'));
-            if (modal) modal.hide();
+            setAlternateReplacementLoading(true);
+            try {
+                await applyAlternateReplacementForDate(groupNum, personName, dateKey);
+                const modal = bootstrap.Modal.getInstance(document.getElementById('alternateReplacementModal'));
+                if (modal) modal.hide();
+            } finally {
+                setAlternateReplacementLoading(false);
+            }
         }
 
         async function applyAlternateReplacementForDate(groupNum, personName, dateKey) {

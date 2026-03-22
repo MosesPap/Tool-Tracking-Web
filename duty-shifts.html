@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.397 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.398 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -983,6 +983,23 @@
             font-size: 1.05rem;
         }
 
+        /* Αντικατάσταση Επιλαχών — loading overlay while Εφαρμογή runs */
+        #alternateReplacementModal .alternate-replacement-loading-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 1060;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.92);
+            border-radius: var(--bs-modal-border-radius, 0.5rem);
+            pointer-events: all;
+        }
+        #alternateReplacementModal .alternate-replacement-loading-overlay.d-none {
+            display: none !important;
+        }
+
         /* Underline when someone else should have been assigned but was missing or skipped (special-holiday skip) */
         .duty-person-replacement {
             text-decoration: underline;
@@ -1585,7 +1602,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.397</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.398</span></h4>
             </div>
             <div class="d-flex align-items-center flex-wrap gap-3 title-bar-stats" style="font-size: 1.25em; font-weight: 500; opacity: 0.98;">
                 <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
@@ -2487,10 +2504,16 @@
     <!-- Alternate Replacement (one-time skip) Modal -->
     <div class="modal fade" id="alternateReplacementModal" tabindex="-1" aria-labelledby="alternateReplacementModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
+            <div class="modal-content position-relative">
+                <div id="alternateReplacementLoadingOverlay" class="alternate-replacement-loading-overlay d-none" aria-live="polite" aria-busy="false">
+                    <div class="spinner-border text-success mb-3" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Φόρτωση…</span>
+                    </div>
+                    <div class="fw-semibold text-secondary text-center px-3">Εφαρμογή αλλαγών… Παρακαλώ περιμένετε.</div>
+                </div>
                 <div class="modal-header bg-success text-white">
                     <h5 class="modal-title" id="alternateReplacementModalLabel"><i class="fas fa-user-check me-2"></i>Αντικατάσταση Επιλαχών</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close btn-close-white" id="alternateReplacementModalCloseBtn" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-2">
@@ -2506,8 +2529,8 @@
                     <input type="date" class="form-control" id="alternateReplacementDate">
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
-                    <button type="button" class="btn btn-success" onclick="confirmAlternateReplacement()"><i class="fas fa-check me-1"></i>Εφαρμογή</button>
+                    <button type="button" class="btn btn-secondary" id="alternateReplacementCancelBtn" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-success" id="alternateReplacementApplyBtn" onclick="confirmAlternateReplacement()"><i class="fas fa-check me-1"></i>Εφαρμογή</button>
                 </div>
             </div>
         </div>
