@@ -5797,18 +5797,27 @@
                 });
                 const normPick = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                 const curNameNorm = person.name ? normPick(person.name) : '';
-                const peopleList = Array.from(allPeopleInGroup)
-                    .filter(p => {
-                        if (curNameNorm && normPick(p) === curNameNorm) return true;
-                        return !isPersonUnavailableForManualDutyOnDate(p, person.group, date, dayTypeCategory);
-                    })
-                    .sort();
+                const escapeOpt = (s) => String(s || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                const fullPeopleList = Array.from(allPeopleInGroup).sort();
                 
-                // Build dropdown options
+                // Build dropdown: show everyone; unavailable (missing/disabled) as disabled options with short reason (current assignee stays selectable)
                 let peopleOptions = '<option value="">-- Επιλέξτε Άτομο --</option>';
-                peopleOptions += peopleList.map(p => 
-                    `<option value="${p}" ${p === person.name ? 'selected' : ''}>${p}</option>`
-                ).join('');
+                fullPeopleList.forEach(p => {
+                    const unavailable = isPersonUnavailableForManualDutyOnDate(p, person.group, date, dayTypeCategory);
+                    const isCurrent = !!(curNameNorm && normPick(p) === curNameNorm);
+                    const reasonShort = unavailable && typeof getUnavailableReasonShort === 'function'
+                        ? getUnavailableReasonShort(p, person.group, date, dayTypeCategory)
+                        : (unavailable ? 'Μη διαθέσιμος/η' : '');
+                    let label = escapeOpt(p);
+                    if (reasonShort) label += ' · ' + escapeOpt(reasonShort);
+                    const dis = unavailable && !isCurrent ? ' disabled' : '';
+                    const sel = isCurrent ? ' selected' : '';
+                    peopleOptions += `<option value="${escapeOpt(p)}"${dis}${sel}>${label}</option>`;
+                });
                 
                 const changeTypeBlock = isCritical
                     ? ''
