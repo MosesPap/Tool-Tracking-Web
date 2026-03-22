@@ -5325,6 +5325,9 @@
                                     const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(candidateKey) : null;
                                     updatedAssignments[candidateKey] = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
                                 }
+                                if (!isNormalConflictSwapValidForMissingBoundaries(dateKey, candidateKey, currentPerson, swapCandidate, groupNum)) {
+                                    return null;
+                                }
                                 return { swapCandidate, candidateKey };
                             };
                             
@@ -5391,7 +5394,8 @@
                                     } else {
                                         if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate, 'normal') &&
                                             !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, sameWeekKey) &&
-                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                            isNormalConflictSwapValidForMissingBoundaries(dateKey, sameWeekKey, currentPerson, swapCandidate, groupNum)) {
                                             swapDayKey = sameWeekKey;
                                             swapDayIndex = normalDays.indexOf(sameWeekKey);
                                             swapFound = true;
@@ -5413,7 +5417,8 @@
                                             if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay, 'normal') &&
                                                 !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, nextSameDayKey) &&
                                                 !hasConsecutiveDuty(nextSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                                isNormalConflictSwapValidForMissingBoundaries(dateKey, nextSameDayKey, currentPerson, swapCandidate, groupNum)) {
                                                 swapDayKey = nextSameDayKey;
                                                 swapDayIndex = normalDays.indexOf(nextSameDayKey);
                                                 swapFound = true;
@@ -5461,7 +5466,8 @@
                                         if (!isPersonMissingOnDate(swapCandidate, groupNum, weekAfterNextDate, 'normal') &&
                                             !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, weekAfterNextKey) &&
                                             !hasConsecutiveDuty(weekAfterNextKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                            isNormalConflictSwapValidForMissingBoundaries(dateKey, weekAfterNextKey, currentPerson, swapCandidate, groupNum)) {
                                             swapDayKey = weekAfterNextKey;
                                             swapDayIndex = normalDays.indexOf(weekAfterNextKey);
                                             swapFound = true;
@@ -5532,7 +5538,8 @@
                                     } else {
                                         if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay, 'normal') &&
                                             !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, nextSameDayKey) &&
-                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                            isNormalConflictSwapValidForMissingBoundaries(dateKey, nextSameDayKey, currentPerson, swapCandidate, groupNum)) {
                                             swapDayKey = nextSameDayKey;
                                             swapDayIndex = normalDays.indexOf(nextSameDayKey);
                                             swapFound = true;
@@ -5577,7 +5584,8 @@
                                             if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate, 'normal') &&
                                                 !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, sameWeekKey) &&
                                                 !hasConsecutiveDuty(sameWeekKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                                isNormalConflictSwapValidForMissingBoundaries(dateKey, sameWeekKey, currentPerson, swapCandidate, groupNum)) {
                                                 swapDayKey = sameWeekKey;
                                                 swapDayIndex = normalDays.indexOf(sameWeekKey);
                                                 swapFound = true;
@@ -5602,10 +5610,11 @@
                                         if (updatedAssignments[nextAlternativeKey]?.[groupNum]) {
                                             const swapCandidate = updatedAssignments[nextAlternativeKey][groupNum];
 
-                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextAlternativeDay) &&
+                                            if (!isPersonMissingOnDate(swapCandidate, groupNum, nextAlternativeDay, 'normal') &&
                                                 !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, nextAlternativeKey) &&
                                                 !hasConsecutiveDuty(nextAlternativeKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                                isNormalConflictSwapValidForMissingBoundaries(dateKey, nextAlternativeKey, currentPerson, swapCandidate, groupNum)) {
                                                 swapDayKey = nextAlternativeKey;
                                                 swapDayIndex = normalDays.indexOf(nextAlternativeKey);
                                                 swapFound = true;
@@ -5647,7 +5656,8 @@
                                             if (!isPersonMissingOnDate(swapCandidate, groupNum, prevAlternativeDay, 'normal') &&
                                                 !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, prevAlternativeKey) &&
                                                 !hasConsecutiveDuty(prevAlternativeKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                                !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                                isNormalConflictSwapValidForMissingBoundaries(dateKey, prevAlternativeKey, currentPerson, swapCandidate, groupNum)) {
                                                 swapDayKey = prevAlternativeKey;
                                                 swapDayIndex = normalDays.indexOf(prevAlternativeKey);
                                                 swapFound = true;
@@ -9847,7 +9857,8 @@
                                 
                                 if (hasRealConflict && 
                                     !isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate, 'normal') &&
-                                    !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                    !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                    isNormalConflictSwapValidForMissingBoundaries(dateKey, sameWeekKey, currentPerson, swapCandidate, groupNum)) {
                                     swapDayKey = sameWeekKey;
                                                             swapFound = true;
                                 }
@@ -9862,7 +9873,8 @@
                                         const swapCandidate = normalAssignments[nextSameDayKey][groupNum];
                                         if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay, 'normal') &&
                                             !hasConsecutiveDuty(nextSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                            isNormalConflictSwapValidForMissingBoundaries(dateKey, nextSameDayKey, currentPerson, swapCandidate, groupNum)) {
                                             swapDayKey = nextSameDayKey;
                                                             swapFound = true;
                                         }
@@ -9884,7 +9896,8 @@
                                     const swapCandidate = normalAssignments[weekAfterNextKey][groupNum];
                                     if (!isPersonMissingOnDate(swapCandidate, groupNum, weekAfterNextDate, 'normal') &&
                                         !hasConsecutiveDuty(weekAfterNextKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                        !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                        !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                        isNormalConflictSwapValidForMissingBoundaries(dateKey, weekAfterNextKey, currentPerson, swapCandidate, groupNum)) {
                                         swapDayKey = weekAfterNextKey;
                                         swapFound = true;
                                     }
@@ -9905,7 +9918,8 @@
                                 const swapCandidate = normalAssignments[nextSameDayKey][groupNum];
                                 if (!isPersonMissingOnDate(swapCandidate, groupNum, nextSameDay, 'normal') &&
                                     !hasConsecutiveDuty(nextSameDayKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                    !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                    !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                    isNormalConflictSwapValidForMissingBoundaries(dateKey, nextSameDayKey, currentPerson, swapCandidate, groupNum)) {
                                     swapDayKey = nextSameDayKey;
                                     swapFound = true;
                                 }
@@ -9922,7 +9936,8 @@
                                     const swapCandidate = normalAssignments[sameWeekKey][groupNum];
                                     if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate, 'normal') &&
                                         !hasConsecutiveDuty(sameWeekKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                        !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                        !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                        isNormalConflictSwapValidForMissingBoundaries(dateKey, sameWeekKey, currentPerson, swapCandidate, groupNum)) {
                                         swapDayKey = sameWeekKey;
                                         swapFound = true;
                                     }
@@ -9943,7 +9958,8 @@
                                         const swapCandidate = normalAssignments[nextAlternativeKey][groupNum];
                                         if (!isPersonMissingOnDate(swapCandidate, groupNum, nextAlternativeDay, 'normal') &&
                                             !hasConsecutiveDuty(nextAlternativeKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                            !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                            isNormalConflictSwapValidForMissingBoundaries(dateKey, nextAlternativeKey, currentPerson, swapCandidate, groupNum)) {
                                             swapDayKey = nextAlternativeKey;
                                             swapFound = true;
                                         }
@@ -10520,6 +10536,24 @@
                 return dateKey === beforeKey || dateKey === afterKey;
             });
         }
+
+        /**
+         * Two-slot normal conflict swap: currentPerson → swapDayKey, swapCandidate → dateKey.
+         * Reject if either would be on a missing day or on a buffer day (immediately before absence start
+         * or after absence end), so the Mon↔Wed / Tue↔Thu search can try the next alternative.
+         */
+        function isNormalConflictSwapValidForMissingBoundaries(dateKey, swapDayKey, currentPerson, swapCandidate, groupNum) {
+            if (!dateKey || !swapDayKey || !currentPerson || !swapCandidate || !Number.isFinite(groupNum)) return true;
+            const dConflict = new Date(dateKey + 'T00:00:00');
+            const dSwap = new Date(swapDayKey + 'T00:00:00');
+            if (isNaN(dConflict.getTime()) || isNaN(dSwap.getTime())) return true;
+            if (isPersonMissingOnDate(currentPerson, groupNum, dSwap, 'normal')) return false;
+            if (isPersonOnMissingBufferDay(currentPerson, groupNum, swapDayKey)) return false;
+            if (isPersonMissingOnDate(swapCandidate, groupNum, dConflict, 'normal')) return false;
+            if (isPersonOnMissingBufferDay(swapCandidate, groupNum, dateKey)) return false;
+            return true;
+        }
+
         function findNextEligiblePersonAfterMissing({
             dateKey,
             date,
