@@ -5795,7 +5795,14 @@
                         groupData[listType].forEach(p => allPeopleInGroup.add(p));
                     }
                 });
-                const peopleList = Array.from(allPeopleInGroup).sort();
+                const normPick = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                const curNameNorm = person.name ? normPick(person.name) : '';
+                const peopleList = Array.from(allPeopleInGroup)
+                    .filter(p => {
+                        if (curNameNorm && normPick(p) === curNameNorm) return true;
+                        return !isPersonUnavailableForManualDutyOnDate(p, person.group, date, dayTypeCategory);
+                    })
+                    .sort();
                 
                 // Build dropdown options
                 let peopleOptions = '<option value="">-- Επιλέξτε Άτομο --</option>';
@@ -5852,6 +5859,14 @@
                 alert('Σφάλμα: ' + error.message);
             }
         }
+        /** True if person cannot take this duty type on this calendar day (disabled or missing). */
+        function isPersonUnavailableForManualDutyOnDate(personName, groupNum, dateObj, dayTypeCategory) {
+            if (!personName || !Number.isFinite(groupNum) || groupNum < 1) return true;
+            if (!dateObj || isNaN(dateObj.getTime())) return true;
+            if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(personName, groupNum, dayTypeCategory)) return true;
+            if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(personName, groupNum, dateObj, dayTypeCategory)) return true;
+            return false;
+        }
         function saveDayAssignments() {
             if (!currentEditingDayKey) return;
             
@@ -5892,6 +5907,55 @@
             });
             
             const normPerson = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            
+            const editDate = (typeof currentEditingDayDate !== 'undefined' && currentEditingDayDate && !isNaN(currentEditingDayDate.getTime()))
+                ? currentEditingDayDate
+                : new Date(dayKey + 'T00:00:00');
+            let editCat = 'normal';
+            const dtEdit = getDayType(editDate);
+            if ((typeof isSpecialHoliday === 'function' && isSpecialHoliday(editDate)) || dtEdit === 'special-holiday') editCat = 'special';
+            else if (dtEdit === 'weekend-holiday') editCat = 'weekend';
+            else if (dtEdit === 'semi-normal-day') editCat = 'semi';
+            
+            // Block manual replacement / mutual swap with people disabled or missing on the relevant duty day(s)
+            for (const select of selects) {
+                if (select.dataset.isCritical === 'true') continue;
+                const group = parseInt(select.dataset.group, 10);
+                if (!Number.isFinite(group)) continue;
+                const prevPerson = typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                    ? (parseAssignedPersonForGroupFromAssignment(prevStr, group) || '').trim()
+                    : '';
+                const newVal = select.value.trim();
+                if (!newVal || normPerson(prevPerson) === normPerson(newVal)) continue;
+                if (isPersonUnavailableForManualDutyOnDate(newVal, group, editDate, editCat)) {
+                    alert(`Ο/η «${newVal}» δεν μπορεί να ανατεθεί: είναι απενεργοποιημένος/η ή απόντης/ουσα για αυτόν τον τύπο υπηρεσίας την ημερομηνία που επεξεργάζεστε.`);
+                    return;
+                }
+                const modeEl = container.querySelector(`input[name="duty-change-mode-${group}"]:checked`);
+                const mode = modeEl ? modeEl.value : 'replacement';
+                if (mode === 'mutual_swap') {
+                    if (!prevPerson) continue;
+                    const dutyCat = typeof getDutyCategoryForDateKey === 'function'
+                        ? getDutyCategoryForDateKey(dayKey)
+                        : editCat;
+                    const otherKey = typeof findOtherDateKeyForPersonInGroupDutyCategory === 'function'
+                        ? findOtherDateKeyForPersonInGroupDutyCategory(newVal, group, dayKey, dutyCat)
+                        : null;
+                    if (!otherKey) continue;
+                    const otherDate = new Date(otherKey + 'T00:00:00');
+                    const otherCat = typeof getDutyCategoryForDateKey === 'function'
+                        ? getDutyCategoryForDateKey(otherKey)
+                        : dutyCat;
+                    if (isPersonUnavailableForManualDutyOnDate(prevPerson, group, otherDate, otherCat)) {
+                        alert(`Ο/η «${prevPerson}» δεν μπορεί να μεταφερθεί στην άλλη ημέρα (${otherKey}): είναι απενεργοποιημένος/η ή απόντης/ουσα εκείνη την ημέρα για τον τύπο υπηρεσίας.`);
+                        return;
+                    }
+                    if (isPersonUnavailableForManualDutyOnDate(newVal, group, otherDate, otherCat)) {
+                        alert(`Ο/η «${newVal}» δεν μπορεί να συμμετάσχει σε αμοιβαία αλλαγή: είναι απενεργοποιημένος/η ή απόντης/ουσα την ${otherKey} (ημέρα της άλλης υπηρεσίας).`);
+                        return;
+                    }
+                }
+            }
             
             // Αμοιβαία Αλλαγή: swap assignees between this day and the other duty day where the selected person is assigned (same group + duty type).
             const mutualSwapPlans = [];
