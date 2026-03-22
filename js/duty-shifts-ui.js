@@ -4027,7 +4027,7 @@
                 hierarchyPopup.innerHTML = '<div class="hierarchy-popup-content"><div class="hierarchy-popup-title">Ιεραρχική Σειρά</div><div class="hierarchy-popup-list">' +
                     entries.map((e, idx) => {
                         const buf = e.bufferWarning
-                            ? ` <i class="fas fa-exclamation-triangle text-warning" title="${escapeHtml(missingBufferTitlePopup)}" aria-label="${escapeHtml(missingBufferTitlePopup)}"></i>`
+                            ? ` <i class="fas fa-exclamation-triangle duty-missing-buffer-warn" title="${escapeHtml(missingBufferTitlePopup)}" aria-label="${escapeHtml(missingBufferTitlePopup)}"></i>`
                             : '';
                         return `<div class="hierarchy-popup-item">${idx + 1}. ${escapeHtml(e.name)}${buf}</div>`;
                     }).join('') +
