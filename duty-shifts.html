@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.406 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.407 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -99,6 +99,13 @@
         }
         #currentMonthYear.cursor-pointer:hover {
             text-decoration: underline;
+        }
+
+        /* Month locked: subtle frame so users see κλείδωμα is active */
+        .calendar-section.calendar-month-locked {
+            border-radius: 8px;
+            outline: 2px dashed rgba(108, 117, 125, 0.85);
+            outline-offset: 6px;
         }
 
         /* =========================================================
@@ -1602,7 +1609,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.406</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.407</span></h4>
             </div>
             <div class="d-flex align-items-center flex-wrap gap-3 title-bar-stats" style="font-size: 1.25em; font-weight: 500; opacity: 0.98;">
                 <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
@@ -1667,6 +1674,12 @@
                         <button class="btn btn-sm btn-outline-secondary" onclick="nextMonth()">
                             <i class="fas fa-chevron-right"></i>
                         </button>
+                        <span class="border-start border-secondary mx-2 d-none d-sm-inline" style="height: 1.5rem; align-self: center;"></span>
+                        <div class="form-check form-switch mb-0 ms-sm-1 d-flex align-items-center flex-shrink-0"
+                             title="Όταν είναι ενεργό, δεν μπορεί να ξεκινήσει ο «Υπολογισμός Υπηρεσιών» για τον μήνα που βλέπετε. Ξεκλειδώστε για επανυπολογισμό.">
+                            <input class="form-check-input flex-shrink-0" type="checkbox" role="switch" id="monthCalculationLockToggle" style="cursor: pointer;">
+                            <label class="form-check-label small text-nowrap ms-2 mb-0 user-select-none" for="monthCalculationLockToggle" style="cursor: pointer;"><i class="fas fa-lock me-1 text-secondary"></i>Κλείδωμα μήνα</label>
+                        </div>
                     </div>
                 </div>
                 <div class="d-flex flex-wrap align-items-center gap-2 border-top pt-2" style="border-color: #dee2e6 !important;">

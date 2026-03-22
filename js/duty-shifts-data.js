@@ -55,9 +55,22 @@
             weekend: {},
             special: {}
         };
+        /** YYYY-MM -> true: month cannot start «Υπολογισμός Υπηρεσιών» until unlocked (Firestore doc monthCalculationLocks). */
+        let monthCalculationLocks = {};
 
         function getMonthKeyFromDate(date) {
             return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        function isMonthCalculationLocked(monthKey) {
+            return !!(monthKey && typeof monthKey === 'string' && monthCalculationLocks && monthCalculationLocks[monthKey] === true);
+        }
+
+        function setMonthCalculationLocked(monthKey, locked) {
+            if (!monthKey || typeof monthKey !== 'string' || !/^\d{4}-\d{2}$/.test(monthKey)) return;
+            if (!monthCalculationLocks || typeof monthCalculationLocks !== 'object') monthCalculationLocks = {};
+            if (locked) monthCalculationLocks[monthKey] = true;
+            else delete monthCalculationLocks[monthKey];
         }
 
         function rebuildRotationBaselineLastByType() {
@@ -811,7 +824,8 @@
                     assignmentReasonsDoc,
                     lastRotationPositionsDoc,
                     rankingsDoc,
-                    missingReasonsDoc
+                    missingReasonsDoc,
+                    monthCalculationLocksDoc
                 ] = await Promise.all([
                     dutyShifts.doc('groups').get(),
                     dutyShifts.doc('holidays').get(),
@@ -829,7 +843,8 @@
                     dutyShifts.doc('assignmentReasons').get(),
                     dutyShifts.doc('lastRotationPositions').get(),
                     dutyShifts.doc('rankings').get(),
-                    dutyShifts.doc('missingReasons').get()
+                    dutyShifts.doc('missingReasons').get(),
+                    dutyShifts.doc('monthCalculationLocks').get()
                 ]);
                 
                 // Load groups
@@ -1037,6 +1052,16 @@
                     assignmentReasons = data || {};
                 } else {
                     assignmentReasons = {};
+                }
+
+                // Load per-month calculation locks (κλείδωμα μήνα)
+                monthCalculationLocks = {};
+                if (monthCalculationLocksDoc && monthCalculationLocksDoc.exists) {
+                    const rawLocks = monthCalculationLocksDoc.data() || {};
+                    const L = rawLocks.locks && typeof rawLocks.locks === 'object' ? rawLocks.locks : rawLocks;
+                    for (const k of Object.keys(L)) {
+                        if (/^\d{4}-\d{2}$/.test(k) && L[k]) monthCalculationLocks[k] = true;
+                    }
                 }
                 
                 // Load last rotation positions
@@ -1325,6 +1350,21 @@
                 assignmentReasons = JSON.parse(savedAssignmentReasons);
             } else {
                 assignmentReasons = {};
+            }
+
+            const savedMonthLocks = localStorage.getItem('dutyShiftsMonthCalculationLocks');
+            monthCalculationLocks = {};
+            if (savedMonthLocks) {
+                try {
+                    const parsed = JSON.parse(savedMonthLocks);
+                    if (parsed && typeof parsed === 'object') {
+                        for (const k of Object.keys(parsed)) {
+                            if (/^\d{4}-\d{2}$/.test(k) && parsed[k]) monthCalculationLocks[k] = true;
+                        }
+                    }
+                } catch (_) {
+                    monthCalculationLocks = {};
+                }
             }
             
             // Load last rotation positions from localStorage
@@ -1662,6 +1702,21 @@
                 } catch (error) {
                     console.error('Error saving assignmentReasons to Firestore:', error);
                 }
+
+                // Save month calculation locks (YYYY-MM keys)
+                try {
+                    const locksOnly = {};
+                    for (const k of Object.keys(monthCalculationLocks || {})) {
+                        if (/^\d{4}-\d{2}$/.test(k) && monthCalculationLocks[k]) locksOnly[k] = true;
+                    }
+                    await db.collection('dutyShifts').doc('monthCalculationLocks').set({
+                        locks: sanitizeForFirestore(locksOnly),
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                } catch (error) {
+                    console.error('Error saving monthCalculationLocks to Firestore:', error);
+                }
                 
                 // Save rankings to Firestore ONLY if they have been modified
                 // This prevents saving rankings on every page refresh or when other data is saved
@@ -1742,6 +1797,11 @@
             localStorage.setItem('dutyShiftsAssignmentReasons', JSON.stringify(assignmentReasons));
             localStorage.setItem('dutyShiftsLastRotationPositions', JSON.stringify(lastRotationPositions));
             localStorage.setItem('dutyShiftsRankings', JSON.stringify(rankings));
+            const locksOnly = {};
+            for (const k of Object.keys(monthCalculationLocks || {})) {
+                if (/^\d{4}-\d{2}$/.test(k) && monthCalculationLocks[k]) locksOnly[k] = true;
+            }
+            localStorage.setItem('dutyShiftsMonthCalculationLocks', JSON.stringify(locksOnly));
         }
 
         // Clear selected dutyShifts documents in Firestore (wipe fields, keep only metadata)

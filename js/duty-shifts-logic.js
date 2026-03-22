@@ -1971,10 +1971,6 @@
         async function calculateDutiesForSelectedMonths() {
             const calcBtn = document.getElementById('calculateDutiesButton');
             const originalBtnHtml = calcBtn ? calcBtn.innerHTML : '';
-            if (calcBtn) {
-                calcBtn.disabled = true;
-                calcBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Προετοιμασία...';
-            }
             try {
                 const startMonthInput = document.getElementById('calculateStartMonth');
                 
@@ -1999,15 +1995,12 @@
                 }
                 
                 const [startYear, startMonthNum] = startMonth.split('-').map(Number);
+                if (!Number.isFinite(startYear) || !Number.isFinite(startMonthNum) || startMonthNum < 1 || startMonthNum > 12) {
+                    alert('Μη έγκυρη επιλογή μήνα.');
+                    return;
+                }
                 const startDate = new Date(startYear, startMonthNum - 1, 1);
                 const endDate = new Date(startYear, startMonthNum, 0);
-                
-                // Store calculation parameters for step-by-step process
-                calculationSteps.startDate = startDate;
-                calculationSteps.endDate = endDate;
-                calculationSteps.preserveExisting = preserveExisting;
-                calculationSteps.stripManualOverrideGroups = stripManualOverrideGroups.slice();
-                calculationSteps.currentStep = 1;
                 
                 // Build month keys for the selected range (YYYY-MM)
                 const monthKeysForRange = [];
@@ -2017,6 +2010,30 @@
                     monthKeysForRange.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
                     d.setMonth(d.getMonth() + 1);
                 }
+
+                const lockedMonths = monthKeysForRange.filter(
+                    (mk) => typeof isMonthCalculationLocked === 'function' && isMonthCalculationLocked(mk)
+                );
+                if (lockedMonths.length > 0) {
+                    alert(
+                        'Ο μήνας που επιλέξατε είναι κλειδωμένος (διακόπτης «Κλείδωμα μήνα» στο ημερολόγιο). ' +
+                        'Δεν μπορεί να ξεκινήσει ο υπολογισμός υπηρεσιών μέχρι να ξεκλειδώσετε τον μήνα — ' +
+                        'ώστε να αποφευχθεί τυχαίος επανυπολογισμός.'
+                    );
+                    return;
+                }
+
+                if (calcBtn) {
+                    calcBtn.disabled = true;
+                    calcBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Προετοιμασία...';
+                }
+                
+                // Store calculation parameters for step-by-step process
+                calculationSteps.startDate = startDate;
+                calculationSteps.endDate = endDate;
+                calculationSteps.preserveExisting = preserveExisting;
+                calculationSteps.stripManualOverrideGroups = stripManualOverrideGroups.slice();
+                calculationSteps.currentStep = 1;
                 
                 // Preserve manual modal / mutual swap / alternate-replacement across full recalc
                 if (typeof captureManualDutyProtectionSnapshot === 'function') {

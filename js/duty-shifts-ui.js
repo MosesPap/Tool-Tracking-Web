@@ -3754,6 +3754,37 @@
                 renderCalendar();
             }
         }
+        let _monthCalculationLockToggleAttached = false;
+        function attachMonthCalculationLockToggleOnce() {
+            if (_monthCalculationLockToggleAttached) return;
+            const el = document.getElementById('monthCalculationLockToggle');
+            if (!el) return;
+            _monthCalculationLockToggleAttached = true;
+            el.addEventListener('change', async function () {
+                if (typeof getMonthKeyFromDate !== 'function' || typeof setMonthCalculationLocked !== 'function') return;
+                const mk = getMonthKeyFromDate(currentDate);
+                const wantLock = !!el.checked;
+                setMonthCalculationLocked(mk, wantLock);
+                try {
+                    if (typeof saveData === 'function') await saveData();
+                } catch (err) {
+                    console.error(err);
+                    alert('Αποτυχία αποθήκευσης του κλειδώματος μήνα. Δοκιμάστε ξανά.');
+                    el.checked = !wantLock;
+                    setMonthCalculationLocked(mk, !wantLock);
+                    return;
+                }
+                if (typeof renderCalendar === 'function') renderCalendar();
+            });
+        }
+        function syncMonthCalculationLockToggle() {
+            const el = document.getElementById('monthCalculationLockToggle');
+            if (!el) return;
+            if (typeof getMonthKeyFromDate !== 'function' || typeof isMonthCalculationLocked !== 'function') return;
+            const mk = getMonthKeyFromDate(currentDate);
+            el.checked = isMonthCalculationLocked(mk);
+        }
+
         function renderCalendar() {
             const calendarGrid = document.getElementById('calendarGrid');
             const currentMonthYear = document.getElementById('currentMonthYear');
@@ -4051,6 +4082,14 @@
             }
             
             grid.appendChild(frag);
+
+            attachMonthCalculationLockToggleOnce();
+            syncMonthCalculationLockToggle();
+            const calSec = document.querySelector('.calendar-section');
+            if (calSec && typeof getMonthKeyFromDate === 'function' && typeof isMonthCalculationLocked === 'function') {
+                const mk = getMonthKeyFromDate(currentDate);
+                calSec.classList.toggle('calendar-month-locked', isMonthCalculationLocked(mk));
+            }
         }
         function showHierarchyPopup(dayDiv, container) {
             // Remove existing popup if any
