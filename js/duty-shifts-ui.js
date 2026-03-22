@@ -5737,6 +5737,7 @@
             `;
             
             personGroups.forEach((person, index) => {
+                const normPick = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                 const isCritical = person.name && criticalPeople.some(cp => {
                     if (person.group) {
                         return cp === person.fullString || (cp.includes(person.name) && cp.includes(`(Ομάδα ${person.group})`));
@@ -5745,8 +5746,9 @@
                     }
                 });
                 
-                // Get skip/swap reason (ignore internal 'shift' markers in the UI)
-                let reason = person.name ? getAssignmentReason(key, person.group, person.name) : null;
+                // Skip/swap/shift: keep raw for mode; hide shift from badges and main reason line (calendar does not underline shift)
+                const rawReason = person.name ? getAssignmentReason(key, person.group, person.name) : null;
+                let reason = rawReason;
                 if (reason && reason.type === 'shift') {
                     reason = null;
                 }
@@ -5754,13 +5756,13 @@
                 if (reason) {
                     if (reason.type === 'skip') {
                         const displayReason = normalizeSkipReasonText(reason.reason);
-                        reasonBadge = `<span class="badge bg-warning ms-2" title="${displayReason}"><i class="fas fa-user-check me-1"></i>Αντικατάσταση</span>`;
+                        reasonBadge = `<span class="badge bg-warning ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-user-check me-1"></i>Αντικατάσταση</span>`;
                     } else if (reason.type === 'swap') {
                         const displayReason = normalizeSwapReasonText(reason.reason);
-                        reasonBadge = `<span class="badge bg-info ms-2" title="${displayReason}"><i class="fas fa-exchange-alt me-1"></i>Αμοιβαία Αλλαγή${reason.swappedWith ? ` με ${reason.swappedWith}` : ''}</span>`;
+                        reasonBadge = `<span class="badge bg-info ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-exchange-alt me-1"></i>Αμοιβαία Αλλαγή${reason.swappedWith ? ` με ${escapeHtml(String(reason.swappedWith))}` : ''}</span>`;
                     }
                 }
-                const defaultChangeMode = reason && reason.type === 'swap' ? 'mutual_swap' : 'replacement';
+                const defaultChangeMode = rawReason && rawReason.type === 'swap' ? 'mutual_swap' : 'replacement';
                 
                 const groupName = person.group ? getGroupName(person.group) : 'Άγνωστη Ομάδα';
                 const missingBufferDay = person.name && person.group && typeof isPersonOnMissingBufferDay === 'function' && isPersonOnMissingBufferDay(person.name, person.group, key);
@@ -5774,10 +5776,11 @@
                 
                 // Add reason display below the person name.
                 // If assignmentReasons is missing (common for missing-period replacements), derive the same reason logic as violations popup.
+                // Also align with calendar underline: assigned vs rotation baseline differs (manual alternate, legacy data, key mismatch).
                 let derivedReasonText = '';
-                if (!reason && person.name && person.group) {
+                if (!reason && person.name && person.group && !(rawReason && rawReason.type === 'shift')) {
                     const expected = getExpectedPersonForDay(person.group);
-                    if (expected && expected !== person.name) {
+                    if (expected && normPick(expected) !== normPick(person.name)) {
                         if (isPersonMissingOnDate(expected, person.group, date, dayTypeCategory)) {
                             if (isPersonDisabledForDuty(expected, person.group, dayTypeCategory)) {
                                 derivedReasonText = buildUnavailableReplacementReason({
@@ -5801,6 +5804,54 @@
                             }
                         }
                     }
+                    if (!derivedReasonText && typeof getRotationBaselineAssignmentForType === 'function') {
+                        const baselineStr = getRotationBaselineAssignmentForType(dayTypeCategory, key);
+                        const baselinePerson =
+                            typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                                ? parseAssignedPersonForGroupFromAssignment(baselineStr, person.group)
+                                : null;
+                        const bp = baselinePerson ? String(baselinePerson).trim() : '';
+                        if (bp && normPick(bp) !== normPick(person.name)) {
+                            if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(bp, person.group, date, dayTypeCategory)) {
+                                if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(bp, person.group, dayTypeCategory)) {
+                                    derivedReasonText =
+                                        typeof buildUnavailableReplacementReason === 'function'
+                                            ? buildUnavailableReplacementReason({
+                                                  skippedPersonName: bp,
+                                                  replacementPersonName: person.name,
+                                                  dateObj: date,
+                                                  groupNum: person.group,
+                                                  dutyCategory: dayTypeCategory
+                                              })
+                                            : `Αντικατέστησε τον/την ${bp} (μη διαθέσιμος/η). Ανατέθηκε ο/η ${person.name}.`;
+                                } else {
+                                    const missingReason =
+                                        typeof getUnavailableReasonShort === 'function'
+                                            ? getUnavailableReasonShort(bp, person.group, date, dayTypeCategory)
+                                            : 'απουσίας';
+                                    derivedReasonText = `Αντικατέστησε τον/την ${bp} λόγω ${missingReason}.`;
+                                }
+                            } else if (
+                                typeof isPersonDisabledForDuty === 'function' &&
+                                isPersonDisabledForDuty(bp, person.group, dayTypeCategory)
+                            ) {
+                                derivedReasonText =
+                                    typeof buildUnavailableReplacementReason === 'function'
+                                        ? buildUnavailableReplacementReason({
+                                              skippedPersonName: bp,
+                                              replacementPersonName: person.name,
+                                              dateObj: date,
+                                              groupNum: person.group,
+                                              dutyCategory: dayTypeCategory
+                                          })
+                                        : `Αντικατέστησε τον/την ${bp} (απενεργοποιημένος/η). Ανατέθηκε ο/η ${person.name}.`;
+                            } else {
+                                derivedReasonText =
+                                    `Η υπηρεσία διαφέρει από τη βασική σειρά περιστροφής για αυτή την ημέρα: στη βάση εμφανίζεται ο/η ${bp}, ενώ ανατέθηκε ο/η ${person.name}. ` +
+                                    '(Π.χ. χειροκίνητη αντικατάσταση, αντικατάσταση επιλαχών ή δεδομένα πριν την αποθήκευση λόγου.)';
+                            }
+                        }
+                    }
                 }
                 const reasonDisplayText = reason
                     ? (reason.type === 'skip'
@@ -5808,7 +5859,7 @@
                         : (reason.type === 'swap' ? normalizeSwapReasonText(reason.reason) : reason.reason))
                     : derivedReasonText;
                 const reasonDisplay = (reason || derivedReasonText)
-                    ? `<div class="mt-1 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${reasonDisplayText}</div>`
+                    ? `<div class="mt-1 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${escapeHtml(reasonDisplayText)}</div>`
                     : '';
                 
                 // Get all people from this group for dropdown
@@ -5819,7 +5870,6 @@
                         groupData[listType].forEach(p => allPeopleInGroup.add(p));
                     }
                 });
-                const normPick = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                 const curNameNorm = person.name ? normPick(person.name) : '';
                 const escapeOpt = (s) => String(s || '')
                     .replace(/&/g, '&amp;')

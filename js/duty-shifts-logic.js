@@ -953,9 +953,15 @@
         }
         function getAssignmentReason(dateKey, groupNum, personName) {
             const gmap = assignmentReasons[dateKey]?.[groupNum] || null;
-            if (!gmap) return null;
-            // Backward compatible: try exact key first, then normalized key.
-            return gmap[personName] || gmap[normalizePersonKey(personName)] || null;
+            if (!gmap || !personName) return null;
+            const n = normalizePersonKey(personName);
+            if (!n) return null;
+            if (gmap[personName]) return gmap[personName];
+            if (gmap[n]) return gmap[n];
+            for (const k of Object.keys(gmap)) {
+                if (normalizePersonKey(k) === n) return gmap[k];
+            }
+            return null;
         }
         /** Find the other date in a swap pair (for rotation: the person on that date is the one who was swapped out of currentDateKey). */
         function findSwapOtherDateKey(swapPairIdRaw, groupNum, currentDateKey) {
