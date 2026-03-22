@@ -1527,6 +1527,28 @@
                     return;
                 }
 
+                const testMap = { ...groupMap, [groupNum]: replacement };
+                const testParts = [];
+                for (let g = 1; g <= 4; g++) {
+                    const pn = testMap[g];
+                    if (pn) testParts.push(`${pn} (Ομάδα ${g})`);
+                }
+                const testAssignmentStr = testParts.join(', ');
+                if (typeof withTemporaryAssignmentPatches === 'function' && typeof hasConsecutiveDuty === 'function') {
+                    const okAlt = withTemporaryAssignmentPatches({ [dateKey]: testAssignmentStr }, () => {
+                        if (hasConsecutiveDuty(dateKey, replacement, groupNum)) {
+                            const monthLabel = dateObj.toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
+                            alert(
+                                `Εντοπίστηκε σύγκρουση διαδοχικών υπηρεσιών για τον/την «${replacement}» (γειτονικές ημέρες με ασυμβίβαστους τύπους) στον μήνα ${monthLabel}. ` +
+                                'Η διαδικασία αντικατάστασης επιλαχών δεν μπορεί να συνεχιστεί. Παρακαλώ επιλέξτε άλλο άτομο ή άλλη ημερομηνία.'
+                            );
+                            return false;
+                        }
+                        return true;
+                    });
+                    if (!okAlt) return;
+                }
+
                 groupMap[groupNum] = replacement;
                 const parts = [];
                 for (let g = 1; g <= 4; g++) {
@@ -6041,14 +6063,60 @@
                 }
                 pendingOtherKeyStrings.set(otherKey, finalStr);
             }
-            const proposedCurrentStr = newAssignments.length > 0 ? newAssignments.join(', ') : '';
-            if (typeof validateManualDutyEditForConsecutiveConflicts === 'function') {
-                const conflictCheck = validateManualDutyEditForConsecutiveConflicts(dayKey, proposedCurrentStr, pendingOtherKeyStrings);
-                if (!conflictCheck.ok) {
-                    alert(conflictCheck.message);
-                    return;
-                }
+
+            // Σύγκρουση διαδοχικών υπηρεσιών: προσομοίωση όλων των αλλαγών (ημέρα + αμοιβαία άλλη ημέρα) πριν την αποθήκευση
+            const conflictCheckPatches = {};
+            if (newAssignments.length > 0) {
+                conflictCheckPatches[dayKey] = newAssignments.join(', ');
+            } else {
+                conflictCheckPatches[dayKey] = null;
             }
+            for (const [otherKey, finalStr] of pendingOtherKeyStrings) {
+                conflictCheckPatches[otherKey] = finalStr;
+            }
+            const monthLabelForMsg = editDate.toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
+            const warnConsecutive = (personLabel) => {
+                alert(
+                    `Εντοπίστηκε σύγκρουση διαδοχικών υπηρεσιών για τον/την «${personLabel}» (γειτονικές ημέρες με ασυμβίβαστους τύπους υπηρεσίας), σε σχέση με τον τρέχοντα μήνα (${monthLabelForMsg}). ` +
+                    'Η διαδικασία δεν μπορεί να συνεχιστεί. Παρακαλώ επιλέξτε άλλο άτομο.'
+                );
+            };
+            const passesConsecutive =
+                typeof withTemporaryAssignmentPatches === 'function' && typeof hasConsecutiveDuty === 'function'
+                    ? withTemporaryAssignmentPatches(conflictCheckPatches, () => {
+                          for (const p of mutualSwapPlans) {
+                              if (hasConsecutiveDuty(dayKey, p.newPerson, p.group)) {
+                                  warnConsecutive(p.newPerson);
+                                  return false;
+                              }
+                              if (hasConsecutiveDuty(p.otherKey, p.prevPerson, p.group)) {
+                                  warnConsecutive(p.prevPerson);
+                                  return false;
+                              }
+                          }
+                          for (const select of selects) {
+                              if (select.dataset.isCritical === 'true') continue;
+                              const g = parseInt(select.dataset.group, 10);
+                              if (!Number.isFinite(g)) continue;
+                              if (mutualGroupsDone.has(g)) continue;
+                              const prevPerson = typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                                  ? (parseAssignedPersonForGroupFromAssignment(prevStr, g) || '').trim()
+                                  : '';
+                              const newVal = select.value.trim();
+                              if (!newVal || normPerson(prevPerson) === normPerson(newVal)) continue;
+                              const modeEl2 = container.querySelector(`input[name="duty-change-mode-${g}"]:checked`);
+                              const mode2 = modeEl2 ? modeEl2.value : 'replacement';
+                              if (mode2 === 'mutual_swap') continue;
+                              if (hasConsecutiveDuty(dayKey, newVal, g)) {
+                                  warnConsecutive(newVal);
+                                  return false;
+                              }
+                          }
+                          return true;
+                      })
+                    : true;
+            if (!passesConsecutive) return;
+
             for (const [otherKey, finalStr] of pendingOtherKeyStrings) {
                 if (typeof setAssignmentForDate === 'function') {
                     setAssignmentForDate(otherKey, finalStr);

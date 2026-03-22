@@ -1024,6 +1024,40 @@
             const personGroupStr = `${person} (Ομάδα ${groupNum})`;
             return assignmentStr.includes(personGroupStr);
         }
+
+        /**
+         * Temporarily apply assignment string patches (per dateKey), run fn(), then restore previous state.
+         * patches[dateKey] = string to set, or null/'' to clear that date via deleteAssignmentForDate.
+         */
+        function withTemporaryAssignmentPatches(patches, fn) {
+            if (!patches || typeof patches !== 'object') {
+                return typeof fn === 'function' ? fn() : undefined;
+            }
+            const backups = [];
+            try {
+                for (const dk of Object.keys(patches)) {
+                    const prev = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dk) : null;
+                    backups.push({ dk, prev });
+                    const v = patches[dk];
+                    if (v == null || (typeof v === 'string' && !String(v).trim())) {
+                        if (typeof deleteAssignmentForDate === 'function') deleteAssignmentForDate(dk);
+                    } else if (typeof setAssignmentForDate === 'function') {
+                        setAssignmentForDate(dk, v);
+                    }
+                }
+                return typeof fn === 'function' ? fn() : undefined;
+            } finally {
+                for (let i = backups.length - 1; i >= 0; i--) {
+                    const b = backups[i];
+                    if (b.prev == null || b.prev === '' || (typeof b.prev === 'string' && !String(b.prev).trim())) {
+                        if (typeof deleteAssignmentForDate === 'function') deleteAssignmentForDate(b.dk);
+                    } else if (typeof setAssignmentForDate === 'function') {
+                        setAssignmentForDate(b.dk, b.prev);
+                    }
+                }
+            }
+        }
+
         function hasConsecutiveDuty(dayKey, person, groupNum, simulatedAssignments = null) {
             const date = new Date(dayKey + 'T00:00:00');
             const currentDayType = getDayType(date);
@@ -1316,193 +1350,6 @@
             
             return false;
         }
-
-        /** Snapshot one date key from the correct per-type assignment store + legacy dutyAssignments. */
-        function snapshotDutyAtDateKey(dateKey) {
-            const date = new Date(dateKey + 'T00:00:00');
-            if (isNaN(date.getTime())) return null;
-            const dt = getDayType(date);
-            let store;
-            if (dt === 'special-holiday') store = specialHolidayAssignments;
-            else if (dt === 'weekend-holiday') store = weekendAssignments;
-            else if (dt === 'semi-normal-day') store = semiNormalAssignments;
-            else store = normalDayAssignments;
-            const had = Object.prototype.hasOwnProperty.call(store, dateKey);
-            const prevVal = store[dateKey];
-            const hadLeg = Object.prototype.hasOwnProperty.call(dutyAssignments, dateKey);
-            const prevLeg = dutyAssignments[dateKey];
-            return { dateKey, store, had, prevVal, hadLeg, prevLeg };
-        }
-        function restoreDutySnapshot(snap) {
-            if (!snap || !snap.store) return;
-            if (!snap.had) delete snap.store[snap.dateKey];
-            else snap.store[snap.dateKey] = snap.prevVal;
-            if (!snap.hadLeg) delete dutyAssignments[snap.dateKey];
-            else dutyAssignments[snap.dateKey] = snap.prevLeg;
-        }
-        function findDuplicatePersonAcrossGroupsOnSameDayString(assignmentStr) {
-            if (!assignmentStr || typeof extractGroupAssignmentsMap !== 'function') return null;
-            const map = extractGroupAssignmentsMap(assignmentStr);
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            const seen = new Map();
-            for (let g = 1; g <= 4; g++) {
-                const p = (map[g] || '').toString().trim();
-                if (!p) continue;
-                const n = norm(p);
-                if (seen.has(n)) return { person: p, firstGroup: seen.get(n), secondGroup: g };
-                seen.set(n, g);
-            }
-            return null;
-        }
-        /** Assignment value from the per–day-type store only (no legacy dutyAssignments fallback). */
-        function getTypeStoreAssignmentRawOnly(dateKey) {
-            const date = new Date(dateKey + 'T00:00:00');
-            if (isNaN(date.getTime())) return null;
-            const dayType = getDayType(date);
-            if (dayType === 'special-holiday') return specialHolidayAssignments[dateKey];
-            if (dayType === 'weekend-holiday') return weekendAssignments[dateKey];
-            if (dayType === 'semi-normal-day') return semiNormalAssignments[dateKey];
-            return normalDayAssignments[dateKey];
-        }
-        /** True if person holds groupNum on dateKey according to the correct type store only (avoids stale merged dutyAssignments). */
-        function personHasDutyOnDateStrictTypeStore(dateKey, person, groupNum) {
-            if (!person || !Number.isFinite(groupNum) || groupNum < 1) return false;
-            const raw = getTypeStoreAssignmentRawOnly(dateKey);
-            if (raw == null || raw === '') return false;
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            const target = norm(person);
-            if (typeof raw === 'object' && !Array.isArray(raw)) {
-                const nm = raw[groupNum] ?? raw[String(groupNum)];
-                return !!(nm && norm(nm) === target);
-            }
-            const str = typeof raw === 'string' ? raw : '';
-            if (!str && typeof extractGroupAssignmentsMap === 'function') {
-                const map = extractGroupAssignmentsMap(raw);
-                const nm = map[groupNum];
-                return !!(nm && norm(nm) === target);
-            }
-            const parsed = typeof parseAssignedPersonForGroupFromAssignment === 'function'
-                ? parseAssignedPersonForGroupFromAssignment(str, groupNum)
-                : null;
-            return !!(parsed && norm(parsed) === target);
-        }
-        /**
-         * Adjacent calendar day / duty-type conflict for manual modal only: uses stored assignments on day±1 only,
-         * no rotation prediction and no calculationSteps (unlike full hasConsecutiveDuty with simulatedAssignments).
-         */
-        function hasAdjacentDutyTypeConflictManualEdit(dayKey, person, groupNum) {
-            const date = new Date(dayKey + 'T00:00:00');
-            if (isNaN(date.getTime())) return false;
-            const currentDayType = getDayType(date);
-            let currentTypeCategory = 'normal';
-            if (currentDayType === 'special-holiday') currentTypeCategory = 'special';
-            else if (currentDayType === 'semi-normal-day') currentTypeCategory = 'semi';
-            else if (currentDayType === 'weekend-holiday') currentTypeCategory = 'weekend';
-            const hasConflict = (type1, type2) => {
-                if (type1 === 'normal' && (type2 === 'semi' || type2 === 'weekend' || type2 === 'special')) return true;
-                if ((type1 === 'semi' || type1 === 'weekend' || type1 === 'special') && type2 === 'normal') return true;
-                if (type1 === 'semi' && (type2 === 'weekend' || type2 === 'special')) return true;
-                if ((type1 === 'weekend' || type1 === 'special') && type2 === 'semi') return true;
-                return false;
-            };
-            const categoryForKey = (dk) => {
-                const d = new Date(dk + 'T00:00:00');
-                if (isNaN(d.getTime())) return 'normal';
-                const dt = getDayType(d);
-                if (dt === 'special-holiday') return 'special';
-                if (dt === 'semi-normal-day') return 'semi';
-                if (dt === 'weekend-holiday') return 'weekend';
-                return 'normal';
-            };
-            const dayBefore = new Date(date);
-            dayBefore.setDate(dayBefore.getDate() - 1);
-            const dayBeforeKey = formatDateKey(dayBefore);
-            if (personHasDutyOnDateStrictTypeStore(dayBeforeKey, person, groupNum)) {
-                if (hasConflict(currentTypeCategory, categoryForKey(dayBeforeKey))) return true;
-            }
-            const dayAfter = new Date(date);
-            dayAfter.setDate(dayAfter.getDate() + 1);
-            const dayAfterKey = formatDateKey(dayAfter);
-            if (personHasDutyOnDateStrictTypeStore(dayAfterKey, person, groupNum)) {
-                if (hasConflict(currentTypeCategory, categoryForKey(dayAfterKey))) return true;
-            }
-            return false;
-        }
-
-        /**
-         * Temporarily applies proposed assignments and checks consecutive-duty rules for the **opened day only**.
-         * Mutual-swap partner dates are not checked for adjacent conflicts (avoids blocking an April edit because
-         * February or another month’s partner day fails automatic neighbour rules). Duplicate-person-same-day still checked everywhere.
-         * Neighbour duty uses per-type stores only (no legacy dutyAssignments fallback) to reduce false positives.
-         */
-        function validateManualDutyEditForConsecutiveConflicts(dayKey, newAssignmentsJoined, pendingOtherKeyStrings) {
-            const relatedKeys = new Set();
-            const addNeighbors = (k) => {
-                if (!k || !/^\d{4}-\d{2}-\d{2}$/.test(String(k))) return;
-                const d = new Date(k + 'T00:00:00');
-                if (isNaN(d.getTime())) return;
-                for (let delta = -1; delta <= 1; delta++) {
-                    const x = new Date(d);
-                    x.setDate(x.getDate() + delta);
-                    relatedKeys.add(formatDateKey(x));
-                }
-            };
-            addNeighbors(dayKey);
-            if (pendingOtherKeyStrings && pendingOtherKeyStrings.size > 0) {
-                for (const ok of pendingOtherKeyStrings.keys()) addNeighbors(ok);
-            }
-            const snaps = [];
-            for (const dk of relatedKeys) {
-                const s = snapshotDutyAtDateKey(dk);
-                if (s) snaps.push(s);
-            }
-            const checkOneDate = (dk, str, runAdjacentConflictCheck) => {
-                if (!str || !String(str).trim()) return null;
-                const dup = findDuplicatePersonAcrossGroupsOnSameDayString(str);
-                if (dup) {
-                    return `Η διαδικασία δεν μπορεί να συνεχιστεί: το ίδιο άτομο («${dup.person}») εμφανίζεται σε περισσότερες από μία ομάδες την ίδια ημέρα (${dk}). Επιλέξτε άλλο άτομο.`;
-                }
-                if (!runAdjacentConflictCheck) return null;
-                const map = typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(str) : {};
-                for (let g = 1; g <= 4; g++) {
-                    const p = (map[g] || '').toString().trim();
-                    if (!p) continue;
-                    if (typeof hasAdjacentDutyTypeConflictManualEdit === 'function' && hasAdjacentDutyTypeConflictManualEdit(dk, p, g)) {
-                        return `Η διαδικασία δεν μπορεί να συνεχιστεί: ανιχνεύτηκε σύγκρουση διαδοχικών υπηρεσιών (γειτονικές ημέρες / τύποι υπηρεσίας) για τον/την «${p}» (Ομάδα ${g}, ημερομηνία ${dk}). Επιλέξτε άλλο άτομο.`;
-                    }
-                }
-                return null;
-            };
-            try {
-                if (pendingOtherKeyStrings && pendingOtherKeyStrings.size > 0 && typeof setAssignmentForDate === 'function') {
-                    for (const [ok, finalStr] of pendingOtherKeyStrings) {
-                        setAssignmentForDate(ok, finalStr);
-                    }
-                }
-                const joined = newAssignmentsJoined && String(newAssignmentsJoined).trim() ? String(newAssignmentsJoined).trim() : '';
-                if (joined) {
-                    if (typeof setAssignmentForDate === 'function') setAssignmentForDate(dayKey, joined);
-                } else {
-                    if (typeof deleteAssignmentForDate === 'function') deleteAssignmentForDate(dayKey);
-                    else delete dutyAssignments[dayKey];
-                }
-                const errCur = checkOneDate(dayKey, joined, true);
-                if (errCur) return { ok: false, message: errCur };
-                if (pendingOtherKeyStrings && pendingOtherKeyStrings.size > 0) {
-                    for (const [ok, finalStr] of pendingOtherKeyStrings) {
-                        const err = checkOneDate(ok, finalStr, false);
-                        if (err) return { ok: false, message: err };
-                    }
-                }
-                return { ok: true };
-            } finally {
-                for (let i = snaps.length - 1; i >= 0; i--) restoreDutySnapshot(snaps[i]);
-            }
-        }
-        if (typeof window !== 'undefined') {
-            window.validateManualDutyEditForConsecutiveConflicts = validateManualDutyEditForConsecutiveConflicts;
-        }
-
         function hadSpecialHolidayDutyBefore(dayKey, person, groupNum) {
             const date = new Date(dayKey + 'T00:00:00');
             const dayOfWeek = date.getDay(); // 0=Sunday, 6=Saturday
