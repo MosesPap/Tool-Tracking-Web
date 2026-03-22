@@ -828,6 +828,42 @@
                 ...(meta ? { meta } : {})
             };
         }
+        /** Next unique swapPairId for manual / automatic swap coloring (max existing + 1). */
+        function getNextSwapPairIdForAssignmentReasons() {
+            let maxSwapPairId = -1;
+            for (const dk in assignmentReasons) {
+                for (const groupNumStr in assignmentReasons[dk]) {
+                    const gmap = assignmentReasons[dk][groupNumStr];
+                    if (!gmap || typeof gmap !== 'object') continue;
+                    for (const personName in gmap) {
+                        const reason = gmap[personName];
+                        if (reason && reason.swapPairId !== null && reason.swapPairId !== undefined) {
+                            const id = typeof reason.swapPairId === 'number' ? reason.swapPairId : parseInt(reason.swapPairId, 10);
+                            if (!isNaN(id) && id > maxSwapPairId) maxSwapPairId = id;
+                        }
+                    }
+                }
+            }
+            return maxSwapPairId + 1;
+        }
+        /** Remove stored reason for one assignee on a date/group (all key spellings). */
+        function clearAssignmentReasonForPersonOnDate(dateKey, groupNum, personName) {
+            if (!dateKey || !Number.isFinite(groupNum) || groupNum < 1 || !personName) return;
+            if (!assignmentReasons[dateKey]?.[groupNum]) return;
+            const gmap = assignmentReasons[dateKey][groupNum];
+            const n = normalizePersonKey(personName);
+            const keysToDelete = new Set();
+            for (const k of Object.keys(gmap)) {
+                if (k === personName || normalizePersonKey(k) === n) keysToDelete.add(k);
+            }
+            keysToDelete.forEach(k => { delete gmap[k]; });
+            if (Object.keys(gmap).length === 0) {
+                delete assignmentReasons[dateKey][groupNum];
+                if (Object.keys(assignmentReasons[dateKey]).length === 0) {
+                    delete assignmentReasons[dateKey];
+                }
+            }
+        }
         function formatGreekDayDate(dateKey) {
             const d = new Date(dateKey + 'T00:00:00');
             if (isNaN(d.getTime())) return { dayName: '', dateStr: dateKey };
