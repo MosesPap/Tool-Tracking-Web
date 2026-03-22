@@ -1354,13 +1354,86 @@
             }
             return null;
         }
+        /** Assignment value from the per–day-type store only (no legacy dutyAssignments fallback). */
+        function getTypeStoreAssignmentRawOnly(dateKey) {
+            const date = new Date(dateKey + 'T00:00:00');
+            if (isNaN(date.getTime())) return null;
+            const dayType = getDayType(date);
+            if (dayType === 'special-holiday') return specialHolidayAssignments[dateKey];
+            if (dayType === 'weekend-holiday') return weekendAssignments[dateKey];
+            if (dayType === 'semi-normal-day') return semiNormalAssignments[dateKey];
+            return normalDayAssignments[dateKey];
+        }
+        /** True if person holds groupNum on dateKey according to the correct type store only (avoids stale merged dutyAssignments). */
+        function personHasDutyOnDateStrictTypeStore(dateKey, person, groupNum) {
+            if (!person || !Number.isFinite(groupNum) || groupNum < 1) return false;
+            const raw = getTypeStoreAssignmentRawOnly(dateKey);
+            if (raw == null || raw === '') return false;
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const target = norm(person);
+            if (typeof raw === 'object' && !Array.isArray(raw)) {
+                const nm = raw[groupNum] ?? raw[String(groupNum)];
+                return !!(nm && norm(nm) === target);
+            }
+            const str = typeof raw === 'string' ? raw : '';
+            if (!str && typeof extractGroupAssignmentsMap === 'function') {
+                const map = extractGroupAssignmentsMap(raw);
+                const nm = map[groupNum];
+                return !!(nm && norm(nm) === target);
+            }
+            const parsed = typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                ? parseAssignedPersonForGroupFromAssignment(str, groupNum)
+                : null;
+            return !!(parsed && norm(parsed) === target);
+        }
         /**
-         * Temporarily applies proposed assignments and checks consecutive-duty rules (same as automatic logic).
-         * Used before saving manual replacement / mutual swap from the day modal.
-         * @param {string} dayKey
-         * @param {string|null|undefined} newAssignmentsJoined — comma-separated assignment string for dayKey, or empty to clear
-         * @param {Map<string,string>|null} pendingOtherKeyStrings — mutual-swap partner dates -> full assignment string
-         * @returns {{ ok: true } | { ok: false, message: string }}
+         * Adjacent calendar day / duty-type conflict for manual modal only: uses stored assignments on day±1 only,
+         * no rotation prediction and no calculationSteps (unlike full hasConsecutiveDuty with simulatedAssignments).
+         */
+        function hasAdjacentDutyTypeConflictManualEdit(dayKey, person, groupNum) {
+            const date = new Date(dayKey + 'T00:00:00');
+            if (isNaN(date.getTime())) return false;
+            const currentDayType = getDayType(date);
+            let currentTypeCategory = 'normal';
+            if (currentDayType === 'special-holiday') currentTypeCategory = 'special';
+            else if (currentDayType === 'semi-normal-day') currentTypeCategory = 'semi';
+            else if (currentDayType === 'weekend-holiday') currentTypeCategory = 'weekend';
+            const hasConflict = (type1, type2) => {
+                if (type1 === 'normal' && (type2 === 'semi' || type2 === 'weekend' || type2 === 'special')) return true;
+                if ((type1 === 'semi' || type1 === 'weekend' || type1 === 'special') && type2 === 'normal') return true;
+                if (type1 === 'semi' && (type2 === 'weekend' || type2 === 'special')) return true;
+                if ((type1 === 'weekend' || type1 === 'special') && type2 === 'semi') return true;
+                return false;
+            };
+            const categoryForKey = (dk) => {
+                const d = new Date(dk + 'T00:00:00');
+                if (isNaN(d.getTime())) return 'normal';
+                const dt = getDayType(d);
+                if (dt === 'special-holiday') return 'special';
+                if (dt === 'semi-normal-day') return 'semi';
+                if (dt === 'weekend-holiday') return 'weekend';
+                return 'normal';
+            };
+            const dayBefore = new Date(date);
+            dayBefore.setDate(dayBefore.getDate() - 1);
+            const dayBeforeKey = formatDateKey(dayBefore);
+            if (personHasDutyOnDateStrictTypeStore(dayBeforeKey, person, groupNum)) {
+                if (hasConflict(currentTypeCategory, categoryForKey(dayBeforeKey))) return true;
+            }
+            const dayAfter = new Date(date);
+            dayAfter.setDate(dayAfter.getDate() + 1);
+            const dayAfterKey = formatDateKey(dayAfter);
+            if (personHasDutyOnDateStrictTypeStore(dayAfterKey, person, groupNum)) {
+                if (hasConflict(currentTypeCategory, categoryForKey(dayAfterKey))) return true;
+            }
+            return false;
+        }
+
+        /**
+         * Temporarily applies proposed assignments and checks consecutive-duty rules for the **opened day only**.
+         * Mutual-swap partner dates are not checked for adjacent conflicts (avoids blocking an April edit because
+         * February or another month’s partner day fails automatic neighbour rules). Duplicate-person-same-day still checked everywhere.
+         * Neighbour duty uses per-type stores only (no legacy dutyAssignments fallback) to reduce false positives.
          */
         function validateManualDutyEditForConsecutiveConflicts(dayKey, newAssignmentsJoined, pendingOtherKeyStrings) {
             const relatedKeys = new Set();
@@ -1383,18 +1456,19 @@
                 const s = snapshotDutyAtDateKey(dk);
                 if (s) snaps.push(s);
             }
-            const checkOneDate = (dk, str) => {
+            const checkOneDate = (dk, str, runAdjacentConflictCheck) => {
                 if (!str || !String(str).trim()) return null;
                 const dup = findDuplicatePersonAcrossGroupsOnSameDayString(str);
                 if (dup) {
                     return `Η διαδικασία δεν μπορεί να συνεχιστεί: το ίδιο άτομο («${dup.person}») εμφανίζεται σε περισσότερες από μία ομάδες την ίδια ημέρα (${dk}). Επιλέξτε άλλο άτομο.`;
                 }
+                if (!runAdjacentConflictCheck) return null;
                 const map = typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(str) : {};
                 for (let g = 1; g <= 4; g++) {
                     const p = (map[g] || '').toString().trim();
                     if (!p) continue;
-                    if (typeof hasConsecutiveDuty === 'function' && hasConsecutiveDuty(dk, p, g)) {
-                        return `Η διαδικασία δεν μπορεί να συνεχιστεί: ανιχνεύτηκε σύγκρουση διαδοχικών υπηρεσιών για τον/την «${p}» (Ομάδα ${g}, ημερομηνία ${dk}). Επιλέξτε άλλο άτομο.`;
+                    if (typeof hasAdjacentDutyTypeConflictManualEdit === 'function' && hasAdjacentDutyTypeConflictManualEdit(dk, p, g)) {
+                        return `Η διαδικασία δεν μπορεί να συνεχιστεί: ανιχνεύτηκε σύγκρουση διαδοχικών υπηρεσιών (γειτονικές ημέρες / τύποι υπηρεσίας) για τον/την «${p}» (Ομάδα ${g}, ημερομηνία ${dk}). Επιλέξτε άλλο άτομο.`;
                     }
                 }
                 return null;
@@ -1412,11 +1486,11 @@
                     if (typeof deleteAssignmentForDate === 'function') deleteAssignmentForDate(dayKey);
                     else delete dutyAssignments[dayKey];
                 }
-                const errCur = checkOneDate(dayKey, joined);
+                const errCur = checkOneDate(dayKey, joined, true);
                 if (errCur) return { ok: false, message: errCur };
                 if (pendingOtherKeyStrings && pendingOtherKeyStrings.size > 0) {
                     for (const [ok, finalStr] of pendingOtherKeyStrings) {
-                        const err = checkOneDate(ok, finalStr);
+                        const err = checkOneDate(ok, finalStr, false);
                         if (err) return { ok: false, message: err };
                     }
                 }
