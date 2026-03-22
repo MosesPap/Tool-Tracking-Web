@@ -468,6 +468,9 @@
                 const r = (mp.reason || '').trim();
                 return r || 'Κώλυμα/Απουσία';
             }
+            if (typeof isPersonOnMissingAdjacentBufferDay === 'function' && isPersonOnMissingAdjacentBufferDay(person, groupNum, dateObj, dutyCategory)) {
+                return 'Ημέρα πριν/μετά απουσίας (χωρίς υπηρεσία)';
+            }
             return 'Κώλυμα/Απουσία';
         }
         function buildUnavailableReplacementReason({ skippedPersonName, replacementPersonName, dateObj, groupNum, dutyCategory = null }) {
@@ -10425,6 +10428,40 @@
             
             alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
+        /**
+         * True on the calendar day immediately before a missing period starts, or the day after it ends.
+         * Those days must not get duty and must not be targets of swaps onto that person (handled via isPersonMissingOnDate).
+         * dutyCategory reserved for future per-type rules; currently all duty types respect the same buffer.
+         */
+        function isPersonOnMissingAdjacentBufferDay(person, groupNum, date, dutyCategory = null) {
+            void dutyCategory;
+            const groupData = groups[groupNum] || {};
+            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            if (missingPeriods.length === 0) return false;
+
+            let checkKey = null;
+            if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                checkKey = date;
+            } else {
+                const d = new Date(date);
+                if (isNaN(d.getTime())) return false;
+                d.setHours(0, 0, 0, 0);
+                checkKey = formatDateKey(d);
+            }
+            if (!checkKey) return false;
+
+            for (const period of missingPeriods) {
+                const startKey = period.start;
+                const endKey = period.end;
+                if (!startKey || !endKey) continue;
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(startKey) || !/^\d{4}-\d{2}-\d{2}$/.test(endKey)) continue;
+                const beforeKey = formatDateKey(shiftDate(new Date(startKey + 'T00:00:00'), -1));
+                const afterKey = formatDateKey(shiftDate(new Date(endKey + 'T00:00:00'), 1));
+                if (checkKey === beforeKey || checkKey === afterKey) return true;
+            }
+            return false;
+        }
+
         function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
@@ -10434,11 +10471,13 @@
             const checkDate = new Date(date);
             checkDate.setHours(0, 0, 0, 0);
             
-            return missingPeriods.some(period => {
+            const inside = missingPeriods.some(period => {
                 const start = new Date(period.start + 'T00:00:00');
                 const end = new Date(period.end + 'T00:00:00');
                 return checkDate >= start && checkDate <= end;
             });
+            if (inside) return true;
+            return isPersonOnMissingAdjacentBufferDay(person, groupNum, date, dutyCategory);
         }
         function findNextEligiblePersonAfterMissing({
             dateKey,
