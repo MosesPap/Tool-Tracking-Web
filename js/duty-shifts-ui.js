@@ -6041,6 +6041,14 @@
                 }
                 pendingOtherKeyStrings.set(otherKey, finalStr);
             }
+            const proposedCurrentStr = newAssignments.length > 0 ? newAssignments.join(', ') : '';
+            if (typeof validateManualDutyEditForConsecutiveConflicts === 'function') {
+                const conflictCheck = validateManualDutyEditForConsecutiveConflicts(dayKey, proposedCurrentStr, pendingOtherKeyStrings);
+                if (!conflictCheck.ok) {
+                    alert(conflictCheck.message);
+                    return;
+                }
+            }
             for (const [otherKey, finalStr] of pendingOtherKeyStrings) {
                 if (typeof setAssignmentForDate === 'function') {
                     setAssignmentForDate(otherKey, finalStr);

@@ -1316,6 +1316,119 @@
             
             return false;
         }
+
+        /** Snapshot one date key from the correct per-type assignment store + legacy dutyAssignments. */
+        function snapshotDutyAtDateKey(dateKey) {
+            const date = new Date(dateKey + 'T00:00:00');
+            if (isNaN(date.getTime())) return null;
+            const dt = getDayType(date);
+            let store;
+            if (dt === 'special-holiday') store = specialHolidayAssignments;
+            else if (dt === 'weekend-holiday') store = weekendAssignments;
+            else if (dt === 'semi-normal-day') store = semiNormalAssignments;
+            else store = normalDayAssignments;
+            const had = Object.prototype.hasOwnProperty.call(store, dateKey);
+            const prevVal = store[dateKey];
+            const hadLeg = Object.prototype.hasOwnProperty.call(dutyAssignments, dateKey);
+            const prevLeg = dutyAssignments[dateKey];
+            return { dateKey, store, had, prevVal, hadLeg, prevLeg };
+        }
+        function restoreDutySnapshot(snap) {
+            if (!snap || !snap.store) return;
+            if (!snap.had) delete snap.store[snap.dateKey];
+            else snap.store[snap.dateKey] = snap.prevVal;
+            if (!snap.hadLeg) delete dutyAssignments[snap.dateKey];
+            else dutyAssignments[snap.dateKey] = snap.prevLeg;
+        }
+        function findDuplicatePersonAcrossGroupsOnSameDayString(assignmentStr) {
+            if (!assignmentStr || typeof extractGroupAssignmentsMap !== 'function') return null;
+            const map = extractGroupAssignmentsMap(assignmentStr);
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const seen = new Map();
+            for (let g = 1; g <= 4; g++) {
+                const p = (map[g] || '').toString().trim();
+                if (!p) continue;
+                const n = norm(p);
+                if (seen.has(n)) return { person: p, firstGroup: seen.get(n), secondGroup: g };
+                seen.set(n, g);
+            }
+            return null;
+        }
+        /**
+         * Temporarily applies proposed assignments and checks consecutive-duty rules (same as automatic logic).
+         * Used before saving manual replacement / mutual swap from the day modal.
+         * @param {string} dayKey
+         * @param {string|null|undefined} newAssignmentsJoined — comma-separated assignment string for dayKey, or empty to clear
+         * @param {Map<string,string>|null} pendingOtherKeyStrings — mutual-swap partner dates -> full assignment string
+         * @returns {{ ok: true } | { ok: false, message: string }}
+         */
+        function validateManualDutyEditForConsecutiveConflicts(dayKey, newAssignmentsJoined, pendingOtherKeyStrings) {
+            const relatedKeys = new Set();
+            const addNeighbors = (k) => {
+                if (!k || !/^\d{4}-\d{2}-\d{2}$/.test(String(k))) return;
+                const d = new Date(k + 'T00:00:00');
+                if (isNaN(d.getTime())) return;
+                for (let delta = -1; delta <= 1; delta++) {
+                    const x = new Date(d);
+                    x.setDate(x.getDate() + delta);
+                    relatedKeys.add(formatDateKey(x));
+                }
+            };
+            addNeighbors(dayKey);
+            if (pendingOtherKeyStrings && pendingOtherKeyStrings.size > 0) {
+                for (const ok of pendingOtherKeyStrings.keys()) addNeighbors(ok);
+            }
+            const snaps = [];
+            for (const dk of relatedKeys) {
+                const s = snapshotDutyAtDateKey(dk);
+                if (s) snaps.push(s);
+            }
+            const checkOneDate = (dk, str) => {
+                if (!str || !String(str).trim()) return null;
+                const dup = findDuplicatePersonAcrossGroupsOnSameDayString(str);
+                if (dup) {
+                    return `Η διαδικασία δεν μπορεί να συνεχιστεί: το ίδιο άτομο («${dup.person}») εμφανίζεται σε περισσότερες από μία ομάδες την ίδια ημέρα (${dk}). Επιλέξτε άλλο άτομο.`;
+                }
+                const map = typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(str) : {};
+                for (let g = 1; g <= 4; g++) {
+                    const p = (map[g] || '').toString().trim();
+                    if (!p) continue;
+                    if (typeof hasConsecutiveDuty === 'function' && hasConsecutiveDuty(dk, p, g)) {
+                        return `Η διαδικασία δεν μπορεί να συνεχιστεί: ανιχνεύτηκε σύγκρουση διαδοχικών υπηρεσιών για τον/την «${p}» (Ομάδα ${g}, ημερομηνία ${dk}). Επιλέξτε άλλο άτομο.`;
+                    }
+                }
+                return null;
+            };
+            try {
+                if (pendingOtherKeyStrings && pendingOtherKeyStrings.size > 0 && typeof setAssignmentForDate === 'function') {
+                    for (const [ok, finalStr] of pendingOtherKeyStrings) {
+                        setAssignmentForDate(ok, finalStr);
+                    }
+                }
+                const joined = newAssignmentsJoined && String(newAssignmentsJoined).trim() ? String(newAssignmentsJoined).trim() : '';
+                if (joined) {
+                    if (typeof setAssignmentForDate === 'function') setAssignmentForDate(dayKey, joined);
+                } else {
+                    if (typeof deleteAssignmentForDate === 'function') deleteAssignmentForDate(dayKey);
+                    else delete dutyAssignments[dayKey];
+                }
+                const errCur = checkOneDate(dayKey, joined);
+                if (errCur) return { ok: false, message: errCur };
+                if (pendingOtherKeyStrings && pendingOtherKeyStrings.size > 0) {
+                    for (const [ok, finalStr] of pendingOtherKeyStrings) {
+                        const err = checkOneDate(ok, finalStr);
+                        if (err) return { ok: false, message: err };
+                    }
+                }
+                return { ok: true };
+            } finally {
+                for (let i = snaps.length - 1; i >= 0; i--) restoreDutySnapshot(snaps[i]);
+            }
+        }
+        if (typeof window !== 'undefined') {
+            window.validateManualDutyEditForConsecutiveConflicts = validateManualDutyEditForConsecutiveConflicts;
+        }
+
         function hadSpecialHolidayDutyBefore(dayKey, person, groupNum) {
             const date = new Date(dayKey + 'T00:00:00');
             const dayOfWeek = date.getDay(); // 0=Sunday, 6=Saturday
