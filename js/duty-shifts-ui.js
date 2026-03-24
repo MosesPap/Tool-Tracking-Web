@@ -7231,6 +7231,26 @@
         function printRotationAndRankings() {
             // Create a new window for printing
             const printWindow = window.open('', '_blank', 'width=800,height=600');
+            const esc = (v) => (typeof escapeHtml === 'function' ? escapeHtml(v == null ? '' : String(v)) : String(v == null ? '' : v));
+            const formatDateKeyForPrint = (dateKey) => {
+                if (!dateKey) return '';
+                const d = new Date(String(dateKey) + 'T00:00:00');
+                if (isNaN(d.getTime())) return String(dateKey);
+                return d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            };
+            const buildMissingRangesLabel = (periods) => {
+                if (!Array.isArray(periods) || periods.length === 0) return '';
+                return periods
+                    .map((p) => {
+                        const from = formatDateKeyForPrint(p?.start);
+                        const to = formatDateKeyForPrint(p?.end);
+                        const dateRange = from && to ? `${from} - ${to}` : '';
+                        const reason = (p?.reason || '').trim();
+                        return reason ? `${dateRange} (${reason})` : dateRange;
+                    })
+                    .filter(Boolean)
+                    .join(' | ');
+            };
             
             // Get all people for rankings
             const allPeople = getAllPeople();
@@ -7269,6 +7289,8 @@
         .group-section { page-break-inside: avoid; }
         .group-section ol { margin: 5px 0; padding-left: 25px; }
         .list-item { padding: 2px 0; }
+        .list-item-unavailable { color: #8b0000; text-decoration: line-through; text-decoration-thickness: 2px; }
+        .list-item-reason { font-size: 11px; color: #8b0000; margin-left: 6px; font-style: italic; }
         .ranking-number { font-weight: bold; color: #007bff; margin-right: 10px; }
         .empty-list { color: #999; font-style: italic; }
         @page { margin: 1.5cm; }
@@ -7301,7 +7323,22 @@
 `;
                     if (list.length > 0) {
                         html += `            <ol>`;
-                        list.forEach((person) => { html += `<li class="list-item">${person}</li>`; });
+                        list.forEach((person) => {
+                            const disabledForType = typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(person, groupNum, listType.key);
+                            const missingPeriods = groupData?.missingPeriods?.[person] || [];
+                            const hasMissingPeriods = Array.isArray(missingPeriods) && missingPeriods.length > 0;
+                            const classes = `list-item${(disabledForType || hasMissingPeriods) ? ' list-item-unavailable' : ''}`;
+                            const reasons = [];
+                            if (disabledForType) reasons.push('Απενεργοποιημένος');
+                            if (hasMissingPeriods) {
+                                const missingLabel = buildMissingRangesLabel(missingPeriods);
+                                reasons.push(`Απουσία: ${missingLabel}`);
+                            }
+                            const reasonHtml = reasons.length > 0
+                                ? ` <span class="list-item-reason">(${esc(reasons.join(' | '))})</span>`
+                                : '';
+                            html += `<li class="${classes}">${esc(person)}${reasonHtml}</li>`;
+                        });
                         html += `</ol>`;
                     } else {
                         html += `            <span class="empty-list">(Κενή λίστα)</span>`;
