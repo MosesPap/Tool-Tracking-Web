@@ -7240,7 +7240,13 @@
             };
             const buildMissingRangesLabel = (periods) => {
                 if (!Array.isArray(periods) || periods.length === 0) return '';
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
                 return periods
+                    .filter((p) => {
+                        const end = p?.end ? new Date(String(p.end) + 'T00:00:00') : null;
+                        return end instanceof Date && !isNaN(end.getTime()) && end >= today; // present or future only
+                    })
                     .map((p) => {
                         const from = formatDateKeyForPrint(p?.start);
                         const to = formatDateKeyForPrint(p?.end);
@@ -7326,15 +7332,14 @@
                         list.forEach((person) => {
                             const disabledForType = typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(person, groupNum, listType.key);
                             const missingPeriods = groupData?.missingPeriods?.[person] || [];
-                            const hasMissingPeriods = Array.isArray(missingPeriods) && missingPeriods.length > 0;
-                            const isUnavailable = disabledForType || hasMissingPeriods;
+                            const missingLabel = buildMissingRangesLabel(missingPeriods);
+                            const hasPresentOrFutureMissing = !!missingLabel;
                             const reasons = [];
                             if (disabledForType) reasons.push('Απενεργοποιημένος');
-                            if (hasMissingPeriods) {
-                                const missingLabel = buildMissingRangesLabel(missingPeriods);
+                            if (hasPresentOrFutureMissing) {
                                 reasons.push(`Απουσία: ${missingLabel}`);
                             }
-                            const personHtml = isUnavailable
+                            const personHtml = disabledForType
                                 ? `<span class="list-item-unavailable-name">${esc(person)}</span>`
                                 : esc(person);
                             const reasonHtml = reasons.length > 0
