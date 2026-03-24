@@ -7289,8 +7289,8 @@
         .group-section { page-break-inside: avoid; }
         .group-section ol { margin: 5px 0; padding-left: 25px; }
         .list-item { padding: 2px 0; }
-        .list-item-unavailable { color: #8b0000; text-decoration: line-through; text-decoration-thickness: 2px; }
-        .list-item-reason { font-size: 11px; color: #8b0000; margin-left: 6px; font-style: italic; }
+        .list-item-unavailable-name { color: #6c757d; text-decoration: line-through; text-decoration-thickness: 2px; }
+        .list-item-reason { font-size: 11px; color: #444; margin-left: 6px; font-style: italic; text-decoration: none; }
         .ranking-number { font-weight: bold; color: #007bff; margin-right: 10px; }
         .empty-list { color: #999; font-style: italic; }
         @page { margin: 1.5cm; }
@@ -7327,17 +7327,20 @@
                             const disabledForType = typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(person, groupNum, listType.key);
                             const missingPeriods = groupData?.missingPeriods?.[person] || [];
                             const hasMissingPeriods = Array.isArray(missingPeriods) && missingPeriods.length > 0;
-                            const classes = `list-item${(disabledForType || hasMissingPeriods) ? ' list-item-unavailable' : ''}`;
+                            const isUnavailable = disabledForType || hasMissingPeriods;
                             const reasons = [];
                             if (disabledForType) reasons.push('Απενεργοποιημένος');
                             if (hasMissingPeriods) {
                                 const missingLabel = buildMissingRangesLabel(missingPeriods);
                                 reasons.push(`Απουσία: ${missingLabel}`);
                             }
+                            const personHtml = isUnavailable
+                                ? `<span class="list-item-unavailable-name">${esc(person)}</span>`
+                                : esc(person);
                             const reasonHtml = reasons.length > 0
                                 ? ` <span class="list-item-reason">(${esc(reasons.join(' | '))})</span>`
                                 : '';
-                            html += `<li class="${classes}">${esc(person)}${reasonHtml}</li>`;
+                            html += `<li class="list-item">${personHtml}${reasonHtml}</li>`;
                         });
                         html += `</ol>`;
                     } else {
