@@ -5298,6 +5298,7 @@
                             const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                             const month = date.getMonth();
                             const year = date.getFullYear();
+                            const applyWeekPairLogic = shouldApplyNormalWeekPairSwapLogicForGroup(groupNum);
                             
                             // Get calculation range dates for validation
                             const calcStartDateRaw = calculationSteps.startDate || null;
@@ -5330,10 +5331,48 @@
                                 }
                                 return { swapCandidate, candidateKey };
                             };
+
+                            const tryEarliestSwapCandidate = (candidateKey) => {
+                                if (!candidateKey || candidateKey === dateKey) return null;
+                                const d = new Date(candidateKey + 'T00:00:00');
+                                if (isNaN(d.getTime()) || getDayType(d) !== 'normal-day') return null;
+                                let swapCandidate = updatedAssignments[candidateKey]?.[groupNum];
+                                if (!swapCandidate && typeof getAssignmentForDate === 'function') {
+                                    const raw = getAssignmentForDate(candidateKey);
+                                    swapCandidate = raw && typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                                        ? parseAssignedPersonForGroupFromAssignment(raw, groupNum) : null;
+                                }
+                                if (!swapCandidate) return null;
+                                if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(swapCandidate, groupNum, 'normal')) return null;
+                                if (isPersonMissingOnDate(swapCandidate, groupNum, d, 'normal')) return null;
+                                if (isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, candidateKey)) return null;
+                                if (!isNormalConflictSwapValidForMissingBoundaries(dateKey, candidateKey, currentPerson, swapCandidate, groupNum)) return null;
+                                if (hasConsecutiveDuty(candidateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
+                                if (hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
+                                return { swapCandidate, candidateKey };
+                            };
+
+                            if (!applyWeekPairLogic) {
+                                const curIdx = sortedNormal.indexOf(dateKey);
+                                if (curIdx >= 0) {
+                                    const asapCandidates = [];
+                                    for (let i = curIdx + 1; i < sortedNormal.length; i++) asapCandidates.push(sortedNormal[i]);
+                                    for (let i = curIdx - 1; i >= 0; i--) asapCandidates.push(sortedNormal[i]);
+                                    for (const candidateKey of asapCandidates) {
+                                        const result = tryEarliestSwapCandidate(candidateKey);
+                                        if (!result) continue;
+                                        swapDayKey = result.candidateKey;
+                                        swapDayIndex = normalDays.indexOf(swapDayKey);
+                                        if (swapDayIndex < 0) swapDayIndex = -1;
+                                        swapFound = true;
+                                        break;
+                                    }
+                                }
+                            }
                             
                             // SEPARATE LOGIC: Monday/Wednesday vs Tuesday/Thursday
                             // Monday (1) or Wednesday (3) - Monday ↔ Wednesday logic
-                            if (dayOfWeek === 1 || dayOfWeek === 3) {
+                            if (!swapFound && applyWeekPairLogic && (dayOfWeek === 1 || dayOfWeek === 3)) {
                                 const alternativeDayOfWeek = dayOfWeek === 1 ? 3 : 1; // Monday ↔ Wednesday
                                 
                                 // MONDAY/WEDNESDAY - Step 1: Try alternative day in same week
@@ -5479,7 +5518,7 @@
                                 }
                             }
                             // TUESDAY/THURSDAY - Separate logic block
-                            else if (dayOfWeek === 2 || dayOfWeek === 4) {
+                            else if (!swapFound && applyWeekPairLogic && (dayOfWeek === 2 || dayOfWeek === 4)) {
                                 const alternativeDayOfWeek = dayOfWeek === 2 ? 4 : 2; // Tuesday ↔ Thursday
                                 // TUESDAY/THURSDAY - Step 1a: Try next same day of week (can be in same month or next month)
                                 const nextSameDay = new Date(year, month, date.getDate() + 7);
@@ -9793,13 +9832,42 @@
                         const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                         const month = date.getMonth();
                         const year = date.getFullYear();
+                        const applyWeekPairLogic = shouldApplyNormalWeekPairSwapLogicForGroup(groupNum);
                         
                         let swapDayKey = null;
                         let swapFound = false;
+                        const tryPreviewEarliestSwapCandidate = (candidateKey) => {
+                            if (!candidateKey || candidateKey === dateKey) return null;
+                            const d = new Date(candidateKey + 'T00:00:00');
+                            if (isNaN(d.getTime()) || getDayType(d) !== 'normal-day') return null;
+                            const swapCandidate = normalAssignments[candidateKey]?.[groupNum];
+                            if (!swapCandidate) return null;
+                            if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(swapCandidate, groupNum, 'normal')) return null;
+                            if (isPersonMissingOnDate(swapCandidate, groupNum, d, 'normal')) return null;
+                            if (!isNormalConflictSwapValidForMissingBoundaries(dateKey, candidateKey, currentPerson, swapCandidate, groupNum)) return null;
+                            if (hasConsecutiveDuty(candidateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
+                            if (hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
+                            return { swapCandidate, candidateKey };
+                        };
+                        if (!applyWeekPairLogic) {
+                            const curIdx = sortedNormal.indexOf(dateKey);
+                            if (curIdx >= 0) {
+                                const asapCandidates = [];
+                                for (let i = curIdx + 1; i < sortedNormal.length; i++) asapCandidates.push(sortedNormal[i]);
+                                for (let i = curIdx - 1; i >= 0; i--) asapCandidates.push(sortedNormal[i]);
+                                for (const candidateKey of asapCandidates) {
+                                    const result = tryPreviewEarliestSwapCandidate(candidateKey);
+                                    if (!result) continue;
+                                    swapDayKey = result.candidateKey;
+                                    swapFound = true;
+                                    break;
+                                }
+                            }
+                        }
                         
                         // SEPARATE LOGIC: Monday/Wednesday vs Tuesday/Thursday
                         // Monday (1) or Wednesday (3) - Monday ↔ Wednesday logic
-                        if (dayOfWeek === 1 || dayOfWeek === 3) {
+                        if (!swapFound && applyWeekPairLogic && (dayOfWeek === 1 || dayOfWeek === 3)) {
                             const alternativeDayOfWeek = dayOfWeek === 1 ? 3 : 1; // Monday ↔ Wednesday
                             
                             // MONDAY/WEDNESDAY - Step 1: Try alternative day in same week
@@ -9905,7 +9973,7 @@
                             }
                         }
                         // TUESDAY/THURSDAY - Separate logic block
-                        else if (dayOfWeek === 2 || dayOfWeek === 4) {
+                        else if (!swapFound && applyWeekPairLogic && (dayOfWeek === 2 || dayOfWeek === 4)) {
                             const alternativeDayOfWeek = dayOfWeek === 2 ? 4 : 2; // Tuesday ↔ Thursday
                             
                             // TUESDAY/THURSDAY - Step 1a: Try next same day of week (can be in same month or next month)
@@ -10552,6 +10620,46 @@
             if (isPersonMissingOnDate(swapCandidate, groupNum, dConflict, 'normal')) return false;
             if (isPersonOnMissingBufferDay(swapCandidate, groupNum, dateKey)) return false;
             return true;
+        }
+
+        const NORMAL_WEEK_PAIR_SWAP_DISABLED_GROUPS_KEY = 'dutyShiftsNormalWeekPairSwapDisabledGroups';
+        function getNormalWeekPairSwapDisabledGroups() {
+            try {
+                if (typeof localStorage === 'undefined') return [];
+                const raw = localStorage.getItem(NORMAL_WEEK_PAIR_SWAP_DISABLED_GROUPS_KEY);
+                if (!raw) return [];
+                const arr = JSON.parse(raw);
+                if (!Array.isArray(arr)) return [];
+                return arr
+                    .map((x) => parseInt(x, 10))
+                    .filter((x) => Number.isFinite(x) && x >= 1 && x <= 4)
+                    .filter((x, i, a) => a.indexOf(x) === i)
+                    .sort((a, b) => a - b);
+            } catch (_) {
+                return [];
+            }
+        }
+        function setNormalWeekPairSwapDisabledGroups(groupsArr) {
+            try {
+                if (typeof localStorage === 'undefined') return;
+                const safe = Array.isArray(groupsArr)
+                    ? groupsArr
+                        .map((x) => parseInt(x, 10))
+                        .filter((x) => Number.isFinite(x) && x >= 1 && x <= 4)
+                        .filter((x, i, a) => a.indexOf(x) === i)
+                        .sort((a, b) => a - b)
+                    : [];
+                localStorage.setItem(NORMAL_WEEK_PAIR_SWAP_DISABLED_GROUPS_KEY, JSON.stringify(safe));
+            } catch (_) {}
+        }
+        function shouldApplyNormalWeekPairSwapLogicForGroup(groupNum) {
+            const disabled = getNormalWeekPairSwapDisabledGroups();
+            return !disabled.includes(groupNum);
+        }
+        if (typeof window !== 'undefined') {
+            window.getNormalWeekPairSwapDisabledGroups = getNormalWeekPairSwapDisabledGroups;
+            window.setNormalWeekPairSwapDisabledGroups = setNormalWeekPairSwapDisabledGroups;
+            window.shouldApplyNormalWeekPairSwapLogicForGroup = shouldApplyNormalWeekPairSwapLogicForGroup;
         }
 
         function findNextEligiblePersonAfterMissing({

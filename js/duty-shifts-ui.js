@@ -3808,6 +3808,38 @@
                 if (typeof renderCalendar === 'function') renderCalendar();
             });
         }
+        function openNormalSwapLogicSettingsModal() {
+            const disabledGroups = typeof getNormalWeekPairSwapDisabledGroups === 'function'
+                ? getNormalWeekPairSwapDisabledGroups()
+                : [];
+            for (let g = 1; g <= 4; g++) {
+                const cb = document.getElementById(`normalSwapDisableGroup${g}`);
+                if (cb) cb.checked = disabledGroups.includes(g);
+            }
+            const modalEl = document.getElementById('normalSwapLogicSettingsModal');
+            if (!modalEl) return;
+            const m = new bootstrap.Modal(modalEl);
+            m.show();
+        }
+        function saveNormalSwapLogicSettingsFromModal() {
+            const selected = [];
+            for (let g = 1; g <= 4; g++) {
+                const cb = document.getElementById(`normalSwapDisableGroup${g}`);
+                if (cb && cb.checked) selected.push(g);
+            }
+            if (typeof setNormalWeekPairSwapDisabledGroups === 'function') {
+                setNormalWeekPairSwapDisabledGroups(selected);
+            }
+            const modalEl = document.getElementById('normalSwapLogicSettingsModal');
+            const m = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
+            if (m) m.hide();
+            if (typeof showInfoMessage === 'function') {
+                showInfoMessage(
+                    'Οι ρυθμίσεις αποθηκεύτηκαν. Θα εφαρμοστούν στον επόμενο υπολογισμό υπηρεσιών.',
+                    'Ρυθμίσεις Swap Καθημερινών'
+                );
+            }
+        }
 
         function renderCalendar() {
             const calendarGrid = document.getElementById('calendarGrid');

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.410 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.411 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -1696,7 +1696,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.410</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.411</span></h4>
             </div>
             <div class="d-flex align-items-center flex-wrap gap-3 title-bar-stats" style="font-size: 1.25em; font-weight: 500; opacity: 0.98;">
                 <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
@@ -1793,6 +1793,9 @@
                     <button class="btn btn-sm btn-info" onclick="printRotationAndRankings()">
                         <i class="fas fa-print me-1"></i>Εκτύπωση Σειρών & Ιεραρχίας
                     </button>
+                    <button class="btn btn-sm btn-outline-dark" onclick="openNormalSwapLogicSettingsModal()">
+                        <i class="fas fa-cogs me-1"></i>Ρυθμίσεις Swap Καθημερινών
+                    </button>
                     <button class="btn btn-sm btn-secondary" onclick="openMissingDisabledPeopleModal()">
                         <i class="fas fa-user-times me-1"></i>Απενεργοποιημένοι/Απουσιάζοντες
                     </button>
@@ -1817,6 +1820,48 @@
                         <div class="row g-2" id="calendarMonthPickerMonths">
                             <!-- 12 Greek months filled by JS -->
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="normalSwapLogicSettingsModal" tabindex="-1" aria-labelledby="normalSwapLogicSettingsModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header py-2">
+                        <h5 class="modal-title" id="normalSwapLogicSettingsModalLabel"><i class="fas fa-cogs me-2"></i>Ρυθμίσεις Swap Καθημερινών</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Κλείσιμο"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="small text-muted mb-2">
+                            Από προεπιλογή η λογική Δευτέρα↔Τετάρτη / Τρίτη↔Πέμπτη εφαρμόζεται σε όλες τις ομάδες.
+                        </p>
+                        <p class="small text-muted mb-3">
+                            Ενεργοποιήστε ομάδες παρακάτω για να <strong>εξαιρεθούν</strong> από αυτή τη λογική και να γίνεται swap
+                            στην πιο κοντινή έγκυρη ημέρα.
+                        </p>
+                        <div class="d-flex flex-column gap-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="1" id="normalSwapDisableGroup1">
+                                <label class="form-check-label" for="normalSwapDisableGroup1">Ομάδα 1</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="2" id="normalSwapDisableGroup2">
+                                <label class="form-check-label" for="normalSwapDisableGroup2">Ομάδα 2</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="3" id="normalSwapDisableGroup3">
+                                <label class="form-check-label" for="normalSwapDisableGroup3">Ομάδα 3</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="4" id="normalSwapDisableGroup4">
+                                <label class="form-check-label" for="normalSwapDisableGroup4">Ομάδα 4</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer py-2">
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
+                        <button type="button" class="btn btn-sm btn-primary" onclick="saveNormalSwapLogicSettingsFromModal()">Αποθήκευση</button>
                     </div>
                 </div>
             </div>
