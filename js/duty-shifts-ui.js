@@ -3840,6 +3840,166 @@
                 );
             }
         }
+        function dutyAssistantNormalizeText(s) {
+            return String(s || '')
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-z0-9\u0370-\u03ff\s]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+        function getDutyAssistantKnowledgeBase() {
+            return [
+                {
+                    id: 'calculate',
+                    keywords: ['υπολογισμ', 'calculate', 'βημα', 'step', 'εκτελεσ', 'υπηρεσι'],
+                    answer:
+`Για υπολογισμό υπηρεσιών:
+1) Πατήστε «Υπολογισμός Υπηρεσιών».
+2) Επιλέξτε ημερομηνία έναρξης/λήξης.
+3) Εκτελέστε τα βήματα και ελέγξτε τα αποτελέσματα ανά τύπο ημέρας.
+4) Στο τέλος αποθηκεύστε τις αλλαγές.
+
+Συμβουλή: Αν ο μήνας είναι κλειδωμένος (toggle «Κλείδωμα μήνα»), πρώτα ξεκλειδώστε τον.`
+                },
+                {
+                    id: 'swap-logic',
+                    keywords: ['swap', 'αλλαγ', 'συγκρουσ', 'δευτερα', 'τεταρτη', 'τριτη', 'πεμπτη', 'consecutive'],
+                    answer:
+`Η λογική swap στις καθημερινές λύνει συγκρούσεις συνεχόμενων αναθέσεων.
+- Από προεπιλογή χρησιμοποιεί κανόνες Δευτέρα↔Τετάρτη και Τρίτη↔Πέμπτη.
+- Από «Ρυθμίσεις» μπορείτε να εξαιρέσετε ομάδες από αυτόν τον κανόνα.
+- Για εξαιρούμενες ομάδες, γίνεται swap στην πιο κοντινή έγκυρη ημέρα.
+
+Σε κάθε περίπτωση, το σύστημα ελέγχει ώστε να μη δημιουργούνται νέες συγκρούσεις και να μη γίνεται swap με απόντες/απενεργοποιημένους.`
+                },
+                {
+                    id: 'missing-disabled',
+                    keywords: ['απουσια', 'απων', 'απενεργ', 'disabled', 'missing', 'περιοδο', 'λογο'],
+                    answer:
+`Για απουσίες/απενεργοποιήσεις:
+1) Πατήστε «Απενεργοποιημένοι/Απουσιάζοντες».
+2) Επιλέξτε άτομο.
+3) Ορίστε απενεργοποίηση ή περίοδο απουσίας (με λόγο προαιρετικά).
+
+Το σύστημα αποφεύγει αυτές τις αναθέσεις στον υπολογισμό και τις λαμβάνει υπόψη σε swaps/αντικαταστάσεις.`
+                },
+                {
+                    id: 'calendar-modes',
+                    keywords: ['ημερολογιο', 'μονο αποντες', 'hover', 'popup', 'cell', 'κελι'],
+                    answer:
+`Στο ημερολόγιο:
+- Το toggle «Μόνο απόντες/απενεργ.» δείχνει μόνο τα σχετικά άτομα ανά ημέρα.
+- Το κελί δείχνει όσα χωράνε και σε hover εμφανίζεται η πλήρης λίστα.
+- Μπορείτε να αλλάξετε το ύψος κελιού από «Ύψος κελιών».`
+                },
+                {
+                    id: 'print',
+                    keywords: ['εκτυπωση', 'σειρα', 'ιεραρχια', 'print', 'rank'],
+                    answer:
+`Από «Εκτύπωση Σειρών & Ιεραρχίας» παράγεται σελίδα εκτύπωσης για:
+- Σειρές περιστροφής ανά τύπο υπηρεσίας.
+- Ιεραρχία (rankings).
+
+Στις σειρές, τα απενεργοποιημένα άτομα σημειώνονται με διακριτή μορφοποίηση και οι απουσίες εμφανίζονται με τρέχον/μελλοντικό εύρος ημερομηνιών.`
+                },
+                {
+                    id: 'settings',
+                    keywords: ['ρυθμισ', 'settings', 'firebase', 'καθαρισμ'],
+                    answer:
+`Στις «Ρυθμίσεις» θα βρείτε:
+- Εξαιρέσεις ομάδων από τη λογική Δευτέρα↔Τετάρτη / Τρίτη↔Πέμπτη.
+- Εργαλεία Firebase (π.χ. «Καθαρισμός Firebase (Υπηρεσίες)»).
+
+Οι επιλογές εξαιρέσεων αποθηκεύονται μόνιμα μέχρι να τις αλλάξετε.`
+                }
+            ];
+        }
+        function getDutyAssistantReply(questionRaw) {
+            const q = dutyAssistantNormalizeText(questionRaw);
+            if (!q) {
+                return 'Γράψτε μια ερώτηση, π.χ. «Πως κάνω υπολογισμό υπηρεσιών;».';
+            }
+            const kb = getDutyAssistantKnowledgeBase();
+            let best = null;
+            let bestScore = 0;
+            for (const item of kb) {
+                let score = 0;
+                for (const kw of item.keywords) {
+                    const nkw = dutyAssistantNormalizeText(kw);
+                    if (!nkw) continue;
+                    if (q.includes(nkw)) score += Math.max(1, Math.floor(nkw.length / 4));
+                }
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = item;
+                }
+            }
+            if (!best || bestScore <= 0) {
+                return `Δεν βρήκα σίγουρη απάντηση για αυτό.
+Δοκιμάστε πιο συγκεκριμένα, π.χ.:
+- «Πως κάνω υπολογισμό υπηρεσιών;»
+- «Πως λειτουργούν τα swaps;»
+- «Πως δηλώνω απουσία;»
+- «Πως γίνεται εκτύπωση;»`;
+            }
+            return best.answer;
+        }
+        function appendDutyAssistantMessage(role, text) {
+            const box = document.getElementById('dutyAssistantConversation');
+            if (!box) return;
+            const who = role === 'user' ? 'Εσείς' : 'Βοηθός';
+            const cls = role === 'user' ? 'bg-white border-primary' : 'bg-white border-secondary';
+            const safe = (typeof escapeHtml === 'function' ? escapeHtml(String(text || '')) : String(text || '')).replace(/\n/g, '<br>');
+            const row = document.createElement('div');
+            row.className = `border rounded p-2 mb-2 ${cls}`;
+            row.innerHTML = `<div class="small fw-semibold mb-1">${who}</div><div class="small">${safe}</div>`;
+            box.appendChild(row);
+            box.scrollTop = box.scrollHeight;
+        }
+        function openDutyAssistantModal() {
+            const modalEl = document.getElementById('dutyAssistantModal');
+            if (!modalEl) return;
+            const conv = document.getElementById('dutyAssistantConversation');
+            if (conv && !conv.dataset.initialized) {
+                conv.dataset.initialized = '1';
+                conv.innerHTML = '';
+                appendDutyAssistantMessage('assistant', 'Γεια σας! Ρωτήστε με οτιδήποτε για τη χρήση του συστήματος υπηρεσιών.');
+            }
+            const m = new bootstrap.Modal(modalEl);
+            m.show();
+            setTimeout(() => {
+                const inp = document.getElementById('dutyAssistantQuestion');
+                if (inp) inp.focus();
+            }, 200);
+        }
+        function submitDutyAssistantQuestion() {
+            const inp = document.getElementById('dutyAssistantQuestion');
+            if (!inp) return;
+            const question = String(inp.value || '').trim();
+            if (!question) return;
+            appendDutyAssistantMessage('user', question);
+            const reply = getDutyAssistantReply(question);
+            appendDutyAssistantMessage('assistant', reply);
+            inp.value = '';
+        }
+        function askDutyAssistantQuick(q) {
+            openDutyAssistantModal();
+            setTimeout(() => {
+                const inp = document.getElementById('dutyAssistantQuestion');
+                if (!inp) return;
+                inp.value = q || '';
+                submitDutyAssistantQuestion();
+            }, 220);
+        }
+        function handleDutyAssistantQuestionKeydown(event) {
+            if (!event) return;
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                submitDutyAssistantQuestion();
+            }
+        }
 
         function renderCalendar() {
             const calendarGrid = document.getElementById('calendarGrid');
