@@ -1790,7 +1790,7 @@
                     <button class="btn btn-sm btn-info" onclick="printRotationAndRankings()">
                         <i class="fas fa-print me-1"></i>Εκτύπωση Σειρών & Ιεραρχίας
                     </button>
-                    <button class="btn btn-sm btn-outline-primary" onclick="openDutyAssistantModal()">
+                    <button class="btn btn-sm btn-outline-primary" onclick="openDutyShiftsAIAssistantModal()">
                         <i class="fas fa-robot me-1"></i>AI Βοηθός
                     </button>
                     <button class="btn btn-sm btn-outline-dark" onclick="openNormalSwapLogicSettingsModal()">
@@ -2894,38 +2894,31 @@
         </div>
     </div>
 
-    <!-- Duty AI Assistant Modal (local / free help) -->
-    <div class="modal fade" id="dutyAssistantModal" tabindex="-1" aria-labelledby="dutyAssistantModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
+    <!-- Duty Shifts AI Assistant (manual-based, local retrieval) -->
+    <div class="modal fade" id="dutyShiftsAIAssistantModal" tabindex="-1" aria-labelledby="dutyShiftsAIAssistantModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="dutyAssistantModalLabel"><i class="fas fa-robot me-2"></i>AI Βοηθός Χρήσης (Δωρεάν)</h5>
+                    <h5 class="modal-title" id="dutyShiftsAIAssistantModalLabel"><i class="fas fa-robot me-2"></i>AI Βοηθός Duty Shifts</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Κλείσιμο"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="alert alert-info py-2 mb-3">
+                    <div class="alert alert-info py-2">
                         <i class="fas fa-info-circle me-1"></i>
-                        Ρωτήστε για χρήση του συστήματος (υπολογισμός, swaps, απουσίες, εκτύπωση, ρυθμίσεις).
+                        Κάνει αναζήτηση μόνο στον οδηγό `DUTY_SHIFTS_MANUAL.md` και επιστρέφει τις πιο σχετικές οδηγίες χρήσης.
                     </div>
-                    <div class="d-flex flex-wrap gap-2 mb-3">
-                        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="askDutyAssistantQuick('Πως κάνω υπολογισμό υπηρεσιών;')">Υπολογισμός</button>
-                        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="askDutyAssistantQuick('Πως λειτουργούν τα swaps;')">Swaps</button>
-                        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="askDutyAssistantQuick('Πως δηλώνω απουσία ή απενεργοποίηση;')">Απουσίες/Απενεργ.</button>
-                        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="askDutyAssistantQuick('Πως γίνεται εκτύπωση σειρών και ιεραρχίας;')">Εκτύπωση</button>
-                        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="askDutyAssistantQuick('Τι κάνουν οι ρυθμίσεις swap καθημερινών;')">Ρυθμίσεις</button>
+                    <div class="mb-2 small text-muted">Παραδείγματα: «Πώς κάνω υπολογισμό πολλών μηνών;», «Τι σημαίνει Κλείδωμα μήνα;», «Πώς λειτουργεί το swap καθημερινών;»</div>
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" id="dutyShiftsAIQuestionInput" placeholder="Γράψτε ερώτηση για τη χρήση του Duty Shifts..." onkeydown="handleDutyShiftsAIAssistantKeydown(event)">
+                        <button class="btn btn-primary" type="button" onclick="askDutyShiftsAIAssistant()"><i class="fas fa-paper-plane me-1"></i>Ερώτηση</button>
                     </div>
-                    <div id="dutyAssistantConversation" class="border rounded p-2 bg-light" style="min-height: 220px; max-height: 50vh; overflow-y: auto;">
-                        <div class="small text-muted">Γράψτε την ερώτησή σας παρακάτω...</div>
-                    </div>
-                    <div class="input-group mt-3">
-                        <input type="text" id="dutyAssistantQuestion" class="form-control" placeholder="π.χ. γιατί δεν έγινε swap σε μια ημερομηνία;" onkeydown="handleDutyAssistantQuestionKeydown(event)">
-                        <button class="btn btn-primary" type="button" onclick="submitDutyAssistantQuestion()">
-                            <i class="fas fa-paper-plane me-1"></i>Αποστολή
-                        </button>
+                    <div id="dutyShiftsAISuggestions" class="d-flex flex-wrap gap-2 mb-3"></div>
+                    <div id="dutyShiftsAIAnswer" class="border rounded p-3 bg-light small text-dark" style="min-height: 120px;">
+                        Γράψτε μια ερώτηση για να δείτε σχετικές οδηγίες από το εγχειρίδιο.
                     </div>
                 </div>
                 <div class="modal-footer py-2">
-                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Κλείσιμο</button>
                 </div>
             </div>
         </div>
@@ -2945,6 +2938,7 @@
     <script src="js/duty-shifts-data.js" charset="UTF-8"></script>
     <script src="js/duty-shifts-logic.js" charset="UTF-8"></script>
     <script src="js/duty-shifts-ui.js" charset="UTF-8"></script>
+    <script src="js/duty-shifts-ai-assistant.js" charset="UTF-8"></script>
     <script>
         // NOTE: Main JavaScript code has been moved to js/duty-shifts.js to reduce memory usage
         // This inline script block is kept minimal for any page-specific initialization if needed
