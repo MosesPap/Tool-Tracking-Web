@@ -4,6 +4,14 @@
 (function () {
     const MANUAL_SECTIONS = [
         {
+            id: 'manual-alternate-replacement',
+            title: 'Αντικατάσταση Επιλαχών (βήμα-βήμα)',
+            keywords:
+                'επιλαχών επιλαχοντα επιλαχόντα επιλαχόντες επιλαχώντα αντικατάσταση επιλαχόντα αντικατάσταση επιλαχών χειροκίνητη αντικατάσταση επιλαχών openAlternateReplacementFromActions alternate replacement manual alternate Ενέργειες Ατόμου person actions',
+            content:
+                'Για αντικατάσταση επιλαχών: 1) Κλικ στο άτομο στη λίστα ομάδας → «Ενέργειες Ατόμου». 2) «Αντικατάσταση Επιλαχών». 3) Επιλέξτε Ημερομηνία (πρέπει να υπάρχει ανάθεση εκείνη την ημέρα και το άτομο να είναι ανατεθειμένο στην ομάδα του). 4) «Εφαρμογή». Ο επιλαχών είναι το επόμενο διαθέσιμο άτομο στη λίστα του τύπου ημέρας (special/weekend/semi/normal), κυκλικά, εκτός απουσίας/απενεργοποίησης. Έλεγχος διαδοχικών συγκρούσεων· αν αποτύχει, δεν εφαρμόζεται. Δεν είναι επιστροφή από απουσία. Baseline περιστροφής κρατά τον παραλειφθέντα· για καθημερινές μπορεί reflow υπόλοιπου μήνα. Στον Υπολογισμό, επιλογή ομάδων μπορεί να αγνοήσει χειροκίνητες αντικαταστάσεις μόνο για αυτές. Λεπτομέρειες: DUTY_SHIFTS_MANUAL.md §5.4.'
+        },
+        {
             id: 'calendar-basics',
             title: 'Ημερολόγιο: βασική χρήση',
             content:
@@ -13,7 +21,7 @@
             id: 'person-actions',
             title: 'Ενέργειες ατόμου',
             content:
-                'Από person actions μπορείτε να κάνετε επεξεργασία, περιόδους απουσίας, απενεργοποίηση ανά τύπο υπηρεσίας ή συνολικά, μεταφορά ομάδας/θέσης και χειροκίνητη αντικατάσταση επιλαχόντων.'
+                'Άνοιγμα από κλικ στο άτομο στη λίστα ομάδας. Modal «Ενέργειες Ατόμου»: Επεξεργασία, Αντικατάσταση Επιλαχών (§5.4 εγχειριδίου), Απενεργοποίηση, Περίοδοι απουσίας, Αλλαγή ομάδας, Διαγραφή.'
         },
         {
             id: 'missing-disabled',
@@ -66,6 +74,7 @@
     ];
 
     const SUGGESTIONS = [
+        'Πώς μπορώ να κάνω αντικατάσταση επιλαχόντα;',
         'Πώς κάνω υπολογισμό πολλών μηνών;',
         'Τι κάνει το Κλείδωμα μήνα;',
         'Πώς λειτουργεί το swap καθημερινών;',
@@ -74,43 +83,81 @@
         'Πώς ελέγχω ότι οι αναθέσεις είναι σωστές;'
     ];
 
+    function normalizeGreek(str) {
+        try {
+            return String(str || '')
+                .normalize('NFD')
+                .replace(/\p{M}/gu, '')
+                .toLowerCase();
+        } catch (_) {
+            return String(str || '').toLowerCase();
+        }
+    }
+
     function tokenize(text) {
-        return String(text || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9α-ωάέήίόύώϊϋΐΰ\s]/gi, ' ')
+        const raw = normalizeGreek(text).replace(/[^a-z0-9α-ω\s]/gi, ' ');
+        return raw
             .split(/\s+/)
             .map((x) => x.trim())
             .filter((x) => x.length > 1);
     }
 
+    function expandQueryTokens(qTokens, questionNorm) {
+        const extra = new Set(qTokens);
+        if (questionNorm.includes('επιλαχ') || questionNorm.includes('antikatastash') || questionNorm.includes('antikatastasi')) {
+            'επιλαχων επιλαχοντα επιλαχοντες επιλαχωντα αντικατασταση επιλαχων αντικατασταση επιλαχοντα εφαρμογη ενεργειες ατομου'.split(' ').forEach((w) => extra.add(w));
+        }
+        return [...extra];
+    }
+
+    function wantsAlternateReplacementAnswer(questionNorm) {
+        if (!questionNorm || questionNorm.length < 4) return false;
+        if (questionNorm.includes('επιλαχ')) return true;
+        if (questionNorm.includes('αντικατασταση') && questionNorm.includes('επιλαχ')) return true;
+        if (questionNorm.includes('αντικατασταση') && questionNorm.includes('επιλαχον')) return true;
+        return false;
+    }
+
     function scoreSection(section, qTokens) {
-        const sTokens = tokenize(`${section.title} ${section.content}`);
+        const kw = section.keywords ? ` ${section.keywords}` : '';
+        const sTokens = tokenize(`${section.title} ${section.content}${kw}`);
         if (qTokens.length === 0 || sTokens.length === 0) return 0;
         const sSet = new Set(sTokens);
         let score = 0;
         for (const t of qTokens) {
             if (sSet.has(t)) score += t.length > 4 ? 2 : 1;
         }
-        // small boost for exact phrase in title
         const qText = qTokens.join(' ');
-        if (qText.length > 4 && section.title.toLowerCase().includes(qText)) score += 3;
+        const titleN = normalizeGreek(section.title);
+        if (qText.length > 4 && titleN.includes(qText)) score += 5;
         return score;
     }
 
     function buildAnswer(question) {
-        const qTokens = tokenize(question);
+        const qRaw = String(question || '').trim();
+        const qNorm = normalizeGreek(qRaw);
+        let qTokens = tokenize(qRaw);
+        qTokens = expandQueryTokens(qTokens, qNorm);
         if (qTokens.length === 0) {
             return 'Γράψτε μια πιο συγκεκριμένη ερώτηση (π.χ. "πώς δουλεύει το swap καθημερινών;").';
         }
-        const ranked = MANUAL_SECTIONS
-            .map((s) => ({ s, score: scoreSection(s, qTokens) }))
-            .sort((a, b) => b.score - a.score);
-        const top = ranked.filter((x) => x.score > 0).slice(0, 3);
+        const altSection = MANUAL_SECTIONS.find((s) => s.id === 'manual-alternate-replacement');
+        const ranked = MANUAL_SECTIONS.map((s) => ({ s, score: scoreSection(s, qTokens) })).sort((a, b) => b.score - a.score);
+
+        let top = [];
+        if (wantsAlternateReplacementAnswer(qNorm) && altSection) {
+            top.push({ s: altSection, score: 999 });
+            const rest = ranked.filter((x) => x.s.id !== 'manual-alternate-replacement' && x.score > 0).slice(0, 2);
+            top = top.concat(rest);
+        } else {
+            top = ranked.filter((x) => x.score > 0).slice(0, 3);
+        }
+
         if (top.length === 0) {
-            return 'Δεν βρήκα σαφή αντιστοίχιση στο εγχειρίδιο. Δοκιμάστε με λέξεις-κλειδιά όπως "υπολογισμός", "swap", "απουσία", "κλείδωμα μήνα", "ιεραρχία".';
+            return 'Δεν βρήκα σαφή αντιστοίχιση στο εγχειρίδιο. Δοκιμάστε με λέξεις-κλειδιά όπως "υπολογισμός", "swap", "απουσία", "επιλαχών", "κλείδωμα μήνα", "ιεραρχία".';
         }
         const lines = [
-            `<div><strong>Ερώτηση:</strong> ${escapeHtml(String(question))}</div>`,
+            `<div><strong>Ερώτηση:</strong> ${escapeHtml(qRaw)}</div>`,
             '<hr class="my-2">',
             '<div><strong>Προτεινόμενη απάντηση από εγχειρίδιο:</strong></div>'
         ];
