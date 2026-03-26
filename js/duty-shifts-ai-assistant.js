@@ -7,9 +7,9 @@
             id: 'manual-alternate-replacement',
             title: 'Αντικατάσταση Επιλαχών (βήμα-βήμα)',
             keywords:
-                'επιλαχών επιλαχοντα επιλαχόντα επιλαχόντες επιλαχώντα αντικατάσταση επιλαχόντα αντικατάσταση επιλαχών χειροκίνητη αντικατάσταση επιλαχών openAlternateReplacementFromActions alternate replacement manual alternate Ενέργειες Ατόμου person actions',
+                'επιλαχών επιλαχοντα επιλαχόντα επιλαχόντες επιλαχώντα αντικατάσταση επιλαχόντα αντικατάσταση επιλαχών χειροκίνητη αντικατάσταση επιλαχών Ενέργειες Ατόμου αναζήτηση ατόμου αναζητηση ατομου person actions',
             content:
-                'Για αντικατάσταση επιλαχών: 1) Κλικ στο άτομο στη λίστα ομάδας → «Ενέργειες Ατόμου». 2) «Αντικατάσταση Επιλαχών». 3) Επιλέξτε Ημερομηνία (πρέπει να υπάρχει ανάθεση εκείνη την ημέρα και το άτομο να είναι ανατεθειμένο στην ομάδα του). 4) «Εφαρμογή». Ο επιλαχών είναι το επόμενο διαθέσιμο άτομο στη λίστα του τύπου ημέρας (special/weekend/semi/normal), κυκλικά, εκτός απουσίας/απενεργοποίησης. Έλεγχος διαδοχικών συγκρούσεων· αν αποτύχει, δεν εφαρμόζεται. Δεν είναι επιστροφή από απουσία. Baseline περιστροφής κρατά τον παραλειφθέντα· για καθημερινές μπορεί reflow υπόλοιπου μήνα. Στον Υπολογισμό, επιλογή ομάδων μπορεί να αγνοήσει χειροκίνητες αντικαταστάσεις μόνο για αυτές. Λεπτομέρειες: DUTY_SHIFTS_MANUAL.md §5.4.'
+                'Για αντικατάσταση επιλαχών: 1) «Ενέργειες Ατόμου»: κλικ στο άτομο στη λίστα ομάδας *ή* πεδίο «Αναζήτηση ατόμου…», επιλογή αποτελέσματος (ή Enter στο πρώτο). 2) «Αντικατάσταση Επιλαχών». 3) Ημερομηνία (υπάρχει ανάθεση εκείνη την ημέρα, το άτομο ανατεθειμένο στην ομάδα του). 4) «Εφαρμογή». Ο επιλαχών: επόμενο διαθέσιμο στη λίστα τύπου ημέρας, κυκλικά. Έλεγχος διαδοχικών· δεν είναι επιστροφή από απουσία. Λεπτομέρειες: DUTY_SHIFTS_MANUAL.md §5.3–§5.4.'
         },
         {
             id: 'calendar-basics',
@@ -21,7 +21,7 @@
             id: 'person-actions',
             title: 'Ενέργειες ατόμου',
             content:
-                'Άνοιγμα από κλικ στο άτομο στη λίστα ομάδας. Modal «Ενέργειες Ατόμου»: Επεξεργασία, Αντικατάσταση Επιλαχών (§5.4 εγχειριδίου), Απενεργοποίηση, Περίοδοι απουσίας, Αλλαγή ομάδας, Διαγραφή.'
+                '«Ενέργειες Ατόμου»: κλικ στο άτομο στη λίστα ομάδας *ή* «Αναζήτηση ατόμου…» → επιλογή από αποτελέσματα (ή Enter στο πρώτο). Modal: Επεξεργασία, Αντικατάσταση Επιλαχών (§5.4), Απενεργοποίηση, Περίοδοι απουσίας, Αλλαγή ομάδας, Διαγραφή.'
         },
         {
             id: 'missing-disabled',
@@ -82,6 +82,81 @@
         'Πώς επηρεάζουν οι απουσίες τις αναθέσεις;',
         'Πώς ελέγχω ότι οι αναθέσεις είναι σωστές;'
     ];
+
+    function escapeHtml(value) {
+        const s = value === null || value === undefined ? '' : String(value);
+        return s
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function getDutyShiftsAIModalEl() {
+        return document.getElementById('dutyShiftsAIAssistantModal');
+    }
+
+    function getDutyShiftsAIInputEl() {
+        const modal = getDutyShiftsAIModalEl();
+        if (modal) {
+            const byData = modal.querySelector('[data-duty-shifts-ai-input]');
+            if (byData) return byData;
+        }
+        return document.getElementById('dutyShiftsAIQuestionInput');
+    }
+
+    function getDutyShiftsAIAnswerEl() {
+        const modal = getDutyShiftsAIModalEl();
+        if (modal) {
+            const byData = modal.querySelector('[data-duty-shifts-ai-answer]');
+            if (byData) return byData;
+        }
+        return document.getElementById('dutyShiftsAIAnswer');
+    }
+
+    let _dutyShiftsAIModalWired = false;
+    function wireDutyShiftsAIModalEvents() {
+        if (_dutyShiftsAIModalWired) return;
+        const modal = getDutyShiftsAIModalEl();
+        if (!modal) return;
+        _dutyShiftsAIModalWired = true;
+
+        modal.addEventListener(
+            'click',
+            function (e) {
+                const askBtn = e.target.closest('[data-duty-shifts-ai-ask]');
+                if (askBtn && modal.contains(askBtn)) {
+                    e.preventDefault();
+                    window.askDutyShiftsAIAssistant();
+                    return;
+                }
+                const sugBtn = e.target.closest('[data-duty-shifts-ai-suggestion-idx]');
+                if (sugBtn && modal.contains(sugBtn)) {
+                    e.preventDefault();
+                    const idx = parseInt(sugBtn.getAttribute('data-duty-shifts-ai-suggestion-idx'), 10);
+                    if (!Number.isFinite(idx) || idx < 0 || idx >= SUGGESTIONS.length) return;
+                    const input = getDutyShiftsAIInputEl();
+                    if (input) input.value = SUGGESTIONS[idx];
+                    window.askDutyShiftsAIAssistant();
+                }
+            },
+            false
+        );
+
+        modal.addEventListener(
+            'keydown',
+            function (e) {
+                if (e.key !== 'Enter') return;
+                const input = getDutyShiftsAIInputEl();
+                if (!input || e.target !== input) return;
+                e.preventDefault();
+                e.stopPropagation();
+                window.askDutyShiftsAIAssistant();
+            },
+            true
+        );
+    }
 
     function normalizeGreek(str) {
         try {
@@ -173,26 +248,28 @@
     function renderSuggestions() {
         const box = document.getElementById('dutyShiftsAISuggestions');
         if (!box) return;
-        box.innerHTML = SUGGESTIONS.map((q) =>
-            `<button type="button" class="btn btn-sm btn-outline-secondary" onclick="useDutyShiftsAISuggestion('${escapeHtml(q).replace(/'/g, '&#39;')}')">${escapeHtml(q)}</button>`
+        box.innerHTML = SUGGESTIONS.map(
+            (q, idx) =>
+                `<button type="button" class="btn btn-sm btn-outline-secondary" data-duty-shifts-ai-suggestion-idx="${idx}">${escapeHtml(q)}</button>`
         ).join('');
     }
 
     window.useDutyShiftsAISuggestion = function useDutyShiftsAISuggestion(q) {
-        const input = document.getElementById('dutyShiftsAIQuestionInput');
+        const input = getDutyShiftsAIInputEl();
         if (!input) return;
-        input.value = q;
+        input.value = String(q || '');
         window.askDutyShiftsAIAssistant();
     };
 
     window.openDutyShiftsAIAssistantModal = function openDutyShiftsAIAssistantModal() {
+        wireDutyShiftsAIModalEvents();
         renderSuggestions();
-        const modalEl = document.getElementById('dutyShiftsAIAssistantModal');
-        if (!modalEl) return;
-        const m = new bootstrap.Modal(modalEl);
+        const modalEl = getDutyShiftsAIModalEl();
+        if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
+        const m = bootstrap.Modal.getOrCreateInstance(modalEl);
         m.show();
         setTimeout(() => {
-            const input = document.getElementById('dutyShiftsAIQuestionInput');
+            const input = getDutyShiftsAIInputEl();
             if (input) input.focus();
         }, 120);
     };
@@ -200,15 +277,26 @@
     window.handleDutyShiftsAIAssistantKeydown = function handleDutyShiftsAIAssistantKeydown(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
+            e.stopPropagation();
             window.askDutyShiftsAIAssistant();
         }
     };
 
     window.askDutyShiftsAIAssistant = function askDutyShiftsAIAssistant() {
-        const input = document.getElementById('dutyShiftsAIQuestionInput');
-        const answerEl = document.getElementById('dutyShiftsAIAnswer');
-        if (!input || !answerEl) return;
-        const q = String(input.value || '').trim();
-        answerEl.innerHTML = buildAnswer(q);
+        wireDutyShiftsAIModalEvents();
+        const run = () => {
+            const input = getDutyShiftsAIInputEl();
+            const answerEl = getDutyShiftsAIAnswerEl();
+            if (!input || !answerEl) return;
+            const q = String(input.value || '').trim();
+            answerEl.innerHTML = buildAnswer(q);
+        };
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(run);
+        } else {
+            run();
+        }
     };
+
+    wireDutyShiftsAIModalEvents();
 })();
