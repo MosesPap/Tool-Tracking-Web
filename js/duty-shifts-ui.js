@@ -11,24 +11,43 @@
 
         function getControlTooltipText(el) {
             if (!el) return '';
+            const dataTooltip = String(el.getAttribute('data-tooltip') || '').trim();
+            if (dataTooltip) return dataTooltip;
+
+            const id = String(el.id || '').trim();
+            const placeholder = String(el.getAttribute('placeholder') || '').trim().toLowerCase();
+            const onClick = String(el.getAttribute('onclick') || '').trim().toLowerCase();
+
+            if (id === 'personSearchInput') return 'Search for a person and open their actions directly.';
+            if (id === 'dutyPersonSearchInput') return 'Search and highlight all duty assignments for one person in the calendar.';
+            if (id === 'monthCalculationLockToggle') return 'Lock/unlock this month to prevent or allow duty recalculation.';
+            if (id === 'calendarMissingDisabledToggle') return 'Show only missing/disabled people for each day and group.';
+            if (id === 'calendarCellHeight') return 'Adjust the calendar cell height for better readability.';
+            if (id === 'dutyShiftsAIQuestionInput') return 'Type a question to get usage guidance from the manual.';
+
+            if (placeholder.includes('αναζήτηση ατόμου')) return 'Search for a person and open their actions directly.';
+            if (placeholder.includes('εύρεση υπηρεσιών')) return 'Search and highlight all duty assignments for the selected person.';
+            if (placeholder.includes('γράψτε ερώτηση')) return 'Ask the built-in assistant about Duty Shifts usage.';
+
+            if (onClick.includes('calculateduties')) return 'Start duty calculation for the selected period and options.';
+            if (onClick.includes('openrankingsmodal')) return 'Open hierarchy/ranking management.';
+            if (onClick.includes('createmonthlyexcel') || onClick.includes('createexcel')) return 'Generate the monthly Excel export.';
+            if (onClick.includes('printalllists')) return 'Print all duty lists and hierarchy pages.';
+            if (onClick.includes('openrotationalviolationsmodal') || onClick.includes('showrotationviolations')) return 'Show assignments that deviate from strict rotation rules.';
+            if (onClick.includes('previousmonth')) return 'Go to previous month.';
+            if (onClick.includes('nextmonth')) return 'Go to next month.';
+            if (onClick.includes('openmonthpicker')) return 'Open month/year picker.';
+            if (onClick.includes('save')) return 'Save your changes.';
+            if (onClick.includes('close')) return 'Close this window without extra actions.';
+
             const explicit = String(el.getAttribute('title') || '').trim();
             if (explicit) return explicit;
             const aria = String(el.getAttribute('aria-label') || '').trim();
             if (aria) return aria;
-            const placeholder = String(el.getAttribute('placeholder') || '').trim();
-            if (placeholder) return placeholder;
-            const dataTooltip = String(el.getAttribute('data-tooltip') || '').trim();
-            if (dataTooltip) return dataTooltip;
-            const byFor = el.id ? document.querySelector(`label[for="${el.id}"]`) : null;
-            if (byFor) {
-                const labelTxt = String(byFor.textContent || '').replace(/\s+/g, ' ').trim();
-                if (labelTxt) return labelTxt;
-            }
-            const text = String(el.textContent || '').replace(/\s+/g, ' ').trim();
-            if (text) return text;
-            if (el.classList.contains('btn')) return 'Εντολή';
-            if (el.tagName === 'INPUT') return 'Πεδίο εισαγωγής';
-            if (el.tagName === 'SELECT') return 'Επιλογή λίστας';
+
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return 'Enter or edit a value for this setting.';
+            if (el.tagName === 'SELECT') return 'Choose a value from the available options.';
+            if (el.classList.contains('btn') || el.getAttribute('role') === 'button') return 'Execute this action.';
             return '';
         }
 
