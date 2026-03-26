@@ -5,12 +5,86 @@
         /** Calendar cell hover popups (hierarchy vs missing/disabled list — only one at a time) */
         let hierarchyPopup = null;
         let missingDisabledCalendarPopup = null;
+        let _controlTooltipsInitialized = false;
+        let _controlTooltipsObserver = null;
+        let _controlTooltipsTimer = null;
+
+        function getControlTooltipText(el) {
+            if (!el) return '';
+            const explicit = String(el.getAttribute('title') || '').trim();
+            if (explicit) return explicit;
+            const aria = String(el.getAttribute('aria-label') || '').trim();
+            if (aria) return aria;
+            const placeholder = String(el.getAttribute('placeholder') || '').trim();
+            if (placeholder) return placeholder;
+            const dataTooltip = String(el.getAttribute('data-tooltip') || '').trim();
+            if (dataTooltip) return dataTooltip;
+            const byFor = el.id ? document.querySelector(`label[for="${el.id}"]`) : null;
+            if (byFor) {
+                const labelTxt = String(byFor.textContent || '').replace(/\s+/g, ' ').trim();
+                if (labelTxt) return labelTxt;
+            }
+            const text = String(el.textContent || '').replace(/\s+/g, ' ').trim();
+            if (text) return text;
+            if (el.classList.contains('btn')) return 'Εντολή';
+            if (el.tagName === 'INPUT') return 'Πεδίο εισαγωγής';
+            if (el.tagName === 'SELECT') return 'Επιλογή λίστας';
+            return '';
+        }
+
+        function applyControlTooltips(root = document) {
+            if (typeof bootstrap === 'undefined' || !bootstrap.Tooltip || !root || !root.querySelectorAll) return;
+            const selector = 'button, .btn, input, select, textarea, [role="button"], .form-check-input';
+            root.querySelectorAll(selector).forEach((el) => {
+                if (!(el instanceof HTMLElement)) return;
+                if (el.dataset.noTooltip === 'true') return;
+                if (!el.offsetParent && !el.classList.contains('modal')) return;
+                const txt = getControlTooltipText(el);
+                if (!txt) return;
+                if (!el.getAttribute('title')) el.setAttribute('title', txt);
+                el.setAttribute('data-bs-toggle', 'tooltip');
+                el.setAttribute('data-bs-placement', 'top');
+                bootstrap.Tooltip.getOrCreateInstance(el, {
+                    container: 'body',
+                    trigger: 'hover focus'
+                });
+            });
+        }
+
+        function initializeControlTooltips() {
+            if (_controlTooltipsInitialized) return;
+            _controlTooltipsInitialized = true;
+            applyControlTooltips(document);
+            _controlTooltipsObserver = new MutationObserver((mutations) => {
+                let shouldRefresh = false;
+                for (const m of mutations) {
+                    if (m.type === 'childList' && (m.addedNodes?.length || m.removedNodes?.length)) {
+                        shouldRefresh = true;
+                        break;
+                    }
+                    if (m.type === 'attributes' && (m.attributeName === 'title' || m.attributeName === 'placeholder' || m.attributeName === 'aria-label')) {
+                        shouldRefresh = true;
+                        break;
+                    }
+                }
+                if (!shouldRefresh) return;
+                if (_controlTooltipsTimer) clearTimeout(_controlTooltipsTimer);
+                _controlTooltipsTimer = setTimeout(() => applyControlTooltips(document), 120);
+            });
+            _controlTooltipsObserver.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['title', 'placeholder', 'aria-label']
+            });
+        }
 
         // When true, after the current child modal closes we reopen the Person Actions (Ενεργειες Ατόμου) modal
         let reopenPersonActionsModalWhenClosed = false;
         let reopenPersonActionsAfterTransferFlow = false;
 
         function reopenPersonActionsModalIfNeeded() {
+            initializeControlTooltips();
             if (reopenPersonActionsModalWhenClosed) {
                 reopenPersonActionsModalWhenClosed = false;
                 // Refresh and show Person Actions for the current person (correct when opened from disable/missing list)
@@ -6014,6 +6088,23 @@
                     <div id="dutyPersonsContainer" class="mt-2">
             `;
             
+            const allPeopleByGroup = [];
+            for (let g = 1; g <= 4; g++) {
+                const gData = groups[g] || {};
+                const set = new Set();
+                ['special', 'weekend', 'semi', 'normal'].forEach((listType) => {
+                    const arr = Array.isArray(gData[listType]) ? gData[listType] : [];
+                    arr.forEach((p) => {
+                        const name = String(p || '').trim();
+                        if (name) set.add(name);
+                    });
+                });
+                allPeopleByGroup.push({
+                    groupNum: g,
+                    people: Array.from(set).sort((a, b) => a.localeCompare(b, 'el'))
+                });
+            }
+
             personGroups.forEach((person, index) => {
                 const normPick = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                 const isCritical = person.name && criticalPeople.some(cp => {
@@ -6140,36 +6231,39 @@
                     ? `<div class="mt-1 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${escapeHtml(reasonDisplayText)}</div>`
                     : '';
                 
-                // Get all people from this group for dropdown
-                const groupData = groups[person.group] || {};
-                const allPeopleInGroup = new Set();
-                ['special', 'weekend', 'semi', 'normal'].forEach(listType => {
-                    if (groupData[listType]) {
-                        groupData[listType].forEach(p => allPeopleInGroup.add(p));
-                    }
-                });
                 const curNameNorm = person.name ? normPick(person.name) : '';
                 const escapeOpt = (s) => String(s || '')
                     .replace(/&/g, '&amp;')
                     .replace(/"/g, '&quot;')
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;');
-                const fullPeopleList = Array.from(allPeopleInGroup).sort();
+                const knownNames = new Set();
                 
-                // Build dropdown: show everyone; unavailable (missing/disabled) as disabled options with short reason (current assignee stays selectable)
+                // Build dropdown: show all people grouped by team; unavailable options disabled (except current assignee).
                 let peopleOptions = '<option value="">-- Επιλέξτε Άτομο --</option>';
-                fullPeopleList.forEach(p => {
-                    const unavailable = isPersonUnavailableForManualDutyOnDate(p, person.group, date, dayTypeCategory);
-                    const isCurrent = !!(curNameNorm && normPick(p) === curNameNorm);
-                    const reasonShort = unavailable && typeof getUnavailableReasonShort === 'function'
-                        ? getUnavailableReasonShort(p, person.group, date, dayTypeCategory)
-                        : (unavailable ? 'Μη διαθέσιμος/η' : '');
-                    let label = escapeOpt(p);
-                    if (reasonShort) label += ' · ' + escapeOpt(reasonShort);
-                    const dis = unavailable && !isCurrent ? ' disabled' : '';
-                    const sel = isCurrent ? ' selected' : '';
-                    peopleOptions += `<option value="${escapeOpt(p)}"${dis}${sel}>${label}</option>`;
+                allPeopleByGroup.forEach((groupEntry) => {
+                    if (!groupEntry.people || groupEntry.people.length === 0) return;
+                    peopleOptions += `<optgroup label="Ομάδα ${groupEntry.groupNum}">`;
+                    groupEntry.people.forEach((p) => {
+                        knownNames.add(normPick(p));
+                        const unavailable = isPersonUnavailableForManualDutyOnDate(p, person.group, date, dayTypeCategory);
+                        const isCurrent = !!(curNameNorm && normPick(p) === curNameNorm);
+                        const reasonShort = unavailable && typeof getUnavailableReasonShort === 'function'
+                            ? getUnavailableReasonShort(p, person.group, date, dayTypeCategory)
+                            : (unavailable ? 'Μη διαθέσιμος/η' : '');
+                        let label = escapeOpt(p);
+                        if (reasonShort) label += ' · ' + escapeOpt(reasonShort);
+                        const dis = unavailable && !isCurrent ? ' disabled' : '';
+                        const sel = isCurrent ? ' selected' : '';
+                        peopleOptions += `<option value="${escapeOpt(p)}"${dis}${sel}>${label}</option>`;
+                    });
+                    peopleOptions += '</optgroup>';
                 });
+
+                // Keep current value selectable even if no longer present in group lists.
+                if (person.name && !knownNames.has(curNameNorm)) {
+                    peopleOptions += `<option value="${escapeOpt(person.name)}" selected>${escapeOpt(person.name)} · (τρέχουσα ανάθεση)</option>`;
+                }
                 
                 const changeTypeBlock = isCritical
                     ? ''
