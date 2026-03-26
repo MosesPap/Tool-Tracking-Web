@@ -17,37 +17,93 @@
             const id = String(el.id || '').trim();
             const placeholder = String(el.getAttribute('placeholder') || '').trim().toLowerCase();
             const onClick = String(el.getAttribute('onclick') || '').trim().toLowerCase();
+            const ariaLabel = String(el.getAttribute('aria-label') || '').trim().toLowerCase();
 
-            if (id === 'personSearchInput') return 'Search for a person and open their actions directly.';
-            if (id === 'dutyPersonSearchInput') return 'Search and highlight all duty assignments for one person in the calendar.';
-            if (id === 'monthCalculationLockToggle') return 'Lock/unlock this month to prevent or allow duty recalculation.';
-            if (id === 'calendarMissingDisabledToggle') return 'Show only missing/disabled people for each day and group.';
-            if (id === 'calendarCellHeight') return 'Adjust the calendar cell height for better readability.';
-            if (id === 'dutyShiftsAIQuestionInput') return 'Type a question to get usage guidance from the manual.';
+            const descriptionById = {
+                personSearchInput: 'Φιλτράρει άμεσα το προσωπικό με βάση το όνομα και ανοίγει τις Ενέργειες Ατόμου για γρήγορη διαχείριση.',
+                dutyPersonSearchInput: 'Εντοπίζει και επισημαίνει στο ημερολόγιο όλες τις αναθέσεις του συγκεκριμένου ατόμου στον τρέχοντα μήνα.',
+                monthCalculationLockToggle: 'Κλειδώνει ή ξεκλειδώνει τον τρέχοντα μήνα ώστε να αποτρέπεται ή να επιτρέπεται νέος υπολογισμός υπηρεσιών.',
+                calendarMissingDisabledToggle: 'Μετατρέπει την προβολή ώστε να εμφανίζονται μόνο απόντες και απενεργοποιημένοι ανά ημέρα/ομάδα.',
+                calendarCellHeight: 'Ρυθμίζει το ύψος των κελιών ημερολογίου για καλύτερη αναγνωσιμότητα όταν υπάρχουν πολλές εγγραφές.',
+                currentMonthYear: 'Ανοίγει επιλογέα μήνα/έτους για άμεση μετάβαση χωρίς διαδοχικά κλικ πλοήγησης.',
+                dutyShiftsAIQuestionInput: 'Δέχεται ερώτηση φυσικής γλώσσας και επιστρέφει σχετική απάντηση από το επίσημο εγχειρίδιο χρήσης.',
+                calculateDutiesButton: 'Ξεκινά τον υπολογισμό για το επιλεγμένο διάστημα και εφαρμόζει τους κανόνες ανά τύπο ημέρας.',
+                nextButton: 'Μεταβαίνει στο επόμενο στάδιο του υπολογισμού και αποθηκεύει το αποτέλεσμα του τρέχοντος βήματος.',
+                backButton: 'Επιστρέφει στο προηγούμενο στάδιο για έλεγχο ή διόρθωση πριν την οριστικοποίηση.',
+                stepCancelButton: 'Ακυρώνει τη διαδικασία βηματικού υπολογισμού χωρίς να συνεχίσει στα επόμενα στάδια.',
+                calculateButton: 'Εκτελεί το τελικό βήμα υπολογισμού και δημιουργεί τις οριστικές αναθέσεις του μήνα.',
+                generateExcelBtn: 'Δημιουργεί και κατεβάζει αρχεία Excel με τα δεδομένα του μήνα όπως εμφανίζονται στην προεπισκόπηση.',
+                savePersonButton: 'Αποθηκεύει το άτομο με τα στοιχεία, ομάδες και ημερομηνίες τελευταίας υπηρεσίας που έχουν οριστεί.',
+                autoAddRankPickerSearch: 'Φιλτράρει τη λίστα ιεραρχίας για γρήγορη επιλογή βαθμού κατά την αυτόματη προσθήκη ατόμου.',
+                alternateReplacementApplyBtn: 'Εφαρμόζει χειροκίνητη αντικατάσταση επιλαχόντα στην επιλεγμένη ημερομηνία με ελέγχους εγκυρότητας.',
+                alternateReplacementModalCloseBtn: 'Κλείνει το παράθυρο αντικατάστασης επιλαχόντα χωρίς νέα εφαρμογή αλλαγής.',
+                confirmModalOkButton: 'Επιβεβαιώνει την ενέργεια που απαιτεί ρητή αποδοχή και συνεχίζει τη λειτουργία.'
+            };
+            if (descriptionById[id]) return descriptionById[id];
 
-            if (placeholder.includes('αναζήτηση ατόμου')) return 'Search for a person and open their actions directly.';
-            if (placeholder.includes('εύρεση υπηρεσιών')) return 'Search and highlight all duty assignments for the selected person.';
-            if (placeholder.includes('γράψτε ερώτηση')) return 'Ask the built-in assistant about Duty Shifts usage.';
+            if (placeholder.includes('αναζήτηση ατόμου')) return 'Αναζητά άτομο με έξυπνη αντιστοίχιση ονόματος και επιτρέπει άμεσο άνοιγμα των ενεργειών του.';
+            if (placeholder.includes('εύρεση υπηρεσιών')) return 'Αναζητά αναθέσεις συγκεκριμένου ατόμου και τονίζει τις αντίστοιχες ημέρες στο ημερολόγιο.';
+            if (placeholder.includes('γράψτε ερώτηση')) return 'Καταχωρεί ερώτηση προς τον βοηθό, ο οποίος απαντά με βάση το εγχειρίδιο της εφαρμογής.';
 
-            if (onClick.includes('calculateduties')) return 'Start duty calculation for the selected period and options.';
-            if (onClick.includes('openrankingsmodal')) return 'Open hierarchy/ranking management.';
-            if (onClick.includes('createmonthlyexcel') || onClick.includes('createexcel')) return 'Generate the monthly Excel export.';
-            if (onClick.includes('printalllists')) return 'Print all duty lists and hierarchy pages.';
-            if (onClick.includes('openrotationalviolationsmodal') || onClick.includes('showrotationviolations')) return 'Show assignments that deviate from strict rotation rules.';
-            if (onClick.includes('previousmonth')) return 'Go to previous month.';
-            if (onClick.includes('nextmonth')) return 'Go to next month.';
-            if (onClick.includes('openmonthpicker')) return 'Open month/year picker.';
-            if (onClick.includes('save')) return 'Save your changes.';
-            if (onClick.includes('close')) return 'Close this window without extra actions.';
+            const actionDescriptions = [
+                ['cleardutypersonselection(', 'Καθαρίζει το φίλτρο προσώπου και επαναφέρει την κανονική προβολή του ημερολογίου.'],
+                ['previousmonth(', 'Μετακινεί το ημερολόγιο στον προηγούμενο μήνα διατηρώντας τα τρέχοντα φίλτρα προβολής.'],
+                ['nextmonth(', 'Μετακινεί το ημερολόγιο στον επόμενο μήνα διατηρώντας τα τρέχοντα φίλτρα προβολής.'],
+                ['openrankingsmodal(', 'Ανοίγει διαχείριση ιεραρχίας για προβολή/διόρθωση κατάταξης που χρησιμοποιείται στις αναθέσεις.'],
+                ['opencalculatedutiesmodal(', 'Ανοίγει τις παραμέτρους υπολογισμού ώστε να οριστεί διάστημα, επιλογές και ομάδες επανυπολογισμού.'],
+                ['openexcelmonthpicker(', 'Ανοίγει επιλογέα μήνα για δημιουργία αρχείου Excel από τα δεδομένα υπηρεσιών.'],
+                ['analyzerotationviolations(', 'Υπολογίζει και εμφανίζει αναθέσεις που αποκλίνουν από την αυστηρή περιστροφική λογική.'],
+                ['printrotationandrankings(', 'Εκτυπώνει συνδυαστικά τις λίστες υπηρεσιών και την ιεραρχική κατάταξη προσωπικού.'],
+                ['opendutyshiftsaiassistantmodal(', 'Ανοίγει τον AI βοηθό για ερωτήσεις χρήσης και λειτουργίας της εφαρμογής.'],
+                ['opennormalswaplogicsettingsmodal(', 'Ανοίγει ρυθμίσεις κανόνων swap για καθημερινές, με εξαιρέσεις/συμπεριφορά ανά ομάδα.'],
+                ['openmissingdisabledpeoplemodal(', 'Εμφανίζει συγκεντρωτική λίστα όσων είναι απόντες ή απενεργοποιημένοι στο τρέχον πλαίσιο.'],
+                ['addperson(', 'Ανοίγει φόρμα καταχώρισης νέου ατόμου στην αντίστοιχη ομάδα με πλήρη στοιχεία υπηρεσίας.'],
+                ['openautoaddpersonmodal(', 'Ανοίγει ημι-αυτόματη προσθήκη ατόμου με υποβοήθηση από άφιξη, ιεραρχία και προτεινόμενες θέσεις.'],
+                ['addrecurringholiday(', 'Καταχωρεί επαναλαμβανόμενη αργία που εφαρμόζεται αυτόματα σε επόμενα έτη/μήνες.'],
+                ['addholiday(', 'Καταχωρεί μεμονωμένη αργία που επηρεάζει τον τύπο ημέρας και τη λογική ανάθεσης.'],
+                ['savenormalswaplogicsettingsfrommodal(', 'Αποθηκεύει τις ρυθμίσεις swap και τις εφαρμόζει στους επόμενους υπολογισμούς.'],
+                ['cleardutyshiftsfirestoredocs(', 'Εκτελεί καθαρισμό αποθηκευμένων εγγράφων υπηρεσιών στη βάση δεδομένων (ενέργεια υψηλού αντίκτυπου).'],
+                ['saveperson(', 'Αποθηκεύει νέα ή τροποποιημένα στοιχεία ατόμου και ενημερώνει τις σχετικές λίστες ομάδας.'],
+                ['savespecialholiday(', 'Αποθηκεύει ειδική αργία ώστε η ημέρα να υπολογίζεται με κανόνες special duty.'],
+                ['saverecurringholiday(', 'Αποθηκεύει κανόνα επαναλαμβανόμενης ειδικής αργίας για μελλοντική αυτόματη εφαρμογή.'],
+                ['calculatedutiesforselectedmonths(', 'Εκκινεί τον κεντρικό υπολογισμό αναθέσεων για το επιλεγμένο χρονικό εύρος.'],
+                ['gotopreviousstep(', 'Επιστρέφει στο προηγούμενο υπο-βήμα για ανασκόπηση πριν τη συνέχεια του υπολογισμού.'],
+                ['cancelstepbystepcalculation(', 'Διακόπτει την τρέχουσα ακολουθία υπολογισμού και κλείνει τη ροή βημάτων.'],
+                ['gotonextstep(', 'Ολοκληρώνει το παρόν στάδιο και συνεχίζει στο επόμενο τμήμα της διαδικασίας υπολογισμού.'],
+                ['executecalculation(', 'Εκτελεί την τελική πράξη ανάθεσης και παράγει το τελικό αποτέλεσμα υπολογισμού.'],
+                ['saveholiday(', 'Αποθηκεύει την επιλεγμένη αργία και ενημερώνει τους κανόνες κατηγοριοποίησης ημέρας.'],
+                ['openmissingreasonsmodal(', 'Ανοίγει τη διαχείριση προκαθορισμένων λόγων απουσίας για ομοιομορφία καταχωρήσεων.'],
+                ['addmissingperiod(', 'Καταχωρεί περίοδο απουσίας για άτομο, ώστε να εξαιρείται αυτόματα όπου απαιτείται.'],
+                ['addmissingreason(', 'Προσθέτει νέο λόγο απουσίας στη διαθέσιμη λίστα επιλογών.'],
+                ['completetransfer(', 'Ολοκληρώνει μεταφορά θέσης/σειράς ατόμου εφαρμόζοντας τις απαραίτητες ενημερώσεις λίστας.'],
+                ['canceltransfertargetgroup(', 'Ακυρώνει την επιλογή ομάδας-στόχου και επιστρέφει χωρίς εφαρμογή μεταφοράς.'],
+                ['confirmtransfertargetgroup(', 'Επιβεβαιώνει την ομάδα-στόχο και συνεχίζει την τελική μεταφορά ατόμου.'],
+                ['openeditpersonfromactions(', 'Ανοίγει την επεξεργασία στοιχείων του επιλεγμένου ατόμου από το μενού ενεργειών.'],
+                ['openalternatereplacementfromactions(', 'Ανοίγει χειροκίνητη αντικατάσταση επιλαχόντα για συγκεκριμένη ημερομηνία υπηρεσίας.'],
+                ['opendisablesettingsfromactions(', 'Ανοίγει ρυθμίσεις απενεργοποίησης ατόμου ανά τύπο υπηρεσίας ή συνολικά.'],
+                ['openmissingperiodfromactions(', 'Ανοίγει διαχείριση περιόδων απουσίας για το συγκεκριμένο άτομο.'],
+                ['opentransferfromactions(', 'Ανοίγει διαδικασία αλλαγής ομάδας/θέσης του επιλεγμένου ατόμου.'],
+                ['deletepersonfromactions(', 'Διαγράφει το άτομο από τις λίστες ομάδας μετά από επιβεβαίωση.'],
+                ['confirmalternatereplacement(', 'Εφαρμόζει αντικατάσταση επιλαχόντα με ελέγχους διαθεσιμότητας και συγκρούσεων.'],
+                ['savedisablesettings(', 'Αποθηκεύει κανόνες απενεργοποίησης ώστε να λαμβάνονται υπόψη στους υπολογισμούς.'],
+                ['saverankings(', 'Αποθηκεύει τη νέα κατάταξη ιεραρχίας που χρησιμοποιείται για ταξινόμηση/προτεραιότητες.'],
+                ['savedayassignments(', 'Αποθηκεύει χειροκίνητες αλλαγές αναθέσεων της ημέρας, μαζί με λόγους αντικατάστασης/αλλαγής.'],
+                ['generateexcelfilesforcurrentmonth(', 'Παράγει τα τελικά αρχεία Excel για τον τρέχοντα μήνα, έτοιμα για αποθήκευση/διανομή.']
+            ];
+            for (const [pattern, desc] of actionDescriptions) {
+                if (onClick.includes(pattern)) return desc;
+            }
+
+            if (ariaLabel === 'close' || ariaLabel === 'κλείσιμο') return 'Κλείνει το τρέχον παράθυρο και επιστρέφει στην προηγούμενη προβολή.';
 
             const explicit = String(el.getAttribute('title') || '').trim();
             if (explicit) return explicit;
             const aria = String(el.getAttribute('aria-label') || '').trim();
             if (aria) return aria;
 
-            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return 'Enter or edit a value for this setting.';
-            if (el.tagName === 'SELECT') return 'Choose a value from the available options.';
-            if (el.classList.contains('btn') || el.getAttribute('role') === 'button') return 'Execute this action.';
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return 'Πεδίο εισαγωγής παραμέτρων που επηρεάζουν τη λειτουργία της οθόνης.';
+            if (el.tagName === 'SELECT') return 'Λίστα επιλογών που καθορίζει ποια τιμή θα εφαρμοστεί στη σχετική λειτουργία.';
+            if (el.classList.contains('btn') || el.getAttribute('role') === 'button') return 'Εκτελεί την αντίστοιχη ενέργεια στο τρέχον πλαίσιο εργασίας.';
             return '';
         }
 
