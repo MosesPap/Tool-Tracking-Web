@@ -24,6 +24,22 @@
                 '«Ενέργειες Ατόμου»: κλικ στο άτομο στη λίστα ομάδας *ή* «Αναζήτηση ατόμου…» → επιλογή από αποτελέσματα (ή Enter στο πρώτο). Modal: Επεξεργασία, Αντικατάσταση Επιλαχών (§5.4), Απενεργοποίηση, Περίοδοι απουσίας, Αλλαγή ομάδας, Διαγραφή.'
         },
         {
+            id: 'calculation-run',
+            title: 'Πώς κάνω υπολογισμό υπηρεσιών',
+            keywords:
+                'υπολογισμος υπολογισω υπηρεσιες υπολογισμος υπηρεσιων εκκινηση υπολογισμου βηματα special weekend semi normal',
+            content:
+                'Από «Υπολογισμός Υπηρεσιών» επιλέγετε διάστημα και ξεκινάτε υπολογισμό. Η ροή τρέχει σε 4 βήματα (special, weekend, semi, normal), εμφανίζει αποτελέσματα ανά βήμα και αποθηκεύει τις αναθέσεις.'
+        },
+        {
+            id: 'calculation-isolated-groups',
+            title: 'Υπολογισμός χωρίς αλλαγή στις άλλες ομάδες',
+            keywords:
+                'χωρις να αλλαξουν οι αλλες ομαδες μονο επιλεγμενες ομαδες επιλογη ομαδων strip manual override preserve existing επανυπολογισμος ομαδων',
+            content:
+                'Στο modal «Υπολογισμός Υπηρεσιών» επιλέγετε συγκεκριμένες ομάδες. Ο επανυπολογισμός αγνοεί χειροκίνητες παρεμβάσεις μόνο για τις επιλεγμένες ομάδες, ενώ οι υπόλοιπες ομάδες μένουν ως έχουν. Αν δεν επιλεγεί ομάδα, οι χειροκίνητες αντικαταστάσεις διατηρούνται.'
+        },
+        {
             id: 'missing-disabled',
             title: 'Απουσίες και απενεργοποιήσεις',
             content:
@@ -32,6 +48,8 @@
         {
             id: 'calculation-flow',
             title: 'Υπολογισμός υπηρεσιών (βήματα)',
+            keywords:
+                'υπολογισμος υπηρεσιων υπολογισω υπηρεσιες βηματα calculation flow special weekend semi normal',
             content:
                 'Ο υπολογισμός τρέχει σε 4 βήματα: special, weekend, semi, normal. Κάθε βήμα εμφανίζει αποτελέσματα και αποθηκεύει προσωρινά assignments. Υπάρχει υποστήριξη multi-month συνέχειας.'
         },
@@ -182,6 +200,12 @@
         if (questionNorm.includes('επιλαχ') || questionNorm.includes('antikatastash') || questionNorm.includes('antikatastasi')) {
             'επιλαχων επιλαχοντα επιλαχοντες επιλαχωντα αντικατασταση επιλαχων αντικατασταση επιλαχοντα εφαρμογη ενεργειες ατομου'.split(' ').forEach((w) => extra.add(w));
         }
+        if ((questionNorm.includes('υπολογ') && questionNorm.includes('υπηρεσι')) || questionNorm.includes('calculation')) {
+            'υπολογισμος υπολογισω υπηρεσιες βηματα special weekend semi normal'.split(' ').forEach((w) => extra.add(w));
+        }
+        if (questionNorm.includes('ομαδ') && (questionNorm.includes('αλλ') || questionNorm.includes('χωρις'))) {
+            'χωρις αλλαξουν αλλες ομαδες επιλογη ομαδων μονο επιλεγμενες'.split(' ').forEach((w) => extra.add(w));
+        }
         return [...extra];
     }
 
@@ -191,6 +215,22 @@
         if (questionNorm.includes('αντικατασταση') && questionNorm.includes('επιλαχ')) return true;
         if (questionNorm.includes('αντικατασταση') && questionNorm.includes('επιλαχον')) return true;
         return false;
+    }
+
+    function wantsCalculationAnswer(questionNorm) {
+        if (!questionNorm || questionNorm.length < 4) return false;
+        return questionNorm.includes('υπολογ') && questionNorm.includes('υπηρεσι');
+    }
+
+    function wantsIsolatedGroupsCalculationAnswer(questionNorm) {
+        if (!questionNorm || questionNorm.length < 4) return false;
+        const asksCalc = questionNorm.includes('υπολογ') && questionNorm.includes('υπηρεσι');
+        const asksGroups = questionNorm.includes('ομαδ');
+        const asksIsolation =
+            questionNorm.includes('χωρις') ||
+            questionNorm.includes('αλλες') ||
+            questionNorm.includes('αλλοιω');
+        return asksCalc && asksGroups && asksIsolation;
     }
 
     function scoreSection(section, qTokens) {
@@ -217,10 +257,23 @@
             return 'Γράψτε μια πιο συγκεκριμένη ερώτηση (π.χ. "πώς δουλεύει το swap καθημερινών;").';
         }
         const altSection = MANUAL_SECTIONS.find((s) => s.id === 'manual-alternate-replacement');
+        const calcSection = MANUAL_SECTIONS.find((s) => s.id === 'calculation-run');
+        const calcIsolatedSection = MANUAL_SECTIONS.find((s) => s.id === 'calculation-isolated-groups');
         const ranked = MANUAL_SECTIONS.map((s) => ({ s, score: scoreSection(s, qTokens) })).sort((a, b) => b.score - a.score);
 
         let top = [];
-        if (wantsAlternateReplacementAnswer(qNorm) && altSection) {
+        if (wantsIsolatedGroupsCalculationAnswer(qNorm) && calcIsolatedSection) {
+            top.push({ s: calcIsolatedSection, score: 999 });
+            if (calcSection) top.push({ s: calcSection, score: 998 });
+            const rest = ranked
+                .filter((x) => x.s.id !== 'calculation-isolated-groups' && x.s.id !== 'calculation-run' && x.score > 0)
+                .slice(0, 1);
+            top = top.concat(rest);
+        } else if (wantsCalculationAnswer(qNorm) && calcSection) {
+            top.push({ s: calcSection, score: 999 });
+            const rest = ranked.filter((x) => x.s.id !== 'calculation-run' && x.score > 0).slice(0, 2);
+            top = top.concat(rest);
+        } else if (wantsAlternateReplacementAnswer(qNorm) && altSection) {
             top.push({ s: altSection, score: 999 });
             const rest = ranked.filter((x) => x.s.id !== 'manual-alternate-replacement' && x.score > 0).slice(0, 2);
             top = top.concat(rest);
