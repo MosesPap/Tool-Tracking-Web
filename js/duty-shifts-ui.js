@@ -78,6 +78,11 @@
                 attributeFilter: ['title', 'placeholder', 'aria-label']
             });
         }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeControlTooltips);
+        } else {
+            initializeControlTooltips();
+        }
 
         // When true, after the current child modal closes we reopen the Person Actions (Ενεργειες Ατόμου) modal
         let reopenPersonActionsModalWhenClosed = false;
