@@ -3206,17 +3206,18 @@
 
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
-            const monthKeyForLookup = `${year}-${String(month + 1).padStart(2, '0')}`;
             const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
 
-            // Prefer authoritative month-scoped rotation continuity when available.
+            const firstDayOfExportMonth = new Date(year, month, 1);
+            const currentMonthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+            // Seed from previous month(s), same as duty calculation — NOT from currentMonthKey alone
+            // (e.g. May's key is empty until May is calculated; April's last assignee must carry forward).
             for (const t of ['normal', 'semi', 'weekend', 'special']) {
-                const byType = lastRotationPositions?.[t];
-                const byMonth = byType && typeof byType === 'object' ? byType[monthKeyForLookup] : null;
-                const fromMonth = (byMonth && typeof byMonth === 'object' && !Array.isArray(byMonth))
-                    ? (byMonth[groupNum] || byMonth[String(groupNum)] || '')
-                    : '';
-                if (fromMonth) lastAssigned[t] = normName(fromMonth);
+                const fromChain = typeof getLastRotationPersonForDate === 'function'
+                    ? getLastRotationPersonForDate(t, firstDayOfExportMonth, groupNum)
+                    : null;
+                if (fromChain) lastAssigned[t] = normName(fromChain);
             }
 
             for (let day = 1; day <= daysInMonth; day++) {
@@ -3235,8 +3236,17 @@
 
                 const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
                 const personName = normName(baselinePerson || getAssignedPersonNameForGroupFromAssignment(assignment, groupNum));
-                // Fallback only: do not override month-scoped lastRotationPositions if we already have it.
-                if (personName && !lastAssigned[rotationType]) lastAssigned[rotationType] = personName;
+                // Last chronological duty in this month wins (do not keep only the first day of the month).
+                if (personName) lastAssigned[rotationType] = personName;
+            }
+
+            // Saved end-of-month rotation from a full month calculation overrides in-month scan when present.
+            for (const t of ['normal', 'semi', 'weekend', 'special']) {
+                const byMonth = lastRotationPositions?.[t]?.[currentMonthKey];
+                if (byMonth && typeof byMonth === 'object' && !Array.isArray(byMonth)) {
+                    const p = byMonth[groupNum] ?? byMonth[String(groupNum)];
+                    if (p) lastAssigned[t] = normName(p);
+                }
             }
 
             const isDisabledForType = (personName, dutyType) => {
@@ -3294,9 +3304,9 @@
                 if (rawList.length === 0) return { names: ['', '', ''], notes: ['', '', ''] };
                 const last = lastAssigned.special;
                 let startIdx = 0;
-                if (last && rawList.indexOf(last) >= 0) {
-                    const idx = rawList.indexOf(last);
-                    startIdx = idx + 1;
+                if (last) {
+                    const idx = rawList.findIndex(p => normName(p) === normName(last));
+                    if (idx >= 0) startIdx = idx + 1;
                 }
                 const findNextSpecialDates = (count = 3, maxDays = 3650) => {
                     const out = [];
