@@ -3240,7 +3240,11 @@
 
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
-            const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
+            const normName = (s) => {
+                const cleaned = String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
+                return (typeof normalizePersonKey === 'function') ? normalizePersonKey(cleaned) : cleaned;
+            };
+            const samePerson = (a, b) => normName(a) === normName(b);
 
             const firstDayOfExportMonth = new Date(year, month, 1);
 
@@ -3272,84 +3276,57 @@
                 if (personName) lastAssigned[rotationType] = personName;
             }
 
+            const getPersonValueFromNameMap = (mapObj, personName) => {
+                if (!mapObj || typeof mapObj !== 'object') return null;
+                if (Object.prototype.hasOwnProperty.call(mapObj, personName)) return mapObj[personName];
+                const target = normName(personName);
+                for (const k of Object.keys(mapObj)) {
+                    if (samePerson(k, personName)) return mapObj[k];
+                }
+                return null;
+            };
+
             const isDisabledForType = (personName, dutyType) => {
-                const dp = groupData?.disabledPersons?.[personName];
+                const dp = getPersonValueFromNameMap(groupData?.disabledPersons, personName);
                 if (!dp || typeof dp !== 'object') return false;
                 return !!(dp.all || dp[dutyType]);
             };
 
-            // Exclude people who have a missing period that overlaps the NEXT month (month after the current Excel month).
-            // This keeps "ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ" realistic for immediate upcoming duties.
+            // Exclude people only when they are absent for the ENTIRE next month (or disabled), per requirement.
             const firstDayOfNextMonth = new Date(year, month + 1, 1);
             const lastDayOfNextMonth = new Date(year, month + 2, 0);
             const nextMonthStartKey = formatDateKey(firstDayOfNextMonth);
             const nextMonthEndKey = formatDateKey(lastDayOfNextMonth);
-            const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
-                const periods = groupData?.missingPeriods?.[personName];
+            const getMissingReasonCoveringWholeRange = (personName, rangeStartKey, rangeEndKey) => {
+                const periods = getPersonValueFromNameMap(groupData?.missingPeriods, personName);
                 if (!Array.isArray(periods) || periods.length === 0) return '';
                 if (!rangeStartKey || !rangeEndKey) return '';
                 for (const p of periods) {
                     const pStartKey = inputValueToDateKey(p?.start);
                     const pEndKey = inputValueToDateKey(p?.end);
                     if (!pStartKey || !pEndKey) continue;
-                    // Overlap check: [pStart,pEnd] intersects [rangeStart,rangeEnd]
-                    if (!(pEndKey < rangeStartKey || pStartKey > rangeEndKey)) {
+                    // Full-cover check: [pStart,pEnd] fully covers [rangeStart,rangeEnd]
+                    if (pStartKey <= rangeStartKey && pEndKey >= rangeEndKey) {
                         const reason = (p?.reason || '').toString().trim();
                         return reason || 'Κώλυμα/Απουσία';
                     }
                 }
                 return '';
             };
-            const getMissingReasonOverNextMonth = (personName) => getMissingReasonOverRange(personName, nextMonthStartKey, nextMonthEndKey);
+            const getMissingReasonOverNextMonth = (personName) => getMissingReasonCoveringWholeRange(personName, nextMonthStartKey, nextMonthEndKey);
             const isMissingOverNextMonth = (personName) => !!getMissingReasonOverNextMonth(personName);
-            const isMissingWholeNextMonth = (personName) => {
-                const periods = groupData?.missingPeriods?.[personName];
-                if (!Array.isArray(periods) || periods.length === 0) return false;
-
-                // Build/merge overlap segments within next month and check full coverage.
-                const segments = [];
-                for (const p of periods) {
-                    const pStartKey = inputValueToDateKey(p?.start);
-                    const pEndKey = inputValueToDateKey(p?.end);
-                    if (!pStartKey || !pEndKey) continue;
-                    if (pEndKey < nextMonthStartKey || pStartKey > nextMonthEndKey) continue;
-                    const s = pStartKey < nextMonthStartKey ? nextMonthStartKey : pStartKey;
-                    const e = pEndKey > nextMonthEndKey ? nextMonthEndKey : pEndKey;
-                    segments.push([s, e]);
-                }
-                if (segments.length === 0) return false;
-
-                segments.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-                const merged = [segments[0]];
-                for (let i = 1; i < segments.length; i++) {
-                    const [s, e] = segments[i];
-                    const last = merged[merged.length - 1];
-                    const lastEndDate = new Date(last[1] + 'T00:00:00');
-                    const nextDay = new Date(lastEndDate);
-                    nextDay.setDate(lastEndDate.getDate() + 1);
-                    const nextDayKey = formatDateKey(nextDay);
-                    if (s <= nextDayKey) {
-                        if (e > last[1]) last[1] = e;
-                    } else {
-                        merged.push([s, e]);
-                    }
-                }
-
-                return merged.some(([s, e]) => s <= nextMonthStartKey && e >= nextMonthEndKey);
-            };
 
             const nextTwoForType = (type) => {
                 const rawList = (groupData?.[type] || []).filter(Boolean);
                 if (rawList.length === 0) return ['', ''];
 
-                // For normal/semi/weekend alternates, exclude only if absent for the ENTIRE next month.
-                const eligible = (p) => !isDisabledForType(p, type) && !isMissingWholeNextMonth(p);
+                const eligible = (p) => !isDisabledForType(p, type) && !isMissingOverNextMonth(p);
                 const eligibleCount = rawList.filter(eligible).length;
                 if (eligibleCount === 0) return ['', ''];
 
                 const last = lastAssigned[type];
                 let startIdx = 0;
-                const lastIdx = last ? rawList.findIndex(p => normName(p) === normName(last)) : -1;
+                const lastIdx = last ? rawList.findIndex(p => samePerson(p, last)) : -1;
                 if (lastIdx >= 0) startIdx = (lastIdx + 1) % rawList.length;
 
                 const picks = [];
@@ -3359,7 +3336,7 @@
                 while (checked < maxChecks && picks.length < 2) {
                     const candidate = rawList[cursor];
                     if (eligible(candidate)) {
-                        if (picks.length === 0 || candidate !== picks[0] || eligibleCount === 1) {
+                        if (picks.length === 0 || !samePerson(candidate, picks[0]) || eligibleCount === 1) {
                             picks.push(candidate);
                         }
                     }
@@ -3378,7 +3355,7 @@
                 const last = lastAssigned.special;
                 let startIdx = 0;
                 if (last) {
-                    const idx = rawList.findIndex(p => normName(p) === normName(last));
+                    const idx = rawList.findIndex(p => samePerson(p, last));
                     if (idx >= 0) startIdx = idx + 1;
                 }
                 const findNextSpecialDates = (count = 3, maxDays = 3650) => {
@@ -3408,7 +3385,7 @@
                             note = 'ΕΚΤΟΣ ΥΠΗΡΕΣΙΑΣ';
                         } else {
                             const { startKey, endKey } = getMonthRangeKeys(specialDates[i]);
-                            const r = getMissingReasonOverRange(name, startKey, endKey);
+                            const r = getMissingReasonCoveringWholeRange(name, startKey, endKey);
                             if (r) note = r;
                         }
                     }
