@@ -3305,19 +3305,33 @@
 
             const nextTwoForType = (type) => {
                 const rawList = (groupData?.[type] || []).filter(Boolean);
-                const list = rawList.filter(p => !isDisabledForType(p, type) && !isMissingOverNextMonth(p));
-                if (list.length === 0) return ['', ''];
+                if (rawList.length === 0) return ['', ''];
+
+                const eligible = (p) => !isDisabledForType(p, type) && !isMissingOverNextMonth(p);
+                const eligibleCount = rawList.filter(eligible).length;
+                if (eligibleCount === 0) return ['', ''];
 
                 const last = lastAssigned[type];
                 let startIdx = 0;
-                const idx = last ? list.findIndex(p => normName(p) === normName(last)) : -1;
-                if (idx >= 0) {
-                    startIdx = idx + 1;
+                const lastIdx = last ? rawList.findIndex(p => normName(p) === normName(last)) : -1;
+                if (lastIdx >= 0) startIdx = (lastIdx + 1) % rawList.length;
+
+                const picks = [];
+                let cursor = startIdx;
+                let checked = 0;
+                const maxChecks = rawList.length * 2; // enough to wrap and still pick 2 (or same when single eligible)
+                while (checked < maxChecks && picks.length < 2) {
+                    const candidate = rawList[cursor];
+                    if (eligible(candidate)) {
+                        if (picks.length === 0 || candidate !== picks[0] || eligibleCount === 1) {
+                            picks.push(candidate);
+                        }
+                    }
+                    cursor = (cursor + 1) % rawList.length;
+                    checked++;
                 }
 
-                const a = list[startIdx % list.length] || '';
-                const b = list.length >= 2 ? (list[(startIdx + 1) % list.length] || '') : '';
-                return [a, b];
+                return [picks[0] || '', picks[1] || ''];
             };
 
             // Special: show next 3 even if disabled/missing; annotate only if unavailable during the actual month
