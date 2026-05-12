@@ -3302,12 +3302,48 @@
             };
             const getMissingReasonOverNextMonth = (personName) => getMissingReasonOverRange(personName, nextMonthStartKey, nextMonthEndKey);
             const isMissingOverNextMonth = (personName) => !!getMissingReasonOverNextMonth(personName);
+            const isMissingWholeNextMonth = (personName) => {
+                const periods = groupData?.missingPeriods?.[personName];
+                if (!Array.isArray(periods) || periods.length === 0) return false;
+
+                // Build/merge overlap segments within next month and check full coverage.
+                const segments = [];
+                for (const p of periods) {
+                    const pStartKey = inputValueToDateKey(p?.start);
+                    const pEndKey = inputValueToDateKey(p?.end);
+                    if (!pStartKey || !pEndKey) continue;
+                    if (pEndKey < nextMonthStartKey || pStartKey > nextMonthEndKey) continue;
+                    const s = pStartKey < nextMonthStartKey ? nextMonthStartKey : pStartKey;
+                    const e = pEndKey > nextMonthEndKey ? nextMonthEndKey : pEndKey;
+                    segments.push([s, e]);
+                }
+                if (segments.length === 0) return false;
+
+                segments.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+                const merged = [segments[0]];
+                for (let i = 1; i < segments.length; i++) {
+                    const [s, e] = segments[i];
+                    const last = merged[merged.length - 1];
+                    const lastEndDate = new Date(last[1] + 'T00:00:00');
+                    const nextDay = new Date(lastEndDate);
+                    nextDay.setDate(lastEndDate.getDate() + 1);
+                    const nextDayKey = formatDateKey(nextDay);
+                    if (s <= nextDayKey) {
+                        if (e > last[1]) last[1] = e;
+                    } else {
+                        merged.push([s, e]);
+                    }
+                }
+
+                return merged.some(([s, e]) => s <= nextMonthStartKey && e >= nextMonthEndKey);
+            };
 
             const nextTwoForType = (type) => {
                 const rawList = (groupData?.[type] || []).filter(Boolean);
                 if (rawList.length === 0) return ['', ''];
 
-                const eligible = (p) => !isDisabledForType(p, type) && !isMissingOverNextMonth(p);
+                // For normal/semi/weekend alternates, exclude only if absent for the ENTIRE next month.
+                const eligible = (p) => !isDisabledForType(p, type) && !isMissingWholeNextMonth(p);
                 const eligibleCount = rawList.filter(eligible).length;
                 if (eligibleCount === 0) return ['', ''];
 
