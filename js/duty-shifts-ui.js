@@ -6722,13 +6722,54 @@
             
             alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
         }
+
+        let missingPeriodDateRangeListenersBound = false;
+
+        /** End date: same month as start in the native picker (value defaults to start), days before start disabled via min. */
+        function syncMissingPeriodEndConstraints() {
+            const startEl = document.getElementById('missingPeriodStart');
+            const endEl = document.getElementById('missingPeriodEnd');
+            if (!startEl || !endEl) return;
+            const start = (startEl.value || '').trim();
+            if (!start) {
+                endEl.removeAttribute('min');
+                return;
+            }
+            endEl.min = start;
+            const end = (endEl.value || '').trim();
+            if (!end || end < start) {
+                endEl.value = start;
+            }
+        }
+
+        function ensureMissingPeriodDateRangeListeners() {
+            if (missingPeriodDateRangeListenersBound) return;
+            const startEl = document.getElementById('missingPeriodStart');
+            const endEl = document.getElementById('missingPeriodEnd');
+            if (!startEl || !endEl) return;
+            missingPeriodDateRangeListenersBound = true;
+            const sync = () => syncMissingPeriodEndConstraints();
+            startEl.addEventListener('change', sync);
+            startEl.addEventListener('input', sync);
+            endEl.addEventListener('focus', () => {
+                sync();
+                const s = (startEl.value || '').trim();
+                if (s && (!(endEl.value || '').trim() || endEl.value < s)) {
+                    endEl.value = s;
+                }
+            });
+        }
+
         function openMissingPeriodModal(groupNum, person) {
+            ensureMissingPeriodDateRangeListeners();
             currentMissingPeriodGroup = groupNum;
             currentMissingPeriodPerson = person;
             
             document.getElementById('missingPeriodPersonName').textContent = person;
             document.getElementById('missingPeriodStart').value = '';
             document.getElementById('missingPeriodEnd').value = '';
+            const endReset = document.getElementById('missingPeriodEnd');
+            if (endReset) endReset.removeAttribute('min');
 
             renderMissingReasonsSelect();
             
@@ -6818,6 +6859,8 @@
             
             document.getElementById('missingPeriodStart').value = '';
             document.getElementById('missingPeriodEnd').value = '';
+            const endAfterAdd = document.getElementById('missingPeriodEnd');
+            if (endAfterAdd) endAfterAdd.removeAttribute('min');
             
             saveData();
             renderMissingPeriodsList();
