@@ -436,6 +436,40 @@
             return null;
         }
 
+        // Baseline-only variant for Excel "ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ": ignores swaps/final assignments.
+        function getLastBaselineRotationPersonForDate(dayType, date, groupNum) {
+            const prevMonthKey = getPreviousMonthKeyFromDate(date);
+            let baselineMonth = rotationBaselineLastByType?.[dayType]?.[prevMonthKey];
+            if (baselineMonth && baselineMonth[groupNum]) {
+                return baselineMonth[groupNum];
+            }
+
+            // If immediate previous month not found, find the most recent available baseline month
+            const baselineByType = rotationBaselineLastByType?.[dayType];
+            if (baselineByType && typeof baselineByType === 'object') {
+                const availableMonths = Object.keys(baselineByType)
+                    .filter(k => isMonthKey(k))
+                    .sort((a, b) => {
+                        const [aYear, aMonth] = a.split('-').map(Number);
+                        const [bYear, bMonth] = b.split('-').map(Number);
+                        if (aYear !== bYear) return bYear - aYear;
+                        return bMonth - aMonth;
+                    });
+
+                const [targetYear, targetMonth] = prevMonthKey.split('-').map(Number);
+                for (const monthKey of availableMonths) {
+                    const [year, month] = monthKey.split('-').map(Number);
+                    if (year < targetYear || (year === targetYear && month <= targetMonth)) {
+                        baselineMonth = baselineByType[monthKey];
+                        if (baselineMonth && baselineMonth[groupNum]) {
+                            return baselineMonth[groupNum];
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
         function setLastRotationPersonForMonth(dayType, monthKey, groupNum, personName) {
             if (!personName) return;
             if (!lastRotationPositions[dayType]) lastRotationPositions[dayType] = {};
@@ -3209,13 +3243,12 @@
             const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
 
             const firstDayOfExportMonth = new Date(year, month, 1);
-            const currentMonthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-            // Seed from previous month(s), same as duty calculation — NOT from currentMonthKey alone
-            // (e.g. May's key is empty until May is calculated; April's last assignee must carry forward).
+            // Seed from previous baseline month(s) only, so Excel alternates follow initial rotation order
+            // and ignore swaps/conflict replacements.
             for (const t of ['normal', 'semi', 'weekend', 'special']) {
-                const fromChain = typeof getLastRotationPersonForDate === 'function'
-                    ? getLastRotationPersonForDate(t, firstDayOfExportMonth, groupNum)
+                const fromChain = typeof getLastBaselineRotationPersonForDate === 'function'
+                    ? getLastBaselineRotationPersonForDate(t, firstDayOfExportMonth, groupNum)
                     : null;
                 if (fromChain) lastAssigned[t] = normName(fromChain);
             }
@@ -3234,19 +3267,9 @@
                 const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
                 const baselinePerson = baselineMap?.[groupNum] || '';
 
-                const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
-                const personName = normName(baselinePerson || getAssignedPersonNameForGroupFromAssignment(assignment, groupNum));
+                const personName = normName(baselinePerson);
                 // Last chronological duty in this month wins (do not keep only the first day of the month).
                 if (personName) lastAssigned[rotationType] = personName;
-            }
-
-            // Saved end-of-month rotation from a full month calculation overrides in-month scan when present.
-            for (const t of ['normal', 'semi', 'weekend', 'special']) {
-                const byMonth = lastRotationPositions?.[t]?.[currentMonthKey];
-                if (byMonth && typeof byMonth === 'object' && !Array.isArray(byMonth)) {
-                    const p = byMonth[groupNum] ?? byMonth[String(groupNum)];
-                    if (p) lastAssigned[t] = normName(p);
-                }
             }
 
             const isDisabledForType = (personName, dutyType) => {
