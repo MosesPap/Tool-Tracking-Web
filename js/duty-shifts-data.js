@@ -3257,23 +3257,34 @@
                 if (fromChain) lastAssigned[t] = normName(fromChain);
             }
 
-            for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(year, month, day);
-                const dayKey = formatDateKey(date);
-                const dayType = getDayType(date);
-                const rotationType = mapDayTypeToRotationType(dayType);
-
-                // Prefer baseline (rotation) assignment when available, so replacements (e.g. manual skip)
-                // do not shift the computed "next on rotation" list.
-                const baseline = (typeof getRotationBaselineAssignmentForDate === 'function')
-                    ? getRotationBaselineAssignmentForDate(dayKey)
-                    : null;
-                const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
-                const baselinePerson = baselineMap?.[groupNum] || '';
-
-                const personName = normName(baselinePerson);
-                // Last chronological duty in this month wins (do not keep only the first day of the month).
-                if (personName) lastAssigned[rotationType] = personName;
+            // Advance "last" from baseline duty maps for this calendar month (chronological last wins).
+            // Do not rely only on getDayType() routing: public holidays / bridges can disagree with which
+            // baseline bucket holds a date; weekend list continuity (e.g. Ομάδα 3) must follow the
+            // weekend baseline map keys for the month, not only Sat/Sun calendar classification.
+            const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+            const baselineMapForType = (t) => {
+                if (t === 'special') return rotationBaselineSpecialAssignments;
+                if (t === 'weekend') return rotationBaselineWeekendAssignments;
+                if (t === 'semi') return rotationBaselineSemiAssignments;
+                return rotationBaselineNormalAssignments;
+            };
+            const baselinePersonForGroupOnDateKey = (t, dateKey) => {
+                const raw = baselineMapForType(t)?.[dateKey];
+                if (!raw) return '';
+                const m = extractGroupAssignmentsMap(raw);
+                const nm = m?.[groupNum] ?? m?.[String(groupNum)];
+                return nm ? String(nm).trim() : '';
+            };
+            for (const t of ['normal', 'semi', 'weekend', 'special']) {
+                const flat = baselineMapForType(t);
+                if (!flat || typeof flat !== 'object') continue;
+                const keys = Object.keys(flat)
+                    .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k) && k.startsWith(monthPrefix))
+                    .sort();
+                for (const dk of keys) {
+                    const personName = normName(baselinePersonForGroupOnDateKey(t, dk));
+                    if (personName) lastAssigned[t] = personName;
+                }
             }
 
             const getPersonValueFromNameMap = (mapObj, personName) => {
