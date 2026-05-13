@@ -3507,6 +3507,53 @@
             previewContent.innerHTML = '';
             
             let hasAnyGroup = false;
+            const typeMeta = {
+                normal: { label: 'Καθημερινές', dayType: 'normal-day' },
+                semi: { label: 'Ημιαργίες', dayType: 'semi-normal-day' },
+                weekend: { label: 'Αργίες', dayType: 'weekend-holiday' },
+                special: { label: 'Ειδικές Αργίες', dayType: 'special-holiday' }
+            };
+            const typeOrder = ['normal', 'semi', 'weekend', 'special'];
+            const toTypeKey = (dayType) => (dayType === 'special-holiday' ? 'special' : dayType === 'weekend-holiday' ? 'weekend' : dayType === 'semi-normal-day' ? 'semi' : 'normal');
+            const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
+            const hashColor = (seed) => {
+                let h = 0;
+                const str = String(seed || '');
+                for (let i = 0; i < str.length; i++) h = ((h << 5) - h) + str.charCodeAt(i);
+                const palette = ['#8e44ad', '#d35400', '#2980b9', '#16a085', '#c0392b', '#2c3e50', '#7f8c8d', '#27ae60'];
+                return palette[Math.abs(h) % palette.length];
+            };
+            const getOrderNo = (groupData, type, personName) => {
+                const list = (groupData?.[type] || []).map(normName);
+                const idx = list.findIndex(n => n === normName(personName));
+                return idx >= 0 ? idx + 1 : null;
+            };
+            const getMissingPeriodsOverMonth = (groupData, personName, mStart, mEnd) => {
+                const periods = groupData?.missingPeriods?.[personName];
+                if (!Array.isArray(periods) || periods.length === 0) return [];
+                const out = [];
+                for (const p of periods) {
+                    const sKey = inputValueToDateKey(p?.start);
+                    const eKey = inputValueToDateKey(p?.end);
+                    if (!sKey || !eKey) continue;
+                    if (eKey < mStart || sKey > mEnd) continue;
+                    out.push({
+                        start: sKey,
+                        end: eKey,
+                        reason: (p?.reason || '').toString().trim()
+                    });
+                }
+                return out;
+            };
+            const getReasonForAssigned = (dateKey, groupNum, personName) => {
+                const gmap = assignmentReasons?.[dateKey]?.[groupNum];
+                if (!gmap || typeof gmap !== 'object') return null;
+                const target = normName(personName);
+                for (const p of Object.keys(gmap)) {
+                    if (normName(p) === target) return gmap[p];
+                }
+                return null;
+            };
             
             // Generate preview for each group
             for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -3519,27 +3566,135 @@
                 }
                 
                 hasAnyGroup = true;
+                const rotationInfo = getNextTwoRotationPeopleForCurrentMonth({
+                    year,
+                    month,
+                    daysInMonth,
+                    groupNum,
+                    groupData,
+                    dutyAssignments
+                });
+                const monthStartKey = formatDateKey(firstDay);
+                const monthEndKey = formatDateKey(lastDay);
+                const allPeople = Array.from(new Set([
+                    ...(groupData.normal || []),
+                    ...(groupData.semi || []),
+                    ...(groupData.weekend || []),
+                    ...(groupData.special || [])
+                ]));
+                const disabledPeople = allPeople.filter((person) => {
+                    const dp = groupData?.disabledPersons?.[person];
+                    if (!dp || typeof dp !== 'object') return false;
+                    return !!(dp.all || dp.normal || dp.semi || dp.weekend || dp.special);
+                });
+                const missingPeople = allPeople
+                    .map((person) => ({ person, periods: getMissingPeriodsOverMonth(groupData, person, monthStartKey, monthEndKey) }))
+                    .filter(item => item.periods.length > 0);
                 
                 // Create preview table for this group
                 const groupPreview = document.createElement('div');
-                groupPreview.className = 'mb-4';
+                groupPreview.className = 'mb-4 p-3 border rounded bg-white';
+                const renderAlternateRows = (type, names, notes = []) => {
+                    const t = typeMeta[type];
+                    const count = type === 'special' ? 3 : 2;
+                    const rows = [];
+                    for (let i = 0; i < count; i++) {
+                        const nm = names?.[i] || '';
+                        const orderNo = nm ? getOrderNo(groupData, type, nm) : null;
+                        const leftText = nm ? `#${orderNo || '-'} ${escapeHtml(nm)}` : '-';
+                        const rightText = type === 'special' ? (notes?.[i] || '') : '';
+                        rows.push(`
+                            <tr>
+                                <td style="padding:4px 6px;"><span class="fw-semibold">${leftText}</span></td>
+                                <td style="padding:4px 6px; color:#6c757d; font-size:11px;">${escapeHtml(rightText)}</td>
+                            </tr>
+                        `);
+                    }
+                    return `
+                        <div class="mb-2 border rounded overflow-hidden">
+                            <div class="fw-bold text-white px-2 py-1" style="background:#428BCA;">${t.label.toUpperCase()}</div>
+                            <table class="table table-sm mb-0">
+                                <tbody>${rows.join('')}</tbody>
+                            </table>
+                        </div>
+                    `;
+                };
+                const disabledHtml = disabledPeople.length === 0
+                    ? '<div class="text-muted small">Δεν υπάρχουν.</div>'
+                    : disabledPeople.map((person) => {
+                        const dp = groupData?.disabledPersons?.[person] || {};
+                        const reasons = [];
+                        if (dp.all) reasons.push('Όλα');
+                        else {
+                            if (dp.normal) reasons.push('Καθημερινές');
+                            if (dp.semi) reasons.push('Ημιαργίες');
+                            if (dp.weekend) reasons.push('Αργίες');
+                            if (dp.special) reasons.push('Ειδικές Αργίες');
+                        }
+                        const orderText = typeOrder
+                            .map(t => `#${getOrderNo(groupData, t, person) || '-'} ${typeMeta[t].label}`)
+                            .join(' | ');
+                        return `<div class="small mb-1"><strong>${escapeHtml(person)}</strong> — ${escapeHtml(reasons.join(', ') || 'Άγνωστο')}<br><span class="text-muted">${escapeHtml(orderText)}</span></div>`;
+                    }).join('');
+                const missingHtml = missingPeople.length === 0
+                    ? '<div class="text-muted small">Δεν υπάρχουν.</div>'
+                    : missingPeople.map(({ person, periods }) => {
+                        const ranges = periods.map((p) => {
+                            const s = new Date(p.start + 'T00:00:00');
+                            const e = new Date(p.end + 'T00:00:00');
+                            const rr = `${formatDate(s)} - ${formatDate(e)}`;
+                            return p.reason ? `${rr} (${p.reason})` : rr;
+                        }).join(' | ');
+                        const orderText = typeOrder
+                            .map(t => `#${getOrderNo(groupData, t, person) || '-'} ${typeMeta[t].label}`)
+                            .join(' | ');
+                        return `<div class="small mb-1"><strong>${escapeHtml(person)}</strong> — ${escapeHtml(ranges)}<br><span class="text-muted">${escapeHtml(orderText)}</span></div>`;
+                    }).join('');
                 groupPreview.innerHTML = `
                     <h5 class="mb-3" style="color: #428BCA;">
                         <i class="fas fa-users me-2"></i>${groupName} - ${monthName} ${year}
                     </h5>
-                    <div class="table-responsive">
-                        <table class="table table-bordered" style="font-size: 12px;">
-                            <thead>
-                                <tr style="background-color: #428BCA; color: white;">
-                                    <th style="width: 12%; text-align: center; padding: 8px;">ΗΜΕΡ.</th>
-                                    <th style="width: 15%; text-align: center; padding: 8px;">ΗΜΕΡΑ</th>
-                                    <th style="width: 30%; text-align: center; padding: 8px;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
-                                </tr>
-                            </thead>
-                            <tbody id="previewGroup${groupNum}">
-                                <!-- Rows will be inserted here -->
-                            </tbody>
-                        </table>
+                    <div class="row g-3">
+                        <div class="col-lg-8">
+                            <div class="table-responsive">
+                                <table class="table table-bordered" style="font-size: 12px;">
+                                    <thead>
+                                        <tr style="background-color: #428BCA; color: white;">
+                                            <th style="width: 13%; text-align: center; padding: 8px;">ΗΜΕΡ.</th>
+                                            <th style="width: 15%; text-align: center; padding: 8px;">ΗΜΕΡΑ</th>
+                                            <th style="width: 52%; text-align: center; padding: 8px;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
+                                            <th style="width: 20%; text-align: center; padding: 8px;">ΑΛΛΑΓΗ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="previewGroup${groupNum}">
+                                        <!-- Rows will be inserted here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="border rounded p-2 bg-light">
+                                <div class="fw-bold text-center mb-2">ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ (όπως στο τελικό Excel)</div>
+                                ${renderAlternateRows('normal', rotationInfo.next.normal)}
+                                ${renderAlternateRows('semi', rotationInfo.next.semi)}
+                                ${renderAlternateRows('weekend', rotationInfo.next.weekend)}
+                                ${renderAlternateRows('special', rotationInfo.next.special, rotationInfo.nextNotes?.special || [])}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row g-3 mt-1">
+                        <div class="col-lg-6">
+                            <div class="border rounded p-2 h-100">
+                                <div class="fw-bold text-danger mb-2">Απενεργοποιημένοι</div>
+                                ${disabledHtml}
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="border rounded p-2 h-100">
+                                <div class="fw-bold text-warning mb-2">Απουσιάζοντες (${monthName} ${year})</div>
+                                ${missingHtml}
+                            </div>
+                        </div>
                     </div>
                 `;
                 previewContent.appendChild(groupPreview);
@@ -3556,6 +3711,11 @@
                     // Get assignment for this group (supports object or string formats)
                     const assignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
                     const personName = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
+                    const typeKey = toTypeKey(dayType);
+                    const orderNo = personName ? getOrderNo(groupData, typeKey, personName) : null;
+                    const reasonObj = personName ? getReasonForAssigned(dayKey, groupNum, personName) : null;
+                    const pairKey = reasonObj?.swapPairId || `${reasonObj?.type || ''}:${reasonObj?.swappedWith || ''}:${dayKey}:${groupNum}`;
+                    const swapColor = reasonObj ? hashColor(pairKey) : null;
                     
                     // Format date as DD/MM/YYYY
                     const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
@@ -3566,10 +3726,24 @@
                     
                     const row = document.createElement('tr');
                     row.style.height = '22px';
+                    const markerText = !reasonObj
+                        ? ''
+                        : (reasonObj.type === 'swap' ? 'Ανταλλαγή'
+                            : reasonObj.type === 'skip' ? 'Αντικατάσταση'
+                            : reasonObj.type === 'shift' ? 'Μετακίνηση'
+                            : 'Χειροκίνητη αλλαγή');
+                    const markerStyle = swapColor
+                        ? `border-left: 5px solid ${swapColor}; border-right: 5px solid ${swapColor};`
+                        : '';
                     row.innerHTML = `
                         <td style="padding: 4px; border: 1px solid #ddd; background-color: ${rgbColor} !important;">${dateStr}</td>
                         <td style="padding: 4px; border: 1px solid #ddd; background-color: ${rgbColor} !important;">${dayName}</td>
-                        <td style="padding: 4px; border: 1px solid #ddd; background-color: ${rgbColor} !important;">${personName || ''}</td>
+                        <td style="padding: 4px; border: 1px solid #ddd; background-color: ${rgbColor} !important; ${markerStyle}">
+                            ${personName ? `<span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}` : ''}
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #ddd; background-color: ${rgbColor} !important; color:${swapColor || '#6c757d'}; font-size:11px;">
+                            ${escapeHtml(markerText)}
+                        </td>
                     `;
                     tbody.appendChild(row);
                 }
