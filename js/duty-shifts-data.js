@@ -3523,6 +3523,16 @@
                 const palette = ['#8e44ad', '#d35400', '#2980b9', '#16a085', '#c0392b', '#2c3e50', '#7f8c8d', '#27ae60'];
                 return palette[Math.abs(h) % palette.length];
             };
+            const swapPairLabelByKey = new Map();
+            let nextSwapPairLabelNo = 1;
+            const getSwapPairLabelNo = (pairKey) => {
+                const k = String(pairKey || '').trim();
+                if (!k) return null;
+                if (!swapPairLabelByKey.has(k)) {
+                    swapPairLabelByKey.set(k, nextSwapPairLabelNo++);
+                }
+                return swapPairLabelByKey.get(k);
+            };
             const getOrderNo = (groupData, type, personName) => {
                 const list = (groupData?.[type] || []).map(normName);
                 const idx = list.findIndex(n => n === normName(personName));
@@ -3726,9 +3736,10 @@
                     
                     const row = document.createElement('tr');
                     row.style.height = '22px';
+                    const swapNo = reasonObj?.type === 'swap' ? getSwapPairLabelNo(pairKey) : null;
                     const markerText = !reasonObj
                         ? ''
-                        : (reasonObj.type === 'swap' ? 'Ανταλλαγή'
+                        : (reasonObj.type === 'swap' ? `Ανταλλαγή #${swapNo || '-'}`
                             : reasonObj.type === 'skip' ? 'Αντικατάσταση'
                             : reasonObj.type === 'shift' ? 'Μετακίνηση'
                             : 'Χειροκίνητη αλλαγή');
