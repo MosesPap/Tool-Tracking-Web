@@ -3241,6 +3241,30 @@
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
             const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
+            const firstDayOfNextMonth = new Date(year, month + 1, 1);
+            const lastDayOfNextMonth = new Date(year, month + 2, 0);
+            const nextMonthStartKey = formatDateKey(firstDayOfNextMonth);
+            const nextMonthEndKey = formatDateKey(lastDayOfNextMonth);
+
+            const isDisabledForType = (personName, dutyType) => {
+                const dp = groupData?.disabledPersons?.[personName];
+                if (!dp || typeof dp !== 'object') return false;
+                return !!(dp.all || dp[dutyType]);
+            };
+            const isMissingWholeNextMonth = (personName) => {
+                const periods = groupData?.missingPeriods?.[personName];
+                if (!Array.isArray(periods) || periods.length === 0) return false;
+                for (const p of periods) {
+                    const pStartKey = inputValueToDateKey(p?.start);
+                    const pEndKey = inputValueToDateKey(p?.end);
+                    if (!pStartKey || !pEndKey) continue;
+                    // Full coverage check: period fully contains the whole next month range.
+                    if (pStartKey <= nextMonthStartKey && pEndKey >= nextMonthEndKey) {
+                        return true;
+                    }
+                }
+                return false;
+            };
 
             const firstDayOfExportMonth = new Date(year, month, 1);
 
@@ -3266,24 +3290,26 @@
                     : null;
                 const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
                 const baselinePerson = baselineMap?.[groupNum] || '';
+                const actualAssignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
+                const actualPerson = getAssignedPersonNameForGroupFromAssignment(actualAssignment, groupNum) || '';
 
-                const personName = normName(baselinePerson);
+                let personName = normName(baselinePerson);
+                // For non-special duty types: if baseline holder is unavailable for the whole next month
+                // and this date was actually served by a replacement, continue from the replacement.
+                // This prevents showing the replacement again as immediate alternate (A,B -> should be B,C).
+                if (
+                    rotationType !== 'special' &&
+                    baselinePerson &&
+                    actualPerson &&
+                    normName(actualPerson) !== normName(baselinePerson) &&
+                    (isDisabledForType(baselinePerson, rotationType) || isMissingWholeNextMonth(baselinePerson))
+                ) {
+                    personName = normName(actualPerson);
+                }
                 // Last chronological duty in this month wins (do not keep only the first day of the month).
                 if (personName) lastAssigned[rotationType] = personName;
             }
 
-            const isDisabledForType = (personName, dutyType) => {
-                const dp = groupData?.disabledPersons?.[personName];
-                if (!dp || typeof dp !== 'object') return false;
-                return !!(dp.all || dp[dutyType]);
-            };
-
-            // Exclude people who have a missing period that overlaps the NEXT month (month after the current Excel month).
-            // This keeps "ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ" realistic for immediate upcoming duties.
-            const firstDayOfNextMonth = new Date(year, month + 1, 1);
-            const lastDayOfNextMonth = new Date(year, month + 2, 0);
-            const nextMonthStartKey = formatDateKey(firstDayOfNextMonth);
-            const nextMonthEndKey = formatDateKey(lastDayOfNextMonth);
             const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
                 const periods = groupData?.missingPeriods?.[personName];
                 if (!Array.isArray(periods) || periods.length === 0) return '';
@@ -3301,20 +3327,6 @@
                 return '';
             };
             const getMissingReasonOverNextMonth = (personName) => getMissingReasonOverRange(personName, nextMonthStartKey, nextMonthEndKey);
-            const isMissingWholeNextMonth = (personName) => {
-                const periods = groupData?.missingPeriods?.[personName];
-                if (!Array.isArray(periods) || periods.length === 0) return false;
-                for (const p of periods) {
-                    const pStartKey = inputValueToDateKey(p?.start);
-                    const pEndKey = inputValueToDateKey(p?.end);
-                    if (!pStartKey || !pEndKey) continue;
-                    // Full coverage check: period fully contains the whole next month range.
-                    if (pStartKey <= nextMonthStartKey && pEndKey >= nextMonthEndKey) {
-                        return true;
-                    }
-                }
-                return false;
-            };
 
             const nextTwoForType = (type) => {
                 const rawList = (groupData?.[type] || []).filter(Boolean);
