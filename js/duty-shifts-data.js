@@ -502,9 +502,8 @@
 
         /**
          * Expected rotation-slot holder for a date (accounts for manual alternate: D replaces A → continue A,B,C, then skip D once).
-         * @param {{ baselineSeedOnly?: boolean }} [options] — If true, month seed uses baseline chain only (Excel επιλαχόντες).
          */
-        function computeExpectedRotationPersonForDate(dayTypeCategory, dateKey, groupNum, options = {}) {
+        function computeExpectedRotationPersonForDate(dayTypeCategory, dateKey, groupNum) {
             try {
                 const groupData = groups[groupNum] || {};
                 const people = groupData[dayTypeCategory] || [];
@@ -531,22 +530,17 @@
                 keys.sort();
                 const targetIdx = keys.indexOf(dateKey);
                 if (targetIdx < 0) return null;
-                const baselineSeedOnly = !!(options && options.baselineSeedOnly);
-                const seed = (baselineSeedOnly && typeof getLastBaselineRotationPersonForDate === 'function')
-                    ? getLastBaselineRotationPersonForDate(dayTypeCategory, monthSeedDate, groupNum)
-                    : getLastRotationPersonForDate(dayTypeCategory, monthSeedDate, groupNum);
+                const seed = getLastRotationPersonForDate(dayTypeCategory, monthSeedDate, groupNum);
                 let idx = 0;
                 if (seed) {
-                    const seedIdx = people.findIndex(p => normRotPersonName(p) === normRotPersonName(seed));
+                    const seedIdx = people.indexOf(seed);
                     if (seedIdx >= 0) idx = (seedIdx + 1) % people.length;
                 }
                 let deferSkip = null;
                 for (let i = 0; i < keys.length; i++) {
                     const dk = keys[i];
                     const manual = findManualAlternateReplacementForGroup(dk, groupNum);
-                    const bIdx = manual
-                        ? people.findIndex(p => normRotPersonName(p) === normRotPersonName(manual.baselinePerson))
-                        : -1;
+                    const bIdx = manual ? people.indexOf(manual.baselinePerson) : -1;
                     if (manual && bIdx >= 0) {
                         if (i === targetIdx) return manual.baselinePerson;
                         idx = (bIdx + 1) % people.length;
@@ -3265,18 +3259,17 @@
                 const dayType = getDayType(date);
                 const rotationType = mapDayTypeToRotationType(dayType);
 
-                if (rotationType === 'special') {
-                    const baseline = (typeof getRotationBaselineAssignmentForDate === 'function')
-                        ? getRotationBaselineAssignmentForDate(dayKey)
-                        : null;
-                    const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
-                    const baselinePerson = baselineMap?.[groupNum] || '';
-                    const personName = normName(baselinePerson);
-                    if (personName) lastAssigned.special = personName;
-                } else if (typeof computeExpectedRotationPersonForDate === 'function') {
-                    const expected = computeExpectedRotationPersonForDate(rotationType, dayKey, groupNum, { baselineSeedOnly: true });
-                    if (expected) lastAssigned[rotationType] = normName(expected);
-                }
+                // Prefer baseline (rotation) assignment when available, so replacements (e.g. manual skip)
+                // do not shift the computed "next on rotation" list.
+                const baseline = (typeof getRotationBaselineAssignmentForDate === 'function')
+                    ? getRotationBaselineAssignmentForDate(dayKey)
+                    : null;
+                const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
+                const baselinePerson = baselineMap?.[groupNum] || '';
+
+                const personName = normName(baselinePerson);
+                // Last chronological duty in this month wins (do not keep only the first day of the month).
+                if (personName) lastAssigned[rotationType] = personName;
             }
 
             const isDisabledForType = (personName, dutyType) => {
@@ -3308,14 +3301,28 @@
                 return '';
             };
             const getMissingReasonOverNextMonth = (personName) => getMissingReasonOverRange(personName, nextMonthStartKey, nextMonthEndKey);
-            const isMissingOverNextMonth = (personName) => !!getMissingReasonOverNextMonth(personName);
+            const isMissingWholeNextMonth = (personName) => {
+                const periods = groupData?.missingPeriods?.[personName];
+                if (!Array.isArray(periods) || periods.length === 0) return false;
+                for (const p of periods) {
+                    const pStartKey = inputValueToDateKey(p?.start);
+                    const pEndKey = inputValueToDateKey(p?.end);
+                    if (!pStartKey || !pEndKey) continue;
+                    // Full coverage check: period fully contains the whole next month range.
+                    if (pStartKey <= nextMonthStartKey && pEndKey >= nextMonthEndKey) {
+                        return true;
+                    }
+                }
+                return false;
+            };
 
             const nextTwoForType = (type) => {
                 const rawList = (groupData?.[type] || []).filter(Boolean);
                 if (rawList.length === 0) return ['', ''];
 
-                const eligible = (p) => !isDisabledForType(p, type) && !isMissingOverNextMonth(p);
-                if (!rawList.some(eligible)) return ['', ''];
+                const eligible = (p) => !isDisabledForType(p, type) && !isMissingWholeNextMonth(p);
+                const eligibleCount = rawList.filter(eligible).length;
+                if (eligibleCount === 0) return ['', ''];
 
                 const last = lastAssigned[type];
                 let startIdx = 0;
@@ -3325,13 +3332,11 @@
                 const picks = [];
                 let cursor = startIdx;
                 let checked = 0;
-                const maxChecks = rawList.length * 2; // enough to wrap and still pick 2
+                const maxChecks = rawList.length * 2; // enough to wrap and still pick 2 (or same when single eligible)
                 while (checked < maxChecks && picks.length < 2) {
                     const candidate = rawList[cursor];
                     if (eligible(candidate)) {
-                        if (picks.length === 0) {
-                            picks.push(candidate);
-                        } else if (normName(candidate) !== normName(picks[0])) {
+                        if (picks.length === 0 || candidate !== picks[0] || eligibleCount === 1) {
                             picks.push(candidate);
                         }
                     }
