@@ -502,8 +502,9 @@
 
         /**
          * Expected rotation-slot holder for a date (accounts for manual alternate: D replaces A → continue A,B,C, then skip D once).
+         * @param {{ baselineSeedOnly?: boolean }} [options] — If true, month seed uses baseline chain only (Excel επιλαχόντες).
          */
-        function computeExpectedRotationPersonForDate(dayTypeCategory, dateKey, groupNum) {
+        function computeExpectedRotationPersonForDate(dayTypeCategory, dateKey, groupNum, options = {}) {
             try {
                 const groupData = groups[groupNum] || {};
                 const people = groupData[dayTypeCategory] || [];
@@ -530,17 +531,22 @@
                 keys.sort();
                 const targetIdx = keys.indexOf(dateKey);
                 if (targetIdx < 0) return null;
-                const seed = getLastRotationPersonForDate(dayTypeCategory, monthSeedDate, groupNum);
+                const baselineSeedOnly = !!(options && options.baselineSeedOnly);
+                const seed = (baselineSeedOnly && typeof getLastBaselineRotationPersonForDate === 'function')
+                    ? getLastBaselineRotationPersonForDate(dayTypeCategory, monthSeedDate, groupNum)
+                    : getLastRotationPersonForDate(dayTypeCategory, monthSeedDate, groupNum);
                 let idx = 0;
                 if (seed) {
-                    const seedIdx = people.indexOf(seed);
+                    const seedIdx = people.findIndex(p => normRotPersonName(p) === normRotPersonName(seed));
                     if (seedIdx >= 0) idx = (seedIdx + 1) % people.length;
                 }
                 let deferSkip = null;
                 for (let i = 0; i < keys.length; i++) {
                     const dk = keys[i];
                     const manual = findManualAlternateReplacementForGroup(dk, groupNum);
-                    const bIdx = manual ? people.indexOf(manual.baselinePerson) : -1;
+                    const bIdx = manual
+                        ? people.findIndex(p => normRotPersonName(p) === normRotPersonName(manual.baselinePerson))
+                        : -1;
                     if (manual && bIdx >= 0) {
                         if (i === targetIdx) return manual.baselinePerson;
                         idx = (bIdx + 1) % people.length;
@@ -3240,11 +3246,7 @@
 
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
-            const normName = (s) => {
-                const cleaned = String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
-                return (typeof normalizePersonKey === 'function') ? normalizePersonKey(cleaned) : cleaned;
-            };
-            const samePerson = (a, b) => normName(a) === normName(b);
+            const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
 
             const firstDayOfExportMonth = new Date(year, month, 1);
 
@@ -3257,74 +3259,55 @@
                 if (fromChain) lastAssigned[t] = normName(fromChain);
             }
 
-            // Advance "last" from baseline duty maps for this calendar month (chronological last wins).
-            // Do not rely only on getDayType() routing: public holidays / bridges can disagree with which
-            // baseline bucket holds a date; weekend list continuity (e.g. Ομάδα 3) must follow the
-            // weekend baseline map keys for the month, not only Sat/Sun calendar classification.
-            const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
-            const baselineMapForType = (t) => {
-                if (t === 'special') return rotationBaselineSpecialAssignments;
-                if (t === 'weekend') return rotationBaselineWeekendAssignments;
-                if (t === 'semi') return rotationBaselineSemiAssignments;
-                return rotationBaselineNormalAssignments;
-            };
-            const baselinePersonForGroupOnDateKey = (t, dateKey) => {
-                const raw = baselineMapForType(t)?.[dateKey];
-                if (!raw) return '';
-                const m = extractGroupAssignmentsMap(raw);
-                const nm = m?.[groupNum] ?? m?.[String(groupNum)];
-                return nm ? String(nm).trim() : '';
-            };
-            for (const t of ['normal', 'semi', 'weekend', 'special']) {
-                const flat = baselineMapForType(t);
-                if (!flat || typeof flat !== 'object') continue;
-                const keys = Object.keys(flat)
-                    .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k) && k.startsWith(monthPrefix))
-                    .sort();
-                for (const dk of keys) {
-                    const personName = normName(baselinePersonForGroupOnDateKey(t, dk));
-                    if (personName) lastAssigned[t] = personName;
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month, day);
+                const dayKey = formatDateKey(date);
+                const dayType = getDayType(date);
+                const rotationType = mapDayTypeToRotationType(dayType);
+
+                if (rotationType === 'special') {
+                    const baseline = (typeof getRotationBaselineAssignmentForDate === 'function')
+                        ? getRotationBaselineAssignmentForDate(dayKey)
+                        : null;
+                    const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
+                    const baselinePerson = baselineMap?.[groupNum] || '';
+                    const personName = normName(baselinePerson);
+                    if (personName) lastAssigned.special = personName;
+                } else if (typeof computeExpectedRotationPersonForDate === 'function') {
+                    const expected = computeExpectedRotationPersonForDate(rotationType, dayKey, groupNum, { baselineSeedOnly: true });
+                    if (expected) lastAssigned[rotationType] = normName(expected);
                 }
             }
 
-            const getPersonValueFromNameMap = (mapObj, personName) => {
-                if (!mapObj || typeof mapObj !== 'object') return null;
-                if (Object.prototype.hasOwnProperty.call(mapObj, personName)) return mapObj[personName];
-                const target = normName(personName);
-                for (const k of Object.keys(mapObj)) {
-                    if (samePerson(k, personName)) return mapObj[k];
-                }
-                return null;
-            };
-
             const isDisabledForType = (personName, dutyType) => {
-                const dp = getPersonValueFromNameMap(groupData?.disabledPersons, personName);
+                const dp = groupData?.disabledPersons?.[personName];
                 if (!dp || typeof dp !== 'object') return false;
                 return !!(dp.all || dp[dutyType]);
             };
 
-            // Exclude people only when they are absent for the ENTIRE next month (or disabled), per requirement.
+            // Exclude people who have a missing period that overlaps the NEXT month (month after the current Excel month).
+            // This keeps "ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ" realistic for immediate upcoming duties.
             const firstDayOfNextMonth = new Date(year, month + 1, 1);
             const lastDayOfNextMonth = new Date(year, month + 2, 0);
             const nextMonthStartKey = formatDateKey(firstDayOfNextMonth);
             const nextMonthEndKey = formatDateKey(lastDayOfNextMonth);
-            const getMissingReasonCoveringWholeRange = (personName, rangeStartKey, rangeEndKey) => {
-                const periods = getPersonValueFromNameMap(groupData?.missingPeriods, personName);
+            const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
+                const periods = groupData?.missingPeriods?.[personName];
                 if (!Array.isArray(periods) || periods.length === 0) return '';
                 if (!rangeStartKey || !rangeEndKey) return '';
                 for (const p of periods) {
                     const pStartKey = inputValueToDateKey(p?.start);
                     const pEndKey = inputValueToDateKey(p?.end);
                     if (!pStartKey || !pEndKey) continue;
-                    // Full-cover check: [pStart,pEnd] fully covers [rangeStart,rangeEnd]
-                    if (pStartKey <= rangeStartKey && pEndKey >= rangeEndKey) {
+                    // Overlap check: [pStart,pEnd] intersects [rangeStart,rangeEnd]
+                    if (!(pEndKey < rangeStartKey || pStartKey > rangeEndKey)) {
                         const reason = (p?.reason || '').toString().trim();
                         return reason || 'Κώλυμα/Απουσία';
                     }
                 }
                 return '';
             };
-            const getMissingReasonOverNextMonth = (personName) => getMissingReasonCoveringWholeRange(personName, nextMonthStartKey, nextMonthEndKey);
+            const getMissingReasonOverNextMonth = (personName) => getMissingReasonOverRange(personName, nextMonthStartKey, nextMonthEndKey);
             const isMissingOverNextMonth = (personName) => !!getMissingReasonOverNextMonth(personName);
 
             const nextTwoForType = (type) => {
@@ -3332,22 +3315,23 @@
                 if (rawList.length === 0) return ['', ''];
 
                 const eligible = (p) => !isDisabledForType(p, type) && !isMissingOverNextMonth(p);
-                const eligibleCount = rawList.filter(eligible).length;
-                if (eligibleCount === 0) return ['', ''];
+                if (!rawList.some(eligible)) return ['', ''];
 
                 const last = lastAssigned[type];
                 let startIdx = 0;
-                const lastIdx = last ? rawList.findIndex(p => samePerson(p, last)) : -1;
+                const lastIdx = last ? rawList.findIndex(p => normName(p) === normName(last)) : -1;
                 if (lastIdx >= 0) startIdx = (lastIdx + 1) % rawList.length;
 
                 const picks = [];
                 let cursor = startIdx;
                 let checked = 0;
-                const maxChecks = rawList.length * 2; // enough to wrap and still pick 2 (or same when single eligible)
+                const maxChecks = rawList.length * 2; // enough to wrap and still pick 2
                 while (checked < maxChecks && picks.length < 2) {
                     const candidate = rawList[cursor];
                     if (eligible(candidate)) {
-                        if (picks.length === 0 || !samePerson(candidate, picks[0]) || eligibleCount === 1) {
+                        if (picks.length === 0) {
+                            picks.push(candidate);
+                        } else if (normName(candidate) !== normName(picks[0])) {
                             picks.push(candidate);
                         }
                     }
@@ -3366,7 +3350,7 @@
                 const last = lastAssigned.special;
                 let startIdx = 0;
                 if (last) {
-                    const idx = rawList.findIndex(p => samePerson(p, last));
+                    const idx = rawList.findIndex(p => normName(p) === normName(last));
                     if (idx >= 0) startIdx = idx + 1;
                 }
                 const findNextSpecialDates = (count = 3, maxDays = 3650) => {
@@ -3396,7 +3380,7 @@
                             note = 'ΕΚΤΟΣ ΥΠΗΡΕΣΙΑΣ';
                         } else {
                             const { startKey, endKey } = getMonthRangeKeys(specialDates[i]);
-                            const r = getMissingReasonCoveringWholeRange(name, startKey, endKey);
+                            const r = getMissingReasonOverRange(name, startKey, endKey);
                             if (r) note = r;
                         }
                     }
