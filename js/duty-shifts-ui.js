@@ -5387,7 +5387,7 @@
                     let briefReason = '';
                     if (derivedUnavailable) {
                         briefReason = derivedUnavailable;
-                    } else if (hasSpecialHolidayDutyInMonth(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
+                    } else if (hasSpecialHolidayDutyInMonthCalcOrSaved(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
                         briefReason =
                             typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
                                 ? buildSpecialHolidaySameMonthUnifiedMessage(
@@ -6248,7 +6248,7 @@
                                 const missingReason = getUnavailableReasonShort(expected, person.group, date, dayTypeCategory);
                                 derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ${missingReason}.`;
                             }
-                        } else if (dayTypeCategory === 'weekend' && hasSpecialHolidayDutyInMonth(expected, person.group, month, year)) {
+                        } else if (dayTypeCategory === 'weekend' && hasSpecialHolidayDutyInMonthCalcOrSaved(expected, person.group, month, year)) {
                             derivedReasonText =
                                 typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
                                     ? buildSpecialHolidaySameMonthUnifiedMessage(
@@ -6305,8 +6305,8 @@
                                         : `Αντικατέστησε τον/την ${bp} (απενεργοποιημένος/η). Ανατέθηκε ο/η ${person.name}.`;
                             } else if (
                                 dayTypeCategory === 'weekend' &&
-                                typeof hasSpecialHolidayDutyInMonth === 'function' &&
-                                hasSpecialHolidayDutyInMonth(bp, person.group, month, year)
+                                typeof hasSpecialHolidayDutyInMonthCalcOrSaved === 'function' &&
+                                hasSpecialHolidayDutyInMonthCalcOrSaved(bp, person.group, month, year)
                             ) {
                                 derivedReasonText =
                                     typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
@@ -6333,8 +6333,8 @@
                     reason.type === 'skip' &&
                     dayTypeCategory === 'weekend' &&
                     reason.swappedWith &&
-                    typeof hasSpecialHolidayDutyInMonth === 'function' &&
-                    hasSpecialHolidayDutyInMonth(reason.swappedWith, person.group, month, year) &&
+                    typeof hasSpecialHolidayDutyInMonthCalcOrSaved === 'function' &&
+                    hasSpecialHolidayDutyInMonthCalcOrSaved(reason.swappedWith, person.group, month, year) &&
                     typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
                 ) {
                     const unifiedSpecialMsg = buildSpecialHolidaySameMonthUnifiedMessage(

@@ -1571,6 +1571,44 @@
             }
             return false;
         }
+
+        /**
+         * Ημερομηνία ειδικής αργίας στον μήνα όπου το άτομο είναι ανατεθειμένο (βήμα 1 temp ή αποθηκευμένα specialHolidayAssignments).
+         * Συγχρονίζει με runWeekendSkipLogic / simulatedSpecialAssignments.
+         */
+        function getSpecialHolidayDutyDateKeyForPersonInMonthCalcOrSaved(person, groupNum, year, monthIndex0) {
+            const fromSaved =
+                typeof getSpecialHolidayDutyDateInMonth === 'function'
+                    ? getSpecialHolidayDutyDateInMonth(person, groupNum, year, monthIndex0)
+                    : null;
+            if (fromSaved) return fromSaved;
+            try {
+                const steps = typeof calculationSteps !== 'undefined' && calculationSteps ? calculationSteps : null;
+                const temp = (steps && steps.tempSpecialAssignments) || {};
+                const specials = [...((steps && steps.dayTypeLists && steps.dayTypeLists.special) || [])];
+                const pNorm = String(person || '').trim();
+                for (const dk of specials) {
+                    if (!dk || typeof dk !== 'string') continue;
+                    const d = new Date(dk + 'T00:00:00');
+                    if (isNaN(d.getTime())) continue;
+                    if (d.getFullYear() !== year || d.getMonth() !== monthIndex0) continue;
+                    const gmap = temp[dk];
+                    if (!gmap) continue;
+                    const assigned = gmap[groupNum];
+                    if (assigned != null && String(assigned).trim() === pNorm) return dk;
+                }
+            } catch (e) {
+                /* ignore */
+            }
+            return null;
+        }
+
+        /** Έχει ειδική αργία τον μήνα: αποθηκευμένα δεδομένα ή temp βήματος 1 (ίδια λογική με weekend skip). */
+        function hasSpecialHolidayDutyInMonthCalcOrSaved(person, groupNum, monthIndex0, year) {
+            if (hasSpecialHolidayDutyInMonth(person, groupNum, monthIndex0, year)) return true;
+            return !!getSpecialHolidayDutyDateKeyForPersonInMonthCalcOrSaved(person, groupNum, year, monthIndex0);
+        }
+
         function _removed_getPersonFromNextMonth(dayKey, dayTypeCategory, groupNum, currentMonth, currentYear, rotationDays, groupPeople, currentRotationPosition = null) {
             const date = new Date(dayKey + 'T00:00:00');
             
@@ -3498,7 +3536,7 @@
                     let briefReason = '';
                     if (derivedUnavailable) {
                         briefReason = derivedUnavailable;
-                    } else if (hasSpecialHolidayDutyInMonth(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
+                    } else if (hasSpecialHolidayDutyInMonthCalcOrSaved(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
                         briefReason =
                             typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
                                 ? buildSpecialHolidaySameMonthUnifiedMessage(
@@ -7236,6 +7274,35 @@
                                         }
                                     }
                                     if (replacementPerson) {
+                                        const displacedPersonWeekendPreview = assignedPerson;
+                                        let skipReasonPreview = '';
+                                        if (hasSpecialHoliday) {
+                                            skipReasonPreview =
+                                                typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
+                                                    ? buildSpecialHolidaySameMonthUnifiedMessage(
+                                                          replacementPerson,
+                                                          dateKey,
+                                                          displacedPersonWeekendPreview,
+                                                          groupNum,
+                                                          date.getFullYear(),
+                                                          date.getMonth()
+                                                      )
+                                                    : '';
+                                            if (!skipReasonPreview) {
+                                                skipReasonPreview = `Αντικατέστησε τον/την ${displacedPersonWeekendPreview} επειδή είχε ειδική αργία στον ίδιο μήνα ${getGreekDayAccusativeArticle(date)} ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο/η ${replacementPerson}.`;
+                                            }
+                                        } else {
+                                            skipReasonPreview = `Αντικατέστησε τον/την ${displacedPersonWeekendPreview} επειδή είχε ήταν ήδη παραλειφθεί αυτόν τον μήνα ${getGreekDayAccusativeArticle(date)} ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο/η ${replacementPerson}.`;
+                                        }
+                                        storeAssignmentReason(
+                                            dateKey,
+                                            groupNum,
+                                            replacementPerson,
+                                            'skip',
+                                            skipReasonPreview,
+                                            displacedPersonWeekendPreview,
+                                            null
+                                        );
                                         assignedPerson = replacementPerson;
                                         wasReplaced = true;
                                         replacementIndex = groupPeople.indexOf(replacementPerson);

@@ -5466,7 +5466,7 @@
                     let briefReason = '';
                     if (derivedUnavailable) {
                         briefReason = derivedUnavailable;
-                    } else if (hasSpecialHolidayDutyInMonth(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
+                    } else if (hasSpecialHolidayDutyInMonthCalcOrSaved(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
                         briefReason =
                             typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
                                 ? buildSpecialHolidaySameMonthUnifiedMessage(
@@ -6510,8 +6510,12 @@
             const placeStr = formatDateKeyAsGreekDMY(placementDateKey);
             const g = parseInt(skippedGroupNum, 10);
             const specialKey =
-                Number.isFinite(g) && sk && typeof getSpecialHolidayDutyDateInMonth === 'function'
-                    ? getSpecialHolidayDutyDateInMonth(sk, g, dutyYear, dutyMonthIndex0)
+                Number.isFinite(g) && sk
+                    ? (typeof getSpecialHolidayDutyDateKeyForPersonInMonthCalcOrSaved === 'function'
+                          ? getSpecialHolidayDutyDateKeyForPersonInMonthCalcOrSaved(sk, g, dutyYear, dutyMonthIndex0)
+                          : typeof getSpecialHolidayDutyDateInMonth === 'function'
+                            ? getSpecialHolidayDutyDateInMonth(sk, g, dutyYear, dutyMonthIndex0)
+                            : null)
                     : null;
             const specialStr = specialKey ? formatDateKeyAsGreekDMY(specialKey) : null;
             if (!rep || !placeStr || !sk) return '';
