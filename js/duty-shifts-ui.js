@@ -5383,19 +5383,24 @@
                             dutyCategory: 'weekend'
                         }).split('.').filter(Boolean)[0])
                         : '';
-                    // Prefer the saved reason sentence (first sentence) when available.
-                    // This keeps the results window consistent with the requested style:
-                    // "Αντικατέστησε τον/την ... επειδή είχε ειδική αργία στον ίδιο μήνα ..."
+                    // Ενιαίο μήνυμα όταν ο παραλειφθείς έχει ήδη ειδική αργία τον ίδιο μήνα (Σαββατοκύριακο).
                     let briefReason = '';
                     if (derivedUnavailable) {
                         briefReason = derivedUnavailable;
+                    } else if (hasSpecialHolidayDutyInMonth(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
+                        briefReason =
+                            typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
+                                ? buildSpecialHolidaySameMonthUnifiedMessage(
+                                      comp,
+                                      dateKey,
+                                      base,
+                                      groupNum,
+                                      dateObj.getFullYear(),
+                                      dateObj.getMonth()
+                                  ) || (reasonText ? reasonText.split('.').filter(Boolean)[0] : '')
+                                : (reasonText ? reasonText.split('.').filter(Boolean)[0] : '');
                     } else if (reasonText) {
                         briefReason = reasonText.split('.').filter(Boolean)[0] || '';
-                    } else if (hasSpecialHolidayDutyInMonth(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
-                        // Fallback: no saved reason (older data) — still show the sentence style.
-                        const dayArt = getGreekDayAccusativeArticle(dateObj);
-                        const dayName = getGreekDayName(dateObj);
-                        briefReason = `Αντικατέστησε τον/την ${base} επειδή είχε ειδική αργία στον ίδιο μήνα ${dayArt} ${dayName} ${dateStr}`;
                     } else {
                         briefReason = 'Αλλαγή';
                     }
@@ -6244,13 +6249,17 @@
                                 derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ${missingReason}.`;
                             }
                         } else if (dayTypeCategory === 'weekend' && hasSpecialHolidayDutyInMonth(expected, person.group, month, year)) {
-                            const specialKey = getSpecialHolidayDutyDateInMonth(expected, person.group, year, month);
-                            if (specialKey) {
-                                const dd = new Date(specialKey + 'T00:00:00');
-                                derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ειδικής αργίας στον ίδιο μήνα (${getGreekDayName(dd)} ${dd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}).`;
-                            } else {
-                                derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ειδικής αργίας στον ίδιο μήνα.`;
-                            }
+                            derivedReasonText =
+                                typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
+                                    ? buildSpecialHolidaySameMonthUnifiedMessage(
+                                          person.name,
+                                          key,
+                                          expected,
+                                          person.group,
+                                          year,
+                                          month
+                                      )
+                                    : '';
                         }
                     }
                     if (!derivedReasonText && typeof getRotationBaselineAssignmentForType === 'function') {
@@ -6294,6 +6303,22 @@
                                               dutyCategory: dayTypeCategory
                                           })
                                         : `Αντικατέστησε τον/την ${bp} (απενεργοποιημένος/η). Ανατέθηκε ο/η ${person.name}.`;
+                            } else if (
+                                dayTypeCategory === 'weekend' &&
+                                typeof hasSpecialHolidayDutyInMonth === 'function' &&
+                                hasSpecialHolidayDutyInMonth(bp, person.group, month, year)
+                            ) {
+                                derivedReasonText =
+                                    typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
+                                        ? buildSpecialHolidaySameMonthUnifiedMessage(
+                                              person.name,
+                                              key,
+                                              bp,
+                                              person.group,
+                                              year,
+                                              month
+                                          )
+                                        : '';
                             } else {
                                 derivedReasonText =
                                     `Η υπηρεσία διαφέρει από τη βασική σειρά περιστροφής για αυτή την ημέρα: στη βάση εμφανίζεται ο/η ${bp}, ενώ ανατέθηκε ο/η ${person.name}. ` +
@@ -6302,11 +6327,37 @@
                         }
                     }
                 }
-                const reasonDisplayText = reason
-                    ? (reason.type === 'skip'
-                        ? normalizeSkipReasonText(reason.reason)
-                        : (reason.type === 'swap' ? normalizeSwapReasonText(reason.reason) : reason.reason))
-                    : derivedReasonText;
+                let reasonDisplayText;
+                if (
+                    reason &&
+                    reason.type === 'skip' &&
+                    dayTypeCategory === 'weekend' &&
+                    reason.swappedWith &&
+                    typeof hasSpecialHolidayDutyInMonth === 'function' &&
+                    hasSpecialHolidayDutyInMonth(reason.swappedWith, person.group, month, year) &&
+                    typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
+                ) {
+                    const unifiedSpecialMsg = buildSpecialHolidaySameMonthUnifiedMessage(
+                        person.name,
+                        key,
+                        reason.swappedWith,
+                        person.group,
+                        year,
+                        month
+                    );
+                    reasonDisplayText =
+                        unifiedSpecialMsg ||
+                        (reason.type === 'skip' ? normalizeSkipReasonText(reason.reason) : reason.reason);
+                } else if (reason) {
+                    reasonDisplayText =
+                        reason.type === 'skip'
+                            ? normalizeSkipReasonText(reason.reason)
+                            : reason.type === 'swap'
+                              ? normalizeSwapReasonText(reason.reason)
+                              : reason.reason;
+                } else {
+                    reasonDisplayText = derivedReasonText;
+                }
                 const reasonDisplay = (reason || derivedReasonText)
                     ? `<div class="mt-1 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${escapeHtml(reasonDisplayText)}</div>`
                     : '';

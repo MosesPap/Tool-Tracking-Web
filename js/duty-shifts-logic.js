@@ -3292,15 +3292,28 @@
                                 replacementPerson: replacementPerson
                             });
                             updatedAssignments[dateKey][groupNum] = replacementPerson;
-                            const monthReason = hasSpecialHoliday
-                                ? 'ειδική αργία στον ίδιο μήνα'
-                                : 'ήταν ήδη παραλειφθεί αυτόν τον μήνα';
+                            let skipReasonText;
+                            if (hasSpecialHoliday) {
+                                skipReasonText =
+                                    typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
+                                        ? buildSpecialHolidaySameMonthUnifiedMessage(
+                                              replacementPerson,
+                                              dateKey,
+                                              currentPerson,
+                                              groupNum,
+                                              date.getFullYear(),
+                                              date.getMonth()
+                                          )
+                                        : `Αντικατέστησε τον/την ${currentPerson} επειδή είχε ειδική αργία στον ίδιο μήνα ${getGreekDayAccusativeArticle(date)} ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο/η ${replacementPerson}.`;
+                            } else {
+                                skipReasonText = `Αντικατέστησε τον/την ${currentPerson} επειδή είχε ήταν ήδη παραλειφθεί αυτόν τον μήνα ${getGreekDayAccusativeArticle(date)} ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο/η ${replacementPerson}.`;
+                            }
                             storeAssignmentReason(
                                 dateKey,
                                 groupNum,
                                 replacementPerson,
                                 'skip',
-                                `Αντικατέστησε τον/την ${currentPerson} επειδή είχε ${monthReason} ${getGreekDayAccusativeArticle(date)} ${getGreekDayName(date)} ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ο/η ${replacementPerson}.`,
+                                skipReasonText,
                                 currentPerson,
                                 null
                             );
@@ -3481,19 +3494,24 @@
                             dutyCategory: 'weekend'
                         }).split('.').filter(Boolean)[0])
                         : '';
-                    // Prefer the saved reason sentence (first sentence) when available.
-                    // This keeps the results window consistent with the requested style:
-                    // "Αντικατέστησε τον/την ... επειδή είχε ειδική αργία στον ίδιο μήνα ..."
+                    // Ενιαίο μήνυμα όταν ο παραλειφθείς έχει ήδη ειδική αργία τον ίδιο μήνα (Σαββατοκύριακο).
                     let briefReason = '';
                     if (derivedUnavailable) {
                         briefReason = derivedUnavailable;
+                    } else if (hasSpecialHolidayDutyInMonth(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
+                        briefReason =
+                            typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
+                                ? buildSpecialHolidaySameMonthUnifiedMessage(
+                                      comp,
+                                      dateKey,
+                                      base,
+                                      groupNum,
+                                      dateObj.getFullYear(),
+                                      dateObj.getMonth()
+                                  ) || (reasonText ? reasonText.split('.').filter(Boolean)[0] : '')
+                                : (reasonText ? reasonText.split('.').filter(Boolean)[0] : '');
                     } else if (reasonText) {
                         briefReason = reasonText.split('.').filter(Boolean)[0] || '';
-                    } else if (hasSpecialHolidayDutyInMonth(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
-                        // Fallback: no saved reason (older data) — still show the sentence style.
-                        const dayArt = getGreekDayAccusativeArticle(dateObj);
-                        const dayName = getGreekDayName(dateObj);
-                        briefReason = `Αντικατέστησε τον/την ${base} επειδή είχε ειδική αργία στον ίδιο μήνα ${dayArt} ${dayName} ${dateStr}`;
                     } else {
                         briefReason = 'Αλλαγή';
                     }

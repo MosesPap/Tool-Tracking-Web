@@ -5462,19 +5462,24 @@
                             dutyCategory: 'weekend'
                         }).split('.').filter(Boolean)[0])
                         : '';
-                    // Prefer the saved reason sentence (first sentence) when available.
-                    // This keeps the results window consistent with the requested style:
-                    // "Αντικατέστησε τον/την ... επειδή είχε ειδική αργία στον ίδιο μήνα ..."
+                    // Ενιαίο μήνυμα όταν ο παραλειφθείς έχει ήδη ειδική αργία τον ίδιο μήνα (Σαββατοκύριακο).
                     let briefReason = '';
                     if (derivedUnavailable) {
                         briefReason = derivedUnavailable;
+                    } else if (hasSpecialHolidayDutyInMonth(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
+                        briefReason =
+                            typeof buildSpecialHolidaySameMonthUnifiedMessage === 'function'
+                                ? buildSpecialHolidaySameMonthUnifiedMessage(
+                                      comp,
+                                      dateKey,
+                                      base,
+                                      groupNum,
+                                      dateObj.getFullYear(),
+                                      dateObj.getMonth()
+                                  ) || (reasonText ? reasonText.split('.').filter(Boolean)[0] : '')
+                                : (reasonText ? reasonText.split('.').filter(Boolean)[0] : '');
                     } else if (reasonText) {
                         briefReason = reasonText.split('.').filter(Boolean)[0] || '';
-                    } else if (hasSpecialHolidayDutyInMonth(base, groupNum, dateObj.getMonth(), dateObj.getFullYear())) {
-                        // Fallback: no saved reason (older data) — still show the sentence style.
-                        const dayArt = getGreekDayAccusativeArticle(dateObj);
-                        const dayName = getGreekDayName(dateObj);
-                        briefReason = `Αντικατέστησε τον/την ${base} επειδή είχε ειδική αργία στον ίδιο μήνα ${dayArt} ${dayName} ${dateStr}`;
                     } else {
                         briefReason = 'Αλλαγή';
                     }
@@ -6485,6 +6490,35 @@
                 // ignore
             }
             return null;
+        }
+
+        /** Ημερομηνία ως D/M/YYYY (π.χ. 13/4/2026) για ενιαία μηνύματα UI. */
+        function formatDateKeyAsGreekDMY(dateKey) {
+            if (!dateKey || typeof dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return '';
+            const d = new Date(dateKey + 'T00:00:00');
+            if (isNaN(d.getTime())) return '';
+            return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+        }
+
+        /**
+         * Ενιαίο μήνυμα: αντικατάσταση (π.χ. Σαββατοκύριακο) επειδή ο άλλος έχει ήδη ειδική αργία τον ίδιο μήνα.
+         * replacementPersonName = αυτός που τοποθετείται, skippedPersonName = αυτός με την ειδική.
+         */
+        function buildSpecialHolidaySameMonthUnifiedMessage(replacementPersonName, placementDateKey, skippedPersonName, skippedGroupNum, dutyYear, dutyMonthIndex0) {
+            const rep = String(replacementPersonName || '').trim();
+            const sk = String(skippedPersonName || '').trim();
+            const placeStr = formatDateKeyAsGreekDMY(placementDateKey);
+            const g = parseInt(skippedGroupNum, 10);
+            const specialKey =
+                Number.isFinite(g) && sk && typeof getSpecialHolidayDutyDateInMonth === 'function'
+                    ? getSpecialHolidayDutyDateInMonth(sk, g, dutyYear, dutyMonthIndex0)
+                    : null;
+            const specialStr = specialKey ? formatDateKeyAsGreekDMY(specialKey) : null;
+            if (!rep || !placeStr || !sk) return '';
+            if (specialStr) {
+                return `Ο/Η ${rep} τοποθετήθηκε στις ${placeStr} γιατί ο/η ${sk} έχει ειδική αργία στις ${specialStr}.`;
+            }
+            return `Ο/Η ${rep} τοποθετήθηκε στις ${placeStr} γιατί ο/η ${sk} έχει ειδική αργία στον ίδιο μήνα.`;
         }
         
         // Analyze rotation violations
