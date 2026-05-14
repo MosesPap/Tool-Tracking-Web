@@ -1618,9 +1618,9 @@
             }
             setAlternateReplacementLoading(true);
             try {
-                await applyAlternateReplacementForDate(groupNum, personName, dateKey);
-                const modal = bootstrap.Modal.getInstance(document.getElementById('alternateReplacementModal'));
-                if (modal) modal.hide();
+            await applyAlternateReplacementForDate(groupNum, personName, dateKey);
+            const modal = bootstrap.Modal.getInstance(document.getElementById('alternateReplacementModal'));
+            if (modal) modal.hide();
             } finally {
                 setAlternateReplacementLoading(false);
             }
@@ -4152,13 +4152,13 @@
                 // Get holiday name (special holiday first, then Orthodox/Cyprus holiday)
                 const holidayName = specialHolidayNameByDate.get(key) || getOrthodoxHolidayNameAuto(date);
                 
-                const dayTypeCategory = (dayType === 'special-holiday')
-                    ? 'special'
-                    : (dayType === 'weekend-holiday')
-                        ? 'weekend'
-                        : (dayType === 'semi-normal-day')
-                            ? 'semi'
-                            : 'normal';
+                        const dayTypeCategory = (dayType === 'special-holiday')
+                            ? 'special'
+                            : (dayType === 'weekend-holiday')
+                                ? 'weekend'
+                                : (dayType === 'semi-normal-day')
+                                    ? 'semi'
+                                    : 'normal';
                 const dateObjCal = new Date(key + 'T00:00:00');
                 const showMdOnly = document.getElementById('calendarMissingDisabledToggle')?.checked === true;
                 
@@ -4321,7 +4321,7 @@
                     ) {
                         dayDiv.classList.add('person-duty-highlight');
                     } else if (!showMdOnly && personIsAssignedInAssignment(assignment, selectedDutyHighlightPerson)) {
-                        dayDiv.classList.add('person-duty-highlight');
+                    dayDiv.classList.add('person-duty-highlight');
                     }
                 }
                 
@@ -4372,7 +4372,7 @@
                         hideMissingDisabledCalendarPopup();
                     });
                 }
-
+                
                 frag.appendChild(dayDiv);
             }
             
@@ -4397,7 +4397,7 @@
                 hierarchyPopup.remove();
                 hierarchyPopup = null;
             }
-
+            
             const hierarchyData = container.getAttribute('data-hierarchy-order');
             if (!hierarchyData) return;
             
@@ -6184,7 +6184,7 @@
                     people: Array.from(set).sort((a, b) => a.localeCompare(b, 'el'))
                 });
             }
-
+            
             personGroups.forEach((person, index) => {
                 const normPick = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                 const isCritical = person.name && criticalPeople.some(cp => {

@@ -804,6 +804,69 @@
             // If count is 0 (no matching days found), return 0
             return Math.max(0, count - 1);
         }
+
+        /**
+         * Pure rotation map dateKey -> person for every semi-normal day in a calendar month.
+         * Mirrors baseline semi seeding (first semi of month + getLastRotationPersonForDate; Feb-2026 / April groups 1–2 hacks).
+         * Used when an absence window lies in a month before calculationSteps.startDate — getRotationPosition() is invalid there.
+         */
+        function buildExpectedSemiPersonMapForCalendarMonth(year, monthIndex0, groupNum) {
+            const out = {};
+            const groupPeople = (groups[groupNum] || {}).semi || [];
+            if (!Array.isArray(groupPeople) || groupPeople.length === 0) return out;
+            const rotLen = groupPeople.length;
+            const semiDays = [];
+            const lastDom = new Date(year, monthIndex0 + 1, 0).getDate();
+            for (let dom = 1; dom <= lastDom; dom++) {
+                const dt = new Date(year, monthIndex0, dom);
+                if (isNaN(dt.getTime())) continue;
+                if (getDayType(dt) === 'semi-normal-day') {
+                    semiDays.push(formatDateKey(dt));
+                }
+            }
+            if (semiDays.length === 0) return out;
+            const firstDt = new Date(semiDays[0] + 'T00:00:00');
+            let posState;
+            const isFeb2026 = year === 2026 && monthIndex0 === 1;
+            const isApril = monthIndex0 === 3;
+            if (isFeb2026 || (isApril && (groupNum === 1 || groupNum === 2))) {
+                posState = 0;
+            } else {
+                const last = getLastRotationPersonForDate('semi', firstDt, groupNum);
+                const idx = groupPeople.indexOf(last);
+                posState = (last && idx >= 0) ? (idx + 1) % rotLen : 0;
+            }
+            for (const dk of semiDays) {
+                const pos = posState % rotLen;
+                out[dk] = groupPeople[pos];
+                posState = (pos + 1) % rotLen;
+            }
+            return out;
+        }
+
+        /** First eligible semi on/after threshold: prefer same calendar month as threshold, then any later semi in range. */
+        function pickSemiReturnFromMissingTargetKey(sortedSemi, thirdDayAfterEnd, calcStartKey, calcEndKey, occupiedMap, groupNum) {
+            if (!thirdDayAfterEnd || !Array.isArray(sortedSemi) || sortedSemi.length === 0 || !calcStartKey || !calcEndKey) return null;
+            const monthPrefix = thirdDayAfterEnd.substring(0, 7);
+            const tryKey = (dk) => {
+                if (!dk || dk < calcStartKey || dk > calcEndKey) return null;
+                if (occupiedMap?.[dk]?.[groupNum]) return null;
+                return dk;
+            };
+            for (const dk of sortedSemi) {
+                if (dk < thirdDayAfterEnd) continue;
+                if (dk.substring(0, 7) !== monthPrefix) break;
+                const t = tryKey(dk);
+                if (t) return t;
+            }
+            for (const dk of sortedSemi) {
+                if (dk < thirdDayAfterEnd) continue;
+                const t = tryKey(dk);
+                if (t) return t;
+            }
+            return null;
+        }
+
         function normalizePersonKey(personName) {
             return String(personName || '')
                 .trim()
@@ -7466,6 +7529,7 @@
 
             const returnFromMissingSemiTargetsRun = {};
             if (calcStartKey && calcEndKey && sortedSemi.length > 0) {
+                const expectedSemiMapCacheRun = new Map();
                 const processedSemiReturnRun = new Set();
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const g = groups[groupNum];
@@ -7507,14 +7571,20 @@
                                 const periodEndDate = new Date(pEndKey + 'T00:00:00');
                                 for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
                                     const checkDateKey = formatDateKey(checkDate);
-                                    if (getDayType(checkDate) === 'semi-normal-day') {
-                                        const rotationPos = getRotationPosition(checkDate, 'semi', groupNum);
-                                        const groupPeopleForCheck = g?.semi || [];
-                                        const expectedPerson = groupPeopleForCheck.length > 0 ? groupPeopleForCheck[rotationPos % groupPeopleForCheck.length] : null;
-                                        if (expectedPerson && normSemiRun(expectedPerson) === normSemiRun(personName)) {
-                                            hadMissedSemi = true;
-                                            break;
-                                        }
+                                    if (getDayType(checkDate) !== 'semi-normal-day') continue;
+                                    if (checkDateKey < scanStartKey || checkDateKey > scanEndKey) continue;
+                                    const y = checkDate.getFullYear();
+                                    const m = checkDate.getMonth();
+                                    const cacheKey = `${y}-${m}-${groupNum}`;
+                                    let semiExpectedMap = expectedSemiMapCacheRun.get(cacheKey);
+                                    if (!semiExpectedMap) {
+                                        semiExpectedMap = buildExpectedSemiPersonMapForCalendarMonth(y, m, groupNum);
+                                        expectedSemiMapCacheRun.set(cacheKey, semiExpectedMap);
+                                    }
+                                    const expectedPerson = semiExpectedMap[checkDateKey];
+                                    if (expectedPerson && normSemiRun(expectedPerson) === normSemiRun(personName)) {
+                                        hadMissedSemi = true;
+                                        break;
                                     }
                                 }
                             }
@@ -7524,12 +7594,8 @@
                             if (!thirdDayAfterEnd) continue;
                             // Backward: avoid assigning one day before missing period starts
                             const dayBeforeStart = addDaysToDateKeyRun(pStartKey, -1);
-                            let targetSemiKey = null;
-                            // Prefer forward: first semi on or after (return day + 3)
-                            const forwardTarget = findFirstSemiOnOrAfterRun(sortedSemi, thirdDayAfterEnd);
-                            if (forwardTarget && forwardTarget >= calcStartKey && forwardTarget <= calcEndKey) {
-                                targetSemiKey = forwardTarget;
-                            } else {
+                            let targetSemiKey = pickSemiReturnFromMissingTargetKey(sortedSemi, thirdDayAfterEnd, calcStartKey, calcEndKey, returnFromMissingSemiTargetsRun, groupNum);
+                            if (!targetSemiKey) {
                                 // Backward: last semi before period start, but not the day before period start
                                 let backwardCandidate = findLastSemiBeforeRun(sortedSemi, pStartKey);
                                 if (backwardCandidate && dayBeforeStart && backwardCandidate === dayBeforeStart) {
@@ -8039,6 +8105,7 @@
                     }
                 }
                 if (calcStartKey && calcEndKey && sortedSemi.length > 0) {
+                    const expectedSemiMapCachePreview = new Map();
                     const processedSemiReturn = new Set();
                     const normSemi = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -8102,37 +8169,24 @@
                                         }
                                     }
                                 } else {
-                                    // Period ended in previous month - check if period overlaps with any semi day
-                                    // We can't use baselineSemiByDate because those semi days aren't in sortedSemi
-                                    // Instead, check if there's a semi day that falls within the period window
-                                    // For this, we need to know what semi days exist - but we only have sortedSemi (current range)
-                                    // So we'll assume: if the period is long enough and contains typical semi days, they likely had a missed semi
-                                    // Actually, a better approach: check if the period window (pStartKey to pEndKey) would contain a semi day
-                                    // by checking if getDayType for dates in that range includes semi-normal-day
-                                    // But we don't have that info easily. For now, let's assume if period is >= 3 days, they likely had a missed semi
-                                    // OR we can check: if period ended in previous month and threshold (end+4) falls in current range, assign them
-                                    // Actually, the user's requirement is: "if they have seminormal duty during the missing period"
-                                    // So we need to verify they had one. Since we don't have previous month semi days in sortedSemi,
-                                    // we'll check: if period ended in previous month and threshold falls in current range, check if they would have been assigned
-                                    // by rotation on any date in the period window that is a semi day
-                                    // For simplicity, let's check if any date in the period window (pStartKey to pEndKey) is a semi-normal-day type
-                                    // and if so, check if rotation would assign this person on that date
                                     const periodStartDate = new Date(pStartKey + 'T00:00:00');
                                     const periodEndDate = new Date(pEndKey + 'T00:00:00');
                                     for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
                                         const checkDateKey = formatDateKey(checkDate);
-                                        const dayType = getDayType(checkDate);
-                                        if (dayType === 'semi-normal-day') {
-                                            // Check if rotation would assign this person on this date
-                                            const rotationPos = getRotationPosition(checkDate, 'semi', groupNum);
-                                            const groupPeopleForCheck = g?.semi || [];
-                                            if (groupPeopleForCheck.length > 0) {
-                                                const expectedPerson = groupPeopleForCheck[rotationPos % groupPeopleForCheck.length];
-                                                if (expectedPerson && normSemi(expectedPerson) === normSemi(personName)) {
-                                                    hadMissedSemi = true;
-                                                    break;
-                                                }
-                                            }
+                                        if (getDayType(checkDate) !== 'semi-normal-day') continue;
+                                        if (checkDateKey < scanStartKey || checkDateKey > scanEndKey) continue;
+                                        const y = checkDate.getFullYear();
+                                        const m = checkDate.getMonth();
+                                        const cacheKey = `${y}-${m}-${groupNum}`;
+                                        let semiExpectedMap = expectedSemiMapCachePreview.get(cacheKey);
+                                        if (!semiExpectedMap) {
+                                            semiExpectedMap = buildExpectedSemiPersonMapForCalendarMonth(y, m, groupNum);
+                                            expectedSemiMapCachePreview.set(cacheKey, semiExpectedMap);
+                                        }
+                                        const expectedPerson = semiExpectedMap[checkDateKey];
+                                        if (expectedPerson && normSemi(expectedPerson) === normSemi(personName)) {
+                                            hadMissedSemi = true;
+                                            break;
                                         }
                                     }
                                 }
@@ -8143,12 +8197,8 @@
                                 if (!thirdDayAfterEnd) continue;
                                 // Backward: avoid assigning one day before missing period starts
                                 const dayBeforeStart = addDaysToDateKeyLocal(pStartKey, -1);
-                                let targetSemiKey = null;
-                                // Prefer forward: first semi on or after (return day + 3)
-                                const forwardTarget = findFirstSemiOnOrAfter(sortedSemi, thirdDayAfterEnd);
-                                if (forwardTarget && forwardTarget >= calcStartKey && forwardTarget <= calcEndKey) {
-                                    targetSemiKey = forwardTarget;
-                                } else {
+                                let targetSemiKey = pickSemiReturnFromMissingTargetKey(sortedSemi, thirdDayAfterEnd, calcStartKey, calcEndKey, returnFromMissingSemiTargets, groupNum);
+                                if (!targetSemiKey) {
                                     // Backward: last semi before period start, but not the day before period start
                                     let backwardCandidate = findLastSemiBefore(sortedSemi, pStartKey);
                                     if (backwardCandidate && dayBeforeStart && backwardCandidate === dayBeforeStart) {
