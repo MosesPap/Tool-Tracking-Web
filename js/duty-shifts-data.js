@@ -5305,7 +5305,7 @@
                                 dateObj: date,
                                 groupNum,
                                 dutyCategory: 'special'
-                            }).split('.').filter(Boolean)[0] || '';
+                            }) || '';
                         } else {
                             reason = 'Αλλαγή (κανόνας/σύγκρουση)';
                         }
@@ -5454,13 +5454,13 @@
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
                     const derivedUnavailable = (isPersonDisabledForDuty(base, groupNum, 'weekend') || isPersonMissingOnDate(base, groupNum, dateObj, 'weekend'))
-                        ? (reasonText ? reasonText.split('.').filter(Boolean)[0] : buildUnavailableReplacementReason({
+                        ? (reasonText || buildUnavailableReplacementReason({
                             skippedPersonName: base,
                             replacementPersonName: comp,
                             dateObj,
                             groupNum,
                             dutyCategory: 'weekend'
-                        }).split('.').filter(Boolean)[0])
+                        }))
                         : '';
                     // Ενιαίο μήνυμα όταν ο παραλειφθείς έχει ήδη ειδική αργία τον ίδιο μήνα (Σαββατοκύριακο).
                     let briefReason = '';
@@ -6554,6 +6554,33 @@
          * Ενιαίο μήνυμα αλλαγής καθημερινής: συνεχόμενη υπηρεσία με Ημιαργία ή Αργία (γειτονική ημέρα).
          * conflictWithLabel: «Ημιαργία» | «Αργία»
          */
+        /**
+         * Ενιαίο μήνυμα αντικατάστασης: απουσία (π.χ. Φύλλο Πορείας) ή απενεργοποίηση.
+         */
+        function buildUnavailableReplacementUnifiedMessage({ replacementPersonName, skippedPersonName, dateObj, groupNum, dutyCategory = null }) {
+            const rep = String(replacementPersonName || '').trim();
+            const sk = String(skippedPersonName || '').trim();
+            if (!rep || !sk || !dateObj || isNaN(dateObj.getTime())) return '';
+            const dateKey =
+                typeof formatDateKey === 'function' ? formatDateKey(dateObj) : null;
+            const dateStr =
+                dateKey && typeof formatDateKeyAsGreekDMY === 'function'
+                    ? formatDateKeyAsGreekDMY(dateKey)
+                    : dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const dayName =
+                typeof getGreekDayName === 'function' ? getGreekDayName(dateObj) : '';
+            const reasonShort =
+                typeof getUnavailableReasonShort === 'function'
+                    ? getUnavailableReasonShort(sk, groupNum, dateObj, dutyCategory)
+                    : 'Κώλυμα/Απουσία';
+            const statusClause =
+                reasonShort === 'Απενεργοποιημένος' ? 'ήταν Απενεργοποιημένος' : `είχε ${reasonShort}`;
+            return (
+                `Ο/Η ${rep} αντικατέστησε τον/την ${sk} στις ${dateStr} ημέρα ${dayName} ` +
+                `επειδή ο/η ${sk} ${statusClause}.`
+            );
+        }
+
         function buildNormalConsecutiveDutySwapUnifiedMessage(changerName, conflictedName, conflictDateKey, placementDateKey, conflictWithLabel) {
             const a = String(changerName || '').trim();
             const b = String(conflictedName || '').trim();

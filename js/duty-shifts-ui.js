@@ -5236,7 +5236,7 @@
                                 dateObj: date,
                                 groupNum,
                                 dutyCategory: 'special'
-                            }).split('.').filter(Boolean)[0] || '';
+                            }) || '';
                         } else {
                             reason = 'Αλλαγή (κανόνας/σύγκρουση)';
                         }
@@ -5375,13 +5375,13 @@
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
                     const derivedUnavailable = (isPersonDisabledForDuty(base, groupNum, 'weekend') || isPersonMissingOnDate(base, groupNum, dateObj, 'weekend'))
-                        ? (reasonText ? reasonText.split('.').filter(Boolean)[0] : buildUnavailableReplacementReason({
+                        ? (reasonText || buildUnavailableReplacementReason({
                             skippedPersonName: base,
                             replacementPersonName: comp,
                             dateObj,
                             groupNum,
                             dutyCategory: 'weekend'
-                        }).split('.').filter(Boolean)[0])
+                        }))
                         : '';
                     // Ενιαίο μήνυμα όταν ο παραλειφθείς έχει ήδη ειδική αργία τον ίδιο μήνα (Σαββατοκύριακο).
                     let briefReason = '';
@@ -6245,8 +6245,13 @@
                                     dutyCategory: dayTypeCategory
                                 });
                             } else {
-                                const missingReason = getUnavailableReasonShort(expected, person.group, date, dayTypeCategory);
-                                derivedReasonText = `Αντικατέστησε τον/την ${expected} λόγω ${missingReason}.`;
+                                derivedReasonText = buildUnavailableReplacementReason({
+                                    skippedPersonName: expected,
+                                    replacementPersonName: person.name,
+                                    dateObj: date,
+                                    groupNum: person.group,
+                                    dutyCategory: dayTypeCategory
+                                });
                             }
                         } else if (dayTypeCategory === 'weekend' && hasSpecialHolidayDutyInMonthCalcOrSaved(expected, person.group, month, year)) {
                             derivedReasonText =
@@ -6283,11 +6288,13 @@
                                               })
                                             : `Αντικατέστησε τον/την ${bp} (μη διαθέσιμος/η). Ανατέθηκε ο/η ${person.name}.`;
                                 } else {
-                                    const missingReason =
-                                        typeof getUnavailableReasonShort === 'function'
-                                            ? getUnavailableReasonShort(bp, person.group, date, dayTypeCategory)
-                                            : 'απουσίας';
-                                    derivedReasonText = `Αντικατέστησε τον/την ${bp} λόγω ${missingReason}.`;
+                                    derivedReasonText = buildUnavailableReplacementReason({
+                                        skippedPersonName: bp,
+                                        replacementPersonName: person.name,
+                                        dateObj: date,
+                                        groupNum: person.group,
+                                        dutyCategory: dayTypeCategory
+                                    });
                                 }
                             } else if (
                                 typeof isPersonDisabledForDuty === 'function' &&
@@ -6352,6 +6359,14 @@
                     reasonDisplayText = resolveSemiHolidayConflictSwapDisplayText(reason);
                 } else if (reason && reason.type === 'swap' && dayTypeCategory === 'normal' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function') {
                     reasonDisplayText = resolveNormalConsecutiveDutySwapDisplayText(reason);
+                } else if (reason && reason.type === 'skip' && typeof resolveUnavailableReplacementDisplayText === 'function') {
+                    reasonDisplayText = resolveUnavailableReplacementDisplayText(
+                        reason,
+                        key,
+                        person.group,
+                        person.name,
+                        dayTypeCategory
+                    );
                 } else if (reason) {
                     reasonDisplayText =
                         reason.type === 'skip'
@@ -7309,7 +7324,9 @@
                         if (assignedIndex === -1 || expectedIndex === -1) continue;
                         
                         // Process the violation
-                        const swapOrSkipReasonText = reason.type === 'skip'
+                        const swapOrSkipReasonText = reason.type === 'skip' && typeof resolveUnavailableReplacementDisplayText === 'function'
+                            ? resolveUnavailableReplacementDisplayText(reason, dateKey, groupNum, assignedPerson, dayTypeCategory)
+                            : reason.type === 'skip'
                             ? normalizeSkipReasonText(reason.reason || '')
                             : reason.type === 'swap' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function' && reason.meta?.normalConsecutiveDutySwap
                               ? resolveNormalConsecutiveDutySwapDisplayText(reason)

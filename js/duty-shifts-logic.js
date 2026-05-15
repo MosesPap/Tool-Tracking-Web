@@ -471,6 +471,16 @@
             return 'Κώλυμα/Απουσία';
         }
         function buildUnavailableReplacementReason({ skippedPersonName, replacementPersonName, dateObj, groupNum, dutyCategory = null }) {
+            if (typeof buildUnavailableReplacementUnifiedMessage === 'function') {
+                const unified = buildUnavailableReplacementUnifiedMessage({
+                    replacementPersonName,
+                    skippedPersonName,
+                    dateObj,
+                    groupNum,
+                    dutyCategory
+                });
+                if (unified) return unified;
+            }
             const reasonShort = getUnavailableReasonShort(skippedPersonName, groupNum, dateObj, dutyCategory);
             const verb = reasonShort === 'Απενεργοποιημένος' ? 'ήταν' : 'είχε';
             const dayName = getGreekDayName(dateObj);
@@ -478,9 +488,80 @@
             const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
             return `Αντικατέστησε τον/την ${skippedPersonName} επειδή ${verb} ${reasonShort} ${dayArt} ${dayName} ${dateStr}. Ανατέθηκε ο/η ${replacementPersonName}.`;
         }
+        function getUnavailableReplacementMeta(replacementPersonName, skippedPersonName, dateKey, dutyCategory) {
+            return {
+                unavailableReplacement: true,
+                replacementPersonName,
+                skippedPersonName,
+                dateKey,
+                dutyCategory: dutyCategory || null
+            };
+        }
+        function resolveUnavailableReplacementDisplayText(reason, dateKey, groupNum, assignedPerson, dutyCategory) {
+            if (!reason || reason.type !== 'skip') {
+                return typeof normalizeSkipReasonText === 'function' ? normalizeSkipReasonText(reason?.reason || '') : reason?.reason || '';
+            }
+            const m = reason.meta;
+            if (m?.unavailableReplacement && m.replacementPersonName && m.skippedPersonName && m.dateKey) {
+                const d = new Date(m.dateKey + 'T00:00:00');
+                if (!isNaN(d.getTime()) && typeof buildUnavailableReplacementUnifiedMessage === 'function') {
+                    const rebuilt = buildUnavailableReplacementUnifiedMessage({
+                        replacementPersonName: m.replacementPersonName,
+                        skippedPersonName: m.skippedPersonName,
+                        dateObj: d,
+                        groupNum,
+                        dutyCategory: m.dutyCategory || dutyCategory
+                    });
+                    if (rebuilt) return rebuilt;
+                }
+            }
+            const raw = String(reason.reason || '').trim();
+            if (raw.includes('αντικατέστησε τον/την') && raw.includes('επειδή ο/η')) return raw;
+            const skipped = reason.swappedWith || null;
+            const rep = assignedPerson || null;
+            if (skipped && rep && dateKey) {
+                const d = new Date(dateKey + 'T00:00:00');
+                if (!isNaN(d.getTime())) {
+                    return buildUnavailableReplacementReason({
+                        replacementPersonName: rep,
+                        skippedPersonName: skipped,
+                        dateObj: d,
+                        groupNum,
+                        dutyCategory
+                    });
+                }
+            }
+            return typeof normalizeSkipReasonText === 'function' ? normalizeSkipReasonText(raw) : raw;
+        }
+        function storeUnavailableReplacementReason(dateKey, groupNum, replacementPersonName, skippedPersonName, dateObj, dutyCategory, swapPairId = null, extraMeta = null) {
+            const reason = buildUnavailableReplacementReason({
+                replacementPersonName: replacementPersonName,
+                skippedPersonName: skippedPersonName,
+                dateObj,
+                groupNum,
+                dutyCategory
+            });
+            const dk =
+                dateObj && typeof formatDateKey === 'function' ? formatDateKey(dateObj) : dateKey;
+            const meta = {
+                ...getUnavailableReplacementMeta(replacementPersonName, skippedPersonName, dk, dutyCategory),
+                ...(extraMeta || {})
+            };
+            storeAssignmentReason(
+                dateKey,
+                groupNum,
+                replacementPersonName,
+                'skip',
+                reason,
+                skippedPersonName,
+                swapPairId,
+                meta
+            );
+        }
         function normalizeSkipReasonText(reasonText) {
             const raw = String(reasonText || '').trim();
             if (!raw) return raw;
+            if (raw.includes('αντικατέστησε τον/την') && raw.includes('επειδή ο/η')) return raw;
             if (!raw.includes('Απενεργοποιημένος')) return raw;
 
             // If it's already in the correct form, keep it.
@@ -3034,7 +3115,7 @@
                                 dateObj: date,
                                 groupNum,
                                 dutyCategory: 'special'
-                            }).split('.').filter(Boolean)[0] || '';
+                            }) || '';
                         } else {
                             reason = 'Αλλαγή (κανόνας/σύγκρουση)';
                         }
@@ -3510,20 +3591,13 @@
                                 replacementPerson: swapPartnerPerson
                             });
                             const swapPartnerDate = new Date(swapPartnerDateKey + 'T00:00:00');
-                            storeAssignmentReason(
+                            storeUnavailableReplacementReason(
                                 dateKey,
                                 groupNum,
                                 swapPartnerPerson,
-                                'skip',
-                                buildUnavailableReplacementReason({
-                                    skippedPersonName: currentPerson,
-                                    replacementPersonName: swapPartnerPerson,
-                                    dateObj: date,
-                                    groupNum,
-                                    dutyCategory: 'weekend'
-                                }),
                                 currentPerson,
-                                null
+                                date,
+                                'weekend'
                             );
                             storeAssignmentReason(
                                 swapPartnerDateKey,
@@ -3557,20 +3631,13 @@
                                 replacementPerson: swapPerson
                             });
                             updatedAssignments[dateKey][groupNum] = swapPerson;
-                            storeAssignmentReason(
+                            storeUnavailableReplacementReason(
                                 dateKey,
                                 groupNum,
                                 swapPerson,
-                                'skip',
-                                buildUnavailableReplacementReason({
-                                    skippedPersonName: currentPerson,
-                                    replacementPersonName: swapPerson,
-                                    dateObj: date,
-                                    groupNum,
-                                    dutyCategory: 'weekend'
-                                }),
                                 currentPerson,
-                                null
+                                date,
+                                'weekend'
                             );
                             assignedWeekendInMonth[monthKey][groupNum].add(swapPerson);
                         }
@@ -3628,13 +3695,13 @@
                         ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
                         : '';
                     const derivedUnavailable = (isPersonDisabledForDuty(base, groupNum, 'weekend') || isPersonMissingOnDate(base, groupNum, dateObj, 'weekend'))
-                        ? (reasonText ? reasonText.split('.').filter(Boolean)[0] : buildUnavailableReplacementReason({
+                        ? (reasonText || buildUnavailableReplacementReason({
                             skippedPersonName: base,
                             replacementPersonName: comp,
                             dateObj,
                             groupNum,
                             dutyCategory: 'weekend'
-                        }).split('.').filter(Boolean)[0])
+                        }))
                         : '';
                     // Ενιαίο μήνυμα όταν ο παραλειφθείς έχει ήδη ειδική αργία τον ίδιο μήνα (Σαββατοκύριακο).
                     let briefReason = '';
@@ -4396,7 +4463,7 @@
                             dateObj,
                             groupNum,
                             dutyCategory: 'semi'
-                        }).split('.').filter(Boolean)[0] || '')
+                        }) || '')
                         : (reasonText
                             ? (reasonObj?.type === 'swap' ? reasonText : reasonText.split('.').filter(Boolean)[0])
                             : 'Αλλαγή');
@@ -6292,7 +6359,7 @@
                                 dateObj,
                                 groupNum,
                                 dutyCategory: 'normal'
-                            }).split('.').filter(Boolean)[0] || '')
+                            }) || '')
                             : 'Αλλαγή');
 
                     // When replacement is due to missing person (not disabled), show backward or forward assignment
@@ -6657,20 +6724,13 @@
                                             assignedPerson = candidate;
                                             foundReplacement = true;
                                             // Persist skip reason (history) for disabled/missing special-holiday replacements too.
-                                            storeAssignmentReason(
+                                            storeUnavailableReplacementReason(
                                                 dateKey,
                                                 groupNum,
                                                 assignedPerson,
-                                                'skip',
-                                                buildUnavailableReplacementReason({
-                                                    skippedPersonName: rotationPerson,
-                                                    replacementPersonName: assignedPerson,
-                                                    dateObj: new Date(dateIterator),
-                                                    groupNum,
-                                                    dutyCategory: 'special'
-                                                }),
                                                 rotationPerson,
-                                                null
+                                                new Date(dateIterator),
+                                                'special'
                                             );
                                             break;
                                         }
@@ -7449,20 +7509,13 @@
                                     }
                                 }
                                 if (swapPerson) {
-                                    storeAssignmentReason(
+                                    storeUnavailableReplacementReason(
                                         dateKey,
                                         groupNum,
                                         swapPerson,
-                                        'skip',
-                                        buildUnavailableReplacementReason({
-                                            skippedPersonName: assignedPerson,
-                                            replacementPersonName: swapPerson,
-                                            dateObj: date,
-                                            groupNum,
-                                            dutyCategory: 'weekend'
-                                        }),
                                         assignedPerson,
-                                        null
+                                        date,
+                                        'weekend'
                                     );
                                     assignedPerson = swapPerson;
                                     wasReplaced = true;
@@ -8639,20 +8692,13 @@
                                     replacementIndex = idx;
                                     wasReplaced = true;
                                     foundReplacement = true;
-                                    storeAssignmentReason(
+                                    storeUnavailableReplacementReason(
                                         dateKey,
                                         groupNum,
                                         assignedPerson,
-                                        'skip',
-                                        buildUnavailableReplacementReason({
-                                            skippedPersonName: rotationPerson,
-                                            replacementPersonName: assignedPerson,
-                                            dateObj: date,
-                                            groupNum,
-                                            dutyCategory: 'semi'
-                                        }),
                                         rotationPerson,
-                                        null
+                                        date,
+                                        'semi'
                                     );
                                     break;
                                 }
@@ -8710,20 +8756,13 @@
                                         replacementIndex = idx;
                                         wasReplaced = true;
                                         foundReplacement = true;
-                                        storeAssignmentReason(
+                                        storeUnavailableReplacementReason(
                                             dateKey,
                                             groupNum,
                                             assignedPerson,
-                                            'skip',
-                                            buildUnavailableReplacementReason({
-                                                skippedPersonName: rotationPerson,
-                                                replacementPersonName: assignedPerson,
-                                                dateObj: date,
-                                                groupNum,
-                                                dutyCategory: 'semi'
-                                            }),
                                             rotationPerson,
-                                            null
+                                            date,
+                                            'semi'
                                         );
                                         break;
                                     }
@@ -9385,20 +9424,13 @@
                                                 lastReplacementIndex = groupPeople.indexOf(replacementPerson);
                                                 
                                                 // Store assignment reason
-                                                storeAssignmentReason(
+                                                storeUnavailableReplacementReason(
                                                     dk,
                                                     groupNum,
                                                     replacementPerson,
-                                                    'skip',
-                                                    buildUnavailableReplacementReason({
-                                                        skippedPersonName: personName,
-                                                        replacementPersonName: replacementPerson,
-                                                        dateObj: dateObj,
-                                                        groupNum,
-                                                        dutyCategory: 'normal'
-                                                    }),
                                                     personName,
-                                                    null
+                                                    dateObj,
+                                                    'normal'
                                                 );
                                                 
                                                 console.log(`[MISSING REPLACEMENT] Replaced ${personName} with ${replacementPerson} on ${dk} (Group ${groupNum}) - missing period`);
@@ -9481,20 +9513,13 @@
                                             lastReplacementIndex = groupPeople.indexOf(replacementPerson);
                                             
                                             // Store assignment reason
-                                            storeAssignmentReason(
+                                            storeUnavailableReplacementReason(
                                                 dk,
                                                 groupNum,
                                                 replacementPerson,
-                                                'skip',
-                                                buildUnavailableReplacementReason({
-                                                    skippedPersonName: personName,
-                                                    replacementPersonName: replacementPerson,
-                                                    dateObj: dateObj,
-                                                    groupNum,
-                                                    dutyCategory: 'normal'
-                                                }),
                                                 personName,
-                                                null
+                                                dateObj,
+                                                'normal'
                                             );
                                             
                                             console.log(`[DISABLED REPLACEMENT] Replaced ${personName} with ${replacementPerson} on ${dk} (Group ${groupNum}) - disabled`);
@@ -9741,20 +9766,13 @@
                                     replacementIndex = idx;
                                     foundReplacement = true;
                                     wasDisabledPersonSkipped = true;
-                                    storeAssignmentReason(
+                                    storeUnavailableReplacementReason(
                                         dateKey,
                                         groupNum,
                                         assignedPerson,
-                                        'skip',
-                                        buildUnavailableReplacementReason({
-                                            skippedPersonName: rotationPerson,
-                                            replacementPersonName: assignedPerson,
-                                            dateObj: date,
-                                            groupNum,
-                                            dutyCategory: 'normal'
-                                        }),
                                         rotationPerson,
-                                        null
+                                        date,
+                                        'normal'
                                     );
                                     break;
                                 }
@@ -9848,20 +9866,13 @@
                                     // Found eligible replacement
                                     assignedPerson = candidate;
                                     foundReplacement = true;
-                                    storeAssignmentReason(
+                                    storeUnavailableReplacementReason(
                                         dateKey,
                                         groupNum,
                                         assignedPerson,
-                                        'skip',
-                                        buildUnavailableReplacementReason({
-                                            skippedPersonName: rotationPerson,
-                                            replacementPersonName: assignedPerson,
-                                            dateObj: date,
-                                            groupNum,
-                                            dutyCategory: 'normal'
-                                        }),
                                         rotationPerson,
-                                        null
+                                        date,
+                                        'normal'
                                     );
                                     break;
                                 }
@@ -11429,7 +11440,9 @@
                         if (assignedIndex === -1 || expectedIndex === -1) continue;
                         
                         // Process the violation
-                        const swapOrSkipReasonText = reason.type === 'skip'
+                        const swapOrSkipReasonText = reason.type === 'skip' && typeof resolveUnavailableReplacementDisplayText === 'function'
+                            ? resolveUnavailableReplacementDisplayText(reason, dateKey, groupNum, assignedPerson, dayTypeCategory)
+                            : reason.type === 'skip'
                             ? normalizeSkipReasonText(reason.reason || '')
                             : reason.type === 'swap' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function' && reason.meta?.normalConsecutiveDutySwap
                               ? resolveNormalConsecutiveDutySwapDisplayText(reason)
