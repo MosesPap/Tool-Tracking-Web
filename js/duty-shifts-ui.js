@@ -235,6 +235,107 @@
             modal.show();
         }
 
+        let _statusChangeEffectiveModalWired = false;
+        let _statusChangeEffectiveResolved = false;
+        let _statusChangeEffectiveCallbacks = null;
+
+        function wireStatusChangeEffectiveModal() {
+            if (_statusChangeEffectiveModalWired) return;
+            const modalEl = document.getElementById('statusChangeEffectiveModal');
+            const inputEl = document.getElementById('statusChangeEffectiveDateInput');
+            const btnCur = document.getElementById('statusChangeEffectiveBtnCurrentMonth');
+            const btnNext = document.getElementById('statusChangeEffectiveBtnNextMonth');
+            const btnConfirm = document.getElementById('statusChangeEffectiveConfirmBtn');
+            if (!modalEl || !inputEl || !btnConfirm) return;
+            _statusChangeEffectiveModalWired = true;
+
+            btnCur.addEventListener('click', () => {
+                const d = new Date();
+                d.setHours(0, 0, 0, 0);
+                const k =
+                    typeof formatDateKey === 'function'
+                        ? formatDateKey(new Date(d.getFullYear(), d.getMonth(), 1))
+                        : '';
+                if (k) inputEl.value = k;
+            });
+            btnNext.addEventListener('click', () => {
+                if (typeof getScheduledStatusEffectiveFrom === 'function') {
+                    const k = getScheduledStatusEffectiveFrom(new Date());
+                    if (k) inputEl.value = k;
+                }
+            });
+
+            btnConfirm.addEventListener('click', () => {
+                const raw = (inputEl.value || '').trim();
+                if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+                    alert('Επιλέξτε έγκυρη ημερομηνία ισχύος.');
+                    return;
+                }
+                const norm =
+                    typeof normalizeStatusEffectiveFromDateKey === 'function'
+                        ? normalizeStatusEffectiveFromDateKey(raw)
+                        : raw;
+                _statusChangeEffectiveResolved = true;
+                const cb = _statusChangeEffectiveCallbacks && _statusChangeEffectiveCallbacks.onConfirm;
+                _statusChangeEffectiveCallbacks = null;
+                const m = bootstrap.Modal.getInstance(modalEl);
+                if (m) m.hide();
+                if (typeof cb === 'function') cb(norm);
+            });
+
+            modalEl.addEventListener('hidden.bs.modal', () => {
+                if (!_statusChangeEffectiveResolved && _statusChangeEffectiveCallbacks && _statusChangeEffectiveCallbacks.onCancel) {
+                    _statusChangeEffectiveCallbacks.onCancel();
+                }
+                _statusChangeEffectiveCallbacks = null;
+                _statusChangeEffectiveResolved = false;
+            });
+        }
+
+        /**
+         * @param {{ title?: string, introHtml?: string, suggestedDateKey?: string, onConfirm: (normalizedDateKey: string) => void, onCancel?: () => void }} options
+         */
+        function openStatusChangeEffectiveModal(options) {
+            wireStatusChangeEffectiveModal();
+            const modalEl = document.getElementById('statusChangeEffectiveModal');
+            const titleEl = document.getElementById('statusChangeEffectiveModalTitle');
+            const introEl = document.getElementById('statusChangeEffectiveModalIntro');
+            const inputEl = document.getElementById('statusChangeEffectiveDateInput');
+            if (!modalEl || !inputEl || !options || typeof options.onConfirm !== 'function') {
+                if (options && typeof options.onCancel === 'function') options.onCancel();
+                return;
+            }
+            const suggested =
+                options.suggestedDateKey ||
+                (typeof getSuggestedStatusEffectiveFromDateKey === 'function'
+                    ? getSuggestedStatusEffectiveFromDateKey(new Date())
+                    : '');
+            if (titleEl && options.title) {
+                titleEl.textContent = '';
+                const ic = document.createElement('i');
+                ic.className = 'fas fa-calendar-day me-2';
+                titleEl.appendChild(ic);
+                titleEl.appendChild(document.createTextNode(String(options.title)));
+            }
+            if (introEl) {
+                const hint =
+                    typeof isInStatusChangeWindow === 'function' && isInStatusChangeWindow()
+                        ? '<strong>Σύσταση:</strong> τελευταίο δεκαήμερο — προεπιλογή η 1η του <em>επόμενου</em> μήνα. '
+                        : '<strong>Σύσταση:</strong> εκτός τελευταίου δεκαήμερου — προεπιλογή η 1η του <em>τρέχοντος</em> μήνα. ';
+                introEl.innerHTML =
+                    (options.introHtml || '') +
+                    `<p class="small text-muted mb-0 mt-2">${hint}Μπορείτε να αλλάξετε την ημερομηνία για επανυπολογισμό οποιουδήποτε μήνα.</p>`;
+            }
+            inputEl.value = suggested || '';
+            _statusChangeEffectiveResolved = false;
+            _statusChangeEffectiveCallbacks = {
+                onConfirm: options.onConfirm,
+                onCancel: options.onCancel || null
+            };
+            const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
         function renderAutoAddRankingsPicker() {
             const body = document.getElementById('autoAddRankPickerBody');
             const search = document.getElementById('autoAddRankPickerSearch');
@@ -911,45 +1012,49 @@
             });
             
             if (draggedElement !== this) {
-                if (typeof assertStatusChangeWindowOrAlert === 'function' && !assertStatusChangeWindowOrAlert()) {
-                    dragOverElement = null;
-                    return false;
-                }
                 const groupNum = parseInt(this.dataset.groupNum);
                 const listType = this.dataset.listType;
                 const fromIndex = parseInt(draggedElement.dataset.index);
                 const toIndex = parseInt(this.dataset.index);
-                
-                const list = groups[groupNum][listType];
-                const person = list[fromIndex];
-                list.splice(fromIndex, 1);
-                list.splice(toIndex, 0, person);
-                
-                // Update priorities to reflect the new order (priority = index + 1)
-                if (!groups[groupNum].priorities) groups[groupNum].priorities = {};
-                list.forEach((personName, index) => {
-                    if (!groups[groupNum].priorities[personName]) {
-                        groups[groupNum].priorities[personName] = {};
-                    }
-                    groups[groupNum].priorities[personName][listType] = index + 1;
-                });
-
-                if (typeof scheduleListOrdersForGroup === 'function') {
-                    const eff = scheduleListOrdersForGroup(groupNum);
-                    const effLabel =
-                        typeof formatScheduledStatusEffectiveLabel === 'function'
-                            ? formatScheduledStatusEffectiveLabel(eff)
-                            : eff;
-                    if (effLabel) {
-                        alert(`Η αλλαγή σειράς καταχωρήθηκε.\nΙσχύει από ${effLabel} (1η επόμενου μήνα).`);
-                    }
-                }
-                
-                saveData();
-                
-                // Ensure the list we just modified is open
                 const modifiedListId = `${listType}List_${groupNum}`;
-                renderGroups(true, [modifiedListId]);
+
+                openStatusChangeEffectiveModal({
+                    title: 'Ισχύς αλλαγής σειράς',
+                    introHtml:
+                        '<p class="mb-0">Η νέα σειρά για υπολογισμούς θα ισχύει από την ημερομηνία που επιλέγετε.</p>',
+                    suggestedDateKey:
+                        typeof getSuggestedStatusEffectiveFromDateKey === 'function'
+                            ? getSuggestedStatusEffectiveFromDateKey(new Date())
+                            : undefined,
+                    onConfirm: (effKey) => {
+                        const list = groups[groupNum][listType];
+                        const person = list[fromIndex];
+                        list.splice(fromIndex, 1);
+                        list.splice(toIndex, 0, person);
+                        if (!groups[groupNum].priorities) groups[groupNum].priorities = {};
+                        list.forEach((personName, idx) => {
+                            if (!groups[groupNum].priorities[personName]) {
+                                groups[groupNum].priorities[personName] = {};
+                            }
+                            groups[groupNum].priorities[personName][listType] = idx + 1;
+                        });
+                        if (typeof scheduleListOrdersForGroup === 'function') {
+                            const effNorm = scheduleListOrdersForGroup(groupNum, effKey);
+                            const effLabel =
+                                typeof formatScheduledStatusEffectiveLabel === 'function'
+                                    ? formatScheduledStatusEffectiveLabel(effNorm || effKey)
+                                    : effNorm || effKey;
+                            if (effLabel) {
+                                alert(`Η αλλαγή σειράς καταχωρήθηκε.\nΙσχύει από ${effLabel}.`);
+                            }
+                        }
+                        saveData();
+                        renderGroups(true, [modifiedListId]);
+                    },
+                    onCancel: () => {
+                        renderGroups(true, [modifiedListId]);
+                    }
+                });
             }
             
             dragOverElement = null;
@@ -2030,18 +2135,40 @@
             };
 
             if (typeof scheduleDisabledStateChange === 'function') {
-                const eff = scheduleDisabledStateChange(groupNum, personName, st);
-                if (!eff) return;
-                const effLabel =
-                    typeof formatScheduledStatusEffectiveLabel === 'function'
-                        ? formatScheduledStatusEffectiveLabel(eff)
-                        : eff;
-                const any = st.all || st.special || st.weekend || st.semi || st.normal;
-                alert(
-                    any
-                        ? `Η απενεργοποίηση καταχωρήθηκε.\nΙσχύει από ${effLabel} (1η επόμενου μήνα).`
-                        : `Η ενεργοποίηση καταχωρήθηκε.\nΙσχύει από ${effLabel} (1η επόμενου μήνα).`
-                );
+                openStatusChangeEffectiveModal({
+                    title: 'Ισχύς αλλαγής απενεργοποίησης',
+                    introHtml:
+                        '<p class="mb-0">Ο υπολογισμός υπηρεσιών εφαρμόζει την κατάσταση από την ημερομηνία ισχύος και μετά.</p>',
+                    suggestedDateKey:
+                        typeof getSuggestedStatusEffectiveFromDateKey === 'function'
+                            ? getSuggestedStatusEffectiveFromDateKey(new Date())
+                            : undefined,
+                    onConfirm: (effKey) => {
+                        scheduleDisabledStateChange(groupNum, personName, st, effKey);
+                        const effLabel =
+                            typeof formatScheduledStatusEffectiveLabel === 'function'
+                                ? formatScheduledStatusEffectiveLabel(effKey)
+                                : effKey;
+                        const any = st.all || st.special || st.weekend || st.semi || st.normal;
+                        alert(
+                            any
+                                ? `Η απενεργοποίηση καταχωρήθηκε.\nΙσχύει από ${effLabel}.`
+                                : `Η ενεργοποίηση καταχωρήθηκε.\nΙσχύει από ${effLabel}.`
+                        );
+                        saveData();
+                        renderGroups();
+                        const dm = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
+                        if (dm) dm.hide();
+                        openPersonActionsModal(
+                            currentPersonActionsGroup,
+                            currentPersonActionsName,
+                            currentPersonActionsIndex != null ? currentPersonActionsIndex : 0,
+                            currentPersonActionsListType || 'normal'
+                        );
+                    },
+                    onCancel: () => {}
+                });
+                return;
             } else {
                 const g = groups[groupNum];
                 if (!g) return;
@@ -2056,20 +2183,17 @@
                 } else {
                     g.disabledPersons[personName] = st;
                 }
+                saveData();
+                renderGroups();
+                const modal = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
+                if (modal) modal.hide();
+                openPersonActionsModal(
+                    currentPersonActionsGroup,
+                    currentPersonActionsName,
+                    currentPersonActionsIndex != null ? currentPersonActionsIndex : 0,
+                    currentPersonActionsListType || 'normal'
+                );
             }
-
-            saveData();
-            renderGroups();
-
-            const modal = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
-            if (modal) modal.hide();
-            // Show Person Actions for the person we just edited (same as Cancel/close path)
-            openPersonActionsModal(
-                currentPersonActionsGroup,
-                currentPersonActionsName,
-                currentPersonActionsIndex != null ? currentPersonActionsIndex : 0,
-                currentPersonActionsListType || 'normal'
-            );
         }
         function openMissingDisabledPeopleModal() {
             const container = document.getElementById('missingDisabledPeopleList');
@@ -3227,33 +3351,42 @@
             }
         }
         function movePersonInList(groupNumber, index, listType, direction) {
-            if (typeof assertStatusChangeWindowOrAlert === 'function' && !assertStatusChangeWindowOrAlert()) {
-                return;
-            }
             const list = groups[groupNumber][listType];
-            if (direction === 'up' && index > 0) {
-                [list[index - 1], list[index]] = [list[index], list[index - 1]];
-            } else if (direction === 'down' && index < list.length - 1) {
-                [list[index], list[index + 1]] = [list[index + 1], list[index]];
-            }
+            const canMove =
+                (direction === 'up' && index > 0) ||
+                (direction === 'down' && index < list.length - 1);
+            if (!canMove) return;
 
-            // UI sorting is priority-based (see renderGroups()), so we must renormalize priorities
-            // after swapping array entries, otherwise the visual order will appear unchanged.
-            normalizeGroupPriorities(groupNumber);
-
-            if (typeof scheduleListOrdersForGroup === 'function') {
-                const eff = scheduleListOrdersForGroup(groupNumber);
-                const effLabel =
-                    typeof formatScheduledStatusEffectiveLabel === 'function'
-                        ? formatScheduledStatusEffectiveLabel(eff)
-                        : eff;
-                if (effLabel) {
-                    alert(`Η αλλαγή σειράς καταχωρήθηκε.\nΙσχύει από ${effLabel} (1η επόμενου μήνα).`);
-                }
-            }
-
-            saveData();
-            renderGroups();
+            openStatusChangeEffectiveModal({
+                title: 'Ισχύς αλλαγής σειράς',
+                introHtml:
+                    '<p class="mb-0">Η νέα σειρά για υπολογισμούς θα ισχύει από την ημερομηνία που επιλέγετε.</p>',
+                suggestedDateKey:
+                    typeof getSuggestedStatusEffectiveFromDateKey === 'function'
+                        ? getSuggestedStatusEffectiveFromDateKey(new Date())
+                        : undefined,
+                onConfirm: (effKey) => {
+                    if (direction === 'up' && index > 0) {
+                        [list[index - 1], list[index]] = [list[index], list[index - 1]];
+                    } else if (direction === 'down' && index < list.length - 1) {
+                        [list[index], list[index + 1]] = [list[index + 1], list[index]];
+                    }
+                    normalizeGroupPriorities(groupNumber);
+                    if (typeof scheduleListOrdersForGroup === 'function') {
+                        const effNorm = scheduleListOrdersForGroup(groupNumber, effKey);
+                        const effLabel =
+                            typeof formatScheduledStatusEffectiveLabel === 'function'
+                                ? formatScheduledStatusEffectiveLabel(effNorm || effKey)
+                                : effNorm || effKey;
+                        if (effLabel) {
+                            alert(`Η αλλαγή σειράς καταχωρήθηκε.\nΙσχύει από ${effLabel}.`);
+                        }
+                    }
+                    saveData();
+                    renderGroups();
+                },
+                onCancel: () => {}
+            });
         }
         function toggleTransferDropdown(groupNumber, index, listType, event) {
             event.stopPropagation();
@@ -3535,9 +3668,19 @@
             renderTransferPositionLists(matchesByType);
         }
         function completeTransfer() {
-            if (typeof assertStatusChangeWindowOrAlert === 'function' && !assertStatusChangeWindowOrAlert()) {
-                return;
-            }
+            openStatusChangeEffectiveModal({
+                title: 'Ισχύς μεταφοράς ομάδας',
+                introHtml:
+                    '<p class="mb-0">Οι λίστες και η ομάδα για υπολογισμούς ενημερώνονται από την ημερομηνία ισχύος και μετά.</p>',
+                suggestedDateKey:
+                    typeof getSuggestedStatusEffectiveFromDateKey === 'function'
+                        ? getSuggestedStatusEffectiveFromDateKey(new Date())
+                        : undefined,
+                onConfirm: (effKey) => completeTransferApply(effKey),
+                onCancel: () => {}
+            });
+        }
+        function completeTransferApply(effKey) {
             // Snapshot for undo BEFORE any changes
             const undoFromGroup = transferData.fromGroup;
             const undoToGroup = transferData.toGroup;
@@ -3655,16 +3798,16 @@
             }
             
             if (typeof scheduleMembershipChange === 'function') {
-                scheduleMembershipChange(transferData.person, transferData.toGroup);
+                scheduleMembershipChange(transferData.person, transferData.toGroup, effKey);
             }
             let effLabel = '';
             if (typeof scheduleListOrdersForGroup === 'function') {
-                scheduleListOrdersForGroup(transferData.fromGroup);
-                const eff = scheduleListOrdersForGroup(transferData.toGroup);
+                scheduleListOrdersForGroup(transferData.fromGroup, effKey);
+                const effNorm = scheduleListOrdersForGroup(transferData.toGroup, effKey);
                 effLabel =
                     typeof formatScheduledStatusEffectiveLabel === 'function'
-                        ? formatScheduledStatusEffectiveLabel(eff)
-                        : eff || '';
+                        ? formatScheduledStatusEffectiveLabel(effNorm || effKey)
+                        : effNorm || effKey || '';
             }
 
             // Close modal
@@ -3676,7 +3819,7 @@
             updateStatistics();
 
             if (effLabel) {
-                alert(`Η μεταφορά καταχωρήθηκε.\nΙσχύει από ${effLabel} (1η επόμενου μήνα) για υπολογισμούς προηγούμενων μηνών.`);
+                alert(`Η μεταφορά καταχωρήθηκε.\nΙσχύει από ${effLabel} για υπολογισμούς αναθέσεων.`);
             }
 
             // Store undo state and show undo button toast

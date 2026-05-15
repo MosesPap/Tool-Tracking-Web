@@ -151,18 +151,28 @@
             const firstNext = new Date(d.getFullYear(), d.getMonth() + 1, 1);
             return typeof formatDateKey === 'function' ? formatDateKey(firstNext) : null;
         }
+        function getFirstOfCalendarMonthDateKey(asOfDate) {
+            const d = asOfDate instanceof Date ? new Date(asOfDate) : new Date();
+            if (isNaN(d.getTime())) return null;
+            d.setHours(0, 0, 0, 0);
+            return typeof formatDateKey === 'function'
+                ? formatDateKey(new Date(d.getFullYear(), d.getMonth(), 1))
+                : null;
+        }
+        /** Προεπιλογή: τελευταίο δεκαήμερο → 1η επόμενου μήνα· αλλιώς → 1η τρέχοντος μήνα. */
+        function getSuggestedStatusEffectiveFromDateKey(asOfDate) {
+            const d = asOfDate instanceof Date ? new Date(asOfDate) : new Date();
+            if (isNaN(d.getTime())) return getScheduledStatusEffectiveFrom(new Date());
+            d.setHours(0, 0, 0, 0);
+            if (isInStatusChangeWindow(d)) {
+                return getScheduledStatusEffectiveFrom(d);
+            }
+            return getFirstOfCalendarMonthDateKey(d) || getScheduledStatusEffectiveFrom(d);
+        }
         function formatScheduledStatusEffectiveLabel(effectiveFromKey) {
             const d = dateFromDateKey(effectiveFromKey);
             if (!d) return effectiveFromKey || '';
             return d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        }
-        function assertStatusChangeWindowOrAlert() {
-            if (isInStatusChangeWindow()) return true;
-            alert(
-                'Οι αλλαγές απενεργοποίησης, μεταφοράς ομάδας και σειράς γίνονται μόνο στο τελευταίο δεκαήμερο του μήνα.\n' +
-                    'Η αλλαγή θα ισχύσει από την 1η του επόμενου μήνα και μετά.'
-            );
-            return false;
         }
         function emptyDisabledState() {
             return { all: false, special: false, weekend: false, semi: false, normal: false };
@@ -346,12 +356,16 @@
             else if (cat === 'normal-day') cat = 'normal';
             return !!st[cat];
         }
-        function scheduleDisabledStateChange(groupNum, personName, state) {
-            if (!assertStatusChangeWindowOrAlert()) return false;
+        function scheduleDisabledStateChange(groupNum, personName, state, effectiveFromKey) {
             ensurePersonStatusScheduleSeeded();
             const pk = personScheduleKey(personName);
             const st = normalizeDisabledState(state);
-            const eff = normalizeStatusEffectiveFromDateKey(getScheduledStatusEffectiveFrom(new Date()));
+            const raw =
+                effectiveFromKey ||
+                (typeof getSuggestedStatusEffectiveFromDateKey === 'function'
+                    ? getSuggestedStatusEffectiveFromDateKey(new Date())
+                    : getScheduledStatusEffectiveFrom(new Date()));
+            const eff = normalizeStatusEffectiveFromDateKey(raw);
             personStatusSchedule.disabled.push({
                 personKey: pk,
                 personName,
@@ -362,9 +376,14 @@
             });
             return eff;
         }
-        function scheduleMembershipChange(personName, toGroupNum) {
+        function scheduleMembershipChange(personName, toGroupNum, effectiveFromKey) {
             ensurePersonStatusScheduleSeeded();
-            const eff = normalizeStatusEffectiveFromDateKey(getScheduledStatusEffectiveFrom(new Date()));
+            const raw =
+                effectiveFromKey ||
+                (typeof getSuggestedStatusEffectiveFromDateKey === 'function'
+                    ? getSuggestedStatusEffectiveFromDateKey(new Date())
+                    : getScheduledStatusEffectiveFrom(new Date()));
+            const eff = normalizeStatusEffectiveFromDateKey(raw);
             const pk = personScheduleKey(personName);
             personStatusSchedule.membership.push({
                 personKey: pk,
