@@ -6524,6 +6524,31 @@
             }
             return `Ο/Η ${rep} τοποθετήθηκε στις ${placeStr} γιατί ο/η ${sk} έχει ειδική αργία στον ίδιο μήνα.`;
         }
+
+        /**
+         * Ενιαίο μήνυμα αλλαγής ημιαργίας: συνεχόμενη υπηρεσία με αργία (Σαββατοκύριακο/ειδική γειτονική ημέρα).
+         * changerName (Α) = αυτός που ανταλλάσσει, conflictedName (Β) = αυτός με τη σύγκρουση,
+         * conflictDateKey = ημερομηνία ημιαργίας με σύγκρουση, placementDateKey = ημερομηνία όπου τοποθετείται ο Β (θέση του Α).
+         */
+        function buildSemiConsecutiveHolidaySwapUnifiedMessage(changerName, conflictedName, conflictDateKey, placementDateKey) {
+            const a = String(changerName || '').trim();
+            const b = String(conflictedName || '').trim();
+            if (!a || !b || !conflictDateKey || !placementDateKey) return '';
+            const conflictDateStr = formatDateKeyAsGreekDMY(conflictDateKey);
+            const placementDateStr = formatDateKeyAsGreekDMY(placementDateKey);
+            if (!conflictDateStr || !placementDateStr) return '';
+            const conflictD = new Date(conflictDateKey + 'T00:00:00');
+            const placementD = new Date(placementDateKey + 'T00:00:00');
+            const conflictDayName =
+                !isNaN(conflictD.getTime()) && typeof getGreekDayName === 'function' ? getGreekDayName(conflictD) : '';
+            const placementDayName =
+                !isNaN(placementD.getTime()) && typeof getGreekDayName === 'function' ? getGreekDayName(placementD) : '';
+            return (
+                `Ο/Η ${a} άλλαξε τον/την ${b} στις ${conflictDateStr} ημέρα ${conflictDayName} ` +
+                `γιατί ο/η ${b} είχε συνεχόμενη υπηρεσία με Αργία. ` +
+                `Ο/Η ${b} τοποθετήθηκε στις ${placementDateStr} ημέρα ${placementDayName}.`
+            );
+        }
         
         // Analyze rotation violations
         function analyzeRotationViolations() {

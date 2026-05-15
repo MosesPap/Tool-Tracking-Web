@@ -515,6 +515,7 @@
         function normalizeSwapReasonText(reasonText) {
             const raw = String(reasonText || '').trim();
             if (!raw) return raw;
+            if (raw.includes('συνεχόμενη υπηρεσία με Αργία') && raw.includes('άλλαξε τον/την')) return raw;
             if (raw.startsWith('Έγινε η αλλαγή γιατι ')) return raw;
 
             // Convert old "Αλλάχθηκε με <name> επειδή ..." -> canonical by stripping the "Αλλάχθηκε με <name>" part.
@@ -943,6 +944,49 @@
             // Canonical swap sentence (used everywhere: results, cell popup, violations)
             // NOTE: keep "γιατι" spelling to match user preference.
             return `Έγινε η αλλαγή γιατι ο/η ${conflictedPersonName} είχε σύγκρουση ${conflictArt} ${conflict.dayName} ${conflict.dateStr}, και ανατέθηκε ${assignedArt} ${assigned.dayName} ${assigned.dateStr}.`;
+        }
+        /** Ημιαργία: αλλαγή λόγω συνεχόμενης υπηρεσίας με αργία (ενιαίο μήνυμα UI). */
+        function buildSemiHolidayConflictSwapReason(changerName, conflictedName, conflictDateKey, placementDateKey) {
+            if (typeof buildSemiConsecutiveHolidaySwapUnifiedMessage === 'function') {
+                const unified = buildSemiConsecutiveHolidaySwapUnifiedMessage(
+                    changerName,
+                    conflictedName,
+                    conflictDateKey,
+                    placementDateKey
+                );
+                if (unified) return unified;
+            }
+            return buildSwapReasonGreek({
+                conflictedPersonName: conflictedName,
+                conflictDateKey,
+                newAssignmentDateKey: placementDateKey
+            });
+        }
+        function getSemiHolidayConflictSwapMeta(changerName, conflictedName, conflictDateKey, placementDateKey) {
+            return {
+                semiConsecutiveHolidaySwap: true,
+                conflictDateKey,
+                placementDateKey,
+                changerName,
+                conflictedName
+            };
+        }
+        function resolveSemiHolidayConflictSwapDisplayText(reason) {
+            if (!reason) return '';
+            const m = reason.meta;
+            if (m?.semiConsecutiveHolidaySwap && m.changerName && m.conflictedName && m.conflictDateKey && m.placementDateKey) {
+                const rebuilt =
+                    typeof buildSemiConsecutiveHolidaySwapUnifiedMessage === 'function'
+                        ? buildSemiConsecutiveHolidaySwapUnifiedMessage(
+                              m.changerName,
+                              m.conflictedName,
+                              m.conflictDateKey,
+                              m.placementDateKey
+                          )
+                        : '';
+                if (rebuilt) return rebuilt;
+            }
+            return typeof normalizeSwapReasonText === 'function' ? normalizeSwapReasonText(reason.reason || '') : reason.reason || '';
         }
         function buildSemiMissingSwapReasonGreek(conflictedPersonName, conflictDateKey, newAssignmentDateKey) {
             const conflict = formatGreekDayDate(conflictDateKey);
@@ -4278,7 +4322,11 @@
                         : null;
                     if (reasonObj?.type === 'swap' && reasonObj.swapPairId != null && otherKey && dateKey > otherKey) continue;
                     const reasonText = reasonObj?.reason
-                        ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
+                        ? String(
+                              reasonObj.type === 'swap'
+                                  ? resolveSemiHolidayConflictSwapDisplayText(reasonObj)
+                                  : reasonObj.reason
+                          )
                         : '';
                     // Same logic as normal: when missing or disabled use "Αντικατέστησε ..." sentence (buildUnavailableReplacementReason)
                     let briefReason = isBaseDisabledOrMissing
@@ -4289,7 +4337,9 @@
                             groupNum,
                             dutyCategory: 'semi'
                         }).split('.').filter(Boolean)[0] || '')
-                        : (reasonText ? reasonText.split('.').filter(Boolean)[0] : 'Αλλαγή');
+                        : (reasonText
+                            ? (reasonObj?.type === 'swap' ? reasonText : reasonText.split('.').filter(Boolean)[0])
+                            : 'Αλλαγή');
 
                     const swapDateStr = otherKey
                         ? new Date(otherKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -7848,8 +7898,10 @@
                         swapInfo[dk2][groupNum] = { otherDateKey: dateKey, otherDateStr: dateStr };
                         swappedSet.add(`${dateKey}:${groupNum}`); swappedSet.add(`${dk2}:${groupNum}`);
                         semiSwapPairId++;
-                        storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dateKey }), person, semiSwapPairId);
-                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dk2 }), other, semiSwapPairId);
+                        const semiUnifiedReasonFwd = buildSemiHolidayConflictSwapReason(other, person, dateKey, dk2);
+                        const semiSwapMetaFwd = getSemiHolidayConflictSwapMeta(other, person, dateKey, dk2);
+                        storeAssignmentReason(dateKey, groupNum, other, 'swap', semiUnifiedReasonFwd, person, semiSwapPairId, semiSwapMetaFwd);
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', semiUnifiedReasonFwd, other, semiSwapPairId, semiSwapMetaFwd);
                         swapped = true;
                         break;
                     }
@@ -7873,8 +7925,10 @@
                         swapInfo[dk2][groupNum] = { otherDateKey: dateKey, otherDateStr: dateStr };
                         swappedSet.add(`${dateKey}:${groupNum}`); swappedSet.add(`${dk2}:${groupNum}`);
                         semiSwapPairId++;
-                        storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dateKey }), person, semiSwapPairId);
-                        storeAssignmentReason(dk2, groupNum, person, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dk2 }), other, semiSwapPairId);
+                        const semiUnifiedReasonBack = buildSemiHolidayConflictSwapReason(other, person, dateKey, dk2);
+                        const semiSwapMetaBack = getSemiHolidayConflictSwapMeta(other, person, dateKey, dk2);
+                        storeAssignmentReason(dateKey, groupNum, other, 'swap', semiUnifiedReasonBack, person, semiSwapPairId, semiSwapMetaBack);
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', semiUnifiedReasonBack, other, semiSwapPairId, semiSwapMetaBack);
                         swapped = true;
                         break;
                     }
@@ -7899,8 +7953,10 @@
                             swapInfo[dk2][groupNum] = { otherDateKey: dateKey, otherDateStr: dateStr };
                             swappedSet.add(`${dateKey}:${groupNum}`); swappedSet.add(`${dk2}:${groupNum}`);
                             semiSwapPairId++;
-                            storeAssignmentReason(dateKey, groupNum, other, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dateKey }), person, semiSwapPairId);
-                            storeAssignmentReason(dk2, groupNum, person, 'swap', buildSwapReasonGreek({ conflictedPersonName: person, conflictDateKey: dateKey, newAssignmentDateKey: dk2 }), other, semiSwapPairId);
+                            const semiUnifiedReasonXMonth = buildSemiHolidayConflictSwapReason(other, person, dateKey, dk2);
+                            const semiSwapMetaXMonth = getSemiHolidayConflictSwapMeta(other, person, dateKey, dk2);
+                            storeAssignmentReason(dateKey, groupNum, other, 'swap', semiUnifiedReasonXMonth, person, semiSwapPairId, semiSwapMetaXMonth);
+                            storeAssignmentReason(dk2, groupNum, person, 'swap', semiUnifiedReasonXMonth, other, semiSwapPairId, semiSwapMetaXMonth);
                             break;
                         }
                     }
@@ -11303,9 +11359,9 @@
                         // Process the violation
                         const swapOrSkipReasonText = reason.type === 'skip'
                             ? normalizeSkipReasonText(reason.reason || '')
-                            : (reason.type === 'swap'
-                                ? normalizeSwapReasonText(reason.reason || '')
-                                : (reason.reason || ''));
+                            : reason.type === 'swap'
+                              ? resolveSemiHolidayConflictSwapDisplayText(reason)
+                              : (reason.reason || '');
                         
                         // Get conflict details
                         const isDisabled = isPersonDisabledForDuty(expectedPerson, groupNum, dayTypeCategory);

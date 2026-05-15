@@ -6348,6 +6348,8 @@
                     reasonDisplayText =
                         unifiedSpecialMsg ||
                         (reason.type === 'skip' ? normalizeSkipReasonText(reason.reason) : reason.reason);
+                } else if (reason && reason.type === 'swap' && dayTypeCategory === 'semi' && typeof resolveSemiHolidayConflictSwapDisplayText === 'function') {
+                    reasonDisplayText = resolveSemiHolidayConflictSwapDisplayText(reason);
                 } else if (reason) {
                     reasonDisplayText =
                         reason.type === 'skip'
@@ -7199,6 +7201,7 @@
                 if (t.includes('Κανονική Άδεια')) return 'Κανονική Άδεια';
                 if (t.includes('Αναρρωτική Άδεια')) return 'Αναρρωτική Άδεια';
                 if (t.includes('Φύλλο Πορείας')) return 'Φύλλο Πορείας';
+                if (t.includes('συνεχόμενη υπηρεσία με Αργία')) return 'Συνεχόμενη υπηρεσία με Αργία';
                 if (t.toLowerCase().includes('ειδική αργία')) return 'Ειδική αργία στον ίδιο μήνα';
                 if (t.toLowerCase().includes('κώλυμα') || t.toLowerCase().includes('απουσία')) return 'Κώλυμα/Απουσία';
                 return 'Παράλειψη';
@@ -7305,9 +7308,11 @@
                         // Process the violation
                         const swapOrSkipReasonText = reason.type === 'skip'
                             ? normalizeSkipReasonText(reason.reason || '')
-                            : (reason.type === 'swap'
+                            : reason.type === 'swap' && typeof resolveSemiHolidayConflictSwapDisplayText === 'function'
+                              ? resolveSemiHolidayConflictSwapDisplayText(reason)
+                              : reason.type === 'swap'
                                 ? normalizeSwapReasonText(reason.reason || '')
-                                : (reason.reason || ''));
+                                : (reason.reason || '');
                         
                         // Get conflict details
                         const isDisabled = isPersonDisabledForDuty(expectedPerson, groupNum, dayTypeCategory);
