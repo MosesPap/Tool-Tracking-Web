@@ -73,6 +73,356 @@
             else delete monthCalculationLocks[monthKey];
         }
 
+        // ============================================================================
+        // Scheduled status changes (disabled / group / list order)
+        // Recorded in last 10 days of month → effective 1st of next month.
+        // Absences (missingPeriods) stay date-window based — unchanged.
+        // ============================================================================
+        const DUTY_STATUS_LIST_TYPES = ['special', 'weekend', 'semi', 'normal'];
+        const PERSON_STATUS_SCHEDULE_EPOCH = '1970-01-01';
+        let personStatusSchedule = { disabled: [], membership: [], listOrders: [], _seeded: false };
+        /** When set, duty calc uses list/disabled state as of this YYYY-MM-DD. */
+        let dutyCalcContextDateKey = null;
+
+        function setDutyCalcContextDateKey(dateKey) {
+            dutyCalcContextDateKey =
+                dateKey && /^\d{4}-\d{2}-\d{2}$/.test(String(dateKey)) ? String(dateKey) : null;
+        }
+        function clearDutyCalcContextDateKey() {
+            dutyCalcContextDateKey = null;
+        }
+        function personScheduleKey(personName) {
+            return typeof normalizePersonKey === 'function'
+                ? normalizePersonKey(personName)
+                : String(personName || '').trim();
+        }
+        function compareScheduleDateKeys(a, b) {
+            return String(a || '').localeCompare(String(b || ''));
+        }
+        function dateFromDateKey(dateKey) {
+            const d = new Date(String(dateKey) + 'T00:00:00');
+            return isNaN(d.getTime()) ? null : d;
+        }
+        function isInStatusChangeWindow(asOfDate) {
+            const d = asOfDate instanceof Date ? new Date(asOfDate) : new Date();
+            if (isNaN(d.getTime())) return false;
+            d.setHours(0, 0, 0, 0);
+            const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+            const windowStart = Math.max(1, lastDay - 9);
+            return d.getDate() >= windowStart;
+        }
+        /**
+         * Αν η «ισχύς από» πέσει στο τελευταίο ημερολογιακό δεκαήμερο του μήνα της,
+         * για υπολογισμούς μεταφέρεται στην 1η του επόμενου μήνα (ο μήνας της ημερομηνίας δεν επηρεάζεται από αυτή την ημερομηνία).
+         * Παράδειγμα: 22/03/2026 → 01/04/2026 (ο Μάρτιος έχει 31 μέρες → δεκαήμερο από 22).
+         */
+        function normalizeStatusEffectiveFromDateKey(dateKey) {
+            if (!dateKey || String(dateKey) === PERSON_STATUS_SCHEDULE_EPOCH) return dateKey;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey))) return dateKey;
+            const d = dateFromDateKey(dateKey);
+            if (!d) return dateKey;
+            const y = d.getFullYear();
+            const m = d.getMonth();
+            const day = d.getDate();
+            const lastDay = new Date(y, m + 1, 0).getDate();
+            const windowStart = Math.max(1, lastDay - 9);
+            if (day >= windowStart) {
+                const firstNext = new Date(y, m + 1, 1);
+                return typeof formatDateKey === 'function' ? formatDateKey(firstNext) : dateKey;
+            }
+            return dateKey;
+        }
+        function sanitizePersonStatusScheduleEffectiveDates() {
+            if (!personStatusSchedule || typeof normalizeStatusEffectiveFromDateKey !== 'function') return;
+            for (const key of ['disabled', 'membership', 'listOrders']) {
+                const arr = personStatusSchedule[key];
+                if (!Array.isArray(arr)) continue;
+                for (const e of arr) {
+                    if (e && e.effectiveFrom && e.effectiveFrom !== PERSON_STATUS_SCHEDULE_EPOCH) {
+                        const n = normalizeStatusEffectiveFromDateKey(e.effectiveFrom);
+                        if (n !== e.effectiveFrom) e.effectiveFrom = n;
+                    }
+                }
+            }
+        }
+        function getScheduledStatusEffectiveFrom(recordDate) {
+            const d = recordDate instanceof Date ? new Date(recordDate) : new Date();
+            d.setHours(0, 0, 0, 0);
+            const firstNext = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+            return typeof formatDateKey === 'function' ? formatDateKey(firstNext) : null;
+        }
+        function formatScheduledStatusEffectiveLabel(effectiveFromKey) {
+            const d = dateFromDateKey(effectiveFromKey);
+            if (!d) return effectiveFromKey || '';
+            return d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+        function assertStatusChangeWindowOrAlert() {
+            if (isInStatusChangeWindow()) return true;
+            alert(
+                'Οι αλλαγές απενεργοποίησης, μεταφοράς ομάδας και σειράς γίνονται μόνο στο τελευταίο δεκαήμερο του μήνα.\n' +
+                    'Η αλλαγή θα ισχύσει από την 1η του επόμενου μήνα και μετά.'
+            );
+            return false;
+        }
+        function emptyDisabledState() {
+            return { all: false, special: false, weekend: false, semi: false, normal: false };
+        }
+        function normalizeDisabledState(raw) {
+            if (raw === true) return { all: true, special: false, weekend: false, semi: false, normal: false };
+            if (!raw || typeof raw !== 'object') return emptyDisabledState();
+            return {
+                all: !!raw.all,
+                special: !!raw.special,
+                weekend: !!raw.weekend,
+                semi: !!raw.semi,
+                normal: !!raw.normal
+            };
+        }
+        function disabledStateIsActive(st) {
+            return !!(st && (st.all || st.special || st.weekend || st.semi || st.normal));
+        }
+        function legacyDisabledStateFromGroups(groupNum, personName) {
+            const g = groups?.[groupNum];
+            const dp = g?.disabledPersons || {};
+            const pk = personScheduleKey(personName);
+            let raw = dp?.[personName];
+            if (!raw && pk) raw = dp?.[pk];
+            if (!raw && pk) {
+                for (const k of Object.keys(dp)) {
+                    if (personScheduleKey(k) === pk) {
+                        raw = dp[k];
+                        break;
+                    }
+                }
+            }
+            return normalizeDisabledState(raw);
+        }
+        function ensurePersonStatusScheduleSeeded() {
+            if (personStatusSchedule._seeded) return;
+            personStatusSchedule.disabled = Array.isArray(personStatusSchedule.disabled)
+                ? personStatusSchedule.disabled
+                : [];
+            personStatusSchedule.membership = Array.isArray(personStatusSchedule.membership)
+                ? personStatusSchedule.membership
+                : [];
+            personStatusSchedule.listOrders = Array.isArray(personStatusSchedule.listOrders)
+                ? personStatusSchedule.listOrders
+                : [];
+            if (
+                personStatusSchedule.disabled.length === 0 &&
+                personStatusSchedule.membership.length === 0 &&
+                personStatusSchedule.listOrders.length === 0
+            ) {
+                for (let g = 1; g <= 4; g++) {
+                    const gd = groups[g];
+                    if (!gd) continue;
+                    for (const listType of DUTY_STATUS_LIST_TYPES) {
+                        const list = (gd[listType] || []).slice();
+                        if (list.length) {
+                            personStatusSchedule.listOrders.push({
+                                groupNum: g,
+                                listType,
+                                order: list,
+                                effectiveFrom: PERSON_STATUS_SCHEDULE_EPOCH,
+                                recordedAt: PERSON_STATUS_SCHEDULE_EPOCH
+                            });
+                        }
+                        for (const person of list) {
+                            const pk = personScheduleKey(person);
+                            if (
+                                !personStatusSchedule.membership.some(
+                                    (e) => e.personKey === pk && e.effectiveFrom === PERSON_STATUS_SCHEDULE_EPOCH
+                                )
+                            ) {
+                                personStatusSchedule.membership.push({
+                                    personKey: pk,
+                                    personName: person,
+                                    groupNum: g,
+                                    effectiveFrom: PERSON_STATUS_SCHEDULE_EPOCH,
+                                    recordedAt: PERSON_STATUS_SCHEDULE_EPOCH
+                                });
+                            }
+                        }
+                    }
+                    const dp = gd.disabledPersons || {};
+                    for (const name of Object.keys(dp)) {
+                        const st = normalizeDisabledState(dp[name]);
+                        if (!disabledStateIsActive(st)) continue;
+                        const pk = personScheduleKey(name);
+                        personStatusSchedule.disabled.push({
+                            personKey: pk,
+                            personName: name,
+                            groupNum: g,
+                            state: st,
+                            effectiveFrom: PERSON_STATUS_SCHEDULE_EPOCH,
+                            recordedAt: PERSON_STATUS_SCHEDULE_EPOCH
+                        });
+                    }
+                }
+            }
+            personStatusSchedule._seeded = true;
+        }
+        function getPersonHomeGroupAtDate(personName, dateKey) {
+            ensurePersonStatusScheduleSeeded();
+            const pk = personScheduleKey(personName);
+            const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
+            const hits = personStatusSchedule.membership
+                .filter((e) => e.personKey === pk && compareScheduleDateKeys(e.effectiveFrom, dk) <= 0)
+                .sort((a, b) => compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom));
+            if (hits.length) return hits[0].groupNum;
+            for (let g = 1; g <= 4; g++) {
+                for (const lt of DUTY_STATUS_LIST_TYPES) {
+                    const list = groups[g]?.[lt] || [];
+                    if (list.some((p) => personScheduleKey(p) === pk)) return g;
+                }
+            }
+            return null;
+        }
+        function getListOrderAtDate(groupNum, listType, dateKey) {
+            ensurePersonStatusScheduleSeeded();
+            const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
+            const hits = personStatusSchedule.listOrders
+                .filter(
+                    (e) =>
+                        e.groupNum === groupNum &&
+                        e.listType === listType &&
+                        compareScheduleDateKeys(e.effectiveFrom, dk) <= 0
+                )
+                .sort((a, b) => compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom));
+            if (hits.length && Array.isArray(hits[0].order)) return hits[0].order.slice();
+            return (groups[groupNum]?.[listType] || []).slice();
+        }
+        function getGroupRotationListAtDate(groupNum, listType, dateKey) {
+            const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
+            const order = getListOrderAtDate(groupNum, listType, dk);
+            return order.filter((person) => getPersonHomeGroupAtDate(person, dk) === groupNum);
+        }
+        function groupsForDuty(groupNum) {
+            const g = groups[groupNum] || {
+                special: [],
+                weekend: [],
+                semi: [],
+                normal: [],
+                lastDuties: {},
+                missingPeriods: {},
+                priorities: {},
+                disabledPersons: {}
+            };
+            const dk = dutyCalcContextDateKey;
+            if (!dk) return g;
+            return {
+                ...g,
+                special: getGroupRotationListAtDate(groupNum, 'special', dk),
+                weekend: getGroupRotationListAtDate(groupNum, 'weekend', dk),
+                semi: getGroupRotationListAtDate(groupNum, 'semi', dk),
+                normal: getGroupRotationListAtDate(groupNum, 'normal', dk)
+            };
+        }
+        function getDisabledStateAtDate(groupNum, personName, dateKey) {
+            ensurePersonStatusScheduleSeeded();
+            const pk = personScheduleKey(personName);
+            const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
+            const hits = personStatusSchedule.disabled
+                .filter(
+                    (e) =>
+                        e.groupNum === groupNum &&
+                        e.personKey === pk &&
+                        compareScheduleDateKeys(e.effectiveFrom, dk) <= 0
+                )
+                .sort((a, b) => compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom));
+            if (hits.length) return normalizeDisabledState(hits[0].state);
+            return legacyDisabledStateFromGroups(groupNum, personName);
+        }
+        function isPersonDisabledForDutyAtDate(person, groupNum, dutyCategory, dateKey) {
+            const st = getDisabledStateAtDate(groupNum, person, dateKey);
+            if (st.all) return true;
+            if (!dutyCategory) {
+                return !!(st.special || st.weekend || st.semi || st.normal);
+            }
+            let cat = dutyCategory;
+            if (cat === 'special-holiday') cat = 'special';
+            else if (cat === 'weekend-holiday') cat = 'weekend';
+            else if (cat === 'semi-normal-day') cat = 'semi';
+            else if (cat === 'normal-day') cat = 'normal';
+            return !!st[cat];
+        }
+        function scheduleDisabledStateChange(groupNum, personName, state) {
+            if (!assertStatusChangeWindowOrAlert()) return false;
+            ensurePersonStatusScheduleSeeded();
+            const pk = personScheduleKey(personName);
+            const st = normalizeDisabledState(state);
+            const eff = normalizeStatusEffectiveFromDateKey(getScheduledStatusEffectiveFrom(new Date()));
+            personStatusSchedule.disabled.push({
+                personKey: pk,
+                personName,
+                groupNum,
+                state: st,
+                effectiveFrom: eff,
+                recordedAt: formatDateKey(new Date())
+            });
+            return eff;
+        }
+        function scheduleMembershipChange(personName, toGroupNum) {
+            ensurePersonStatusScheduleSeeded();
+            const eff = normalizeStatusEffectiveFromDateKey(getScheduledStatusEffectiveFrom(new Date()));
+            const pk = personScheduleKey(personName);
+            personStatusSchedule.membership.push({
+                personKey: pk,
+                personName,
+                groupNum: toGroupNum,
+                effectiveFrom: eff,
+                recordedAt: formatDateKey(new Date())
+            });
+            return eff;
+        }
+        function scheduleListOrdersForGroup(groupNum, effectiveFrom) {
+            ensurePersonStatusScheduleSeeded();
+            const eff = normalizeStatusEffectiveFromDateKey(
+                effectiveFrom || getScheduledStatusEffectiveFrom(new Date())
+            );
+            const recordedAt = formatDateKey(new Date());
+            const gd = groups[groupNum];
+            if (!gd) return eff;
+            for (const listType of DUTY_STATUS_LIST_TYPES) {
+                const order = (gd[listType] || []).slice();
+                personStatusSchedule.listOrders.push({
+                    groupNum,
+                    listType,
+                    order,
+                    effectiveFrom: eff,
+                    recordedAt
+                });
+            }
+            return eff;
+        }
+        function getPendingScheduledStatusSummary(personName, groupNum) {
+            ensurePersonStatusScheduleSeeded();
+            const todayKey = formatDateKey(new Date());
+            const pk = personScheduleKey(personName);
+            const eff = getScheduledStatusEffectiveFrom(new Date());
+            const parts = [];
+            const dis = personStatusSchedule.disabled
+                .filter((e) => e.personKey === pk && e.groupNum === groupNum && compareScheduleDateKeys(e.effectiveFrom, todayKey) > 0)
+                .sort((a, b) => compareScheduleDateKeys(a.effectiveFrom, b.effectiveFrom));
+            if (dis.length) {
+                const st = dis[0].state;
+                parts.push(
+                    disabledStateIsActive(st)
+                        ? `Απενεργοποίηση από ${formatScheduledStatusEffectiveLabel(dis[0].effectiveFrom)}`
+                        : `Ενεργοποίηση από ${formatScheduledStatusEffectiveLabel(dis[0].effectiveFrom)}`
+                );
+            }
+            const mem = personStatusSchedule.membership
+                .filter((e) => e.personKey === pk && compareScheduleDateKeys(e.effectiveFrom, todayKey) > 0)
+                .sort((a, b) => compareScheduleDateKeys(a.effectiveFrom, b.effectiveFrom));
+            if (mem.length) {
+                parts.push(
+                    `Ομάδα ${getGroupName ? getGroupName(mem[0].groupNum) : mem[0].groupNum} από ${formatScheduledStatusEffectiveLabel(mem[0].effectiveFrom)}`
+                );
+            }
+            return parts.join(' · ');
+        }
+
         function rebuildRotationBaselineLastByType() {
             const out = { normal: {}, semi: {}, weekend: {}, special: {} };
 
@@ -859,7 +1209,8 @@
                     lastRotationPositionsDoc,
                     rankingsDoc,
                     missingReasonsDoc,
-                    monthCalculationLocksDoc
+                    monthCalculationLocksDoc,
+                    personStatusScheduleDoc
                 ] = await Promise.all([
                     dutyShifts.doc('groups').get(),
                     dutyShifts.doc('holidays').get(),
@@ -878,7 +1229,8 @@
                     dutyShifts.doc('lastRotationPositions').get(),
                     dutyShifts.doc('rankings').get(),
                     dutyShifts.doc('missingReasons').get(),
-                    dutyShifts.doc('monthCalculationLocks').get()
+                    dutyShifts.doc('monthCalculationLocks').get(),
+                    dutyShifts.doc('personStatusSchedule').get()
                 ]);
                 
                 // Load groups
@@ -921,6 +1273,22 @@
                             });
                         });
                     }
+                }
+
+                if (personStatusScheduleDoc && personStatusScheduleDoc.exists) {
+                    const sched = personStatusScheduleDoc.data() || {};
+                    personStatusSchedule = {
+                        disabled: Array.isArray(sched.disabled) ? sched.disabled : [],
+                        membership: Array.isArray(sched.membership) ? sched.membership : [],
+                        listOrders: Array.isArray(sched.listOrders) ? sched.listOrders : [],
+                        _seeded: true
+                    };
+                }
+                if (typeof ensurePersonStatusScheduleSeeded === 'function') {
+                    ensurePersonStatusScheduleSeeded();
+                }
+                if (typeof sanitizePersonStatusScheduleEffectiveDates === 'function') {
+                    sanitizePersonStatusScheduleEffectiveDates();
                 }
 
                 // Load missing reasons list (Firestore)
@@ -1333,6 +1701,24 @@
                     });
                 }
             }
+            const savedSchedule = localStorage.getItem('dutyShiftsPersonStatusSchedule');
+            if (savedSchedule) {
+                try {
+                    const sched = JSON.parse(savedSchedule);
+                    personStatusSchedule = {
+                        disabled: Array.isArray(sched.disabled) ? sched.disabled : [],
+                        membership: Array.isArray(sched.membership) ? sched.membership : [],
+                        listOrders: Array.isArray(sched.listOrders) ? sched.listOrders : [],
+                        _seeded: true
+                    };
+                } catch (_) {}
+            }
+            if (typeof ensurePersonStatusScheduleSeeded === 'function') {
+                ensurePersonStatusScheduleSeeded();
+            }
+            if (typeof sanitizePersonStatusScheduleEffectiveDates === 'function') {
+                sanitizePersonStatusScheduleEffectiveDates();
+            }
             if (savedHolidays) {
                 holidays = JSON.parse(savedHolidays);
             }
@@ -1605,6 +1991,23 @@
                 } catch (error) {
                     console.error('Error saving groups to Firestore:', error);
                 }
+
+                try {
+                    ensurePersonStatusScheduleSeeded();
+                    if (typeof sanitizePersonStatusScheduleEffectiveDates === 'function') {
+                        sanitizePersonStatusScheduleEffectiveDates();
+                    }
+                    const schedPayload = {
+                        disabled: personStatusSchedule.disabled || [],
+                        membership: personStatusSchedule.membership || [],
+                        listOrders: personStatusSchedule.listOrders || [],
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    };
+                    await db.collection('dutyShifts').doc('personStatusSchedule').set(schedPayload);
+                } catch (error) {
+                    console.error('Error saving personStatusSchedule to Firestore:', error);
+                }
                 
                 // Save holidays
                 try {
@@ -1836,6 +2239,20 @@
                 if (/^\d{4}-\d{2}$/.test(k) && monthCalculationLocks[k]) locksOnly[k] = true;
             }
             localStorage.setItem('dutyShiftsMonthCalculationLocks', JSON.stringify(locksOnly));
+            try {
+                ensurePersonStatusScheduleSeeded();
+                if (typeof sanitizePersonStatusScheduleEffectiveDates === 'function') {
+                    sanitizePersonStatusScheduleEffectiveDates();
+                }
+                localStorage.setItem(
+                    'dutyShiftsPersonStatusSchedule',
+                    JSON.stringify({
+                        disabled: personStatusSchedule.disabled || [],
+                        membership: personStatusSchedule.membership || [],
+                        listOrders: personStatusSchedule.listOrders || []
+                    })
+                );
+            } catch (_) {}
         }
 
         // Clear selected dutyShifts documents in Firestore (wipe fields, keep only metadata)

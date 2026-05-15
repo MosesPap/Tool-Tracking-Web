@@ -911,6 +911,10 @@
             });
             
             if (draggedElement !== this) {
+                if (typeof assertStatusChangeWindowOrAlert === 'function' && !assertStatusChangeWindowOrAlert()) {
+                    dragOverElement = null;
+                    return false;
+                }
                 const groupNum = parseInt(this.dataset.groupNum);
                 const listType = this.dataset.listType;
                 const fromIndex = parseInt(draggedElement.dataset.index);
@@ -929,6 +933,17 @@
                     }
                     groups[groupNum].priorities[personName][listType] = index + 1;
                 });
+
+                if (typeof scheduleListOrdersForGroup === 'function') {
+                    const eff = scheduleListOrdersForGroup(groupNum);
+                    const effLabel =
+                        typeof formatScheduledStatusEffectiveLabel === 'function'
+                            ? formatScheduledStatusEffectiveLabel(eff)
+                            : eff;
+                    if (effLabel) {
+                        alert(`Η αλλαγή σειράς καταχωρήθηκε.\nΙσχύει από ${effLabel} (1η επόμενου μήνα).`);
+                    }
+                }
                 
                 saveData();
                 
@@ -2004,9 +2019,6 @@
             if (!currentPersonActionsGroup || !currentPersonActionsName) return;
             const groupNum = currentPersonActionsGroup;
             const personName = currentPersonActionsName;
-            const g = groups[groupNum];
-            if (!g) return;
-            if (!g.disabledPersons) g.disabledPersons = {};
 
             const all = !!document.getElementById('disableAllSwitch')?.checked;
             const st = {
@@ -2017,31 +2029,29 @@
                 normal: all ? false : !!document.getElementById('disableNormalSwitch')?.checked
             };
 
-            const any = st.all || st.special || st.weekend || st.semi || st.normal;
-            const keyName = (typeof normalizePersonKey === 'function') ? normalizePersonKey(personName) : String(personName || '').trim();
-            if (!any) {
-                // Remove any stored disabled entry for this person (defensive: raw + normalized + legacy variants).
-                delete g.disabledPersons[personName];
-                if (keyName) delete g.disabledPersons[keyName];
-                if (keyName) {
-                    for (const k of Object.keys(g.disabledPersons || {})) {
-                        try {
-                            if ((typeof normalizePersonKey === 'function' ? normalizePersonKey(k) : String(k || '').trim()) === keyName) {
-                                delete g.disabledPersons[k];
-                            }
-                        } catch (_) {}
-                    }
-                }
+            if (typeof scheduleDisabledStateChange === 'function') {
+                const eff = scheduleDisabledStateChange(groupNum, personName, st);
+                if (!eff) return;
+                const effLabel =
+                    typeof formatScheduledStatusEffectiveLabel === 'function'
+                        ? formatScheduledStatusEffectiveLabel(eff)
+                        : eff;
+                const any = st.all || st.special || st.weekend || st.semi || st.normal;
+                alert(
+                    any
+                        ? `Η απενεργοποίηση καταχωρήθηκε.\nΙσχύει από ${effLabel} (1η επόμενου μήνα).`
+                        : `Η ενεργοποίηση καταχωρήθηκε.\nΙσχύει από ${effLabel} (1η επόμενου μήνα).`
+                );
             } else {
-                // Store under a normalized key so availability checks never miss it due to spacing/commas differences.
-                if (keyName) {
-                    // Remove any other key variants for the same normalized name
-                    for (const k of Object.keys(g.disabledPersons || {})) {
-                        try {
-                            const nk = (typeof normalizePersonKey === 'function') ? normalizePersonKey(k) : String(k || '').trim();
-                            if (nk === keyName && k !== keyName) delete g.disabledPersons[k];
-                        } catch (_) {}
-                    }
+                const g = groups[groupNum];
+                if (!g) return;
+                if (!g.disabledPersons) g.disabledPersons = {};
+                const any = st.all || st.special || st.weekend || st.semi || st.normal;
+                const keyName = (typeof normalizePersonKey === 'function') ? normalizePersonKey(personName) : String(personName || '').trim();
+                if (!any) {
+                    delete g.disabledPersons[personName];
+                    if (keyName) delete g.disabledPersons[keyName];
+                } else if (keyName) {
                     g.disabledPersons[keyName] = st;
                 } else {
                     g.disabledPersons[personName] = st;
@@ -2276,14 +2286,22 @@
                 }
             }
         }
-        function getDisabledState(groupNum, personName) {
+        function getDisabledState(groupNum, personName, asOfDate) {
+            const todayKey = typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null;
+            let dateKey = todayKey;
+            if (asOfDate instanceof Date && !isNaN(asOfDate.getTime()) && typeof formatDateKey === 'function') {
+                dateKey = formatDateKey(asOfDate);
+            } else if (typeof asOfDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) {
+                dateKey = asOfDate;
+            }
+            if (typeof getDisabledStateAtDate === 'function') {
+                return getDisabledStateAtDate(groupNum, personName, dateKey);
+            }
             const g = groups?.[groupNum];
             const dp = g?.disabledPersons || {};
             const keyName = (typeof normalizePersonKey === 'function') ? normalizePersonKey(personName) : String(personName || '').trim();
-            // Try exact key first, then normalized key.
             let raw = dp?.[personName];
             if (!raw && keyName) raw = dp?.[keyName];
-            // If still not found, search by normalized key (handles legacy entries and weird whitespace/commas).
             if (!raw && keyName) {
                 for (const k of Object.keys(dp || {})) {
                     try {
@@ -3209,6 +3227,9 @@
             }
         }
         function movePersonInList(groupNumber, index, listType, direction) {
+            if (typeof assertStatusChangeWindowOrAlert === 'function' && !assertStatusChangeWindowOrAlert()) {
+                return;
+            }
             const list = groups[groupNumber][listType];
             if (direction === 'up' && index > 0) {
                 [list[index - 1], list[index]] = [list[index], list[index - 1]];
@@ -3219,6 +3240,17 @@
             // UI sorting is priority-based (see renderGroups()), so we must renormalize priorities
             // after swapping array entries, otherwise the visual order will appear unchanged.
             normalizeGroupPriorities(groupNumber);
+
+            if (typeof scheduleListOrdersForGroup === 'function') {
+                const eff = scheduleListOrdersForGroup(groupNumber);
+                const effLabel =
+                    typeof formatScheduledStatusEffectiveLabel === 'function'
+                        ? formatScheduledStatusEffectiveLabel(eff)
+                        : eff;
+                if (effLabel) {
+                    alert(`Η αλλαγή σειράς καταχωρήθηκε.\nΙσχύει από ${effLabel} (1η επόμενου μήνα).`);
+                }
+            }
 
             saveData();
             renderGroups();
@@ -3503,6 +3535,9 @@
             renderTransferPositionLists(matchesByType);
         }
         function completeTransfer() {
+            if (typeof assertStatusChangeWindowOrAlert === 'function' && !assertStatusChangeWindowOrAlert()) {
+                return;
+            }
             // Snapshot for undo BEFORE any changes
             const undoFromGroup = transferData.fromGroup;
             const undoToGroup = transferData.toGroup;
@@ -3619,6 +3654,19 @@
                 }
             }
             
+            if (typeof scheduleMembershipChange === 'function') {
+                scheduleMembershipChange(transferData.person, transferData.toGroup);
+            }
+            let effLabel = '';
+            if (typeof scheduleListOrdersForGroup === 'function') {
+                scheduleListOrdersForGroup(transferData.fromGroup);
+                const eff = scheduleListOrdersForGroup(transferData.toGroup);
+                effLabel =
+                    typeof formatScheduledStatusEffectiveLabel === 'function'
+                        ? formatScheduledStatusEffectiveLabel(eff)
+                        : eff || '';
+            }
+
             // Close modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('transferPositionModal'));
             modal.hide();
@@ -3626,6 +3674,10 @@
             saveData();
             renderGroups();
             updateStatistics();
+
+            if (effLabel) {
+                alert(`Η μεταφορά καταχωρήθηκε.\nΙσχύει από ${effLabel} (1η επόμενου μήνα) για υπολογισμούς προηγούμενων μηνών.`);
+            }
 
             // Store undo state and show undo button toast
             lastTransferUndo = {

@@ -285,7 +285,7 @@
             `;
         }
         function getLastAndNextDutyDates(person, groupNum, listType, listArrayLength) {
-            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
+            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
             const lastDuties = groupData.lastDuties?.[person] || {};
             const lastDutyDateStr = lastDuties[listType];
             
@@ -445,14 +445,26 @@
             
             return { lastDuty: lastDutyFormatted, nextDuty: nextDutyFormatted };
         }
-        function isPersonDisabledForDuty(person, groupNum, dutyCategory) {
-            const st = getDisabledState(groupNum, person);
+        function isPersonDisabledForDuty(person, groupNum, dutyCategory, asOfDate) {
+            let dateKey = null;
+            if (asOfDate instanceof Date && !isNaN(asOfDate.getTime())) {
+                dateKey = typeof formatDateKey === 'function' ? formatDateKey(asOfDate) : null;
+            } else if (typeof asOfDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) {
+                dateKey = asOfDate;
+            } else if (typeof dutyCalcContextDateKey === 'string' && dutyCalcContextDateKey) {
+                dateKey = dutyCalcContextDateKey;
+            }
+            if (dateKey && typeof isPersonDisabledForDutyAtDate === 'function') {
+                return isPersonDisabledForDutyAtDate(person, groupNum, dutyCategory, dateKey);
+            }
+            const st =
+                typeof getDisabledStateAtDate === 'function'
+                    ? getDisabledStateAtDate(groupNum, person, dateKey || formatDateKey(new Date()))
+                    : getDisabledState(groupNum, person);
             if (st.all) return true;
             if (!dutyCategory) {
-                // If category is not specified, treat any per-type disabled as disabled for display/availability helpers.
                 return !!(st.special || st.weekend || st.semi || st.normal);
             }
-            // Accept both internal categories and day-type strings defensively
             let cat = dutyCategory;
             if (cat === 'special-holiday') cat = 'special';
             else if (cat === 'weekend-holiday') cat = 'weekend';
@@ -462,7 +474,7 @@
         }
         function getUnavailableReasonShort(person, groupNum, dateObj, dutyCategory = null) {
             if (!person) return '';
-            if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return 'Απενεργοποιημένος';
+            if (isPersonDisabledForDuty(person, groupNum, dutyCategory, dateObj)) return 'Απενεργοποιημένος';
             const mp = getPersonMissingPeriod(person, groupNum, dateObj);
             if (mp) {
                 const r = (mp.reason || '').trim();
@@ -899,7 +911,7 @@
          */
         function buildExpectedSemiPersonMapForCalendarMonth(year, monthIndex0, groupNum) {
             const out = {};
-            const groupPeople = (groups[groupNum] || {}).semi || [];
+            const groupPeople = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum] || {}).semi || [];
             if (!Array.isArray(groupPeople) || groupPeople.length === 0) return out;
             const rotLen = groupPeople.length;
             const semiDays = [];
@@ -1429,7 +1441,7 @@
                         const calculationEndDate = calculationSteps?.endDate;
                         if (calculationStartDate && calculationEndDate && dayAfter >= calculationStartDate && dayAfter <= calculationEndDate) {
                             // Get group data to check rotation
-                            const groupData = groups[groupNum] || { normal: [] };
+                            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { normal: [] };
                             const groupPeople = groupData.normal || [];
                             if (groupPeople.length > 0) {
                                 const rotationDays = groupPeople.length;
@@ -1473,7 +1485,7 @@
                         } else if (calculationEndDate && dayAfter > calculationEndDate) {
                             // Day after is in next month (beyond calculation range) - temporarily calculate assignment
                             // This is similar to getPersonFromNextMonth logic but for conflict detection only
-                            const groupData = groups[groupNum] || { normal: [] };
+                            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { normal: [] };
                             const groupPeople = groupData.normal || [];
                             if (groupPeople.length > 0) {
                                 const rotationDays = groupPeople.length;
@@ -1518,7 +1530,7 @@
                 // When day after is in next month, predict assignment for semi/weekend/special (normal already handled above)
                 const calculationEndDate = calculationSteps?.endDate ? (calculationSteps.endDate instanceof Date ? calculationSteps.endDate : new Date(calculationSteps.endDate)) : null;
                 if (!hasDutyAfter && calculationEndDate && dayAfter > calculationEndDate) {
-                    const groupData = groups[groupNum] || {};
+                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || {};
                     if (afterDayType === 'semi-normal-day') {
                         const groupPeople = groupData.semi || [];
                         if (groupPeople.length > 0) {
@@ -1624,7 +1636,7 @@
             }
             
             // Get group data to find rotation days
-            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
             const groupPeople = groupData.weekend || [];
             if (groupPeople.length === 0) return false;
             
@@ -2074,7 +2086,7 @@
             }
             
             // Check lastDuties data first (manually entered last duties)
-            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
+            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
             const lastDuties = groupData.lastDuties?.[person];
             if (lastDuties) {
                 const lastDutyDateStr = lastDuties[dayTypeCategory];
@@ -2523,7 +2535,7 @@
                     return null;
                 };
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || { special: [] };
+                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
                     const groupPeople = groupData.special || [];
                     if (groupPeople.length === 0) continue;
                     const rotationDays = groupPeople.length;
@@ -2611,6 +2623,7 @@
                 const displacedByReturnFromMissing = { 1: [], 2: [], 3: [], 4: [] };
 
                 sortedSpecial.forEach((dateKey, specialIndex) => {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     const dayName = getGreekDayName(date);
@@ -2664,7 +2677,7 @@
 
                     // Calculate who will be assigned for each group based on rotation order (per-group position from globalSpecialRotationPosition)
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
                         const groupPeople = groupData.special || [];
                         
                         if (groupPeople.length === 0) {
@@ -2922,7 +2935,7 @@
 
                     // Same-month swap: assign to missed date the baseline person for target, or next eligible in rotation if that person is also missing
                     if (isSameMonthSwap && baselinePersonForTarget) {
-                        const groupData = groups[groupNum] || { special: [] };
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
                         const groupPeople = groupData.special || [];
                         const missedDateObj = new Date(missedDateKey + 'T00:00:00');
                         let personForMissedDate = null;
@@ -2964,6 +2977,7 @@
                 
                 // Build preview table after return-from-missing so we show baseline vs αντικατάσταση (including return-from-missing)
                 for (const dateKey of sortedSpecial) {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     const dayName = getGreekDayName(date);
@@ -2990,7 +3004,7 @@
                     html += `<td><strong>${dateStr}</strong></td>`;
                     html += `<td>${holidayName || 'Ειδική Αργία'}</td>`;
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const groupData = groups[groupNum] || { special: [] };
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
                         const groupPeople = groupData.special || [];
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
@@ -3412,6 +3426,7 @@
                 const sortedSpecial = [...specialHolidays].sort();
                 
                 sortedSpecial.forEach((dateKey) => {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                     
@@ -3473,12 +3488,13 @@
                 // Phase 1: Replacements only for special duty in same month (and cascade: already assigned this month).
                 // For each weekend date, if the rotation person has special duty in that month, assign the NEXT eligible person in the weekend list (same for all such cases).
                 sortedWeekends.forEach((dateKey) => {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                     if (!skippedInMonth[monthKey]) skippedInMonth[monthKey] = {};
                     if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const groupData = groups[groupNum] || { weekend: [] };
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { weekend: [] };
                         const groupPeople = groupData.weekend || [];
                         if (groupPeople.length === 0) continue;
                         if (!skippedInMonth[monthKey][groupNum]) skippedInMonth[monthKey][groupNum] = new Set();
@@ -3552,11 +3568,12 @@
                 // Phase 2: Swaps because person is missing on this date.
                 // Prefer swapping with another weekend in the same month: missing person gets the other date, other date's person gets this date.
                 sortedWeekends.forEach((dateKey) => {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                     if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const groupData = groups[groupNum] || { weekend: [] };
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { weekend: [] };
                         const groupPeople = groupData.weekend || [];
                         if (groupPeople.length === 0) continue;
                         if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
@@ -3945,6 +3962,7 @@
                 const sortedSpecial = [...specialHolidays].sort();
                 
                 sortedSpecial.forEach((dateKey) => {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     const month = date.getMonth();
                     const year = date.getFullYear();
@@ -4101,13 +4119,14 @@
 
                 // Run swap logic (check for consecutive conflicts with weekend or special holiday)
                 sortedSemi.forEach((dateKey, semiIndex) => {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     const month = date.getMonth();
                     const year = date.getFullYear();
                     const monthKey = `${year}-${month}`;
                     
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const groupData = groups[groupNum] || { semi: [] };
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { semi: [] };
                         const groupPeople = groupData.semi || [];
                         
                         if (groupPeople.length === 0) continue;
@@ -4987,6 +5006,7 @@
                 const sortedSpecial = [...specialHolidays].sort();
                 
                 sortedSpecial.forEach((dateKey) => {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     const month = date.getMonth();
                     const year = date.getFullYear();
@@ -5214,7 +5234,7 @@
                                 track = getTrackFromDow(dateKeyToDate(thirdNorm).getDay());
                             }
                             if (!track) return true;
-                            const groupPeopleForReturn = (groups?.[groupNum]?.normal || []);
+                            const groupPeopleForReturn = ((typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.normal || []);
                             for (const dk of sortedNormal) {
                                 if (dk < calcStartKey || dk > calcEndKey) continue;
                                 const curAssigned = updatedAssignments?.[dk]?.[groupNum] || null;
@@ -5233,7 +5253,7 @@
                             const tryDeferred = (candidateKey) => {
                                 if (!candidateKey) return false;
                                 if (!canAssignPersonToNormalDay(candidateKey, personName, groupNum, updatedAssignments, globalNormalRotationPosition, simulatedSpecialAssignments, simulatedWeekendAssignments, simulatedSemiAssignments, { allowConsecutiveConflicts: true })) return false;
-                                const groupPeople = (groups?.[groupNum]?.normal || []);
+                                const groupPeople = ((typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.normal || []);
                                 const chainOk = canShiftInsertFromDate(sortedNormal, candidateKey, groupNum, personName, groupPeople, updatedAssignments, globalNormalRotationPosition, simulatedSpecialAssignments, simulatedWeekendAssignments, simulatedSemiAssignments);
                                 return chainOk.ok;
                             };
@@ -5244,7 +5264,7 @@
                                 targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
                             }
                             if (!targetKey) return true;
-                            const groupPeopleFinal = (groups?.[groupNum]?.normal || []);
+                            const groupPeopleFinal = ((typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.normal || []);
                             const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
                             if (!ins.ok) return true;
                             try {
@@ -5351,7 +5371,7 @@
                                     // so that feasibility checks (canAssignPersonToNormalDay / canShiftInsertFromDate) do not
                                     // see them as already assigned (which can block finding a targetKey when rotation assigned
                                     // them at end of month and duplicate/consecutive logic would otherwise prevent reinsertion).
-                                    const groupPeopleForReturn = (groups?.[groupNum]?.normal || []);
+                                    const groupPeopleForReturn = ((typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.normal || []);
                                     for (const dk of sortedNormal) {
                                         if (dk < calcStartKey || dk > calcEndKey) continue;
                                         const curAssigned = updatedAssignments?.[dk]?.[groupNum] || null;
@@ -5398,7 +5418,7 @@
                                             { allowConsecutiveConflicts: true }
                                         );
                                         if (!okReturning) return false;
-                                        const groupPeople = (groups?.[groupNum]?.normal || []);
+                                        const groupPeople = ((typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.normal || []);
                                         const chainOk = canShiftInsertFromDate(
                                             sortedNormal,
                                             candidateKey,
@@ -5471,7 +5491,7 @@
                                     if (!targetKey) continue;
 
                                     // Apply shift insertion (follow rotation): everyone moves to the next normal day.
-                                    const groupPeopleFinal = (groups?.[groupNum]?.normal || []);
+                                    const groupPeopleFinal = ((typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.normal || []);
                                     const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
                                     if (!ins.ok) continue;
                                     usedReturnFromMissingTargets.add(`${targetKey}:${groupNum}`);
@@ -5560,10 +5580,11 @@
                 
                 // Run swap logic (check for consecutive conflicts)
                 sortedNormal.forEach((dateKey) => {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const groupData = groups[groupNum] || { normal: [] };
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { normal: [] };
                         const groupPeople = groupData.normal || [];
                         
                         if (groupPeople.length === 0) continue;
@@ -6258,7 +6279,7 @@
                 if (!row || row.cells.length < 6) continue;
                 const date = new Date(dateKey + 'T00:00:00');
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups?.[groupNum] || { normal: [] };
+                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum]) || { normal: [] };
                     const groupPeople = groupData.normal || [];
                     const assignedPerson = finalAssignments?.[dateKey]?.[groupNum];
                     let daysCountInfo = '';
@@ -6696,13 +6717,14 @@
                 const dateIterator = new Date(startDate);
                 while (dateIterator <= endDate) {
                     const dateKey = formatDateKey(dateIterator);
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     if (getDayType(dateIterator) === 'special-holiday') {
                         const month = dateIterator.getMonth();
                         const year = dateIterator.getFullYear();
                         const monthKey = `${year}-${month}`;
                         
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            const groupData = groups[groupNum] || { special: [] };
+                            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
                             const groupPeople = groupData.special || [];
                             
                             if (groupPeople.length > 0) {
@@ -7284,7 +7306,7 @@
                     
                     // Calculate who will be assigned for each group based on rotation order
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
                         const groupPeople = groupData.weekend || [];
                         
                         if (groupPeople.length === 0) {
@@ -7617,6 +7639,7 @@
                 const sortedWeekendKeysForMonth = [...weekendHolidays].sort();
                 const lastWeekendRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
                 for (const dateKey of sortedWeekendKeysForMonth) {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
                     for (let g = 1; g <= 4; g++) {
@@ -7909,7 +7932,7 @@
                 const { date, monthKey } = meta;
                 if (!baseline[dateKey]) baseline[dateKey] = {};
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || { semi: [] };
+                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { semi: [] };
                     const groupPeople = groupData.semi || [];
                     if (groupPeople.length === 0) continue;
                     const rotationDays = groupPeople.length;
@@ -8174,7 +8197,7 @@
                 }
                 
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || { weekend: [] };
+                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { weekend: [] };
                     const groupPeople = groupData.weekend || [];
                     
                     if (groupPeople.length > 0) {
@@ -8511,6 +8534,7 @@
                 }
                 
                 sortedSemi.forEach((dateKey, semiIndex) => {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     const dayName = getGreekDayName(date);
@@ -8532,7 +8556,7 @@
                     
                     // Calculate who will be assigned for each group
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const groupData = groups[groupNum] || { semi: [] };
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { semi: [] };
                         const groupPeople = groupData.semi || [];
                         
                         if (groupPeople.length === 0) {
@@ -8861,6 +8885,7 @@
                 const sortedSemiKeysForMonth = [...semiNormalDays].sort();
                 const lastSemiRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
                 for (const dateKey of sortedSemiKeysForMonth) {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
                     for (let g = 1; g <= 4; g++) {
@@ -8936,7 +8961,7 @@
                         const afterType = getDayType(dayAfter);
 
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            const groupPeople = groups?.[groupNum]?.semi || [];
+                            const groupPeople = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.semi || [];
                             if (!groupPeople.length) continue;
 
                             const currentPerson = previewSemiAssignments?.[dateKey]?.[groupNum] || null;
@@ -9005,6 +9030,7 @@
                     if (tableBody) {
                         tableBody.innerHTML = '';
                         for (const dateKey of sortedSemiForPreview) {
+                            if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                             const date = new Date(dateKey + 'T00:00:00');
                             if (isNaN(date.getTime())) continue;
                             const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -9015,7 +9041,7 @@
                             rowHtml += `<td>${dayName}</td>`;
 
                             for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                                const groupPeople = groups?.[groupNum]?.semi || [];
+                                const groupPeople = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.semi || [];
                                 if (!groupPeople.length) {
                                     rowHtml += '<td class="text-muted">-</td>';
                                     continue;
@@ -9069,7 +9095,7 @@
                 }
                 
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || { special: [] };
+                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
                     const groupPeople = groupData.special || [];
                     
                     if (groupPeople.length > 0) {
@@ -9145,7 +9171,7 @@
                 }
                 
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || { weekend: [] };
+                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { weekend: [] };
                     const groupPeople = groupData.weekend || [];
                     
                     if (groupPeople.length > 0) {
@@ -9563,7 +9589,7 @@
                     
                     // Calculate who will be assigned for each group
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const groupData = groups[groupNum] || { normal: [] };
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { normal: [] };
                         const groupPeople = groupData.normal || [];
                         
                         if (groupPeople.length === 0) {
@@ -10083,7 +10109,7 @@
                 const date = new Date(dateKey + 'T00:00:00');
                 
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || { normal: [] };
+                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { normal: [] };
                     const groupPeople = groupData.normal || [];
                     
                     if (groupPeople.length === 0) continue;
@@ -10482,7 +10508,7 @@
                         rowHtml += `<td>${dayName}</td>`;
                         
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            const groupData = groups[groupNum] || { normal: [] };
+                            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { normal: [] };
                             const groupPeople = groupData.normal || [];
                             const rotationDays = groupPeople.length;
                             
@@ -10573,6 +10599,7 @@
             const sortedNormalKeysForMonth = [...normalDays].sort();
             const lastNormalRotationPositionsByMonth = {}; // monthKey -> { groupNum -> person for rotation continuity }
             for (const dateKey of sortedNormalKeysForMonth) {
+                if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                 const d = new Date(dateKey + 'T00:00:00');
                 const monthKey = getMonthKeyFromDate(d);
                 for (let g = 1; g <= 4; g++) {
@@ -10679,7 +10706,7 @@
             }
             
             // Check last duties from person data
-            const groupData = groups[groupNum] || {};
+            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || {};
             const personData = groupData.lastDuties && groupData.lastDuties[person];
             if (personData) {
                 let lastDutyKey = null;
@@ -10701,7 +10728,7 @@
             return null;
         }
         function findPersonOriginalDayInRotation(person, dayTypeCategory, groupNum, dayTypeLists, startDate, currentDayKey) {
-            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
             let groupPeople;
             if (dayTypeCategory === 'special') {
                 groupPeople = groupData.special || [];
@@ -10750,7 +10777,7 @@
             return null;
         }
         function findAndAssignNextAvailableDay(person, skipDay, dayTypeCategory, groupNum, dayTypeLists, sortedDays, startDate) {
-            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
             
             // Find next available day after skipDay
             const skipIndex = sortedDays.indexOf(skipDay);
@@ -10831,8 +10858,18 @@
         }
         // saveDayAssignments() is defined in duty-shifts-ui.js (uses setAssignmentForDate for correct persistence)
         function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
-            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
-            if (isPersonDisabledForDuty(person, groupNum, dutyCategory)) return true;
+            const homeGroup =
+                typeof getPersonHomeGroupAtDate === 'function' && date
+                    ? getPersonHomeGroupAtDate(
+                          person,
+                          typeof formatDateKey === 'function'
+                              ? formatDateKey(date instanceof Date ? date : new Date(date))
+                              : null
+                      )
+                    : null;
+            const mpGroup = homeGroup != null ? homeGroup : groupNum;
+            const groupData = groups[mpGroup] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
+            if (isPersonDisabledForDuty(person, mpGroup, dutyCategory, date)) return true;
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             if (missingPeriods.length === 0) return false;
             
@@ -10855,7 +10892,7 @@
          */
         function isPersonOnMissingBufferDay(person, groupNum, date) {
             if (!person || !Number.isFinite(groupNum) || groupNum < 1) return false;
-            const groupData = groups[groupNum] || {};
+            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || {};
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             if (missingPeriods.length === 0) return false;
 
@@ -11243,7 +11280,7 @@
             const date = new Date(dayKey + 'T00:00:00');
             
             // Get group data to find rotation days
-            const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
             const groupPeople = groupData.weekend || [];
             if (groupPeople.length === 0) return null;
             
@@ -11289,7 +11326,7 @@
             return null;
         }
         function getPersonMissingPeriod(person, groupNum, date) {
-            const groupData = groups[groupNum] || {};
+            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || {};
             const personData = groupData.missingPeriods?.[person];
             if (!personData || !Array.isArray(personData)) return null;
             
@@ -11422,7 +11459,7 @@
                         if (!expectedPerson) continue; // Need to know who was replaced
                         
                         // Get group data for validation
-                        const groupData = groups[groupNum];
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]);
                         if (!groupData) continue;
                         
                         // Get the appropriate list for this day type
@@ -11731,7 +11768,7 @@
         <div class="groups-grid">
 `;
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
+                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
                     const groupName = getGroupName(groupNum);
                     const list = groupData[listType.key] || [];
                     html += `
