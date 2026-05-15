@@ -515,6 +515,7 @@
         function normalizeSwapReasonText(reasonText) {
             const raw = String(reasonText || '').trim();
             if (!raw) return raw;
+            if (raw.includes('συνεχόμενη υπηρεσία με') && raw.includes('άλλαξε τον/την')) return raw;
             if (raw.includes('συνεχόμενη υπηρεσία με Αργία') && raw.includes('άλλαξε τον/την')) return raw;
             if (raw.startsWith('Έγινε η αλλαγή γιατι ')) return raw;
 
@@ -988,6 +989,52 @@
             }
             return typeof normalizeSwapReasonText === 'function' ? normalizeSwapReasonText(reason.reason || '') : reason.reason || '';
         }
+        /** Καθημερινή: αλλαγή λόγω συνεχόμενης υπηρεσίας με Ημιαργία ή Αργία. */
+        function buildNormalConsecutiveDutySwapReason(changerName, conflictedName, conflictDateKey, placementDateKey, conflictWithLabel) {
+            if (typeof buildNormalConsecutiveDutySwapUnifiedMessage === 'function') {
+                const unified = buildNormalConsecutiveDutySwapUnifiedMessage(
+                    changerName,
+                    conflictedName,
+                    conflictDateKey,
+                    placementDateKey,
+                    conflictWithLabel
+                );
+                if (unified) return unified;
+            }
+            return buildSwapReasonGreek({
+                conflictedPersonName: conflictedName,
+                conflictDateKey,
+                newAssignmentDateKey: placementDateKey
+            });
+        }
+        function getNormalConsecutiveDutySwapMeta(changerName, conflictedName, conflictDateKey, placementDateKey, conflictWithLabel) {
+            return {
+                normalConsecutiveDutySwap: true,
+                conflictDateKey,
+                placementDateKey,
+                changerName,
+                conflictedName,
+                conflictWithLabel: conflictWithLabel || 'Αργία'
+            };
+        }
+        function resolveNormalConsecutiveDutySwapDisplayText(reason) {
+            if (!reason) return '';
+            const m = reason.meta;
+            if (m?.normalConsecutiveDutySwap && m.changerName && m.conflictedName && m.conflictDateKey && m.placementDateKey) {
+                const rebuilt =
+                    typeof buildNormalConsecutiveDutySwapUnifiedMessage === 'function'
+                        ? buildNormalConsecutiveDutySwapUnifiedMessage(
+                              m.changerName,
+                              m.conflictedName,
+                              m.conflictDateKey,
+                              m.placementDateKey,
+                              m.conflictWithLabel
+                          )
+                        : '';
+                if (rebuilt) return rebuilt;
+            }
+            return typeof normalizeSwapReasonText === 'function' ? normalizeSwapReasonText(reason.reason || '') : reason.reason || '';
+        }
         function buildSemiMissingSwapReasonGreek(conflictedPersonName, conflictDateKey, newAssignmentDateKey) {
             const conflict = formatGreekDayDate(conflictDateKey);
             const assigned = formatGreekDayDate(newAssignmentDateKey);
@@ -1001,7 +1048,14 @@
             const monthPart = monthKey ? ` (${monthKey})` : '';
             return `Αντικατέστησε τον/την ${skippedPersonName} επειδή είχε κώλυμα${monthPart} ${dayArt} ${d.dayName} ${d.dateStr}. Ανατέθηκε ο/η ${replacementPersonName}.`;
         }
-        function getConsecutiveConflictNeighborDayKey(dayKey, person, groupNum, simulatedAssignments = null) {
+        function consecutiveConflictLabelForNeighborDayType(neighborDayType) {
+            if (neighborDayType === 'semi-normal-day') return 'Ημιαργία';
+            if (neighborDayType === 'weekend-holiday' || neighborDayType === 'special-holiday') return 'Αργία';
+            return null;
+        }
+
+        /** Γειτονική ημέρα σύγκρουσης + ετικέτα «Ημιαργία» / «Αργία» για καθημερινές. */
+        function getConsecutiveConflictNeighborInfo(dayKey, person, groupNum, simulatedAssignments = null) {
             const date = new Date(dayKey + 'T00:00:00');
             if (isNaN(date.getTime())) return null;
 
@@ -1027,36 +1081,42 @@
                 else if (neighborType === 'semi-normal-day') neighborTypeCategory = 'semi';
                 else if (neighborType === 'weekend-holiday') neighborTypeCategory = 'weekend';
 
-                if (!hasConflict(currentTypeCategory, neighborTypeCategory)) return false;
+                if (!hasConflict(currentTypeCategory, neighborTypeCategory)) return null;
 
-                // Determine if person has duty on neighbor day (simulated preferred)
+                let hasNeighborDuty = false;
                 if (simulatedAssignments) {
                     const neighborMonthKey = getMonthKeyFromDate(neighborDate);
                     if (neighborTypeCategory === 'special') {
-                        return simulatedAssignments.special?.[neighborMonthKey]?.[groupNum]?.has(person) || false;
+                        hasNeighborDuty = simulatedAssignments.special?.[neighborMonthKey]?.[groupNum]?.has(person) || false;
+                    } else if (neighborTypeCategory === 'weekend') {
+                        hasNeighborDuty = simulatedAssignments.weekend?.[neighborKey]?.[groupNum] === person;
+                    } else if (neighborTypeCategory === 'semi') {
+                        hasNeighborDuty = simulatedAssignments.semi?.[neighborKey]?.[groupNum] === person;
+                    } else {
+                        hasNeighborDuty = simulatedAssignments.normal?.[neighborKey]?.[groupNum] === person;
                     }
-                    if (neighborTypeCategory === 'weekend') {
-                        return simulatedAssignments.weekend?.[neighborKey]?.[groupNum] === person;
-                    }
-                    if (neighborTypeCategory === 'semi') {
-                        return simulatedAssignments.semi?.[neighborKey]?.[groupNum] === person;
-                    }
-                    // normal
-                    return simulatedAssignments.normal?.[neighborKey]?.[groupNum] === person;
+                } else {
+                    hasNeighborDuty = hasDutyOnDay(neighborKey, person, groupNum);
                 }
-
-                return hasDutyOnDay(neighborKey, person, groupNum);
+                if (!hasNeighborDuty) return null;
+                const conflictWithLabel = consecutiveConflictLabelForNeighborDayType(neighborType);
+                if (!conflictWithLabel) return null;
+                return { neighborKey, conflictWithLabel };
             };
 
             const dayAfter = new Date(date);
             dayAfter.setDate(dayAfter.getDate() + 1);
-            if (checkNeighbor(dayAfter)) return formatDateKey(dayAfter);
+            const afterInfo = checkNeighbor(dayAfter);
+            if (afterInfo) return afterInfo;
 
             const dayBefore = new Date(date);
             dayBefore.setDate(dayBefore.getDate() - 1);
-            if (checkNeighbor(dayBefore)) return formatDateKey(dayBefore);
+            return checkNeighbor(dayBefore);
+        }
 
-            return null;
+        function getConsecutiveConflictNeighborDayKey(dayKey, person, groupNum, simulatedAssignments = null) {
+            const info = getConsecutiveConflictNeighborInfo(dayKey, person, groupNum, simulatedAssignments);
+            return info?.neighborKey || null;
         }
         function getAssignmentReason(dateKey, groupNum, personName) {
             const gmap = assignmentReasons[dateKey]?.[groupNum] || null;
@@ -5915,8 +5975,9 @@
                                     swapPairId: swapPairId
                                 });
                                 
-                                // Use the ACTUAL conflict neighbor day instead of the swap-execution day.
-                                const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, simulatedAssignments) || dateKey;
+                                const conflictNeighborInfo = getConsecutiveConflictNeighborInfo(dateKey, currentPerson, groupNum, simulatedAssignments);
+                                const conflictNeighborKey = conflictNeighborInfo?.neighborKey || dateKey;
+                                const conflictWithLabel = conflictNeighborInfo?.conflictWithLabel || 'Αργία';
 
                                 // Always perform a simple two-slot swap: conflicted person goes to swap date, swap candidate goes to conflicted date.
                                 // (Previously a "backward shift" rotated the whole track and overwrote 24/02 and 26/02 with wrong assignments.)
@@ -5990,12 +6051,31 @@
                                 // Store assignment reasons for BOTH people involved in the swap with swap pair ID
                                 // Improved Greek reasons:
                                 // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day (e.g. Thu).
-                                const swapMeta = isCrossMonthSwap ? {
-                                    isCrossMonth: true,
-                                    originDayKey: dateKey,
-                                    swapDayKey: swapDayKey,
-                                    conflictDateKey: conflictNeighborKey
-                                } : null;
+                                const swapMetaBase = {
+                                    conflictDateKey: dateKey,
+                                    placementDateKey: swapDayKey,
+                                    changerName: swapCandidate,
+                                    conflictedName: currentPerson,
+                                    conflictWithLabel,
+                                    neighborConflictDateKey: conflictNeighborKey
+                                };
+                                const swapMeta = isCrossMonthSwap
+                                    ? { ...swapMetaBase, isCrossMonth: true, originDayKey: dateKey, swapDayKey: swapDayKey }
+                                    : swapMetaBase;
+                                const normalUnifiedReason = buildNormalConsecutiveDutySwapReason(
+                                    swapCandidate,
+                                    currentPerson,
+                                    dateKey,
+                                    swapDayKey,
+                                    conflictWithLabel
+                                );
+                                const normalSwapMeta = getNormalConsecutiveDutySwapMeta(
+                                    swapCandidate,
+                                    currentPerson,
+                                    dateKey,
+                                    swapDayKey,
+                                    conflictWithLabel
+                                );
                                 // Only store classic "swap" reasons when we actually performed a swap.
                                 // For backward shifts we already stored per-day "shift" reasons above.
                                 if (!isBackwardWithinMonth) {
@@ -6004,32 +6084,20 @@
                                         groupNum,
                                         swapCandidate,
                                         'swap',
-                                        buildSwapReasonGreek({
-                                            changedWithName: currentPerson,
-                                            conflictedPersonName: currentPerson,
-                                            conflictDateKey: conflictNeighborKey,
-                                            newAssignmentDateKey: swapDayKey,
-                                            subjectName: swapCandidate
-                                        }),
+                                        normalUnifiedReason,
                                         currentPerson,
                                         swapPairId,
-                                        swapMeta
+                                        { ...normalSwapMeta, ...(isCrossMonthSwap ? { isCrossMonth: true, originDayKey: dateKey, swapDayKey } : {}) }
                                     );
                                     storeAssignmentReason(
                                         swapDayKey,
                                         groupNum,
                                         currentPerson,
                                         'swap',
-                                        buildSwapReasonGreek({
-                                            changedWithName: swapCandidate,
-                                            conflictedPersonName: currentPerson,
-                                            conflictDateKey: conflictNeighborKey,
-                                            newAssignmentDateKey: swapDayKey,
-                                            subjectName: currentPerson
-                                        }),
+                                        normalUnifiedReason,
                                         swapCandidate,
                                         swapPairId,
-                                        swapMeta
+                                        { ...normalSwapMeta, ...(isCrossMonthSwap ? { isCrossMonth: true, originDayKey: dateKey, swapDayKey } : {}) }
                                     );
                                 }
                                 
@@ -6207,10 +6275,16 @@
                     }
                     
                     const reasonText = reasonObj?.reason
-                        ? String(reasonObj.type === 'swap' ? normalizeSwapReasonText(reasonObj.reason) : reasonObj.reason)
+                        ? String(
+                              reasonObj.type === 'swap' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function'
+                                  ? resolveNormalConsecutiveDutySwapDisplayText(reasonObj)
+                                  : reasonObj.type === 'swap'
+                                    ? normalizeSwapReasonText(reasonObj.reason)
+                                    : reasonObj.reason
+                          )
                         : '';
                     let briefReason = reasonText
-                        ? reasonText.split('.').filter(Boolean)[0]
+                        ? (reasonObj?.type === 'swap' ? reasonText : reasonText.split('.').filter(Boolean)[0])
                         : (isBaseDisabledOrMissing
                             ? (buildUnavailableReplacementReason({
                                 skippedPersonName: base,
@@ -10321,48 +10395,46 @@
                                 console.warn('[PREVIEW SWAP CONTINUITY] Failed to reflow future normal days after swap:', previewContErr);
                             }
                             
-                            // Store assignment reasons for BOTH people involved in the swap with swap pair ID
-                                // Improved Greek reasons:
-                                // Use the ACTUAL conflict neighbor day (e.g. Fri) instead of the swap-execution day (e.g. Thu).
-                                const conflictNeighborKey = getConsecutiveConflictNeighborDayKey(dateKey, currentPerson, groupNum, simulatedAssignments) || dateKey;
+                            const conflictNeighborInfoPreview = getConsecutiveConflictNeighborInfo(dateKey, currentPerson, groupNum, simulatedAssignments);
+                            const conflictNeighborKeyPreview = conflictNeighborInfoPreview?.neighborKey || dateKey;
+                            const conflictWithLabelPreview = conflictNeighborInfoPreview?.conflictWithLabel || 'Αργία';
                             const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
-                            const swapMeta = isCrossMonthSwap ? {
-                                isCrossMonth: true,
-                                originDayKey: dateKey,
-                                swapDayKey: swapDayKey,
-                                conflictDateKey: conflictNeighborKey
-                            } : null;
+                            const normalUnifiedReasonPreview = buildNormalConsecutiveDutySwapReason(
+                                swapCandidate,
+                                currentPerson,
+                                dateKey,
+                                swapDayKey,
+                                conflictWithLabelPreview
+                            );
+                            const normalSwapMetaPreview = getNormalConsecutiveDutySwapMeta(
+                                swapCandidate,
+                                currentPerson,
+                                dateKey,
+                                swapDayKey,
+                                conflictWithLabelPreview
+                            );
+                            const previewSwapMeta = isCrossMonthSwap
+                                ? { ...normalSwapMetaPreview, isCrossMonth: true, originDayKey: dateKey, swapDayKey, neighborConflictDateKey: conflictNeighborKeyPreview }
+                                : { ...normalSwapMetaPreview, neighborConflictDateKey: conflictNeighborKeyPreview };
                             storeAssignmentReason(
                                 dateKey,
                                 groupNum,
                                 swapCandidate,
                                 'swap',
-                                buildSwapReasonGreek({
-                                    changedWithName: currentPerson,
-                                    conflictedPersonName: currentPerson,
-                                        conflictDateKey: conflictNeighborKey,
-                                    newAssignmentDateKey: swapDayKey,
-                                    subjectName: swapCandidate
-                                }),
+                                normalUnifiedReasonPreview,
                                 currentPerson,
                                 swapPairId,
-                                swapMeta
+                                previewSwapMeta
                             );
                             storeAssignmentReason(
                                 swapDayKey,
                                 groupNum,
                                 currentPerson,
                                 'swap',
-                                buildSwapReasonGreek({
-                                    changedWithName: swapCandidate,
-                                    conflictedPersonName: currentPerson,
-                                        conflictDateKey: conflictNeighborKey,
-                                    newAssignmentDateKey: swapDayKey,
-                                    subjectName: currentPerson
-                                }),
+                                normalUnifiedReasonPreview,
                                 swapCandidate,
                                 swapPairId,
-                                swapMeta
+                                previewSwapMeta
                             );
                             
                             // Mark both people as swapped to prevent re-swapping
@@ -11359,9 +11431,13 @@
                         // Process the violation
                         const swapOrSkipReasonText = reason.type === 'skip'
                             ? normalizeSkipReasonText(reason.reason || '')
-                            : reason.type === 'swap'
+                            : reason.type === 'swap' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function' && reason.meta?.normalConsecutiveDutySwap
+                              ? resolveNormalConsecutiveDutySwapDisplayText(reason)
+                              : reason.type === 'swap' && typeof resolveSemiHolidayConflictSwapDisplayText === 'function'
                               ? resolveSemiHolidayConflictSwapDisplayText(reason)
-                              : (reason.reason || '');
+                              : reason.type === 'swap'
+                                ? normalizeSwapReasonText(reason.reason || '')
+                                : (reason.reason || '');
                         
                         // Get conflict details
                         const isDisabled = isPersonDisabledForDuty(expectedPerson, groupNum, dayTypeCategory);

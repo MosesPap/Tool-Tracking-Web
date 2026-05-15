@@ -6350,6 +6350,8 @@
                         (reason.type === 'skip' ? normalizeSkipReasonText(reason.reason) : reason.reason);
                 } else if (reason && reason.type === 'swap' && dayTypeCategory === 'semi' && typeof resolveSemiHolidayConflictSwapDisplayText === 'function') {
                     reasonDisplayText = resolveSemiHolidayConflictSwapDisplayText(reason);
+                } else if (reason && reason.type === 'swap' && dayTypeCategory === 'normal' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function') {
+                    reasonDisplayText = resolveNormalConsecutiveDutySwapDisplayText(reason);
                 } else if (reason) {
                     reasonDisplayText =
                         reason.type === 'skip'
@@ -7201,6 +7203,7 @@
                 if (t.includes('Κανονική Άδεια')) return 'Κανονική Άδεια';
                 if (t.includes('Αναρρωτική Άδεια')) return 'Αναρρωτική Άδεια';
                 if (t.includes('Φύλλο Πορείας')) return 'Φύλλο Πορείας';
+                if (t.includes('συνεχόμενη υπηρεσία με Ημιαργία')) return 'Συνεχόμενη υπηρεσία με Ημιαργία';
                 if (t.includes('συνεχόμενη υπηρεσία με Αργία')) return 'Συνεχόμενη υπηρεσία με Αργία';
                 if (t.toLowerCase().includes('ειδική αργία')) return 'Ειδική αργία στον ίδιο μήνα';
                 if (t.toLowerCase().includes('κώλυμα') || t.toLowerCase().includes('απουσία')) return 'Κώλυμα/Απουσία';
@@ -7308,7 +7311,9 @@
                         // Process the violation
                         const swapOrSkipReasonText = reason.type === 'skip'
                             ? normalizeSkipReasonText(reason.reason || '')
-                            : reason.type === 'swap' && typeof resolveSemiHolidayConflictSwapDisplayText === 'function'
+                            : reason.type === 'swap' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function' && reason.meta?.normalConsecutiveDutySwap
+                              ? resolveNormalConsecutiveDutySwapDisplayText(reason)
+                              : reason.type === 'swap' && typeof resolveSemiHolidayConflictSwapDisplayText === 'function'
                               ? resolveSemiHolidayConflictSwapDisplayText(reason)
                               : reason.type === 'swap'
                                 ? normalizeSwapReasonText(reason.reason || '')

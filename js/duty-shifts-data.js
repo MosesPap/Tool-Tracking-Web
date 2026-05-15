@@ -6549,6 +6549,31 @@
                 `Ο/Η ${b} τοποθετήθηκε στις ${placementDateStr} ημέρα ${placementDayName}.`
             );
         }
+
+        /**
+         * Ενιαίο μήνυμα αλλαγής καθημερινής: συνεχόμενη υπηρεσία με Ημιαργία ή Αργία (γειτονική ημέρα).
+         * conflictWithLabel: «Ημιαργία» | «Αργία»
+         */
+        function buildNormalConsecutiveDutySwapUnifiedMessage(changerName, conflictedName, conflictDateKey, placementDateKey, conflictWithLabel) {
+            const a = String(changerName || '').trim();
+            const b = String(conflictedName || '').trim();
+            const withLabel = String(conflictWithLabel || '').trim() || 'Αργία';
+            if (!a || !b || !conflictDateKey || !placementDateKey) return '';
+            const conflictDateStr = formatDateKeyAsGreekDMY(conflictDateKey);
+            const placementDateStr = formatDateKeyAsGreekDMY(placementDateKey);
+            if (!conflictDateStr || !placementDateStr) return '';
+            const conflictD = new Date(conflictDateKey + 'T00:00:00');
+            const placementD = new Date(placementDateKey + 'T00:00:00');
+            const conflictDayName =
+                !isNaN(conflictD.getTime()) && typeof getGreekDayName === 'function' ? getGreekDayName(conflictD) : '';
+            const placementDayName =
+                !isNaN(placementD.getTime()) && typeof getGreekDayName === 'function' ? getGreekDayName(placementD) : '';
+            return (
+                `Ο/Η ${a} άλλαξε τον/την ${b} στις ${conflictDateStr} ημέρα ${conflictDayName} ` +
+                `γιατί ο/η ${b} είχε συνεχόμενη υπηρεσία με ${withLabel}. ` +
+                `Ο/Η ${b} τοποθετήθηκε στις ${placementDateStr} ημέρα ${placementDayName}.`
+            );
+        }
         
         // Analyze rotation violations
         function analyzeRotationViolations() {
