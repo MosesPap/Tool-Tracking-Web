@@ -6574,7 +6574,7 @@
                     ? getUnavailableReasonShort(sk, groupNum, dateObj, dutyCategory)
                     : 'Κώλυμα/Απουσία';
             const statusClause =
-                reasonShort === 'Απενεργοποιημένος' ? 'ήταν Απενεργοποιημένος' : `είχε ${reasonShort}`;
+                reasonShort === 'Απενεργοποιημένος' ? 'Απενεργοποιήθηκε' : `είχε ${reasonShort}`;
             return (
                 `Ο/Η ${rep} αντικατέστησε τον/την ${sk} στις ${dateStr} ημέρα ${dayName} ` +
                 `επειδή ο/η ${sk} ${statusClause}.`
@@ -6611,7 +6611,7 @@
             const extractShortReasonFromSavedText = (reasonText) => {
                 const t = String(reasonText || '');
                 if (!t) return '';
-                if (t.includes('Απενεργοποιημένος')) return 'Απενεργοποιημένος';
+                if (t.includes('Απενεργοποιήθηκε') || t.includes('Απενεργοποιημένος')) return 'Απενεργοποιημένος';
                 // Match common missing reasons explicitly
                 if (t.includes('Κανονική Άδεια')) return 'Κανονική Άδεια';
                 if (t.includes('Αναρρωτική Άδεια')) return 'Αναρρωτική Άδεια';

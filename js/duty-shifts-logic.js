@@ -516,7 +516,9 @@
                 }
             }
             const raw = String(reason.reason || '').trim();
-            if (raw.includes('αντικατέστησε τον/την') && raw.includes('επειδή ο/η')) return raw;
+            if (raw.includes('αντικατέστησε τον/την') && raw.includes('επειδή ο/η')) {
+                return raw.replace(/ήταν\s+Απενεργοποιημένος/g, 'Απενεργοποιήθηκε');
+            }
             const skipped = reason.swappedWith || null;
             const rep = assignedPerson || null;
             if (skipped && rep && dateKey) {
@@ -561,7 +563,9 @@
         function normalizeSkipReasonText(reasonText) {
             const raw = String(reasonText || '').trim();
             if (!raw) return raw;
-            if (raw.includes('αντικατέστησε τον/την') && raw.includes('επειδή ο/η')) return raw;
+            if (raw.includes('αντικατέστησε τον/την') && raw.includes('επειδή ο/η')) {
+                return raw.replace(/ήταν\s+Απενεργοποιημένος/g, 'Απενεργοποιήθηκε');
+            }
             if (!raw.includes('Απενεργοποιημένος')) return raw;
 
             // If it's already in the correct form, keep it.
@@ -11331,7 +11335,7 @@
             const extractShortReasonFromSavedText = (reasonText) => {
                 const t = String(reasonText || '');
                 if (!t) return '';
-                if (t.includes('Απενεργοποιημένος')) return 'Απενεργοποιημένος';
+                if (t.includes('Απενεργοποιήθηκε') || t.includes('Απενεργοποιημένος')) return 'Απενεργοποιημένος';
                 // Match common missing reasons explicitly
                 if (t.includes('Κανονική Άδεια')) return 'Κανονική Άδεια';
                 if (t.includes('Αναρρωτική Άδεια')) return 'Αναρρωτική Άδεια';

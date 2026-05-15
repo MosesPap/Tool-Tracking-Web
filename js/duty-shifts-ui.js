@@ -7213,7 +7213,7 @@
             const extractShortReasonFromSavedText = (reasonText) => {
                 const t = String(reasonText || '');
                 if (!t) return '';
-                if (t.includes('Απενεργοποιημένος')) return 'Απενεργοποιημένος';
+                if (t.includes('Απενεργοποιήθηκε') || t.includes('Απενεργοποιημένος')) return 'Απενεργοποιημένος';
                 // Match common missing reasons explicitly
                 if (t.includes('Κανονική Άδεια')) return 'Κανονική Άδεια';
                 if (t.includes('Αναρρωτική Άδεια')) return 'Αναρρωτική Άδεια';
