@@ -103,12 +103,13 @@
             const d = new Date(String(dateKey) + 'T00:00:00');
             return isNaN(d.getTime()) ? null : d;
         }
+        /** Επιτρέπονται μεταβολές λίστας/μεταφοράς/scheduled απενεργοποίησης όταν η ημερομηνία ανήκει στις τελευταίες 15 ημέρες του μήνα (τελευταίο δεκαπενθήμερο). */
         function isInStatusChangeWindow(asOfDate) {
             const d = asOfDate instanceof Date ? new Date(asOfDate) : new Date();
             if (isNaN(d.getTime())) return false;
             d.setHours(0, 0, 0, 0);
             const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-            const windowStart = Math.max(1, lastDay - 9);
+            const windowStart = Math.max(1, lastDay - 14);
             return d.getDate() >= windowStart;
         }
         /**
@@ -159,7 +160,7 @@
                 ? formatDateKey(new Date(d.getFullYear(), d.getMonth(), 1))
                 : null;
         }
-        /** Προεπιλογή: τελευταίο δεκαήμερο → 1η επόμενου μήνα· αλλιώς → 1η τρέχοντος μήνα. */
+        /** Προεπιλογή: τελευταίο δεκαπενθήμερο → 1η επόμενου μήνα· αλλιώς → 1η τρέχοντος μήνα. */
         function getSuggestedStatusEffectiveFromDateKey(asOfDate) {
             const d = asOfDate instanceof Date ? new Date(asOfDate) : new Date();
             if (isNaN(d.getTime())) return getScheduledStatusEffectiveFrom(new Date());
