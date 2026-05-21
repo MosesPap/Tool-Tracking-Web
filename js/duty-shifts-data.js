@@ -289,6 +289,11 @@
             }
             return null;
         }
+        function sameRotationListMembership(orderA, orderB) {
+            if (!Array.isArray(orderA) || !Array.isArray(orderB) || orderA.length !== orderB.length) return false;
+            const keysB = new Set(orderB.map((p) => personScheduleKey(p)));
+            return orderA.every((p) => keysB.has(personScheduleKey(p)));
+        }
         /** Rotation order = priority sort (same rule as renderGroups), not raw array insertion order. */
         function getSortedGroupListForRotation(groupNum, listType) {
             const g = groups[groupNum];
@@ -311,6 +316,7 @@
         function getListOrderAtDate(groupNum, listType, dateKey) {
             ensurePersonStatusScheduleSeeded();
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
+            const sortedCurrent = getSortedGroupListForRotation(groupNum, listType);
             const hits = personStatusSchedule.listOrders
                 .filter(
                     (e) =>
@@ -318,9 +324,28 @@
                         e.listType === listType &&
                         compareScheduleDateKeys(e.effectiveFrom, dk) <= 0
                 )
-                .sort((a, b) => compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom));
-            if (hits.length && Array.isArray(hits[0].order)) return hits[0].order.slice();
-            return getSortedGroupListForRotation(groupNum, listType);
+                .sort((a, b) => {
+                    const byEff = compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom);
+                    if (byEff !== 0) return byEff;
+                    return compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
+                });
+            if (hits.length && Array.isArray(hits[0].order)) {
+                const scheduled = hits[0].order.slice();
+                // Live priorities / UI reorder win over stale seeded schedule when roster is unchanged.
+                if (sameRotationListMembership(scheduled, sortedCurrent)) {
+                    return sortedCurrent;
+                }
+                return scheduled;
+            }
+            return sortedCurrent;
+        }
+        /** Keep stored arrays aligned with priority order (Firestore groups doc + schedule snapshots). */
+        function syncGroupListArraysFromPriorities(groupNum) {
+            const g = groups[groupNum];
+            if (!g) return;
+            for (const listType of DUTY_STATUS_LIST_TYPES) {
+                g[listType] = getSortedGroupListForRotation(groupNum, listType);
+            }
         }
         function getGroupRotationListAtDate(groupNum, listType, dateKey) {
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
@@ -427,6 +452,7 @@
         }
         function scheduleListOrdersForGroup(groupNum, effectiveFrom) {
             ensurePersonStatusScheduleSeeded();
+            syncGroupListArraysFromPriorities(groupNum);
             const eff = normalizeStatusEffectiveFromDateKey(
                 effectiveFrom ||
                     (typeof getFirstOfCalendarMonthDateKey === 'function'
@@ -439,6 +465,14 @@
             if (!gd) return eff;
             for (const listType of DUTY_STATUS_LIST_TYPES) {
                 const order = getSortedGroupListForRotation(groupNum, listType);
+                personStatusSchedule.listOrders = personStatusSchedule.listOrders.filter(
+                    (e) =>
+                        !(
+                            e.groupNum === groupNum &&
+                            e.listType === listType &&
+                            e.effectiveFrom === eff
+                        )
+                );
                 personStatusSchedule.listOrders.push({
                     groupNum,
                     listType,
@@ -453,6 +487,7 @@
         window.clearDutyCalcContextDateKey = clearDutyCalcContextDateKey;
         window.groupsForDuty = groupsForDuty;
         window.getSortedGroupListForRotation = getSortedGroupListForRotation;
+        window.syncGroupListArraysFromPriorities = syncGroupListArraysFromPriorities;
         window.scheduleListOrdersForGroup = scheduleListOrdersForGroup;
         function getPendingScheduledStatusSummary(personName, groupNum) {
             ensurePersonStatusScheduleSeeded();
@@ -2162,6 +2197,9 @@
                 
                 // Save groups
                 try {
+                    for (let gi = 1; gi <= 4; gi++) {
+                        syncGroupListArraysFromPriorities(gi);
+                    }
                     const sanitizedGroups = sanitizeForFirestore(groups);
                 await db.collection('dutyShifts').doc('groups').set({
                         ...sanitizedGroups,
@@ -2401,6 +2439,9 @@
 
         // Fallback: Save data to localStorage
         function saveDataToLocalStorage() {
+            for (let gi = 1; gi <= 4; gi++) {
+                syncGroupListArraysFromPriorities(gi);
+            }
             localStorage.setItem('dutyShiftsGroups', JSON.stringify(groups));
             localStorage.setItem('dutyShiftsHolidays', JSON.stringify(holidays));
             localStorage.setItem('dutyShiftsSpecialHolidays', JSON.stringify(specialHolidays));

@@ -1033,13 +1033,16 @@
                     list.splice(fromIndex, 1);
                     list.splice(toIndex, 0, person);
                     if (!groups[groupNum].priorities) groups[groupNum].priorities = {};
-                    list.forEach((personName, idx) => {
-                        if (!groups[groupNum].priorities[personName]) {
-                            groups[groupNum].priorities[personName] = {};
+                        list.forEach((personName, idx) => {
+                            if (!groups[groupNum].priorities[personName]) {
+                                groups[groupNum].priorities[personName] = {};
+                            }
+                            groups[groupNum].priorities[personName][listType] = idx + 1;
+                        });
+                        if (typeof syncGroupListArraysFromPriorities === 'function') {
+                            syncGroupListArraysFromPriorities(groupNum);
                         }
-                        groups[groupNum].priorities[personName][listType] = idx + 1;
-                    });
-                    if (typeof scheduleListOrdersForGroup === 'function') {
+                        if (typeof scheduleListOrdersForGroup === 'function') {
                         const effNorm = scheduleListOrdersForGroup(groupNum, effKey);
                         const effLabel =
                             typeof formatScheduledStatusEffectiveLabel === 'function'
@@ -3397,6 +3400,9 @@
                     [list[index], list[index + 1]] = [list[index + 1], list[index]];
                 }
                 normalizeGroupPriorities(groupNumber);
+                if (typeof syncGroupListArraysFromPriorities === 'function') {
+                    syncGroupListArraysFromPriorities(groupNumber);
+                }
                 if (typeof scheduleListOrdersForGroup === 'function') {
                     const effNorm = scheduleListOrdersForGroup(groupNumber, effKey);
                     const effLabel =

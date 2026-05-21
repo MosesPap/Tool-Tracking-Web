@@ -2580,7 +2580,10 @@
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const g = groups[groupNum];
                     const missingMap = g?.missingPeriods || {};
-                    const specialList = g?.special || [];
+                    const specialList =
+                        typeof getSortedGroupListForRotation === 'function'
+                            ? getSortedGroupListForRotation(groupNum, 'special')
+                            : (g?.special || []);
                     if (specialList.length === 0) continue;
                     for (const personName of Object.keys(missingMap)) {
                         if (!specialList.some(p => normPerson(p) === normPerson(personName))) continue;
@@ -2885,8 +2888,14 @@
                 // Process return-from-missing in baseline (rotation) order: A then B then C… so first slot goes to A, second to B.
                 const returnFromMissingSortedByBaselineOrder = returnFromMissingSpecial.slice().sort((a, b) => {
                     if (a.groupNum !== b.groupNum) return a.groupNum - b.groupNum;
-                    const groupPeopleA = (groups[a.groupNum] || {}).special || [];
-                    const groupPeopleB = (groups[b.groupNum] || {}).special || [];
+                    const groupPeopleA =
+                        typeof getSortedGroupListForRotation === 'function'
+                            ? getSortedGroupListForRotation(a.groupNum, 'special')
+                            : (groups[a.groupNum] || {}).special || [];
+                    const groupPeopleB =
+                        typeof getSortedGroupListForRotation === 'function'
+                            ? getSortedGroupListForRotation(b.groupNum, 'special')
+                            : (groups[b.groupNum] || {}).special || [];
                     const idxA = groupPeopleA.indexOf(a.personName);
                     const idxB = groupPeopleB.indexOf(b.personName);
                     return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
@@ -7162,7 +7171,10 @@
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const g = groups[groupNum];
                         const missingMap = g?.missingPeriods || {};
-                        const weekendList = g?.weekend || [];
+                        const weekendList =
+                            typeof getSortedGroupListForRotation === 'function'
+                                ? getSortedGroupListForRotation(groupNum, 'weekend')
+                                : (g?.weekend || []);
                         for (const personName of Object.keys(missingMap)) {
                             if (!weekendList.some(p => normW(p) === normW(personName))) continue;
                             const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
@@ -7204,7 +7216,7 @@
                                         const dayType = getDayType(checkDate);
                                         if (dayType === 'weekend-holiday') {
                                             const rotationPos = getRotationPosition(checkDate, 'weekend', groupNum);
-                                            const groupPeopleForCheck = g?.weekend || [];
+                                            const groupPeopleForCheck = weekendList;
                                             if (groupPeopleForCheck.length > 0) {
                                                 const expectedPerson = groupPeopleForCheck[rotationPos % groupPeopleForCheck.length];
                                                 if (expectedPerson && normW(expectedPerson) === normW(personName)) {
@@ -7825,7 +7837,10 @@
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const g = groups[groupNum];
                     const missingMap = g?.missingPeriods || {};
-                    const semiList = g?.semi || [];
+                    const semiList =
+                        typeof getSortedGroupListForRotation === 'function'
+                            ? getSortedGroupListForRotation(groupNum, 'semi')
+                            : (g?.semi || []);
                     for (const personName of Object.keys(missingMap || {})) {
                         if (!semiList.some(p => normSemiRun(p) === normSemiRun(personName))) continue;
                         const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
@@ -9374,7 +9389,10 @@
                             const g = groups?.[groupNum];
                             const missingMap = g?.missingPeriods || {};
                             const disabledMap = g?.disabledPersons || {};
-                            const groupPeople = g?.normal || [];
+                            const groupPeople =
+                                typeof getSortedGroupListForRotation === 'function'
+                                    ? getSortedGroupListForRotation(groupNum, 'normal')
+                                    : (g?.normal || []);
                             
                             if (groupPeople.length === 0) continue;
                             
@@ -9566,6 +9584,7 @@
                 }
                 
                 sortedNormal.forEach((dateKey, normalIndex) => {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     const dayName = getGreekDayName(date);
@@ -9591,7 +9610,10 @@
                     
                     // Calculate who will be assigned for each group
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { normal: [] };
+                        const groupData =
+                            (typeof groupsForDuty === 'function'
+                                ? groupsForDuty(groupNum, dateKey)
+                                : groups[groupNum]) || { normal: [] };
                         const groupPeople = groupData.normal || [];
                         
                         if (groupPeople.length === 0) {
