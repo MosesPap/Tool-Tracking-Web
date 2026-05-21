@@ -5588,6 +5588,8 @@
                 
                 // Track people who have already been swapped to prevent re-swapping
                 const swappedPeopleSet = new Set(); // Format: "dateKey:groupNum:personName"
+                /** Per group:normalizedName — no second swap on same person (non week-pair groups). */
+                const normalSwapInvolvedPersons = new Set();
                 
                 // Run swap logic (check for consecutive conflicts)
                 sortedNormal.forEach((dateKey) => {
@@ -5685,50 +5687,38 @@
                             };
 
                             if (!applyWeekPairLogic) {
-                                const resolvePersonOnDay = (candidateKey) => {
-                                    let person = updatedAssignments[candidateKey]?.[groupNum];
-                                    if (!person && typeof getAssignmentForDate === 'function') {
-                                        const raw = getAssignmentForDate(candidateKey);
-                                        person = raw && typeof parseAssignedPersonForGroupFromAssignment === 'function'
-                                            ? parseAssignedPersonForGroupFromAssignment(raw, groupNum) : null;
-                                    }
-                                    return person || null;
-                                };
-                                const peerResult = findPeerConflictMutualSwapCandidate({
-                                    dateKey,
-                                    currentPerson,
-                                    groupNum,
-                                    sortedNormal,
-                                    simulatedAssignments,
-                                    swappedPeopleSet,
-                                    resolvePersonOnDay
-                                });
-                                if (peerResult) {
-                                    swapDayKey = peerResult.candidateKey;
-                                    swapDayIndex = normalDays.indexOf(swapDayKey);
-                                    if (swapDayIndex < 0) swapDayIndex = -1;
-                                    swapFound = true;
-                                    if (!updatedAssignments[swapDayKey]) {
-                                        const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(swapDayKey) : null;
-                                        updatedAssignments[swapDayKey] = raw && typeof extractGroupAssignmentsMap === 'function'
-                                            ? extractGroupAssignmentsMap(raw) : {};
-                                    }
-                                }
-                                if (!swapFound) {
-                                    const curIdx = sortedNormal.indexOf(dateKey);
-                                    if (curIdx >= 0) {
-                                        const asapCandidates = [];
-                                        for (let i = curIdx + 1; i < sortedNormal.length; i++) asapCandidates.push(sortedNormal[i]);
-                                        for (let i = curIdx - 1; i >= 0; i--) asapCandidates.push(sortedNormal[i]);
-                                        for (const candidateKey of asapCandidates) {
+                                if (isPersonInvolvedInNormalAsapSwap(normalSwapInvolvedPersons, groupNum, currentPerson)) {
+                                    // Already participated in an ASAP swap — avoid swap-on-swap cascade.
+                                } else {
+                                    const asapResult = findNormalAsapSwapPartner({
+                                        dateKey,
+                                        currentPerson,
+                                        groupNum,
+                                        sortedNormal,
+                                        assignments: updatedAssignments,
+                                        swappedPeopleSet,
+                                        swapInvolvedPersons: normalSwapInvolvedPersons,
+                                        validateSwapFn: (candidateKey) => {
                                             const result = tryEarliestSwapCandidate(candidateKey);
-                                            if (!result) continue;
-                                            swapDayKey = result.candidateKey;
-                                            swapDayIndex = normalDays.indexOf(swapDayKey);
-                                            if (swapDayIndex < 0) swapDayIndex = -1;
-                                            swapFound = true;
-                                            break;
+                                            if (!result) return null;
+                                            const isMutualConflict = hasConsecutiveDuty(
+                                                candidateKey,
+                                                result.swapCandidate,
+                                                groupNum,
+                                                simulatedAssignments
+                                            );
+                                            return {
+                                                candidateKey: result.candidateKey,
+                                                swapCandidate: result.swapCandidate,
+                                                isMutualConflict
+                                            };
                                         }
+                                    });
+                                    if (asapResult) {
+                                        swapDayKey = asapResult.swapDayKey;
+                                        swapDayIndex = normalDays.indexOf(swapDayKey);
+                                        if (swapDayIndex < 0) swapDayIndex = -1;
+                                        swapFound = true;
                                     }
                                 }
                             }
@@ -6121,10 +6111,9 @@
                                 const isBackwardWithinMonth = false; // no track shift; swap only
                                 const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
 
-                                // Maintain same-month rotation continuity after a two-slot swap.
-                                // Example: 06/04 A <-> 08/04 C => 08/04 becomes A, but next normal should continue after C (i.e. D), not after A.
+                                // Rotation continuity reflow only for Mon↔Wed / Tue↔Thu groups (week-pair logic).
                                 try {
-                                    if (!isCrossMonthSwap && Array.isArray(groupPeople) && groupPeople.length > 0) {
+                                    if (applyWeekPairLogic && !isCrossMonthSwap && Array.isArray(groupPeople) && groupPeople.length > 0) {
                                         const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
                                         const laterOriginalPerson = (laterKey === dateKey) ? currentPerson : swapCandidate;
                                         const laterOriginalIdx = groupPeople.indexOf(laterOriginalPerson);
@@ -6137,7 +6126,6 @@
                                                     const nextDateObj = new Date(nextKey + 'T00:00:00');
                                                     if (isNaN(nextDateObj.getTime())) continue;
 
-                                                    // Respect explicit return-from-missing placement and continue cursor from that person.
                                                     const existingPerson = updatedAssignments?.[nextKey]?.[groupNum] || null;
                                                     const existingReason = existingPerson ? getAssignmentReason(nextKey, groupNum, existingPerson) : null;
                                                     if (existingReason && existingReason.meta && (existingReason.meta.returnFromMissing || existingReason.meta.shiftedByReturnFromMissing)) {
@@ -6238,6 +6226,10 @@
                                 // Mark both people as swapped to prevent re-swapping
                                 swappedPeopleSet.add(`${dateKey}:${groupNum}:${currentPerson}`);
                                 swappedPeopleSet.add(`${swapDayKey}:${groupNum}:${swapCandidate}`);
+                                if (!applyWeekPairLogic) {
+                                    markNormalAsapSwapInvolved(normalSwapInvolvedPersons, groupNum, currentPerson);
+                                    markNormalAsapSwapInvolved(normalSwapInvolvedPersons, groupNum, swapCandidate);
+                                }
                                 
                                 // IMPORTANT: Stop processing this conflict - swap found, don't try other steps
                                 // Continue to next group/person - swap is complete
@@ -10158,6 +10150,7 @@
             
             if (normalDays.length > 0 && sortedNormal) {
                 const swappedPeopleSet = new Set(); // Format: "dateKey:groupNum:personName"
+                const normalSwapInvolvedPersonsPreview = new Set();
                 
                 // Apply swap logic to normalAssignments BEFORE displaying
                 sortedNormal.forEach((dateKey) => {
@@ -10211,32 +10204,34 @@
                             return { swapCandidate, candidateKey };
                         };
                         if (!applyWeekPairLogic) {
-                            const peerResult = findPeerConflictMutualSwapCandidate({
-                                dateKey,
-                                currentPerson,
-                                groupNum,
-                                sortedNormal,
-                                simulatedAssignments,
-                                swappedPeopleSet,
-                                resolvePersonOnDay: (candidateKey) => normalAssignments[candidateKey]?.[groupNum] || null
-                            });
-                            if (peerResult) {
-                                swapDayKey = peerResult.candidateKey;
-                                swapFound = true;
-                            }
-                            if (!swapFound) {
-                                const curIdx = sortedNormal.indexOf(dateKey);
-                                if (curIdx >= 0) {
-                                    const asapCandidates = [];
-                                    for (let i = curIdx + 1; i < sortedNormal.length; i++) asapCandidates.push(sortedNormal[i]);
-                                    for (let i = curIdx - 1; i >= 0; i--) asapCandidates.push(sortedNormal[i]);
-                                    for (const candidateKey of asapCandidates) {
+                            if (!isPersonInvolvedInNormalAsapSwap(normalSwapInvolvedPersonsPreview, groupNum, currentPerson)) {
+                                const asapResultPreview = findNormalAsapSwapPartner({
+                                    dateKey,
+                                    currentPerson,
+                                    groupNum,
+                                    sortedNormal,
+                                    assignments: normalAssignments,
+                                    swappedPeopleSet,
+                                    swapInvolvedPersons: normalSwapInvolvedPersonsPreview,
+                                    validateSwapFn: (candidateKey) => {
                                         const result = tryPreviewEarliestSwapCandidate(candidateKey);
-                                        if (!result) continue;
-                                        swapDayKey = result.candidateKey;
-                                        swapFound = true;
-                                        break;
+                                        if (!result) return null;
+                                        const isMutualConflict = hasConsecutiveDuty(
+                                            candidateKey,
+                                            result.swapCandidate,
+                                            groupNum,
+                                            simulatedAssignments
+                                        );
+                                        return {
+                                            candidateKey: result.candidateKey,
+                                            swapCandidate: result.swapCandidate,
+                                            isMutualConflict
+                                        };
                                     }
+                                });
+                                if (asapResultPreview) {
+                                    swapDayKey = asapResultPreview.swapDayKey;
+                                    swapFound = true;
                                 }
                             }
                         }
@@ -10447,11 +10442,10 @@
                             normalAssignments[dateKey][groupNum] = swapCandidate;
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
 
-                            // Keep same-month normal rotation continuity after a two-slot swap in preview.
-                            // Example: 06/04 A <-> 08/04 C => after 08/04 continue from C (next is D), not from A.
+                            // Rotation continuity reflow in preview only for week-pair groups.
                             try {
                                 const isCrossMonthSwapPreview = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
-                                if (!isCrossMonthSwapPreview && Array.isArray(groupPeople) && groupPeople.length > 0) {
+                                if (applyWeekPairLogic && !isCrossMonthSwapPreview && Array.isArray(groupPeople) && groupPeople.length > 0) {
                                     const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
                                     const laterOriginalPerson = (laterKey === dateKey) ? currentPerson : swapCandidate;
                                     const laterOriginalIdx = groupPeople.indexOf(laterOriginalPerson);
@@ -10551,6 +10545,10 @@
                             // Mark both people as swapped to prevent re-swapping
                             swappedPeopleSet.add(`${dateKey}:${groupNum}:${currentPerson}`);
                             swappedPeopleSet.add(`${swapDayKey}:${groupNum}:${swapCandidate}`);
+                            if (!applyWeekPairLogic) {
+                                markNormalAsapSwapInvolved(normalSwapInvolvedPersonsPreview, groupNum, currentPerson);
+                                markNormalAsapSwapInvolved(normalSwapInvolvedPersonsPreview, groupNum, swapCandidate);
+                            }
                         }
                     }
                 }
@@ -10990,67 +10988,89 @@
             });
         }
 
+        /** Max calendar days between conflict day and swap partner (non week-pair groups; ~1.5 weeks). */
+        const NORMAL_ASAP_SWAP_MAX_CALENDAR_DAYS = 10;
+
+        function calendarDayDistanceAbs(dateKeyA, dateKeyB) {
+            if (!dateKeyA || !dateKeyB) return Infinity;
+            const a = new Date(dateKeyA + 'T00:00:00');
+            const b = new Date(dateKeyB + 'T00:00:00');
+            if (isNaN(a.getTime()) || isNaN(b.getTime())) return Infinity;
+            return Math.abs(Math.round((a - b) / (1000 * 60 * 60 * 24)));
+        }
+
+        function normalAsapSwapInvolvedKey(groupNum, personName) {
+            const n = typeof normalizePersonKey === 'function' ? normalizePersonKey(personName) : String(personName || '').trim();
+            return `${groupNum}:${n}`;
+        }
+
+        function isPersonInvolvedInNormalAsapSwap(involvedSet, groupNum, personName) {
+            if (!involvedSet || !personName) return false;
+            return involvedSet.has(normalAsapSwapInvolvedKey(groupNum, personName));
+        }
+
+        function markNormalAsapSwapInvolved(involvedSet, groupNum, personName) {
+            if (involvedSet && personName) involvedSet.add(normalAsapSwapInvolvedKey(groupNum, personName));
+        }
+
         /**
-         * Groups without Mon↔Wed / Tue↔Thu week-pair logic: prefer swapping two people who each have
-         * a consecutive-duty conflict on their own normal day (A↔B) instead of displacing a third person.
+         * Groups without Mon↔Wed / Tue↔Thu logic: shortest valid two-slot swap.
+         * Prefer mutual exchange when both assignees have consecutive conflicts; skip people already swapped.
          */
-        function findPeerConflictMutualSwapCandidate({
+        function findNormalAsapSwapPartner({
             dateKey,
             currentPerson,
             groupNum,
             sortedNormal,
-            simulatedAssignments,
+            assignments,
             swappedPeopleSet,
-            resolvePersonOnDay
+            swapInvolvedPersons,
+            validateSwapFn
         }) {
-            if (!dateKey || !currentPerson || !Array.isArray(sortedNormal) || typeof resolvePersonOnDay !== 'function') {
+            if (!dateKey || !currentPerson || !Array.isArray(sortedNormal) || !assignments || typeof validateSwapFn !== 'function') {
                 return null;
             }
-            const curIdx = sortedNormal.indexOf(dateKey);
-            if (curIdx < 0) return null;
-            const conflictDate = new Date(dateKey + 'T00:00:00');
-            if (isNaN(conflictDate.getTime())) return null;
+            if (isPersonInvolvedInNormalAsapSwap(swapInvolvedPersons, groupNum, currentPerson)) return null;
 
-            const peerCandidates = [];
-            for (let i = 0; i < sortedNormal.length; i++) {
-                if (i === curIdx) continue;
-                const peerKey = sortedNormal[i];
-                const peerPerson = resolvePersonOnDay(peerKey);
-                if (!peerPerson || peerPerson === currentPerson) continue;
+            const mutualCandidates = [];
+            const slotCandidates = [];
 
-                const peerSwapKey = `${peerKey}:${groupNum}:${peerPerson}`;
-                if (swappedPeopleSet && swappedPeopleSet.has(peerSwapKey)) continue;
+            for (const otherKey of sortedNormal) {
+                if (otherKey === dateKey) continue;
+                const dist = calendarDayDistanceAbs(dateKey, otherKey);
+                if (dist > NORMAL_ASAP_SWAP_MAX_CALENDAR_DAYS) continue;
 
-                const peerDate = new Date(peerKey + 'T00:00:00');
-                if (isNaN(peerDate.getTime()) || getDayType(peerDate) !== 'normal-day') continue;
-                if (!hasConsecutiveDuty(peerKey, peerPerson, groupNum, simulatedAssignments)) continue;
+                const otherPerson = assignments[otherKey]?.[groupNum];
+                if (!otherPerson || otherPerson === currentPerson) continue;
 
-                if (typeof isPersonDisabledForDuty === 'function') {
-                    if (isPersonDisabledForDuty(peerPerson, groupNum, 'normal')) continue;
-                    if (isPersonDisabledForDuty(currentPerson, groupNum, 'normal')) continue;
-                }
-                if (typeof isDeferredManualAlternatePersonOnDate === 'function') {
-                    if (isDeferredManualAlternatePersonOnDate(peerPerson, groupNum, peerKey)) continue;
-                    if (isDeferredManualAlternatePersonOnDate(currentPerson, groupNum, dateKey)) continue;
-                }
-                if (isPersonMissingOnDate(peerPerson, groupNum, conflictDate, 'normal')) continue;
-                if (isPersonMissingOnDate(currentPerson, groupNum, peerDate, 'normal')) continue;
-                if (!isNormalConflictSwapValidForMissingBoundaries(dateKey, peerKey, currentPerson, peerPerson, groupNum)) {
-                    continue;
-                }
-                if (hasConsecutiveDuty(dateKey, peerPerson, groupNum, simulatedAssignments)) continue;
-                if (hasConsecutiveDuty(peerKey, currentPerson, groupNum, simulatedAssignments)) continue;
+                const otherSwapKey = `${otherKey}:${groupNum}:${otherPerson}`;
+                if (swappedPeopleSet && swappedPeopleSet.has(otherSwapKey)) continue;
+                if (isPersonInvolvedInNormalAsapSwap(swapInvolvedPersons, groupNum, otherPerson)) continue;
 
-                peerCandidates.push({
-                    swapCandidate: peerPerson,
-                    candidateKey: peerKey,
-                    distance: Math.abs(i - curIdx)
-                });
+                const validated = validateSwapFn(otherKey);
+                if (!validated) continue;
+
+                const entry = {
+                    candidateKey: validated.candidateKey || otherKey,
+                    swapCandidate: validated.swapCandidate,
+                    dist
+                };
+                slotCandidates.push(entry);
+                if (validated.isMutualConflict) mutualCandidates.push(entry);
             }
 
-            if (peerCandidates.length === 0) return null;
-            peerCandidates.sort((a, b) => a.distance - b.distance);
-            return peerCandidates[0];
+            mutualCandidates.sort((a, b) => a.dist - b.dist);
+            if (mutualCandidates.length > 0) {
+                const best = mutualCandidates[0];
+                return { swapDayKey: best.candidateKey, swapCandidate: best.swapCandidate, mutual: true };
+            }
+
+            slotCandidates.sort((a, b) => a.dist - b.dist);
+            if (slotCandidates.length > 0) {
+                const best = slotCandidates[0];
+                return { swapDayKey: best.candidateKey, swapCandidate: best.swapCandidate, mutual: false };
+            }
+            return null;
         }
 
         /**
