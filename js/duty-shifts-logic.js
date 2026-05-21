@@ -5685,19 +5685,50 @@
                             };
 
                             if (!applyWeekPairLogic) {
-                                const curIdx = sortedNormal.indexOf(dateKey);
-                                if (curIdx >= 0) {
-                                    const asapCandidates = [];
-                                    for (let i = curIdx + 1; i < sortedNormal.length; i++) asapCandidates.push(sortedNormal[i]);
-                                    for (let i = curIdx - 1; i >= 0; i--) asapCandidates.push(sortedNormal[i]);
-                                    for (const candidateKey of asapCandidates) {
-                                        const result = tryEarliestSwapCandidate(candidateKey);
-                                        if (!result) continue;
-                                        swapDayKey = result.candidateKey;
-                                        swapDayIndex = normalDays.indexOf(swapDayKey);
-                                        if (swapDayIndex < 0) swapDayIndex = -1;
-                                        swapFound = true;
-                                        break;
+                                const resolvePersonOnDay = (candidateKey) => {
+                                    let person = updatedAssignments[candidateKey]?.[groupNum];
+                                    if (!person && typeof getAssignmentForDate === 'function') {
+                                        const raw = getAssignmentForDate(candidateKey);
+                                        person = raw && typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                                            ? parseAssignedPersonForGroupFromAssignment(raw, groupNum) : null;
+                                    }
+                                    return person || null;
+                                };
+                                const peerResult = findPeerConflictMutualSwapCandidate({
+                                    dateKey,
+                                    currentPerson,
+                                    groupNum,
+                                    sortedNormal,
+                                    simulatedAssignments,
+                                    swappedPeopleSet,
+                                    resolvePersonOnDay
+                                });
+                                if (peerResult) {
+                                    swapDayKey = peerResult.candidateKey;
+                                    swapDayIndex = normalDays.indexOf(swapDayKey);
+                                    if (swapDayIndex < 0) swapDayIndex = -1;
+                                    swapFound = true;
+                                    if (!updatedAssignments[swapDayKey]) {
+                                        const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(swapDayKey) : null;
+                                        updatedAssignments[swapDayKey] = raw && typeof extractGroupAssignmentsMap === 'function'
+                                            ? extractGroupAssignmentsMap(raw) : {};
+                                    }
+                                }
+                                if (!swapFound) {
+                                    const curIdx = sortedNormal.indexOf(dateKey);
+                                    if (curIdx >= 0) {
+                                        const asapCandidates = [];
+                                        for (let i = curIdx + 1; i < sortedNormal.length; i++) asapCandidates.push(sortedNormal[i]);
+                                        for (let i = curIdx - 1; i >= 0; i--) asapCandidates.push(sortedNormal[i]);
+                                        for (const candidateKey of asapCandidates) {
+                                            const result = tryEarliestSwapCandidate(candidateKey);
+                                            if (!result) continue;
+                                            swapDayKey = result.candidateKey;
+                                            swapDayIndex = normalDays.indexOf(swapDayKey);
+                                            if (swapDayIndex < 0) swapDayIndex = -1;
+                                            swapFound = true;
+                                            break;
+                                        }
                                     }
                                 }
                             }
@@ -10180,17 +10211,32 @@
                             return { swapCandidate, candidateKey };
                         };
                         if (!applyWeekPairLogic) {
-                            const curIdx = sortedNormal.indexOf(dateKey);
-                            if (curIdx >= 0) {
-                                const asapCandidates = [];
-                                for (let i = curIdx + 1; i < sortedNormal.length; i++) asapCandidates.push(sortedNormal[i]);
-                                for (let i = curIdx - 1; i >= 0; i--) asapCandidates.push(sortedNormal[i]);
-                                for (const candidateKey of asapCandidates) {
-                                    const result = tryPreviewEarliestSwapCandidate(candidateKey);
-                                    if (!result) continue;
-                                    swapDayKey = result.candidateKey;
-                                    swapFound = true;
-                                    break;
+                            const peerResult = findPeerConflictMutualSwapCandidate({
+                                dateKey,
+                                currentPerson,
+                                groupNum,
+                                sortedNormal,
+                                simulatedAssignments,
+                                swappedPeopleSet,
+                                resolvePersonOnDay: (candidateKey) => normalAssignments[candidateKey]?.[groupNum] || null
+                            });
+                            if (peerResult) {
+                                swapDayKey = peerResult.candidateKey;
+                                swapFound = true;
+                            }
+                            if (!swapFound) {
+                                const curIdx = sortedNormal.indexOf(dateKey);
+                                if (curIdx >= 0) {
+                                    const asapCandidates = [];
+                                    for (let i = curIdx + 1; i < sortedNormal.length; i++) asapCandidates.push(sortedNormal[i]);
+                                    for (let i = curIdx - 1; i >= 0; i--) asapCandidates.push(sortedNormal[i]);
+                                    for (const candidateKey of asapCandidates) {
+                                        const result = tryPreviewEarliestSwapCandidate(candidateKey);
+                                        if (!result) continue;
+                                        swapDayKey = result.candidateKey;
+                                        swapFound = true;
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -10942,6 +10988,69 @@
                 const afterKey = formatDateKey(dayAfterEnd);
                 return dateKey === beforeKey || dateKey === afterKey;
             });
+        }
+
+        /**
+         * Groups without Mon↔Wed / Tue↔Thu week-pair logic: prefer swapping two people who each have
+         * a consecutive-duty conflict on their own normal day (A↔B) instead of displacing a third person.
+         */
+        function findPeerConflictMutualSwapCandidate({
+            dateKey,
+            currentPerson,
+            groupNum,
+            sortedNormal,
+            simulatedAssignments,
+            swappedPeopleSet,
+            resolvePersonOnDay
+        }) {
+            if (!dateKey || !currentPerson || !Array.isArray(sortedNormal) || typeof resolvePersonOnDay !== 'function') {
+                return null;
+            }
+            const curIdx = sortedNormal.indexOf(dateKey);
+            if (curIdx < 0) return null;
+            const conflictDate = new Date(dateKey + 'T00:00:00');
+            if (isNaN(conflictDate.getTime())) return null;
+
+            const peerCandidates = [];
+            for (let i = 0; i < sortedNormal.length; i++) {
+                if (i === curIdx) continue;
+                const peerKey = sortedNormal[i];
+                const peerPerson = resolvePersonOnDay(peerKey);
+                if (!peerPerson || peerPerson === currentPerson) continue;
+
+                const peerSwapKey = `${peerKey}:${groupNum}:${peerPerson}`;
+                if (swappedPeopleSet && swappedPeopleSet.has(peerSwapKey)) continue;
+
+                const peerDate = new Date(peerKey + 'T00:00:00');
+                if (isNaN(peerDate.getTime()) || getDayType(peerDate) !== 'normal-day') continue;
+                if (!hasConsecutiveDuty(peerKey, peerPerson, groupNum, simulatedAssignments)) continue;
+
+                if (typeof isPersonDisabledForDuty === 'function') {
+                    if (isPersonDisabledForDuty(peerPerson, groupNum, 'normal')) continue;
+                    if (isPersonDisabledForDuty(currentPerson, groupNum, 'normal')) continue;
+                }
+                if (typeof isDeferredManualAlternatePersonOnDate === 'function') {
+                    if (isDeferredManualAlternatePersonOnDate(peerPerson, groupNum, peerKey)) continue;
+                    if (isDeferredManualAlternatePersonOnDate(currentPerson, groupNum, dateKey)) continue;
+                }
+                if (isPersonMissingOnDate(peerPerson, groupNum, conflictDate, 'normal')) continue;
+                if (isPersonMissingOnDate(currentPerson, groupNum, peerDate, 'normal')) continue;
+                if (!isNormalConflictSwapValidForMissingBoundaries(dateKey, peerKey, currentPerson, peerPerson, groupNum)) {
+                    continue;
+                }
+                if (hasConsecutiveDuty(dateKey, peerPerson, groupNum, simulatedAssignments)) continue;
+                if (hasConsecutiveDuty(peerKey, currentPerson, groupNum, simulatedAssignments)) continue;
+
+                peerCandidates.push({
+                    swapCandidate: peerPerson,
+                    candidateKey: peerKey,
+                    distance: Math.abs(i - curIdx)
+                });
+            }
+
+            if (peerCandidates.length === 0) return null;
+            peerCandidates.sort((a, b) => a.distance - b.distance);
+            return peerCandidates[0];
         }
 
         /**
