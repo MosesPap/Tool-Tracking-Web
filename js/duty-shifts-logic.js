@@ -11090,46 +11090,6 @@
             return true;
         }
 
-        const NORMAL_WEEK_PAIR_SWAP_DISABLED_GROUPS_KEY = 'dutyShiftsNormalWeekPairSwapDisabledGroups';
-        function getNormalWeekPairSwapDisabledGroups() {
-            try {
-                if (typeof localStorage === 'undefined') return [];
-                const raw = localStorage.getItem(NORMAL_WEEK_PAIR_SWAP_DISABLED_GROUPS_KEY);
-                if (!raw) return [];
-                const arr = JSON.parse(raw);
-                if (!Array.isArray(arr)) return [];
-                return arr
-                    .map((x) => parseInt(x, 10))
-                    .filter((x) => Number.isFinite(x) && x >= 1 && x <= 4)
-                    .filter((x, i, a) => a.indexOf(x) === i)
-                    .sort((a, b) => a - b);
-            } catch (_) {
-                return [];
-            }
-        }
-        function setNormalWeekPairSwapDisabledGroups(groupsArr) {
-            try {
-                if (typeof localStorage === 'undefined') return;
-                const safe = Array.isArray(groupsArr)
-                    ? groupsArr
-                        .map((x) => parseInt(x, 10))
-                        .filter((x) => Number.isFinite(x) && x >= 1 && x <= 4)
-                        .filter((x, i, a) => a.indexOf(x) === i)
-                        .sort((a, b) => a - b)
-                    : [];
-                localStorage.setItem(NORMAL_WEEK_PAIR_SWAP_DISABLED_GROUPS_KEY, JSON.stringify(safe));
-            } catch (_) {}
-        }
-        function shouldApplyNormalWeekPairSwapLogicForGroup(groupNum) {
-            const disabled = getNormalWeekPairSwapDisabledGroups();
-            return !disabled.includes(groupNum);
-        }
-        if (typeof window !== 'undefined') {
-            window.getNormalWeekPairSwapDisabledGroups = getNormalWeekPairSwapDisabledGroups;
-            window.setNormalWeekPairSwapDisabledGroups = setNormalWeekPairSwapDisabledGroups;
-            window.shouldApplyNormalWeekPairSwapLogicForGroup = shouldApplyNormalWeekPairSwapLogicForGroup;
-        }
-
         function findNextEligiblePersonAfterMissing({
             dateKey,
             date,

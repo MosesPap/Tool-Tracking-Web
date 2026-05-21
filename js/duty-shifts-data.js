@@ -1297,6 +1297,101 @@
         window.saveDutyShiftsUserPreferenceFlexibleEffective = saveDutyShiftsUserPreferenceFlexibleEffective;
         window.resetDutyShiftsUserPreferencesSessionCache = resetDutyShiftsUserPreferencesSessionCache;
 
+        /**
+         * Κοινές ρυθμίσεις εφαρμογής (όλοι οι χρήστες): dutyShifts/settings
+         * — εξαιρέσεις ομάδων από λογική Δευ↔Τετ / Πέμ↔Τρι.
+         */
+        const NORMAL_WEEK_PAIR_SWAP_DISABLED_GROUPS_LS_KEY = 'dutyShiftsNormalWeekPairSwapDisabledGroups';
+        let normalWeekPairSwapDisabledGroups = [];
+
+        function sanitizeNormalWeekPairSwapDisabledGroups(groupsArr) {
+            if (!Array.isArray(groupsArr)) return [];
+            return groupsArr
+                .map((x) => parseInt(x, 10))
+                .filter((x) => Number.isFinite(x) && x >= 1 && x <= 4)
+                .filter((x, i, a) => a.indexOf(x) === i)
+                .sort((a, b) => a - b);
+        }
+
+        function readNormalWeekPairSwapDisabledGroupsFromLocalStorage() {
+            try {
+                const raw = localStorage.getItem(NORMAL_WEEK_PAIR_SWAP_DISABLED_GROUPS_LS_KEY);
+                if (!raw) return [];
+                return sanitizeNormalWeekPairSwapDisabledGroups(JSON.parse(raw));
+            } catch (_) {
+                return [];
+            }
+        }
+
+        function applyNormalWeekPairSwapDisabledGroupsFromValue(groupsArr) {
+            normalWeekPairSwapDisabledGroups = sanitizeNormalWeekPairSwapDisabledGroups(groupsArr);
+            try {
+                localStorage.setItem(
+                    NORMAL_WEEK_PAIR_SWAP_DISABLED_GROUPS_LS_KEY,
+                    JSON.stringify(normalWeekPairSwapDisabledGroups)
+                );
+            } catch (_) {}
+        }
+
+        function getNormalWeekPairSwapDisabledGroups() {
+            return normalWeekPairSwapDisabledGroups.slice();
+        }
+
+        function setNormalWeekPairSwapDisabledGroups(groupsArr) {
+            applyNormalWeekPairSwapDisabledGroupsFromValue(groupsArr);
+        }
+
+        function shouldApplyNormalWeekPairSwapLogicForGroup(groupNum) {
+            return !normalWeekPairSwapDisabledGroups.includes(groupNum);
+        }
+
+        async function saveDutyShiftsAppSettingsNormalWeekPairDisabled(groupsArr) {
+            const safe = sanitizeNormalWeekPairSwapDisabledGroups(groupsArr);
+            applyNormalWeekPairSwapDisabledGroupsFromValue(safe);
+
+            const user = window.auth?.currentUser;
+            if (!user?.uid || !window.db) {
+                console.warn('saveDutyShiftsAppSettingsNormalWeekPairDisabled: no auth/db');
+                return false;
+            }
+
+            try {
+                const db = window.db || firebase.firestore();
+                await db
+                    .collection('dutyShifts')
+                    .doc('settings')
+                    .set(
+                        {
+                            normalWeekPairSwapDisabledGroups: safe,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedBy: user.uid
+                        },
+                        { merge: true }
+                    );
+                return true;
+            } catch (e) {
+                console.error('saveDutyShiftsAppSettingsNormalWeekPairDisabled:', e);
+                alert(
+                    'Οι εξαιρέσεις ομάδων αποθηκεύτηκαν τοπικά, αλλά αποτυχία εγγραφής στο cloud. Ελέγξτε δικαιώματα Firestore ή τη σύνδεση.'
+                );
+                return false;
+            }
+        }
+
+        async function migrateNormalWeekPairSwapDisabledGroupsFromLocalStorageIfNeeded() {
+            const user = window.auth?.currentUser;
+            if (!user?.uid || !window.db) return;
+            const fromLs = readNormalWeekPairSwapDisabledGroupsFromLocalStorage();
+            if (!fromLs.length) return;
+            if (normalWeekPairSwapDisabledGroups.length) return;
+            await saveDutyShiftsAppSettingsNormalWeekPairDisabled(fromLs);
+        }
+
+        window.getNormalWeekPairSwapDisabledGroups = getNormalWeekPairSwapDisabledGroups;
+        window.setNormalWeekPairSwapDisabledGroups = setNormalWeekPairSwapDisabledGroups;
+        window.shouldApplyNormalWeekPairSwapLogicForGroup = shouldApplyNormalWeekPairSwapLogicForGroup;
+        window.saveDutyShiftsAppSettingsNormalWeekPairDisabled = saveDutyShiftsAppSettingsNormalWeekPairDisabled;
+
         // Track data loading to prevent duplicate loads
         let dataLastLoaded = null;
         let isLoadingData = false;
@@ -1425,7 +1520,8 @@
                     rankingsDoc,
                     missingReasonsDoc,
                     monthCalculationLocksDoc,
-                    personStatusScheduleDoc
+                    personStatusScheduleDoc,
+                    settingsDoc
                 ] = await Promise.all([
                     dutyShifts.doc('groups').get(),
                     dutyShifts.doc('holidays').get(),
@@ -1445,7 +1541,8 @@
                     dutyShifts.doc('rankings').get(),
                     dutyShifts.doc('missingReasons').get(),
                     dutyShifts.doc('monthCalculationLocks').get(),
-                    dutyShifts.doc('personStatusSchedule').get()
+                    dutyShifts.doc('personStatusSchedule').get(),
+                    dutyShifts.doc('settings').get()
                 ]);
                 
                 // Load groups
@@ -1679,6 +1776,21 @@
                     for (const k of Object.keys(L)) {
                         if (/^\d{4}-\d{2}$/.test(k) && L[k]) monthCalculationLocks[k] = true;
                     }
+                }
+
+                // Κοινές ρυθμίσεις: εξαιρέσεις ομάδων swap (Δευ↔Τετ / Πέμ↔Τρι)
+                if (settingsDoc && settingsDoc.exists) {
+                    const settingsData = settingsDoc.data() || {};
+                    if (Array.isArray(settingsData.normalWeekPairSwapDisabledGroups)) {
+                        applyNormalWeekPairSwapDisabledGroupsFromValue(settingsData.normalWeekPairSwapDisabledGroups);
+                    } else {
+                        applyNormalWeekPairSwapDisabledGroupsFromValue([]);
+                    }
+                } else {
+                    applyNormalWeekPairSwapDisabledGroupsFromValue(readNormalWeekPairSwapDisabledGroupsFromLocalStorage());
+                    migrateNormalWeekPairSwapDisabledGroupsFromLocalStorageIfNeeded().catch((e) => {
+                        console.warn('migrateNormalWeekPairSwapDisabledGroupsFromLocalStorageIfNeeded:', e);
+                    });
                 }
                 
                 // Load last rotation positions
@@ -1986,6 +2098,8 @@
             } else {
                 assignmentReasons = {};
             }
+
+            applyNormalWeekPairSwapDisabledGroupsFromValue(readNormalWeekPairSwapDisabledGroupsFromLocalStorage());
 
             const savedMonthLocks = localStorage.getItem('dutyShiftsMonthCalculationLocks');
             monthCalculationLocks = {};

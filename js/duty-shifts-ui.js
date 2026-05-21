@@ -4246,7 +4246,9 @@
                 const cb = document.getElementById(`normalSwapDisableGroup${g}`);
                 if (cb && cb.checked) selected.push(g);
             }
-            if (typeof setNormalWeekPairSwapDisabledGroups === 'function') {
+            if (typeof saveDutyShiftsAppSettingsNormalWeekPairDisabled === 'function') {
+                await saveDutyShiftsAppSettingsNormalWeekPairDisabled(selected);
+            } else if (typeof setNormalWeekPairSwapDisabledGroups === 'function') {
                 setNormalWeekPairSwapDisabledGroups(selected);
             }
             const modalEl = document.getElementById('normalSwapLogicSettingsModal');
@@ -4254,8 +4256,8 @@
             if (m) m.hide();
             if (typeof showInfoMessage === 'function') {
                 showInfoMessage(
-                    'Οι ρυθμίσεις αποθηκεύτηκαν. Θα εφαρμοστούν στον επόμενο υπολογισμό υπηρεσιών.',
-                    'Ρυθμίσεις Swap Καθημερινών'
+                    'Οι ρυθμίσεις αποθηκεύτηκαν στο cloud. Ισχύουν για όλους τους χρήστες (εξαιρέσεις ομάδων) και ανά λογαριασμό (ευέλικτη ημερομηνία).',
+                    'Ρυθμίσεις'
                 );
             }
         }
