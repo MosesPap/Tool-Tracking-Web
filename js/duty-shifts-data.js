@@ -289,6 +289,25 @@
             }
             return null;
         }
+        /** Rotation order = priority sort (same rule as renderGroups), not raw array insertion order. */
+        function getSortedGroupListForRotation(groupNum, listType) {
+            const g = groups[groupNum];
+            if (!g) return [];
+            const list = (g[listType] || []).slice();
+            const priorities = g.priorities || {};
+            list.sort((a, b) => {
+                const priorityA = priorities[a]?.[listType] ?? 999;
+                const priorityB = priorities[b]?.[listType] ?? 999;
+                if (priorityA !== priorityB) return priorityA - priorityB;
+                const dateA = g.lastDuties?.[a]?.[listType];
+                const dateB = g.lastDuties?.[b]?.[listType];
+                if (!dateA && !dateB) return 0;
+                if (!dateA) return 1;
+                if (!dateB) return -1;
+                return new Date(dateB) - new Date(dateA);
+            });
+            return list;
+        }
         function getListOrderAtDate(groupNum, listType, dateKey) {
             ensurePersonStatusScheduleSeeded();
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
@@ -301,14 +320,14 @@
                 )
                 .sort((a, b) => compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom));
             if (hits.length && Array.isArray(hits[0].order)) return hits[0].order.slice();
-            return (groups[groupNum]?.[listType] || []).slice();
+            return getSortedGroupListForRotation(groupNum, listType);
         }
         function getGroupRotationListAtDate(groupNum, listType, dateKey) {
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
             const order = getListOrderAtDate(groupNum, listType, dk);
             return order.filter((person) => getPersonHomeGroupAtDate(person, dk) === groupNum);
         }
-        function groupsForDuty(groupNum) {
+        function groupsForDuty(groupNum, dateKey) {
             const g = groups[groupNum] || {
                 special: [],
                 weekend: [],
@@ -319,8 +338,19 @@
                 priorities: {},
                 disabledPersons: {}
             };
-            const dk = dutyCalcContextDateKey;
-            if (!dk) return g;
+            const dk =
+                dateKey ||
+                dutyCalcContextDateKey ||
+                (typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null);
+            if (!dk) {
+                return {
+                    ...g,
+                    special: getSortedGroupListForRotation(groupNum, 'special'),
+                    weekend: getSortedGroupListForRotation(groupNum, 'weekend'),
+                    semi: getSortedGroupListForRotation(groupNum, 'semi'),
+                    normal: getSortedGroupListForRotation(groupNum, 'normal')
+                };
+            }
             return {
                 ...g,
                 special: getGroupRotationListAtDate(groupNum, 'special', dk),
@@ -398,13 +428,17 @@
         function scheduleListOrdersForGroup(groupNum, effectiveFrom) {
             ensurePersonStatusScheduleSeeded();
             const eff = normalizeStatusEffectiveFromDateKey(
-                effectiveFrom || getScheduledStatusEffectiveFrom(new Date())
+                effectiveFrom ||
+                    (typeof getFirstOfCalendarMonthDateKey === 'function'
+                        ? getFirstOfCalendarMonthDateKey(new Date())
+                        : null) ||
+                    getScheduledStatusEffectiveFrom(new Date())
             );
             const recordedAt = formatDateKey(new Date());
             const gd = groups[groupNum];
             if (!gd) return eff;
             for (const listType of DUTY_STATUS_LIST_TYPES) {
-                const order = (gd[listType] || []).slice();
+                const order = getSortedGroupListForRotation(groupNum, listType);
                 personStatusSchedule.listOrders.push({
                     groupNum,
                     listType,
@@ -415,6 +449,11 @@
             }
             return eff;
         }
+        window.setDutyCalcContextDateKey = setDutyCalcContextDateKey;
+        window.clearDutyCalcContextDateKey = clearDutyCalcContextDateKey;
+        window.groupsForDuty = groupsForDuty;
+        window.getSortedGroupListForRotation = getSortedGroupListForRotation;
+        window.scheduleListOrdersForGroup = scheduleListOrdersForGroup;
         function getPendingScheduledStatusSummary(personName, groupNum) {
             ensurePersonStatusScheduleSeeded();
             const todayKey = formatDateKey(new Date());
@@ -1105,6 +1144,124 @@
         let missingReasons = ['Κανονική Άδεια', 'Αναρρωτική Άδεια', 'Φύλλο Πορείας'];
         let missingReasonsModified = false;
 
+        /**
+         * Προτίμηση «Ευέλικτη ημερομηνία ισχύος»: ανά Firebase χρήστη στο Firestore.
+         * Διαδρομή: dutyShifts/userPreferences/users/{uid}
+         * Σύσταση κανόνα ασφαλείας: ανάγνωση/εγγραφή μόνο αν request.auth.uid == uid (και όποιοι άλλοι έλεγχοι έχετε για Duty Shifts).
+         */
+        const FLEXIBLE_STATUS_EFFECTIVE_LS_KEY = 'dutyShiftsFlexibleStatusEffectiveDates';
+        let dutyShiftsUserPrefsFlexibleEffectiveDates = null;
+        let dutyShiftsUserPrefsLoadedForUid = null;
+
+        function readFlexibleStatusEffectiveFromLocalStorage() {
+            try {
+                const v = localStorage.getItem(FLEXIBLE_STATUS_EFFECTIVE_LS_KEY);
+                return v === '1' || v === 'true';
+            } catch (_) {
+                return false;
+            }
+        }
+
+        function isFlexibleStatusEffectiveDatesEnabled() {
+            const uid = window.auth?.currentUser?.uid;
+            if (
+                uid &&
+                dutyShiftsUserPrefsLoadedForUid === uid &&
+                dutyShiftsUserPrefsFlexibleEffectiveDates !== null
+            ) {
+                return !!dutyShiftsUserPrefsFlexibleEffectiveDates;
+            }
+            return readFlexibleStatusEffectiveFromLocalStorage();
+        }
+
+        function resetDutyShiftsUserPreferencesSessionCache() {
+            dutyShiftsUserPrefsFlexibleEffectiveDates = null;
+            dutyShiftsUserPrefsLoadedForUid = null;
+        }
+
+        function applyDutyShiftsFlexiblePreferenceForUser(uid, valueFromFirestore) {
+            dutyShiftsUserPrefsLoadedForUid = uid || null;
+            if (typeof valueFromFirestore === 'boolean') {
+                dutyShiftsUserPrefsFlexibleEffectiveDates = valueFromFirestore;
+            } else {
+                dutyShiftsUserPrefsFlexibleEffectiveDates = readFlexibleStatusEffectiveFromLocalStorage();
+            }
+            try {
+                localStorage.setItem(
+                    FLEXIBLE_STATUS_EFFECTIVE_LS_KEY,
+                    dutyShiftsUserPrefsFlexibleEffectiveDates ? '1' : '0'
+                );
+            } catch (_) {}
+        }
+
+        async function loadDutyShiftsUserPreferences(user) {
+            resetDutyShiftsUserPreferencesSessionCache();
+            if (!user?.uid || !window.db) {
+                dutyShiftsUserPrefsFlexibleEffectiveDates = readFlexibleStatusEffectiveFromLocalStorage();
+                dutyShiftsUserPrefsLoadedForUid = null;
+                return;
+            }
+            try {
+                const db = window.db || firebase.firestore();
+                const snap = await db
+                    .collection('dutyShifts')
+                    .doc('userPreferences')
+                    .collection('users')
+                    .doc(user.uid)
+                    .get();
+                if (snap.exists) {
+                    const d = snap.data() || {};
+                    if (typeof d.flexibleStatusEffectiveDates === 'boolean') {
+                        applyDutyShiftsFlexiblePreferenceForUser(user.uid, d.flexibleStatusEffectiveDates);
+                        return;
+                    }
+                }
+                applyDutyShiftsFlexiblePreferenceForUser(user.uid, undefined);
+            } catch (e) {
+                console.warn('loadDutyShiftsUserPreferences:', e);
+                applyDutyShiftsFlexiblePreferenceForUser(user.uid, undefined);
+            }
+        }
+
+        async function saveDutyShiftsUserPreferenceFlexibleEffective(enabled) {
+            const user = window.auth?.currentUser;
+            const val = !!enabled;
+            dutyShiftsUserPrefsFlexibleEffectiveDates = val;
+            dutyShiftsUserPrefsLoadedForUid = user?.uid || null;
+            try {
+                localStorage.setItem(FLEXIBLE_STATUS_EFFECTIVE_LS_KEY, val ? '1' : '0');
+            } catch (_) {}
+
+            if (!user?.uid || !window.db) return;
+
+            try {
+                const db = window.db || firebase.firestore();
+                await db
+                    .collection('dutyShifts')
+                    .doc('userPreferences')
+                    .collection('users')
+                    .doc(user.uid)
+                    .set(
+                        {
+                            flexibleStatusEffectiveDates: val,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedBy: user.uid
+                        },
+                        { merge: true }
+                    );
+            } catch (e) {
+                console.error('saveDutyShiftsUserPreferenceFlexibleEffective:', e);
+                alert(
+                    'Η ρύθμιση αποθηκεύτηκε τοπικά στον browser, αλλά αποτυχία εγγραφής στο cloud. Ελέγξτε δικαιώματα Firestore ή τη σύνδεση.'
+                );
+            }
+        }
+
+        window.isFlexibleStatusEffectiveDatesEnabled = isFlexibleStatusEffectiveDatesEnabled;
+        window.loadDutyShiftsUserPreferences = loadDutyShiftsUserPreferences;
+        window.saveDutyShiftsUserPreferenceFlexibleEffective = saveDutyShiftsUserPreferenceFlexibleEffective;
+        window.resetDutyShiftsUserPreferencesSessionCache = resetDutyShiftsUserPreferencesSessionCache;
+
         // Track data loading to prevent duplicate loads
         let dataLastLoaded = null;
         let isLoadingData = false;
@@ -1133,6 +1290,7 @@
                     if (user && user.emailVerified) {
                         const now = Date.now();
                         if (dataLastLoaded && (now - dataLastLoaded) < DATA_CACHE_DURATION && !isLoadingData) {
+                            await loadDutyShiftsUserPreferences(user);
                             renderGroups();
                             renderHolidays();
                             renderRecurringHolidays();
@@ -1143,6 +1301,7 @@
                         
                         isLoadingData = true;
                         await loadData();
+                        await loadDutyShiftsUserPreferences(user);
                         dataLastLoaded = Date.now();
                         isLoadingData = false;
                         
@@ -1155,6 +1314,7 @@
                         updateStatistics();
                         });
                     } else {
+                        resetDutyShiftsUserPreferencesSessionCache();
                         // Not authenticated, use localStorage
                         loadDataFromLocalStorage();
                         requestAnimationFrame(() => {

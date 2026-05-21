@@ -235,16 +235,6 @@
             modal.show();
         }
 
-        /** Όταν ενεργό: επιλογή «Ισχύει από» (modal) ανά πάσα στιγμή. Όταν απενεργοποιημένο: μόνο τελευταίο δεκαπενθήμερο + ισχύς όπως παλιά. */
-        const FLEXIBLE_STATUS_EFFECTIVE_LS_KEY = 'dutyShiftsFlexibleStatusEffectiveDates';
-        function isFlexibleStatusEffectiveDatesEnabled() {
-            try {
-                const v = localStorage.getItem(FLEXIBLE_STATUS_EFFECTIVE_LS_KEY);
-                return v === '1' || v === 'true';
-            } catch (_) {
-                return false;
-            }
-        }
         function assertStatusChangeWindowOrAlert() {
             if (isFlexibleStatusEffectiveDatesEnabled()) return true;
             if (typeof isInStatusChangeWindow === 'function' && isInStatusChangeWindow(new Date())) return true;
@@ -1056,9 +1046,7 @@
                                 ? formatScheduledStatusEffectiveLabel(effNorm || effKey)
                                 : effNorm || effKey;
                         if (effLabel) {
-                            const suffix = isFlexibleStatusEffectiveDatesEnabled()
-                                ? '.'
-                                : ' (1η επόμενου μήνα).';
+                            const suffix = isFlexibleStatusEffectiveDatesEnabled() ? '.' : ' (για υπολογισμούς από αυτή την ημερομηνία).';
                             alert(`Η αλλαγή σειράς καταχωρήθηκε.\nΙσχύει από ${effLabel}${suffix}`);
                         }
                     }
@@ -3418,7 +3406,7 @@
                     if (effLabel) {
                         const suffix = isFlexibleStatusEffectiveDatesEnabled()
                             ? '.'
-                            : ' (1η επόμενου μήνα).';
+                            : ' (για υπολογισμούς από αυτή την ημερομηνία).';
                         alert(`Η αλλαγή σειράς καταχωρήθηκε.\nΙσχύει από ${effLabel}${suffix}`);
                     }
                 }
@@ -4238,11 +4226,13 @@
             const m = new bootstrap.Modal(modalEl);
             m.show();
         }
-        function saveNormalSwapLogicSettingsFromModal() {
+        async function saveNormalSwapLogicSettingsFromModal() {
             const flexCb = document.getElementById('dutyShiftsFlexibleStatusEffectiveDates');
-            if (flexCb) {
+            if (flexCb && typeof saveDutyShiftsUserPreferenceFlexibleEffective === 'function') {
+                await saveDutyShiftsUserPreferenceFlexibleEffective(!!flexCb.checked);
+            } else if (flexCb) {
                 try {
-                    localStorage.setItem(FLEXIBLE_STATUS_EFFECTIVE_LS_KEY, flexCb.checked ? '1' : '0');
+                    localStorage.setItem('dutyShiftsFlexibleStatusEffectiveDates', flexCb.checked ? '1' : '0');
                 } catch (_) {}
             }
             const selected = [];

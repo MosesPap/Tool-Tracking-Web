@@ -383,7 +383,9 @@
             
             if (listArrayLength > 0) {
                 // Get the person's index in the list (their rotation position)
-                const list = groups[groupNum]?.[listType] || [];
+                const gd =
+                    typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum] || {};
+                const list = gd[listType] || [];
                 const personIndex = list.indexOf(person);
                 
                 if (personIndex === -1) {
