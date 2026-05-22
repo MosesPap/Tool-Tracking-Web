@@ -2346,15 +2346,28 @@
                     calculationSteps.dutyProtectionSnapshot = null;
                 }
                 
-                // If not preserving existing: delete selected months from Firebase and in-memory so calculation starts fresh
+                // If not preserving existing: clear only selected groups for the month (others unchanged)
                 if (!preserveExisting && monthKeysForRange.length > 0) {
+                    if (typeof captureDutyShiftsCancelRestoreSnapshot === 'function') {
+                        calculationSteps.cancelRestoreSnapshot = captureDutyShiftsCancelRestoreSnapshot(
+                            startDate,
+                            endDate
+                        );
+                    } else {
+                        calculationSteps.cancelRestoreSnapshot = null;
+                    }
                     const db = window.db || (typeof firebase !== 'undefined' && firebase.firestore && firebase.firestore());
                     const user = window.auth && window.auth.currentUser;
                     if (db && user && typeof deleteSelectedMonthsFromDutyDocs === 'function') {
-                        await deleteSelectedMonthsFromDutyDocs(db, user, monthKeysForRange);
+                        await deleteSelectedMonthsFromDutyDocs(
+                            db,
+                            user,
+                            monthKeysForRange,
+                            calculationSteps.stripManualOverrideGroups
+                        );
                     }
                     if (typeof clearSelectedMonthsInMemory === 'function') {
-                        clearSelectedMonthsInMemory(monthKeysForRange);
+                        clearSelectedMonthsInMemory(monthKeysForRange, calculationSteps.stripManualOverrideGroups);
                     }
                     if (calculationSteps.dutyProtectionSnapshot && typeof restoreManualDutyProtectionReasonsAfterClear === 'function') {
                         restoreManualDutyProtectionReasonsAfterClear(
@@ -2516,6 +2529,13 @@
                 
                 // Store assignments and rotation positions for saving when Next is pressed
                 const tempSpecialAssignments = {}; // dateKey -> { groupNum -> personName }
+                if (typeof seedPreservedDutyAssignmentsIntoTemp === 'function') {
+                    seedPreservedDutyAssignmentsIntoTemp(
+                        tempSpecialAssignments,
+                        specialHolidayAssignments,
+                        sortedSpecial
+                    );
+                }
                 // Track rotation persons (who SHOULD be assigned according to rotation, before missing/skip)
                 const specialRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
                 // For missing replacement: keep a simulated set of special assignments so hasConsecutiveDuty can validate neighbors.
@@ -2682,6 +2702,9 @@
 
                     // Calculate who will be assigned for each group based on rotation order (per-group position from globalSpecialRotationPosition)
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
+                            continue;
+                        }
                         const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
                         const groupPeople = groupData.special || [];
                         
@@ -3304,17 +3327,22 @@
                 const tempSpecialBaselineAssignments = calculationSteps.tempSpecialBaselineAssignments || {};
                 const lastSpecialRotationPositionsByMonth = calculationSteps.lastSpecialRotationPositionsByMonth || {};
                 
-                // Save special holiday assignments to Firestore
+                // Save special holiday assignments to Firestore (μόνο ομάδες επανυπολογισμού — merge με υπάρχουσες)
                 if (Object.keys(tempSpecialAssignments).length > 0) {
-                    // Organize by month
-                    const organizedSpecial = organizeAssignmentsByMonth(tempSpecialAssignments);
+                    if (typeof mergeTempGroupAssignmentsIntoAssignmentStore === 'function') {
+                        mergeTempGroupAssignmentsIntoAssignmentStore(tempSpecialAssignments, specialHolidayAssignments);
+                    } else {
+                        Object.assign(specialHolidayAssignments, tempSpecialAssignments);
+                    }
+                    const toOrganize = {};
+                    for (const dk of Object.keys(tempSpecialAssignments)) {
+                        if (specialHolidayAssignments[dk] !== undefined) toOrganize[dk] = specialHolidayAssignments[dk];
+                    }
+                    const organizedSpecial = organizeAssignmentsByMonth(toOrganize);
                     const sanitizedSpecial = sanitizeForFirestore(organizedSpecial);
                     
                     await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'specialHolidayAssignments', organizedSpecial);
-                    console.log('Saved Step 1 special holiday assignments to Firestore:', Object.keys(tempSpecialAssignments).length, 'dates');
-                    
-                    // Also update local memory
-                    Object.assign(specialHolidayAssignments, tempSpecialAssignments);
+                    console.log('Saved Step 1 special holiday assignments to Firestore:', Object.keys(toOrganize).length, 'dates');
                 }
 
                 // Save special-holiday rotation baseline (pure rotation order) to Firestore
@@ -3330,6 +3358,7 @@
                     for (const monthKey in lastSpecialRotationPositionsByMonth) {
                         const groupsForMonth = lastSpecialRotationPositionsByMonth[monthKey] || {};
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) continue;
                             if (groupsForMonth[groupNum] !== undefined) {
                                 setLastRotationPersonForMonth('special', monthKey, groupNum, groupsForMonth[groupNum]);
                             }
@@ -3393,8 +3422,18 @@
                         }
                     }
                     
-                    // Update local memory (for preview and subsequent steps)
-                    Object.assign(weekendAssignments, formattedAssignments);
+                    let mergedWeekend = formattedAssignments;
+                    if (typeof mergeFormattedAssignmentsWithExistingStore === 'function' && typeof getCalculationRecalcGroupSet === 'function') {
+                        const recalcSet = getCalculationRecalcGroupSet();
+                        if (recalcSet) {
+                            mergedWeekend = mergeFormattedAssignmentsWithExistingStore(
+                                formattedAssignments,
+                                weekendAssignments,
+                                recalcSet
+                            );
+                        }
+                    }
+                    Object.assign(weekendAssignments, mergedWeekend);
                 }
                 
                 // Save last rotation positions for weekends (per month)
@@ -3402,6 +3441,7 @@
                     for (const monthKey in lastWeekendRotationPositionsByMonth) {
                         const groupsForMonth = lastWeekendRotationPositionsByMonth[monthKey] || {};
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) continue;
                             if (groupsForMonth[groupNum] !== undefined) {
                                 setLastRotationPersonForMonth('weekend', monthKey, groupNum, groupsForMonth[groupNum]);
                             }
@@ -3888,14 +3928,24 @@
                         }
                     }
                     
-                    const organizedWeekend = organizeAssignmentsByMonth(formattedAssignments);
+                    let mergedWeekendFinal = formattedAssignments;
+                    if (typeof mergeFormattedAssignmentsWithExistingStore === 'function' && typeof getCalculationRecalcGroupSet === 'function') {
+                        const recalcSet = getCalculationRecalcGroupSet();
+                        if (recalcSet) {
+                            mergedWeekendFinal = mergeFormattedAssignmentsWithExistingStore(
+                                formattedAssignments,
+                                weekendAssignments,
+                                recalcSet
+                            );
+                        }
+                    }
+                    const organizedWeekend = organizeAssignmentsByMonth(mergedWeekendFinal);
                     const sanitizedWeekend = sanitizeForFirestore(organizedWeekend);
                     
                     await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'weekendAssignments', organizedWeekend);
                     console.log('Saved Step 2 final weekend assignments (after skip logic) to weekendAssignments document');
                     
-                    // Update local memory
-                    Object.assign(weekendAssignments, formattedAssignments);
+                    Object.assign(weekendAssignments, mergedWeekendFinal);
                     
                     // IMPORTANT: Update rotation positions based on FINAL assignments (after skip logic)
                     // This ensures that when Person A is replaced by Person B, next calculation starts from Person B's position
@@ -4631,7 +4681,18 @@
                         }
                     }
                     
-                    const organizedSemi = organizeAssignmentsByMonth(formattedAssignments);
+                    let mergedSemiFinal = formattedAssignments;
+                    if (typeof mergeFormattedAssignmentsWithExistingStore === 'function' && typeof getCalculationRecalcGroupSet === 'function') {
+                        const recalcSet = getCalculationRecalcGroupSet();
+                        if (recalcSet) {
+                            mergedSemiFinal = mergeFormattedAssignmentsWithExistingStore(
+                                formattedAssignments,
+                                semiNormalAssignments,
+                                recalcSet
+                            );
+                        }
+                    }
+                    const organizedSemi = organizeAssignmentsByMonth(mergedSemiFinal);
                     const sanitizedSemi = sanitizeForFirestore(organizedSemi);
                     
                     await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'semiNormalAssignments', organizedSemi);
@@ -5597,6 +5658,9 @@
                     const date = new Date(dateKey + 'T00:00:00');
                     
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
+                            continue;
+                        }
                         const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { normal: [] };
                         const groupPeople = groupData.normal || [];
                         
@@ -6575,14 +6639,24 @@
                     if (formattedAssignments['2026-02-19'] || formattedAssignments['2026-02-26']) {
                         console.log('[SAVE DEBUG] formattedAssignments for 2026-02-19:', formattedAssignments['2026-02-19'], '2026-02-26:', formattedAssignments['2026-02-26']);
                     }
-                    const organizedNormal = organizeAssignmentsByMonth(formattedAssignments);
+                    let mergedNormalFinal = formattedAssignments;
+                    if (typeof mergeFormattedAssignmentsWithExistingStore === 'function' && typeof getCalculationRecalcGroupSet === 'function') {
+                        const recalcSet = getCalculationRecalcGroupSet();
+                        if (recalcSet) {
+                            mergedNormalFinal = mergeFormattedAssignmentsWithExistingStore(
+                                formattedAssignments,
+                                normalDayAssignments,
+                                recalcSet
+                            );
+                        }
+                    }
+                    const organizedNormal = organizeAssignmentsByMonth(mergedNormalFinal);
                     const sanitizedNormal = sanitizeForFirestore(organizedNormal);
                     
                     await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'normalDayAssignments', organizedNormal);
                     console.log('Saved Step 4 final normal assignments (after swap logic) to normalDayAssignments document');
                     
-                    // Update local memory
-                    Object.assign(normalDayAssignments, formattedAssignments);
+                    Object.assign(normalDayAssignments, mergedNormalFinal);
                     
                     // IMPORTANT: Update last normal rotation state from FINAL assignments (after return-from-missing and swap)
                     // so that next time we build the preview we start from the correct person and rotation stays consistent.
@@ -6658,20 +6732,30 @@
                 renderCurrentStep();
             }
         }
-        function cancelStepByStepCalculation() {
+        async function cancelStepByStepCalculation() {
+            const snap = calculationSteps.cancelRestoreSnapshot;
+            calculationSteps.cancelRestoreSnapshot = null;
+
             const modal = bootstrap.Modal.getInstance(document.getElementById('stepByStepCalculationModal'));
             if (modal) {
                 modal.hide();
             }
-            // Remove backdrop if it exists
             const backdrop = document.querySelector('.modal-backdrop');
-            if (backdrop) {
-                backdrop.remove();
-            }
-            // Remove modal-open class from body
+            if (backdrop) backdrop.remove();
             document.body.classList.remove('modal-open');
             document.body.style.overflow = '';
             document.body.style.paddingRight = '';
+
+            if (snap && typeof restoreDutyShiftsCancelRestoreSnapshot === 'function') {
+                restoreDutyShiftsCancelRestoreSnapshot(snap);
+                try {
+                    if (typeof saveData === 'function') await saveData();
+                    if (typeof renderCalendar === 'function') renderCalendar();
+                } catch (err) {
+                    console.error('cancelStepByStepCalculation restore:', err);
+                    alert('Η ακύρωση επανέφερε τα δεδομένα στη μνήμη, αλλά αποτυχία αποθήκευσης στο cloud. Δοκιμάστε ξανά ή ανανεώστε τη σελίδα.');
+                }
+            }
         }
         async function executeCalculation() {
             let loadingAlert = null;
@@ -6693,18 +6777,36 @@
             const endDate = calculationSteps.endDate;
             const preserveExisting = calculationSteps.preserveExisting;
             
-            // Clear assignments only for the selected date range if not preserving
+            // Clear assignments only for recalc groups in range (unselected groups keep existing duties)
             if (!preserveExisting) {
+                const recalcSet =
+                    typeof getCalculationRecalcGroupSet === 'function' ? getCalculationRecalcGroupSet() : null;
+                const stores = [
+                    normalDayAssignments,
+                    semiNormalAssignments,
+                    weekendAssignments,
+                    specialHolidayAssignments
+                ];
                 const dateIterator = new Date(startDate);
                 while (dateIterator <= endDate) {
                     const key = formatDateKey(dateIterator);
-                    // Delete assignments for the selected date range
+                    if (!recalcSet) {
                         delete dutyAssignments[key];
-                            // Also delete from day-type-specific assignments
-                            delete normalDayAssignments[key];
-                            delete semiNormalAssignments[key];
-                            delete weekendAssignments[key];
-                            delete specialHolidayAssignments[key];
+                        delete normalDayAssignments[key];
+                        delete semiNormalAssignments[key];
+                        delete weekendAssignments[key];
+                        delete specialHolidayAssignments[key];
+                    } else {
+                        for (const store of stores) {
+                            if (!store[key]) continue;
+                            const stripped =
+                                typeof removeGroupsFromAssignmentValue === 'function'
+                                    ? removeGroupsFromAssignmentValue(store[key], recalcSet)
+                                    : undefined;
+                            if (stripped !== undefined) store[key] = stripped;
+                            else delete store[key];
+                        }
+                    }
                     dateIterator.setDate(dateIterator.getDate() + 1);
                 }
             }
@@ -7121,6 +7223,13 @@
                 
                 // Track weekend assignments as we process them (for consecutive day checking)
                 const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
+                if (typeof seedPreservedDutyAssignmentsIntoTemp === 'function') {
+                    seedPreservedDutyAssignmentsIntoTemp(
+                        simulatedWeekendAssignments,
+                        weekendAssignments,
+                        sortedWeekends
+                    );
+                }
                 
                 // IMPORTANT: Track rotation persons (who SHOULD be assigned according to rotation)
                 // This is separate from assigned persons (who may have been swapped/skipped)
@@ -7343,6 +7452,17 @@
                     
                     // Calculate who will be assigned for each group based on rotation order
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
+                            const preserved = simulatedWeekendAssignments[dateKey]?.[groupNum];
+                            if (preserved) {
+                                if (!weekendRotationPersons[dateKey]) weekendRotationPersons[dateKey] = {};
+                                weekendRotationPersons[dateKey][groupNum] = preserved;
+                                html += `<td>${buildBaselineComputedCellHtml(preserved, preserved, '', '')}</td>`;
+                            } else {
+                                html += '<td class="text-muted">-</td>';
+                            }
+                            continue;
+                        }
                         const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
                         const groupPeople = groupData.weekend || [];
                         
@@ -7972,6 +8092,14 @@
                 const { date, monthKey } = meta;
                 if (!baseline[dateKey]) baseline[dateKey] = {};
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
+                        const map = extractGroupAssignmentsMap(semiNormalAssignments?.[dateKey]);
+                        if (map[groupNum]) {
+                            if (!baseline[dateKey]) baseline[dateKey] = {};
+                            baseline[dateKey][groupNum] = map[groupNum];
+                        }
+                        continue;
+                    }
                     const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { semi: [] };
                     const groupPeople = groupData.semi || [];
                     if (groupPeople.length === 0) continue;
@@ -8069,6 +8197,7 @@
                 const { monthKey } = meta;
                 const indicesInMonth = semiIndicesByMonth[monthKey] || [];
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) continue;
                     if (swappedSet.has(`${dateKey}:${groupNum}`)) continue;
                     const person = finalAssignments[dateKey]?.[groupNum];
                     if (!person || !hasConflict(dateKey, person, groupNum)) continue;
@@ -8173,7 +8302,17 @@
                     const user = window.auth.currentUser;
                     const formattedBaseline = formatGroupAssignmentsToStringMap(baseline);
                     const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
-                    const formattedFinal = formatGroupAssignmentsToStringMap(finalAssignments);
+                    let formattedFinal = formatGroupAssignmentsToStringMap(finalAssignments);
+                    if (typeof mergeFormattedAssignmentsWithExistingStore === 'function' && typeof getCalculationRecalcGroupSet === 'function') {
+                        const recalcSet = getCalculationRecalcGroupSet();
+                        if (recalcSet) {
+                            formattedFinal = mergeFormattedAssignmentsWithExistingStore(
+                                formattedFinal,
+                                semiNormalAssignments,
+                                recalcSet
+                            );
+                        }
+                    }
                     const organizedFinal = organizeAssignmentsByMonth(formattedFinal);
                     // Save baseline and final in parallel to reduce total wait
                     await Promise.all([
@@ -9338,6 +9477,9 @@
             
             // Sort normal days by date (define at function scope so it's accessible for swap logic)
             const sortedNormal = [...normalDays].sort();
+            if (typeof seedPreservedDutyAssignmentsIntoTemp === 'function') {
+                seedPreservedDutyAssignmentsIntoTemp(normalAssignments, normalDayAssignments, sortedNormal);
+            }
             
             // IMPORTANT: Track normal rotation persons (who SHOULD be assigned according to rotation)
             // This is separate from assigned persons (who may have been swapped)
@@ -9633,6 +9775,17 @@
                     
                     // Calculate who will be assigned for each group
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
+                            const preserved = normalAssignments[dateKey]?.[groupNum];
+                            if (preserved) {
+                                if (!normalRotationPersons[dateKey]) normalRotationPersons[dateKey] = {};
+                                normalRotationPersons[dateKey][groupNum] = preserved;
+                                html += `<td>${buildBaselineComputedCellHtml(preserved, preserved, '', '')}</td>`;
+                            } else {
+                                html += '<td class="text-muted">-</td>';
+                            }
+                            continue;
+                        }
                         const groupData =
                             (typeof groupsForDuty === 'function'
                                 ? groupsForDuty(groupNum, dateKey)
@@ -10157,6 +10310,9 @@
                 const date = new Date(dateKey + 'T00:00:00');
                 
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
+                        continue;
+                    }
                     const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { normal: [] };
                     const groupPeople = groupData.normal || [];
                     

@@ -1155,8 +1155,198 @@
             stripManualOverrideGroups: [],
             dayTypeLists: null,
             /** Captured before month recalc clear; used to restore manual modal / mutual swap / alternate replacement. */
-            dutyProtectionSnapshot: null
+            dutyProtectionSnapshot: null,
+            /** Full in-memory snapshot before partial month clear (restore on Ακύρωση). */
+            cancelRestoreSnapshot: null
         };
+
+        /** Groups selected for recalc (strip manual overrides). Null = preserve-all mode (no partial strip). */
+        function getCalculationRecalcGroupSet() {
+            const arr = calculationSteps?.stripManualOverrideGroups;
+            if (!Array.isArray(arr) || arr.length === 0) return null;
+            const s = new Set(arr.map((x) => parseInt(x, 10)).filter((x) => x >= 1 && x <= 4));
+            return s.size > 0 ? s : null;
+        }
+
+        function shouldRecalculateDutyGroup(groupNum) {
+            const s = getCalculationRecalcGroupSet();
+            if (!s) return true;
+            return s.has(groupNum);
+        }
+
+        function removeGroupsFromAssignmentValue(assignment, groupSet) {
+            if (!groupSet || groupSet.size === 0) return assignment;
+            if (!assignment) return undefined;
+            if (typeof assignment === 'object' && !Array.isArray(assignment)) {
+                const copy = { ...assignment };
+                for (const g of groupSet) {
+                    delete copy[g];
+                    delete copy[String(g)];
+                }
+                return Object.keys(copy).length > 0 ? copy : undefined;
+            }
+            const map = extractGroupAssignmentsMap(assignment);
+            for (const g of groupSet) delete map[g];
+            const str = groupMapToAssignmentString(map);
+            return str || undefined;
+        }
+
+        function seedPreservedDutyAssignmentsIntoTemp(tempByDate, existingByDate, dateKeys) {
+            const recalcSet = getCalculationRecalcGroupSet();
+            if (!recalcSet) return;
+            const keys = Array.isArray(dateKeys) ? dateKeys : Object.keys(existingByDate || {});
+            for (const dateKey of keys) {
+                const map = extractGroupAssignmentsMap(existingByDate?.[dateKey]);
+                for (let g = 1; g <= 4; g++) {
+                    if (recalcSet.has(g) || !map[g]) continue;
+                    if (!tempByDate[dateKey]) tempByDate[dateKey] = {};
+                    tempByDate[dateKey][g] = map[g];
+                }
+            }
+        }
+
+        function mergeTempGroupAssignmentsIntoAssignmentStore(tempByDate, targetStore) {
+            if (!tempByDate || !targetStore) return;
+            const recalcSet = getCalculationRecalcGroupSet();
+            for (const dateKey of Object.keys(tempByDate)) {
+                const tempMap = tempByDate[dateKey];
+                if (!tempMap || typeof tempMap !== 'object') continue;
+                if (!recalcSet) {
+                    targetStore[dateKey] = { ...tempMap };
+                    continue;
+                }
+                const existingMap = extractGroupAssignmentsMap(targetStore[dateKey]);
+                for (let g = 1; g <= 4; g++) {
+                    if (!recalcSet.has(g)) continue;
+                    if (tempMap[g]) existingMap[g] = tempMap[g];
+                    else delete existingMap[g];
+                }
+                const str = groupMapToAssignmentString(existingMap);
+                if (str) targetStore[dateKey] = existingMap;
+                else delete targetStore[dateKey];
+            }
+        }
+
+        function mergeFormattedAssignmentsWithExistingStore(formattedNew, existingStore, recalcGroupSet) {
+            if (!recalcGroupSet || recalcGroupSet.size === 0) return formattedNew;
+            const out = { ...formattedNew };
+            for (const dateKey of Object.keys(formattedNew)) {
+                const newMap = extractGroupAssignmentsMap(formattedNew[dateKey]);
+                const existingMap = extractGroupAssignmentsMap(existingStore?.[dateKey]);
+                const merged = { ...existingMap };
+                for (const g of recalcGroupSet) {
+                    if (newMap[g]) merged[g] = newMap[g];
+                    else delete merged[g];
+                }
+                const str = groupMapToAssignmentString(merged);
+                if (str) out[dateKey] = str;
+                else delete out[dateKey];
+            }
+            for (const dateKey of Object.keys(existingStore || {})) {
+                if (out[dateKey]) continue;
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue;
+                const existingMap = extractGroupAssignmentsMap(existingStore[dateKey]);
+                let hasPreserved = false;
+                for (let g = 1; g <= 4; g++) {
+                    if (!recalcGroupSet.has(g) && existingMap[g]) hasPreserved = true;
+                }
+                if (hasPreserved) out[dateKey] = existingStore[dateKey];
+            }
+            return out;
+        }
+
+        function captureDutyShiftsCancelRestoreSnapshot(startDate, endDate) {
+            if (!startDate || !endDate) return null;
+            const snap = {
+                normalDayAssignments: {},
+                semiNormalAssignments: {},
+                weekendAssignments: {},
+                specialHolidayAssignments: {},
+                rotationBaselineSpecialAssignments: {},
+                rotationBaselineWeekendAssignments: {},
+                rotationBaselineSemiAssignments: {},
+                rotationBaselineNormalAssignments: {},
+                assignmentReasons: {}
+            };
+            try {
+                snap.lastRotationPositions = JSON.parse(JSON.stringify(lastRotationPositions || {}));
+            } catch (_) {
+                snap.lastRotationPositions = { normal: {}, semi: {}, weekend: {}, special: {} };
+            }
+            const storeMap = {
+                normalDayAssignments,
+                semiNormalAssignments,
+                weekendAssignments,
+                specialHolidayAssignments,
+                rotationBaselineSpecialAssignments,
+                rotationBaselineWeekendAssignments,
+                rotationBaselineSemiAssignments,
+                rotationBaselineNormalAssignments
+            };
+            const storeNames = Object.keys(storeMap);
+            const di = new Date(startDate);
+            const end = new Date(endDate);
+            while (di <= end) {
+                const dk = formatDateKey(di);
+                for (const name of storeNames) {
+                    const store = storeMap[name];
+                    if (store && store[dk] !== undefined) {
+                        try {
+                            snap[name][dk] = JSON.parse(JSON.stringify(store[dk]));
+                        } catch (_) {
+                            snap[name][dk] = store[dk];
+                        }
+                    }
+                }
+                if (assignmentReasons[dk]) {
+                    try {
+                        snap.assignmentReasons[dk] = JSON.parse(JSON.stringify(assignmentReasons[dk]));
+                    } catch (_) {
+                        snap.assignmentReasons[dk] = assignmentReasons[dk];
+                    }
+                }
+                di.setDate(di.getDate() + 1);
+            }
+            return snap;
+        }
+
+        function restoreDutyShiftsCancelRestoreSnapshot(snapshot) {
+            if (!snapshot) return;
+            const pairs = [
+                [normalDayAssignments, snapshot.normalDayAssignments],
+                [semiNormalAssignments, snapshot.semiNormalAssignments],
+                [weekendAssignments, snapshot.weekendAssignments],
+                [specialHolidayAssignments, snapshot.specialHolidayAssignments],
+                [rotationBaselineSpecialAssignments, snapshot.rotationBaselineSpecialAssignments],
+                [rotationBaselineWeekendAssignments, snapshot.rotationBaselineWeekendAssignments],
+                [rotationBaselineSemiAssignments, snapshot.rotationBaselineSemiAssignments],
+                [rotationBaselineNormalAssignments, snapshot.rotationBaselineNormalAssignments]
+            ];
+            for (const [store, frag] of pairs) {
+                if (!store || !frag) continue;
+                for (const dk of Object.keys(frag)) {
+                    store[dk] = frag[dk];
+                }
+            }
+            for (const dk of Object.keys(snapshot.assignmentReasons || {})) {
+                assignmentReasons[dk] = snapshot.assignmentReasons[dk];
+            }
+            if (snapshot.lastRotationPositions) {
+                try {
+                    lastRotationPositions = JSON.parse(JSON.stringify(snapshot.lastRotationPositions));
+                } catch (_) {}
+            }
+            if (typeof rebuildRotationBaselineLastByType === 'function') rebuildRotationBaselineLastByType();
+        }
+
+        window.getCalculationRecalcGroupSet = getCalculationRecalcGroupSet;
+        window.shouldRecalculateDutyGroup = shouldRecalculateDutyGroup;
+        window.seedPreservedDutyAssignmentsIntoTemp = seedPreservedDutyAssignmentsIntoTemp;
+        window.mergeTempGroupAssignmentsIntoAssignmentStore = mergeTempGroupAssignmentsIntoAssignmentStore;
+        window.mergeFormattedAssignmentsWithExistingStore = mergeFormattedAssignmentsWithExistingStore;
+        window.captureDutyShiftsCancelRestoreSnapshot = captureDutyShiftsCancelRestoreSnapshot;
+        window.restoreDutyShiftsCancelRestoreSnapshot = restoreDutyShiftsCancelRestoreSnapshot;
+        window.removeGroupsFromAssignmentValue = removeGroupsFromAssignmentValue;
 
         function _stripOverrideGroupSetFromArray(stripGroupNums) {
             if (!Array.isArray(stripGroupNums) || stripGroupNums.length === 0) return null;
@@ -3748,14 +3938,14 @@
             }
         }
 
-        // Delete for selected month(s) from rotation baselines, lastRotationPositions, and assignment docs (when not preserving existing).
-        // Uses parallel reads and parallel writes to avoid long sequential round-trips.
-        async function deleteSelectedMonthsFromDutyDocs(db, user, monthKeys) {
+        // Delete/clear selected month(s). If groupNums (1–4) provided, only those groups are removed; other groups stay.
+        async function deleteSelectedMonthsFromDutyDocs(db, user, monthKeys, groupNums) {
             if (!db || !user || !Array.isArray(monthKeys) || monthKeys.length === 0) return;
             const monthKeyRegex = /^[A-Za-z]+\s+\d{4}$/;
             const dateKeyRegex = /^\d{4}-\d{2}-\d{2}$/;
             const monthNamesToDelete = new Set(monthKeys.map(mk => getMonthNameFromMonthKey(mk)).filter(Boolean));
             const monthKeySet = new Set(monthKeys);
+            const groupSet = _stripOverrideGroupSetFromArray(groupNums);
             const dutyShifts = db.collection('dutyShifts');
 
             const monthOrganizedDocIds = [
@@ -3789,12 +3979,30 @@
                     for (const key in data) {
                         const val = data[key];
                         if (monthKeyRegex.test(key) && val && typeof val === 'object' && !Array.isArray(val)) {
-                            if (!monthNamesToDelete.has(key)) normalized[key] = { ...val };
+                            if (!monthNamesToDelete.has(key)) {
+                                normalized[key] = { ...val };
+                                continue;
+                            }
+                            if (!groupSet) continue;
+                            const monthBlock = { ...val };
+                            for (const dk in monthBlock) {
+                                if (!dateKeyRegex.test(dk) || !monthKeySet.has(dk.substring(0, 7))) continue;
+                                const stripped = removeGroupsFromAssignmentValue(monthBlock[dk], groupSet);
+                                if (stripped !== undefined) monthBlock[dk] = stripped;
+                                else delete monthBlock[dk];
+                            }
+                            if (Object.keys(monthBlock).length > 0) normalized[key] = monthBlock;
                             continue;
                         }
                         if (dateKeyRegex.test(key)) {
                             const monthName = getMonthNameFromDateKey(key);
-                            if (monthName && !monthNamesToDelete.has(monthName)) {
+                            const mk = key.substring(0, 7);
+                            if (monthName && monthNamesToDelete.has(monthName) && monthKeySet.has(mk)) {
+                                if (!groupSet) continue;
+                                if (!normalized[monthName]) normalized[monthName] = {};
+                                const stripped = removeGroupsFromAssignmentValue(val, groupSet);
+                                if (stripped !== undefined) normalized[monthName][key] = stripped;
+                            } else if (monthName && !monthNamesToDelete.has(monthName)) {
                                 if (!normalized[monthName]) normalized[monthName] = {};
                                 normalized[monthName][key] = val;
                             }
@@ -3818,7 +4026,19 @@
                     for (const key in data) {
                         if (dateKeyRegex.test(key)) {
                             const mk = key.substring(0, 7);
-                            if (monthKeySet.has(mk)) continue;
+                            if (monthKeySet.has(mk)) {
+                                if (!groupSet) continue;
+                                const frag = data[key];
+                                if (!frag || typeof frag !== 'object') continue;
+                                const outFrag = {};
+                                for (const gStr of Object.keys(frag)) {
+                                    const gNum = parseInt(gStr, 10);
+                                    if (groupSet.has(gNum)) continue;
+                                    outFrag[gStr] = frag[gStr];
+                                }
+                                if (Object.keys(outFrag).length > 0) filtered[key] = outFrag;
+                                continue;
+                            }
                         }
                         filtered[key] = data[key];
                     }
@@ -3840,8 +4060,20 @@
                         const byType = data[dayType];
                         if (!byType || typeof byType !== 'object') continue;
                         for (const k in byType) {
-                            if (monthKeySet.has(k)) continue;
-                            out[dayType][k] = byType[k];
+                            if (!monthKeySet.has(k)) {
+                                out[dayType][k] = byType[k];
+                                continue;
+                            }
+                            if (!groupSet) continue;
+                            const block = byType[k];
+                            if (block && typeof block === 'object' && !Array.isArray(block)) {
+                                const copy = { ...block };
+                                for (const g of groupSet) {
+                                    delete copy[g];
+                                    delete copy[String(g)];
+                                }
+                                if (Object.keys(copy).length > 0) out[dayType][k] = copy;
+                            }
                         }
                     }
                     const sanitized = sanitizeForFirestore(out);
@@ -3856,34 +4088,67 @@
             }
         }
 
-        // Clear in-memory assignment/baseline/lastRotation for selected month(s) so calculation sees a clean slate.
-        function clearSelectedMonthsInMemory(monthKeys) {
+        function clearSelectedMonthsInMemory(monthKeys, groupNums) {
             if (!Array.isArray(monthKeys) || monthKeys.length === 0) return;
             const prefixSet = new Set(monthKeys);
+            const groupSet = _stripOverrideGroupSetFromArray(groupNums);
             const dateKeyInRange = (dateKey) => {
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return false;
-                const monthKey = dateKey.substring(0, 7);
-                return prefixSet.has(monthKey);
+                return prefixSet.has(dateKey.substring(0, 7));
             };
-            const purgeFrom = (obj) => {
+            const stripFromStore = (obj) => {
                 if (!obj || typeof obj !== 'object') return;
                 for (const key of Object.keys(obj)) {
-                    if (dateKeyInRange(key)) delete obj[key];
+                    if (!dateKeyInRange(key)) continue;
+                    if (!groupSet) {
+                        delete obj[key];
+                        continue;
+                    }
+                    const stripped = removeGroupsFromAssignmentValue(obj[key], groupSet);
+                    if (stripped !== undefined) obj[key] = stripped;
+                    else delete obj[key];
                 }
             };
-            purgeFrom(specialHolidayAssignments);
-            purgeFrom(weekendAssignments);
-            purgeFrom(semiNormalAssignments);
-            purgeFrom(normalDayAssignments);
-            purgeFrom(rotationBaselineSpecialAssignments);
-            purgeFrom(rotationBaselineWeekendAssignments);
-            purgeFrom(rotationBaselineSemiAssignments);
-            purgeFrom(rotationBaselineNormalAssignments);
-            purgeFrom(assignmentReasons);
+            stripFromStore(specialHolidayAssignments);
+            stripFromStore(weekendAssignments);
+            stripFromStore(semiNormalAssignments);
+            stripFromStore(normalDayAssignments);
+            stripFromStore(rotationBaselineSpecialAssignments);
+            stripFromStore(rotationBaselineWeekendAssignments);
+            stripFromStore(rotationBaselineSemiAssignments);
+            stripFromStore(rotationBaselineNormalAssignments);
+            if (!groupSet) {
+                for (const key of Object.keys(assignmentReasons || {})) {
+                    if (dateKeyInRange(key)) delete assignmentReasons[key];
+                }
+            } else {
+                for (const key of Object.keys(assignmentReasons || {})) {
+                    if (!dateKeyInRange(key)) continue;
+                    const frag = assignmentReasons[key];
+                    if (!frag || typeof frag !== 'object') continue;
+                    for (const gStr of Object.keys(frag)) {
+                        const gNum = parseInt(gStr, 10);
+                        if (groupSet.has(gNum)) delete frag[gStr];
+                    }
+                    if (Object.keys(frag).length === 0) delete assignmentReasons[key];
+                }
+            }
             for (const dayType of ['normal', 'semi', 'weekend', 'special']) {
                 const byType = lastRotationPositions[dayType];
-                if (byType && typeof byType === 'object') {
-                    for (const mk of monthKeys) delete byType[mk];
+                if (!byType || typeof byType !== 'object') continue;
+                for (const mk of monthKeys) {
+                    if (!byType[mk] || typeof byType[mk] !== 'object') continue;
+                    if (!groupSet) {
+                        delete byType[mk];
+                        continue;
+                    }
+                    const block = { ...byType[mk] };
+                    for (const g of groupSet) {
+                        delete block[g];
+                        delete block[String(g)];
+                    }
+                    if (Object.keys(block).length > 0) byType[mk] = block;
+                    else delete byType[mk];
                 }
             }
             if (typeof rebuildRotationBaselineLastByType === 'function') rebuildRotationBaselineLastByType();
