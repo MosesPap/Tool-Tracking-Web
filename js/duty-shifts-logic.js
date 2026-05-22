@@ -2327,6 +2327,16 @@
                     return;
                 }
 
+                if (stripManualOverrideGroups.length === 0) {
+                    alert(
+                        'Δεν επιλέξατε καμία ομάδα για επανυπολογισμό.\n\n' +
+                        'Οι υπηρεσίες, οι αμοιβαίες αλλαγές, οι αντικαταστάσεις και τα αίτια (assignment reasons) ' +
+                        'παραμένουν ακριβώς όπως είναι — δεν ανοίγει η διαδικασία βημάτων.\n\n' +
+                        'Επιλέξτε μία ή περισσότερες ομάδες αν θέλετε επανυπολογισμό μόνο για αυτές.'
+                    );
+                    return;
+                }
+
                 if (calcBtn) {
                     calcBtn.disabled = true;
                     calcBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Προετοιμασία...';
@@ -2338,16 +2348,16 @@
                 calculationSteps.preserveExisting = preserveExisting;
                 calculationSteps.stripManualOverrideGroups = stripManualOverrideGroups.slice();
                 calculationSteps.currentStep = 1;
+                calculationSteps.cancelRestoreSnapshot = null;
+                calculationSteps.dutyProtectionSnapshot = null;
                 
-                // Preserve manual modal / mutual swap / alternate-replacement across full recalc
+                // Preserve manual modal / mutual swap / alternate-replacement for selected groups only
                 if (typeof captureManualDutyProtectionSnapshot === 'function') {
                     calculationSteps.dutyProtectionSnapshot = captureManualDutyProtectionSnapshot(startDate, endDate);
-                } else {
-                    calculationSteps.dutyProtectionSnapshot = null;
                 }
                 
-                // If not preserving existing: clear only selected groups for the month (others unchanged)
-                if (!preserveExisting && monthKeysForRange.length > 0) {
+                // Clear only selected groups for the month (others unchanged)
+                if (monthKeysForRange.length > 0) {
                     if (typeof captureDutyShiftsCancelRestoreSnapshot === 'function') {
                         calculationSteps.cancelRestoreSnapshot = captureDutyShiftsCancelRestoreSnapshot(
                             startDate,

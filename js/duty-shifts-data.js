@@ -1160,7 +1160,7 @@
             cancelRestoreSnapshot: null
         };
 
-        /** Groups selected for recalc (strip manual overrides). Null = preserve-all mode (no partial strip). */
+        /** Groups selected for recalc. Null = καμία ομάδα — δεν τρέχει επανυπολογισμός. */
         function getCalculationRecalcGroupSet() {
             const arr = calculationSteps?.stripManualOverrideGroups;
             if (!Array.isArray(arr) || arr.length === 0) return null;
@@ -1168,9 +1168,13 @@
             return s.size > 0 ? s : null;
         }
 
+        function isDutyRecalculationActive() {
+            return getCalculationRecalcGroupSet() !== null;
+        }
+
         function shouldRecalculateDutyGroup(groupNum) {
             const s = getCalculationRecalcGroupSet();
-            if (!s) return true;
+            if (!s) return false;
             return s.has(groupNum);
         }
 
@@ -1208,13 +1212,10 @@
         function mergeTempGroupAssignmentsIntoAssignmentStore(tempByDate, targetStore) {
             if (!tempByDate || !targetStore) return;
             const recalcSet = getCalculationRecalcGroupSet();
+            if (!recalcSet) return;
             for (const dateKey of Object.keys(tempByDate)) {
                 const tempMap = tempByDate[dateKey];
                 if (!tempMap || typeof tempMap !== 'object') continue;
-                if (!recalcSet) {
-                    targetStore[dateKey] = { ...tempMap };
-                    continue;
-                }
                 const existingMap = extractGroupAssignmentsMap(targetStore[dateKey]);
                 for (let g = 1; g <= 4; g++) {
                     if (!recalcSet.has(g)) continue;
@@ -1340,6 +1341,7 @@
         }
 
         window.getCalculationRecalcGroupSet = getCalculationRecalcGroupSet;
+        window.isDutyRecalculationActive = isDutyRecalculationActive;
         window.shouldRecalculateDutyGroup = shouldRecalculateDutyGroup;
         window.seedPreservedDutyAssignmentsIntoTemp = seedPreservedDutyAssignmentsIntoTemp;
         window.mergeTempGroupAssignmentsIntoAssignmentStore = mergeTempGroupAssignmentsIntoAssignmentStore;
