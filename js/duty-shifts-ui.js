@@ -6473,7 +6473,7 @@
                         reasonBadge = `<span class="badge bg-info ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-exchange-alt me-1"></i>Αμοιβαία Αλλαγή${reason.swappedWith ? ` με ${escapeHtml(String(reason.swappedWith))}` : ''}</span>`;
                     }
                 }
-                const defaultChangeMode = rawReason && rawReason.type === 'swap' ? 'mutual_swap' : 'replacement';
+                const defaultChangeMode = rawReason && rawReason.type === 'skip' ? 'replacement' : 'mutual_swap';
                 
                 const groupName = person.group ? getGroupName(person.group) : 'Άγνωστη Ομάδα';
                 const missingBufferDay = person.name && person.group && typeof isPersonOnMissingBufferDay === 'function' && isPersonOnMissingBufferDay(person.name, person.group, key);
@@ -6695,12 +6695,12 @@
                     : `<div class="duty-change-type-options mt-2 pt-2 border-top">
                         <span class="small text-muted d-block mb-1"><strong>Τύπος αλλαγής</strong> (όταν αλλάζετε το άτομο)</span>
                         <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-repl-${person.group}" value="replacement" ${defaultChangeMode === 'replacement' ? 'checked' : ''}>
-                            <label class="form-check-label" for="duty-mode-repl-${person.group}">Αντικατάσταση</label>
-                        </div>
-                        <div class="form-check form-check-inline">
                             <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-swap-${person.group}" value="mutual_swap" ${defaultChangeMode === 'mutual_swap' ? 'checked' : ''}>
                             <label class="form-check-label" for="duty-mode-swap-${person.group}">Αμοιβαία Αλλαγή</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-repl-${person.group}" value="replacement" ${defaultChangeMode === 'replacement' ? 'checked' : ''}>
+                            <label class="form-check-label" for="duty-mode-repl-${person.group}">Αντικατάσταση</label>
                         </div>
                         <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση:</strong> αποκλείονται άτομα με υπηρεσία ±2 ημέρες κοντά. <strong>Αμοιβαία Αλλαγή:</strong> επιλέγετε άτομο ελεύθερα· μετά εμφανίζεται παράθυρο με τις δύο ημερομηνίες αντιμεταθέσεως και έλεγχο σύγκρουσης μετά την τοποθέτηση (±2 ημέρες).</small>
                     </div>`;
