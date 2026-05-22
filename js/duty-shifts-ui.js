@@ -6654,15 +6654,34 @@
                     groupEntry.people.forEach((p) => {
                         knownNames.add(normPick(p));
                         const unavailable = isPersonUnavailableForManualDutyOnDate(p, person.group, date, dayTypeCategory);
+                        const prevForConflict = (person.name || '').trim();
+                        let consecutiveConflict = false;
+                        if (!isCritical && p && normPick(p) !== normPick(prevForConflict) && defaultChangeMode === 'replacement') {
+                            consecutiveConflict = wouldManualDutySelectionCauseConsecutiveConflict(
+                                key, p, person.group, prevForConflict, 'replacement'
+                            );
+                        }
                         const isCurrent = !!(curNameNorm && normPick(p) === curNameNorm);
                         const reasonShort = unavailable && typeof getUnavailableReasonShort === 'function'
                             ? getUnavailableReasonShort(p, person.group, date, dayTypeCategory)
                             : (unavailable ? 'Μη διαθέσιμος/η' : '');
                         let label = escapeOpt(p);
                         if (reasonShort) label += ' · ' + escapeOpt(reasonShort);
-                        const dis = unavailable && !isCurrent ? ' disabled' : '';
+                        else if (consecutiveConflict) {
+                            const nearInfo = typeof getConsecutiveConflictNeighborInfoSavedOnly === 'function'
+                                ? getConsecutiveConflictNeighborInfoSavedOnly(key, p, person.group)
+                                : null;
+                            if (nearInfo?.dayOffset != null) {
+                                const d = Math.abs(nearInfo.dayOffset);
+                                label += ` · Υπηρεσία ${d} ${d === 1 ? 'ημέρα' : 'ημέρες'} ${nearInfo.dayOffset < 0 ? 'πριν' : 'μετά'}`;
+                            } else {
+                                label += ' · Υπηρεσία ±2 ημέρες κοντά';
+                            }
+                        }
+                        const blockRepl = defaultChangeMode === 'replacement' && consecutiveConflict;
+                        const dis = (unavailable || blockRepl) && !isCurrent ? ' disabled' : '';
                         const sel = isCurrent ? ' selected' : '';
-                        peopleOptions += `<option value="${escapeOpt(p)}"${dis}${sel}>${label}</option>`;
+                        peopleOptions += `<option value="${escapeOpt(p)}" data-unavailable="${unavailable ? '1' : '0'}" data-base-label="${escapeOpt(p)}"${dis}${sel}>${label}</option>`;
                     });
                     peopleOptions += '</optgroup>';
                 });
@@ -6684,7 +6703,7 @@
                             <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-swap-${person.group}" value="mutual_swap" ${defaultChangeMode === 'mutual_swap' ? 'checked' : ''}>
                             <label class="form-check-label" for="duty-mode-swap-${person.group}">Αμοιβαία Αλλαγή</label>
                         </div>
-                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση:</strong> αποκλείονται άτομα με υπηρεσία 1–2 ημέρες πριν/μετά. <strong>Αμοιβαία Αλλαγή:</strong> επιλέγετε άτομο και εμφανίζεται παράθυρο με τις δύο ημερομηνίες ανταλλαγής· έλεγχος σύγκρουσης ±2 ημέρες μετά την τοποθέτηση.</small>
+                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση:</strong> απενεργοποιούνται στη λίστα άτομα με υπηρεσία 1–2 ημέρες πριν/μετά. <strong>Αμοιβαία Αλλαγή:</strong> όλα τα ονόματα διαθέσιμα· μετά την επιλογή εμφανίζεται παράθυρο επιβεβαίωσης με τις δύο ημερομηνίες και έλεγχο σύγκρουσης.</small>
                     </div>`;
                 
                 content += `
@@ -6950,6 +6969,50 @@
             modal.show();
         }
 
+        /** Ενημέρωση disabled/ετικετών options ανά τύπο αλλαγής (αντικατάσταση = v1.452, αμοιβαία = όλα ενεργά). */
+        function refreshDutyPersonSelectOptionStates(select) {
+            if (!select || select.dataset.isCritical === 'true' || !currentEditingDayKey) return;
+            const group = parseInt(select.dataset.group, 10);
+            if (!Number.isFinite(group)) return;
+            const dayKey = currentEditingDayKey;
+            const prevPerson = (select.dataset.originalName || '').trim();
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const container = document.getElementById('dutyPersonsContainer');
+            const modeEl = container?.querySelector(`input[name="duty-change-mode-${group}"]:checked`);
+            const mode = modeEl ? modeEl.value : 'replacement';
+            const curVal = select.value.trim();
+
+            select.querySelectorAll('option').forEach((opt) => {
+                const p = (opt.value || '').trim();
+                if (!p) return;
+                const isCurrent = norm(p) === norm(curVal) || norm(p) === norm(prevPerson);
+                const unavailable = opt.dataset.unavailable === '1';
+                let baseLabel = opt.dataset.baseLabel || p;
+                if (!opt.dataset.baseLabel) opt.dataset.baseLabel = baseLabel;
+
+                let suffix = '';
+                let consecutiveConflict = false;
+                if (mode === 'replacement' && norm(p) !== norm(prevPerson)) {
+                    consecutiveConflict = wouldManualDutySelectionCauseConsecutiveConflict(
+                        dayKey, p, group, prevPerson, 'replacement'
+                    );
+                    if (consecutiveConflict && typeof getConsecutiveConflictNeighborInfoSavedOnly === 'function') {
+                        const nearInfo = getConsecutiveConflictNeighborInfoSavedOnly(dayKey, p, group);
+                        if (nearInfo?.dayOffset != null) {
+                            const d = Math.abs(nearInfo.dayOffset);
+                            suffix = ` · Υπηρεσία ${d} ${d === 1 ? 'ημέρα' : 'ημέρες'} ${nearInfo.dayOffset < 0 ? 'πριν' : 'μετά'}`;
+                        } else {
+                            suffix = ' · Υπηρεσία ±2 ημέρες κοντά';
+                        }
+                    } else if (consecutiveConflict) {
+                        suffix = ' · Υπηρεσία ±2 ημέρες κοντά';
+                    }
+                }
+                opt.textContent = baseLabel + suffix;
+                opt.disabled = (unavailable || (mode === 'replacement' && consecutiveConflict)) && !isCurrent;
+            });
+        }
+
         function formatConsecutiveConflictBlockMessage(personLabel, dayKey, groupNum, mode) {
             const dateObj = new Date(dayKey + 'T00:00:00');
             const monthLabel = !isNaN(dateObj.getTime())
@@ -7029,6 +7092,7 @@
             if (!container) return;
             container.querySelectorAll('.duty-person-select').forEach((select) => {
                 select.dataset.lastValidValue = (select.value || select.dataset.originalName || '').trim();
+                refreshDutyPersonSelectOptionStates(select);
                 select.addEventListener('change', () => validateDutyPersonSelectOnChange(select));
             });
             container.querySelectorAll('input[name^="duty-change-mode-"]').forEach((radio) => {
@@ -7038,6 +7102,16 @@
                     const sel = container.querySelector(`.duty-person-select[data-group="${m[1]}"]`);
                     if (!sel) return;
                     delete sel.dataset.mutualSwapConfirmToken;
+                    refreshDutyPersonSelectOptionStates(sel);
+                    if (radio.value === 'replacement') {
+                        const revert = sel.dataset.lastValidValue != null
+                            ? sel.dataset.lastValidValue
+                            : (sel.dataset.originalName || '');
+                        const selectedOpt = Array.from(sel.options).find((o) => o.value === sel.value);
+                        if (sel.value.trim() && selectedOpt?.disabled) {
+                            sel.value = revert;
+                        }
+                    }
                     validateDutyPersonSelectOnChange(sel);
                 });
             });
