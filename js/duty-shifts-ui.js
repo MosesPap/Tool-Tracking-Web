@@ -6672,7 +6672,7 @@
                             : (unavailable ? 'Μη διαθέσιμος/η' : '');
                         let label = escapeOpt(p);
                         if (reasonShort) label += ' · ' + escapeOpt(reasonShort);
-                        else if (consecutiveConflict) label += ' · Σύγκρουση διαδοχικών υπηρεσιών';
+                        else if (consecutiveConflict) label += ' · Σύγκρουση (±2 ημ., υπάρχουσες αναθέσεις)';
                         const dis = (unavailable || consecutiveConflict) && !isCurrent ? ' disabled' : '';
                         const sel = isCurrent ? ' selected' : '';
                         peopleOptions += `<option value="${escapeOpt(p)}"${dis}${sel}>${label}</option>`;
@@ -6697,7 +6697,7 @@
                             <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-swap-${person.group}" value="mutual_swap" ${defaultChangeMode === 'mutual_swap' ? 'checked' : ''}>
                             <label class="form-check-label" for="duty-mode-swap-${person.group}">Αμοιβαία Αλλαγή</label>
                         </div>
-                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση:</strong> αλλάζει μόνο αυτή η ημέρα (ο προηγούμενος δεν μεταφέρεται αλλού). <strong>Αμοιβαία Αλλαγή:</strong> ανταλλαγή δύο ημερών — ο προηγούμενος ανατίθεται ακριβώς εκεί που ήταν ο νέος (ίδιος τύπος υπηρεσίας / ομάδα).</small>
+                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση:</strong> αλλάζει μόνο αυτή την ημέρα. <strong>Αμοιβαία Αλλαγή:</strong> ανταλλαγή δύο ημερών (ίδιος τύπος / ομάδα). <strong>Σύγκρουση:</strong> αποκλείονται επιλογές που θα δημιουργούσαν ασυμβίβαστες υπηρεσίες με ήδη καταχωρημένες αναθέσεις έως 2 ημέρες πριν ή μετά (όχι η βασική σειρά περιστροφής).</small>
                     </div>`;
                 
                 content += `
@@ -6744,49 +6744,13 @@
             return false;
         }
 
-        /** Pending modal selects for the day being edited; otherwise saved assignments only. */
-        function buildGroupAssignmentMapForDay(dayKey, options = {}) {
-            const overrideGroup = options.overrideGroup;
-            const overridePerson = options.overridePerson;
-            const fromModal = options.fromModal !== false;
-            const prevRaw = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null)
-                || dutyAssignments?.[dayKey]
-                || '';
+        function buildAssignmentStringForGroupPatch(dayKey, groupNum, personForGroup) {
+            const prevRaw = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) || '';
             const map = typeof extractGroupAssignmentsMap === 'function'
                 ? extractGroupAssignmentsMap(prevRaw)
                 : {};
-
-            if (fromModal && dayKey === currentEditingDayKey) {
-                const container = document.getElementById('dutyPersonsContainer');
-                if (container) {
-                    container.querySelectorAll('.duty-person-select').forEach((sel) => {
-                        const g = parseInt(sel.dataset.group, 10);
-                        if (!Number.isFinite(g)) return;
-                        if (sel.dataset.isCritical === 'true') {
-                            const orig = (sel.dataset.originalName || '').trim();
-                            if (orig) map[g] = orig;
-                            return;
-                        }
-                        const val = sel.value.trim();
-                        if (val) map[g] = val;
-                        else delete map[g];
-                    });
-                }
-            }
-
-            if (overrideGroup != null && Number.isFinite(overrideGroup)) {
-                if (overridePerson) map[overrideGroup] = String(overridePerson).trim();
-                else delete map[overrideGroup];
-            }
-            return map;
-        }
-
-        function buildAssignmentStringForGroupPatch(dayKey, groupNum, personForGroup) {
-            const map = buildGroupAssignmentMapForDay(dayKey, {
-                fromModal: dayKey === currentEditingDayKey,
-                overrideGroup: groupNum,
-                overridePerson: personForGroup
-            });
+            if (personForGroup) map[groupNum] = String(personForGroup).trim();
+            else delete map[groupNum];
             return typeof groupMapToAssignmentString === 'function' ? groupMapToAssignmentString(map) : '';
         }
 
@@ -6809,30 +6773,12 @@
             return patches;
         }
 
-        /** Collect persons to validate after a manual change (includes swap/replacement/calc assignees on neighbors). */
-        function collectManualDutyConflictPersonChecks(dayKey, groupNum, newPerson, prevPerson, mode) {
-            const checks = [];
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            if (newPerson && (!prevPerson || norm(prevPerson) !== norm(newPerson))) {
-                checks.push({ person: newPerson, onKey: dayKey, groupNum, mode });
-            }
-            if (mode === 'mutual_swap' && prevPerson && norm(prevPerson) !== norm(newPerson)) {
-                const dutyCat = typeof getDutyCategoryForDateKey === 'function'
-                    ? getDutyCategoryForDateKey(dayKey)
-                    : 'normal';
-                const otherKey = typeof findOtherDateKeyForPersonInGroupDutyCategory === 'function'
-                    ? findOtherDateKeyForPersonInGroupDutyCategory(newPerson, groupNum, dayKey, dutyCat)
-                    : null;
-                if (otherKey) {
-                    checks.push({ person: prevPerson, onKey: otherKey, groupNum, mode: 'mutual_swap' });
-                }
-            }
-            return checks;
-        }
-
         /** True if assigning newPerson (replacement or mutual swap) would create a consecutive-duty conflict. */
         function wouldManualDutySelectionCauseConsecutiveConflict(dayKey, newPerson, groupNum, prevPerson, mode) {
-            if (typeof hasConsecutiveDuty !== 'function' || typeof withTemporaryAssignmentPatches !== 'function') {
+            const checkFn = typeof hasConsecutiveDutySavedOnly === 'function'
+                ? hasConsecutiveDutySavedOnly
+                : (typeof hasConsecutiveDuty === 'function' ? hasConsecutiveDuty : null);
+            if (!checkFn || typeof withTemporaryAssignmentPatches !== 'function') {
                 return false;
             }
             if (!dayKey || !newPerson || !Number.isFinite(groupNum)) return false;
@@ -6840,11 +6786,16 @@
             if (prevPerson && norm(prevPerson) === norm(newPerson)) return false;
 
             const patches = buildManualDutyConflictPatches(dayKey, groupNum, newPerson, prevPerson, mode);
-            const personChecks = collectManualDutyConflictPersonChecks(dayKey, groupNum, newPerson, prevPerson, mode);
-
             return !!withTemporaryAssignmentPatches(patches, () => {
-                for (const chk of personChecks) {
-                    if (hasConsecutiveDuty(chk.onKey, chk.person, groupNum)) return true;
+                if (checkFn(dayKey, newPerson, groupNum)) return true;
+                if (mode === 'mutual_swap' && prevPerson) {
+                    const dutyCat = typeof getDutyCategoryForDateKey === 'function'
+                        ? getDutyCategoryForDateKey(dayKey)
+                        : 'normal';
+                    const otherKey = typeof findOtherDateKeyForPersonInGroupDutyCategory === 'function'
+                        ? findOtherDateKeyForPersonInGroupDutyCategory(newPerson, groupNum, dayKey, dutyCat)
+                        : null;
+                    if (otherKey && checkFn(otherKey, prevPerson, groupNum)) return true;
                 }
                 return false;
             });
@@ -6857,19 +6808,24 @@
                 : dayKey;
             const modeLabel = mode === 'mutual_swap' ? 'αμοιβαία αλλαγή' : 'αντικατάσταση';
             let neighborDetail = '';
-            if (typeof getConsecutiveConflictNeighborInfo === 'function') {
-                const info = getConsecutiveConflictNeighborInfo(dayKey, personLabel, groupNum);
+            const neighborInfoFn = typeof getConsecutiveConflictNeighborInfoSavedOnly === 'function'
+                ? getConsecutiveConflictNeighborInfoSavedOnly
+                : (typeof getConsecutiveConflictNeighborInfo === 'function' ? getConsecutiveConflictNeighborInfo : null);
+            if (neighborInfoFn) {
+                const info = neighborInfoFn(dayKey, personLabel, groupNum);
                 if (info?.neighborKey && info?.conflictWithLabel) {
                     const nd = new Date(info.neighborKey + 'T00:00:00');
                     const ndStr = !isNaN(nd.getTime())
                         ? nd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
                         : info.neighborKey;
-                    neighborDetail = ` Σύγκρουση με γειτονική ημέρα ${ndStr} (${info.conflictWithLabel}).`;
+                    const daysAway = info.dayOffset != null ? Math.abs(info.dayOffset) : 1;
+                    neighborDetail = ` Σύγκρουση με υπάρχουσα ανάθεση ${daysAway} ημέρα/ες ${info.dayOffset < 0 ? 'πριν' : 'μετά'} (${ndStr}, ${info.conflictWithLabel}).`;
                 }
             }
             return (
                 `Εντοπίστηκε σύγκρουση διαδοχικών υπηρεσιών για τον/την «${personLabel}» κατά την ${modeLabel} ` +
-                `(γειτονικές ημέρες με ασυμβίβαστους τύπους υπηρεσίας), σε σχέση με τον τρέχοντα μήνα (${monthLabel}).${neighborDetail} ` +
+                `(έλεγχος έως 2 ημέρες πριν και 2 ημέρες μετά, μόνο σε ήδη καταχωρημένες αναθέσεις — όχι βασική σειρά περιστροφής), ` +
+                `στον μήνα ${monthLabel}.${neighborDetail} ` +
                 'Η αλλαγή δεν επιτρέπεται. Παρακαλώ επιλέξτε άλλο άτομο ή άλλον τύπο αλλαγής.'
             );
         }
@@ -7081,19 +7037,10 @@
 
             const mutualGroupsDone = new Set(mutualSwapPlans.map((p) => p.group));
 
-            // Σύγκρουση διαδοχικών υπηρεσιών πριν την αποθήκευση (όλες οι αλλαγές modal + αμοιβαίες άλλες ημέρες)
+            // Σύγκρουση διαδοχικών υπηρεσιών πριν την αποθήκευση (αντικατάσταση / αμοιβαία αλλαγή)
             const warnConsecutive = (personLabel, conflictDayKey, groupNum, mode) => {
                 alert(formatConsecutiveConflictBlockMessage(personLabel, conflictDayKey, groupNum, mode));
             };
-            const saveConflictPatches = {};
-            const modalDayStr = typeof groupMapToAssignmentString === 'function'
-                ? groupMapToAssignmentString(buildGroupAssignmentMapForDay(dayKey, { fromModal: true }))
-                : (newAssignments.length > 0 ? newAssignments.join(', ') : null);
-            saveConflictPatches[dayKey] = modalDayStr && String(modalDayStr).trim() ? modalDayStr : null;
-            for (const [otherKey, finalStr] of pendingOtherKeyStrings) {
-                saveConflictPatches[otherKey] = finalStr;
-            }
-            const saveConflictChecks = [];
             for (const select of selects) {
                 if (select.dataset.isCritical === 'true') continue;
                 const g = parseInt(select.dataset.group, 10);
@@ -7105,25 +7052,10 @@
                 if (!newVal || normPerson(prevPerson) === normPerson(newVal)) continue;
                 const modeEl2 = container.querySelector(`input[name="duty-change-mode-${g}"]:checked`);
                 const mode2 = modeEl2 ? modeEl2.value : 'replacement';
-                saveConflictChecks.push(
-                    ...collectManualDutyConflictPersonChecks(dayKey, g, newVal, prevPerson, mode2)
-                );
-            }
-            if (
-                saveConflictChecks.length > 0 &&
-                typeof withTemporaryAssignmentPatches === 'function' &&
-                typeof hasConsecutiveDuty === 'function'
-            ) {
-                const blocked = withTemporaryAssignmentPatches(saveConflictPatches, () => {
-                    for (const chk of saveConflictChecks) {
-                        if (hasConsecutiveDuty(chk.onKey, chk.person, chk.groupNum)) {
-                            warnConsecutive(chk.person, chk.onKey, chk.groupNum, chk.mode);
-                            return false;
-                        }
-                    }
-                    return true;
-                });
-                if (blocked === false) return;
+                if (wouldManualDutySelectionCauseConsecutiveConflict(dayKey, newVal, g, prevPerson, mode2)) {
+                    warnConsecutive(newVal, dayKey, g, mode2);
+                    return;
+                }
             }
 
             for (const [otherKey, finalStr] of pendingOtherKeyStrings) {

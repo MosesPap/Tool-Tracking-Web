@@ -1267,30 +1267,31 @@
         }
 
         function hasDutyOnDay(dayKey, person, groupNum) {
-            if (!dayKey || !person || !Number.isFinite(groupNum)) return false;
-
-            if (typeof getAssignedPersonForGroupOnDateKey === 'function') {
-                const assigned = getAssignedPersonForGroupOnDateKey(dayKey, groupNum);
-                if (!assigned) return false;
-                const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-                return norm(assigned) === norm(person);
-            }
-
+            // Determine which document to check based on day type
             const date = new Date(dayKey + 'T00:00:00');
             if (isNaN(date.getTime())) return false;
-
-            let assignment = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null;
-            if (!assignment) assignment = dutyAssignments?.[dayKey] || null;
-            if (!assignment) return false;
-
-            if (typeof extractGroupAssignmentsMap === 'function') {
-                const map = extractGroupAssignmentsMap(assignment);
-                const assigned = map[groupNum];
-                if (!assigned) return false;
-                const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-                return norm(assigned) === norm(person);
+            
+            const dayType = getDayType(date);
+            let assignment = null;
+            
+            if (dayType === 'special-holiday') {
+                assignment = specialHolidayAssignments[dayKey];
+            } else if (dayType === 'weekend-holiday') {
+                assignment = weekendAssignments[dayKey];
+            } else if (dayType === 'semi-normal-day') {
+                assignment = semiNormalAssignments[dayKey];
+            } else if (dayType === 'normal-day') {
+                assignment = normalDayAssignments[dayKey];
             }
-
+            
+            // Also check legacy dutyAssignments for backward compatibility
+            if (!assignment) {
+                assignment = dutyAssignments[dayKey];
+            }
+            
+            if (!assignment) return false;
+            
+            // Ensure assignment is a string
             const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
             const personGroupStr = `${person} (Ομάδα ${groupNum})`;
             return assignmentStr.includes(personGroupStr);
@@ -1621,6 +1622,79 @@
             
             return false;
         }
+
+        /** Χειροκίνητες αλλαγές (modal ημέρας): έλεγχος ±N ημερών μόνο σε αποθηκευμένες/τρέχουσες αναθέσεις (όχι βασική σειρά / πρόβλεψη περιστροφής). */
+        const MANUAL_DUTY_CONFLICT_NEIGHBOR_DAYS = 2;
+
+        function getDayTypeCategoryForDateInput(dateOrKey) {
+            const date = typeof dateOrKey === 'string' ? new Date(dateOrKey + 'T00:00:00') : dateOrKey;
+            if (!date || isNaN(date.getTime())) return 'normal';
+            const dayType = getDayType(date);
+            if (dayType === 'special-holiday') return 'special';
+            if (dayType === 'semi-normal-day') return 'semi';
+            if (dayType === 'weekend-holiday') return 'weekend';
+            return 'normal';
+        }
+
+        function hasIncompatibleConsecutiveDayTypeCategories(typeCat1, typeCat2) {
+            if (typeCat1 === 'normal' && (typeCat2 === 'semi' || typeCat2 === 'weekend' || typeCat2 === 'special')) return true;
+            if ((typeCat1 === 'semi' || typeCat1 === 'weekend' || typeCat1 === 'special') && typeCat2 === 'normal') return true;
+            if (typeCat1 === 'semi' && (typeCat2 === 'weekend' || typeCat2 === 'special')) return true;
+            if ((typeCat1 === 'weekend' || typeCat1 === 'special') && typeCat2 === 'semi') return true;
+            return false;
+        }
+
+        /**
+         * Σύγκρουση διαδοχικών υπηρεσιών από πραγματικές αναθέσεις (αντικαταστάσεις, αμοιβαίες αλλαγές, υπολογισμός)
+         * σε έως ±neighborDays ημέρες. Δεν χρησιμοποιεί βασική σειρά περιστροφής ούτε πρόβλεψη μελλοντικής ανάθεσης.
+         */
+        function hasConsecutiveDutySavedOnly(dayKey, person, groupNum, neighborDays = MANUAL_DUTY_CONFLICT_NEIGHBOR_DAYS) {
+            if (!dayKey || !person || !Number.isFinite(groupNum)) return false;
+            const date = new Date(dayKey + 'T00:00:00');
+            if (isNaN(date.getTime())) return false;
+            const currentTypeCategory = getDayTypeCategoryForDateInput(date);
+            const radius = Math.max(1, parseInt(neighborDays, 10) || MANUAL_DUTY_CONFLICT_NEIGHBOR_DAYS);
+
+            for (let offset = -radius; offset <= radius; offset++) {
+                if (offset === 0) continue;
+                const neighborDate = new Date(date);
+                neighborDate.setDate(neighborDate.getDate() + offset);
+                const neighborKey = formatDateKey(neighborDate);
+                if (!hasDutyOnDay(neighborKey, person, groupNum)) continue;
+                const neighborTypeCategory = getDayTypeCategoryForDateInput(neighborDate);
+                if (hasIncompatibleConsecutiveDayTypeCategories(currentTypeCategory, neighborTypeCategory)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function getConsecutiveConflictNeighborInfoSavedOnly(dayKey, person, groupNum, neighborDays = MANUAL_DUTY_CONFLICT_NEIGHBOR_DAYS) {
+            const date = new Date(dayKey + 'T00:00:00');
+            if (isNaN(date.getTime())) return null;
+            const currentTypeCategory = getDayTypeCategoryForDateInput(date);
+            const radius = Math.max(1, parseInt(neighborDays, 10) || MANUAL_DUTY_CONFLICT_NEIGHBOR_DAYS);
+            const offsets = [];
+            for (let d = 1; d <= radius; d++) {
+                offsets.push(-d, d);
+            }
+
+            for (const offset of offsets) {
+                const neighborDate = new Date(date);
+                neighborDate.setDate(neighborDate.getDate() + offset);
+                const neighborKey = formatDateKey(neighborDate);
+                if (!hasDutyOnDay(neighborKey, person, groupNum)) continue;
+                const neighborType = getDayType(neighborDate);
+                if (!hasIncompatibleConsecutiveDayTypeCategories(currentTypeCategory, getDayTypeCategoryForDateInput(neighborDate))) {
+                    continue;
+                }
+                const conflictWithLabel = consecutiveConflictLabelForNeighborDayType(neighborType);
+                if (!conflictWithLabel) continue;
+                return { neighborKey, conflictWithLabel, dayOffset: offset };
+            }
+            return null;
+        }
+
         function hadSpecialHolidayDutyBefore(dayKey, person, groupNum) {
             const date = new Date(dayKey + 'T00:00:00');
             const dayOfWeek = date.getDay(); // 0=Sunday, 6=Saturday
