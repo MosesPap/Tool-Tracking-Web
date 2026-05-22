@@ -1644,15 +1644,28 @@
             return false;
         }
 
+        /** Ανάθεση ατόμου στην ομάδα για συγκεκριμένη ημέρα (αποθηκευμένη/τρέχουσα, όχι βασική σειρά). */
+        function personIsAssignedToGroupOnDateKey(dayKey, person, groupNum) {
+            if (!dayKey || !person || !Number.isFinite(groupNum)) return false;
+            const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null;
+            if (raw == null || raw === '') return false;
+            const assigned = typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                ? parseAssignedPersonForGroupFromAssignment(raw, groupNum)
+                : null;
+            if (!assigned) return false;
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            return norm(assigned) === norm(person);
+        }
+
         /**
-         * Σύγκρουση διαδοχικών υπηρεσιών από πραγματικές αναθέσεις (αντικαταστάσεις, αμοιβαίες αλλαγές, υπολογισμός)
-         * σε έως ±neighborDays ημέρες. Δεν χρησιμοποιεί βασική σειρά περιστροφής ούτε πρόβλεψη μελλοντικής ανάθεσης.
+         * Χειροκίνητη αλλαγή: το άτομο δεν μπορεί να ανατεθεί εδώ αν έχει ήδη υπηρεσία στην ίδια ομάδα
+         * 1–neighborDays ημέρες πριν ή μετά (π.χ. Β μία μέρα πριν, Α δύο μέρες πριν, Δ/Ε μετά).
+         * Μόνο πραγματικές αναθέσεις (getAssignmentForDate), όχι βασική σειρά / πρόβλεψη περιστροφής.
          */
         function hasConsecutiveDutySavedOnly(dayKey, person, groupNum, neighborDays = MANUAL_DUTY_CONFLICT_NEIGHBOR_DAYS) {
             if (!dayKey || !person || !Number.isFinite(groupNum)) return false;
             const date = new Date(dayKey + 'T00:00:00');
             if (isNaN(date.getTime())) return false;
-            const currentTypeCategory = getDayTypeCategoryForDateInput(date);
             const radius = Math.max(1, parseInt(neighborDays, 10) || MANUAL_DUTY_CONFLICT_NEIGHBOR_DAYS);
 
             for (let offset = -radius; offset <= radius; offset++) {
@@ -1660,9 +1673,7 @@
                 const neighborDate = new Date(date);
                 neighborDate.setDate(neighborDate.getDate() + offset);
                 const neighborKey = formatDateKey(neighborDate);
-                if (!hasDutyOnDay(neighborKey, person, groupNum)) continue;
-                const neighborTypeCategory = getDayTypeCategoryForDateInput(neighborDate);
-                if (hasIncompatibleConsecutiveDayTypeCategories(currentTypeCategory, neighborTypeCategory)) {
+                if (personIsAssignedToGroupOnDateKey(neighborKey, person, groupNum)) {
                     return true;
                 }
             }
@@ -1672,7 +1683,6 @@
         function getConsecutiveConflictNeighborInfoSavedOnly(dayKey, person, groupNum, neighborDays = MANUAL_DUTY_CONFLICT_NEIGHBOR_DAYS) {
             const date = new Date(dayKey + 'T00:00:00');
             if (isNaN(date.getTime())) return null;
-            const currentTypeCategory = getDayTypeCategoryForDateInput(date);
             const radius = Math.max(1, parseInt(neighborDays, 10) || MANUAL_DUTY_CONFLICT_NEIGHBOR_DAYS);
             const offsets = [];
             for (let d = 1; d <= radius; d++) {
@@ -1683,13 +1693,11 @@
                 const neighborDate = new Date(date);
                 neighborDate.setDate(neighborDate.getDate() + offset);
                 const neighborKey = formatDateKey(neighborDate);
-                if (!hasDutyOnDay(neighborKey, person, groupNum)) continue;
+                if (!personIsAssignedToGroupOnDateKey(neighborKey, person, groupNum)) continue;
                 const neighborType = getDayType(neighborDate);
-                if (!hasIncompatibleConsecutiveDayTypeCategories(currentTypeCategory, getDayTypeCategoryForDateInput(neighborDate))) {
-                    continue;
-                }
-                const conflictWithLabel = consecutiveConflictLabelForNeighborDayType(neighborType);
-                if (!conflictWithLabel) continue;
+                const conflictWithLabel = typeof getDayTypeLabel === 'function'
+                    ? getDayTypeLabel(neighborType)
+                    : (consecutiveConflictLabelForNeighborDayType(neighborType) || 'Υπηρεσία');
                 return { neighborKey, conflictWithLabel, dayOffset: offset };
             }
             return null;

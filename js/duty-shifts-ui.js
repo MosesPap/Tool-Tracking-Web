@@ -6672,7 +6672,17 @@
                             : (unavailable ? 'Μη διαθέσιμος/η' : '');
                         let label = escapeOpt(p);
                         if (reasonShort) label += ' · ' + escapeOpt(reasonShort);
-                        else if (consecutiveConflict) label += ' · Σύγκρουση (±2 ημ., υπάρχουσες αναθέσεις)';
+                        else if (consecutiveConflict) {
+                            const nearInfo = typeof getConsecutiveConflictNeighborInfoSavedOnly === 'function'
+                                ? getConsecutiveConflictNeighborInfoSavedOnly(key, p, person.group)
+                                : null;
+                            if (nearInfo?.dayOffset != null) {
+                                const d = Math.abs(nearInfo.dayOffset);
+                                label += ` · Υπηρεσία ${d} ${d === 1 ? 'ημέρα' : 'ημέρες'} ${nearInfo.dayOffset < 0 ? 'πριν' : 'μετά'}`;
+                            } else {
+                                label += ' · Υπηρεσία ±2 ημέρες κοντά';
+                            }
+                        }
                         const dis = (unavailable || consecutiveConflict) && !isCurrent ? ' disabled' : '';
                         const sel = isCurrent ? ' selected' : '';
                         peopleOptions += `<option value="${escapeOpt(p)}"${dis}${sel}>${label}</option>`;
@@ -6697,7 +6707,7 @@
                             <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-swap-${person.group}" value="mutual_swap" ${defaultChangeMode === 'mutual_swap' ? 'checked' : ''}>
                             <label class="form-check-label" for="duty-mode-swap-${person.group}">Αμοιβαία Αλλαγή</label>
                         </div>
-                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση:</strong> αλλάζει μόνο αυτή την ημέρα. <strong>Αμοιβαία Αλλαγή:</strong> ανταλλαγή δύο ημερών (ίδιος τύπος / ομάδα). <strong>Σύγκρουση:</strong> αποκλείονται επιλογές που θα δημιουργούσαν ασυμβίβαστες υπηρεσίες με ήδη καταχωρημένες αναθέσεις έως 2 ημέρες πριν ή μετά (όχι η βασική σειρά περιστροφής).</small>
+                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση:</strong> αλλάζει μόνο αυτή την ημέρα. <strong>Αμοιβαία Αλλαγή:</strong> ανταλλαγή δύο ημερών (ίδιος τύπος / ομάδα). <strong>Σύγκρουση:</strong> δεν επιτρέπεται άτομο που έχει ήδη υπηρεσία στην ίδια ομάδα 1–2 ημέρες πριν ή μετά (π.χ. αντικατάσταση του Γ όχι με Β/Α/Δ/Ε αν είναι κοντά).</small>
                     </div>`;
                 
                 content += `
@@ -6819,14 +6829,15 @@
                         ? nd.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
                         : info.neighborKey;
                     const daysAway = info.dayOffset != null ? Math.abs(info.dayOffset) : 1;
-                    neighborDetail = ` Σύγκρουση με υπάρχουσα ανάθεση ${daysAway} ημέρα/ες ${info.dayOffset < 0 ? 'πριν' : 'μετά'} (${ndStr}, ${info.conflictWithLabel}).`;
+                    const dayWord = daysAway === 1 ? 'ημέρα' : 'ημέρες';
+                    neighborDetail = ` Έχει ήδη υπηρεσία ${daysAway} ${dayWord} ${info.dayOffset < 0 ? 'πριν' : 'μετά'} (${ndStr}, ${info.conflictWithLabel}).`;
                 }
             }
             return (
-                `Εντοπίστηκε σύγκρουση διαδοχικών υπηρεσιών για τον/την «${personLabel}» κατά την ${modeLabel} ` +
-                `(έλεγχος έως 2 ημέρες πριν και 2 ημέρες μετά, μόνο σε ήδη καταχωρημένες αναθέσεις — όχι βασική σειρά περιστροφής), ` +
-                `στον μήνα ${monthLabel}.${neighborDetail} ` +
-                'Η αλλαγή δεν επιτρέπεται. Παρακαλώ επιλέξτε άλλο άτομο ή άλλον τύπο αλλαγής.'
+                `Ο/η «${personLabel}» δεν μπορεί να επιλεγεί για ${modeLabel}: έχει ήδη υπηρεσία στην ίδια ομάδα ` +
+                `έως 2 ημέρες πριν ή 2 ημέρες μετά από αυτή την ημέρα (μόνο καταχωρημένες αναθέσεις, όχι βασική σειρά).` +
+                ` Μήνας: ${monthLabel}.${neighborDetail} ` +
+                'Επιλέξτε άλλο άτομο.'
             );
         }
 
