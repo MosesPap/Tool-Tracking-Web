@@ -6656,7 +6656,7 @@
                         const unavailable = isPersonUnavailableForManualDutyOnDate(p, person.group, date, dayTypeCategory);
                         const prevForConflict = (person.name || '').trim();
                         let consecutiveConflict = false;
-                        if (!isCritical && p && normPick(p) !== normPick(prevForConflict) && defaultChangeMode === 'replacement') {
+                        if (!isCritical && defaultChangeMode !== 'mutual_swap' && p && normPick(p) !== normPick(prevForConflict)) {
                             consecutiveConflict = wouldManualDutySelectionCauseConsecutiveConflict(
                                 key, p, person.group, prevForConflict, 'replacement'
                             );
@@ -6678,10 +6678,9 @@
                                 label += ' · Υπηρεσία ±2 ημέρες κοντά';
                             }
                         }
-                        const blockRepl = defaultChangeMode === 'replacement' && consecutiveConflict;
-                        const dis = (unavailable || blockRepl) && !isCurrent ? ' disabled' : '';
+                        const dis = (unavailable || consecutiveConflict) && !isCurrent ? ' disabled' : '';
                         const sel = isCurrent ? ' selected' : '';
-                        peopleOptions += `<option value="${escapeOpt(p)}" data-unavailable="${unavailable ? '1' : '0'}" data-base-label="${escapeOpt(p)}"${dis}${sel}>${label}</option>`;
+                        peopleOptions += `<option value="${escapeOpt(p)}"${dis}${sel}>${label}</option>`;
                     });
                     peopleOptions += '</optgroup>';
                 });
@@ -6703,7 +6702,7 @@
                             <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-swap-${person.group}" value="mutual_swap" ${defaultChangeMode === 'mutual_swap' ? 'checked' : ''}>
                             <label class="form-check-label" for="duty-mode-swap-${person.group}">Αμοιβαία Αλλαγή</label>
                         </div>
-                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση:</strong> απενεργοποιούνται στη λίστα άτομα με υπηρεσία 1–2 ημέρες πριν/μετά. <strong>Αμοιβαία Αλλαγή:</strong> όλα τα ονόματα διαθέσιμα· μετά την επιλογή εμφανίζεται παράθυρο επιβεβαίωσης με τις δύο ημερομηνίες και έλεγχο σύγκρουσης.</small>
+                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση:</strong> αποκλείονται άτομα με υπηρεσία ±2 ημέρες κοντά. <strong>Αμοιβαία Αλλαγή:</strong> επιλέγετε άτομο ελεύθερα· μετά εμφανίζεται παράθυρο με τις δύο ημερομηνίες αντιμεταθέσεως και έλεγχο σύγκρουσης μετά την τοποθέτηση (±2 ημέρες).</small>
                     </div>`;
                 
                 content += `
@@ -6807,210 +6806,182 @@
             });
         }
 
-        function formatDutyDateKeyElGR(dayKey) {
-            const d = new Date(dayKey + 'T00:00:00');
-            if (isNaN(d.getTime())) return String(dayKey || '');
-            return d.toLocaleDateString('el-GR', {
-                weekday: 'long',
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric'
-            });
+        function formatDutyDateLabel(dateKey) {
+            const d = new Date(dateKey + 'T00:00:00');
+            if (isNaN(d.getTime())) return String(dateKey || '');
+            const dayName = typeof getGreekDayName === 'function' ? getGreekDayName(d) : '';
+            const ds = d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            return dayName ? `${dayName} ${ds}` : ds;
         }
 
-        function buildMutualSwapConfirmToken(dayKey, groupNum, prevPerson, newPerson, otherKey) {
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            return [dayKey, groupNum, norm(prevPerson), norm(newPerson), otherKey].join('|');
-        }
-
-        /** Μετά την ανταλλαγή: έλεγχος ±2 ημ. για νέο άτομο εδώ και προηγούμενο στην άλλη ημέρα. */
-        function analyzeMutualSwapConsecutiveConflicts(dayKey, groupNum, prevPerson, newPerson) {
-            if (!dayKey || !newPerson || !prevPerson || !Number.isFinite(groupNum)) {
-                return { ok: false, error: 'Λείπουν στοιχεία για αμοιβαία αλλαγή.' };
-            }
+        function buildMutualSwapPlan(dayKey, groupNum, prevPerson, newPerson) {
             const dutyCat = typeof getDutyCategoryForDateKey === 'function'
                 ? getDutyCategoryForDateKey(dayKey)
                 : 'normal';
             const otherKey = typeof findOtherDateKeyForPersonInGroupDutyCategory === 'function'
                 ? findOtherDateKeyForPersonInGroupDutyCategory(newPerson, groupNum, dayKey, dutyCat)
                 : null;
-            if (!otherKey) {
-                return {
-                    ok: false,
-                    error: `Δεν βρέθηκε άλλη ημέρα (ίδιος τύπος υπηρεσίας) όπου ο/η «${newPerson}» είναι ανατεθειμένος/η στην Ομάδα ${groupNum}.`
-                };
-            }
-            const checkFn = typeof hasConsecutiveDutySavedOnly === 'function' ? hasConsecutiveDutySavedOnly : null;
-            const infoFn = typeof getConsecutiveConflictNeighborInfoSavedOnly === 'function'
-                ? getConsecutiveConflictNeighborInfoSavedOnly
-                : null;
-            const issues = [];
-            if (checkFn && typeof withTemporaryAssignmentPatches === 'function') {
-                const patches = buildManualDutyConflictPatches(dayKey, groupNum, newPerson, prevPerson, 'mutual_swap');
-                withTemporaryAssignmentPatches(patches, () => {
-                    if (checkFn(dayKey, newPerson, groupNum)) {
-                        issues.push({
-                            person: newPerson,
-                            centerDayKey: dayKey,
-                            info: infoFn ? infoFn(dayKey, newPerson, groupNum) : null
-                        });
-                    }
-                    if (checkFn(otherKey, prevPerson, groupNum)) {
-                        issues.push({
-                            person: prevPerson,
-                            centerDayKey: otherKey,
-                            info: infoFn ? infoFn(otherKey, prevPerson, groupNum) : null
-                        });
-                    }
-                });
-            }
             return {
-                ok: true,
                 dayKey,
                 otherKey,
-                groupNum,
-                prevPerson,
-                newPerson,
-                issues,
-                hasConflict: issues.length > 0
+                prevPerson: String(prevPerson || '').trim(),
+                newPerson: String(newPerson || '').trim(),
+                groupNum
             };
         }
 
-        function formatMutualSwapIssueLine(issue) {
-            if (!issue) return '';
-            const centerStr = formatDutyDateKeyElGR(issue.centerDayKey);
-            let extra = '';
-            if (issue.info?.neighborKey) {
-                const ndStr = formatDutyDateKeyElGR(issue.info.neighborKey);
-                const daysAway = issue.info.dayOffset != null ? Math.abs(issue.info.dayOffset) : 1;
-                const dayWord = daysAway === 1 ? 'ημέρα' : 'ημέρες';
-                extra = ` (σύγκρουση με υπηρεσία ${daysAway} ${dayWord} ${issue.info.dayOffset < 0 ? 'πριν' : 'μετά'}: ${ndStr})`;
+        /** Μετά την αντιμετάθεση: σύγκρουση ±2 ημ. από κάθε ημέρα-στόχο (μόνο καταχωρημένες αναθέσεις). */
+        function evaluateMutualSwapAfterPlacementConflicts(plan) {
+            const checkFn = typeof hasConsecutiveDutySavedOnly === 'function' ? hasConsecutiveDutySavedOnly : null;
+            if (!checkFn || typeof withTemporaryAssignmentPatches !== 'function') {
+                return { ok: true, conflicts: [], plan, error: null };
             }
-            return `<li>Ο/η <strong>${escapeHtml(String(issue.person))}</strong> στην <strong>${escapeHtml(centerStr)}</strong>${extra}</li>`;
+            if (!plan?.otherKey) {
+                return { ok: false, conflicts: [], plan, error: 'no_other_date' };
+            }
+            const conflicts = [];
+            const patches = buildManualDutyConflictPatches(
+                plan.dayKey,
+                plan.groupNum,
+                plan.newPerson,
+                plan.prevPerson,
+                'mutual_swap'
+            );
+            withTemporaryAssignmentPatches(patches, () => {
+                const addIfConflict = (person, atKey) => {
+                    if (!person || !atKey) return;
+                    if (!checkFn(atKey, person, plan.groupNum)) return;
+                    const info = typeof getConsecutiveConflictNeighborInfoSavedOnly === 'function'
+                        ? getConsecutiveConflictNeighborInfoSavedOnly(atKey, person, plan.groupNum)
+                        : null;
+                    conflicts.push({ person, atKey, info });
+                };
+                addIfConflict(plan.newPerson, plan.dayKey);
+                addIfConflict(plan.prevPerson, plan.otherKey);
+            });
+            return { ok: conflicts.length === 0, conflicts, plan, error: null };
         }
 
-        function revertMutualSwapSelect(select) {
-            if (!select) return;
-            const revert = select.dataset.lastValidValue != null
-                ? select.dataset.lastValidValue
-                : (select.dataset.originalName || '');
-            select.value = revert;
-            delete select.dataset.mutualSwapConfirmToken;
+        function formatMutualSwapConflictLine(conflict) {
+            if (!conflict) return '';
+            const atLabel = formatDutyDateLabel(conflict.atKey);
+            let near = '';
+            if (conflict.info?.neighborKey) {
+                const d = Math.abs(conflict.info.dayOffset || 1);
+                const word = d === 1 ? 'ημέρα' : 'ημέρες';
+                const dir = (conflict.info.dayOffset || 0) < 0 ? 'πριν' : 'μετά';
+                near = ` (υπηρεσία ${d} ${word} ${dir}: ${formatDutyDateLabel(conflict.info.neighborKey)})`;
+            }
+            return `Ο/η «${conflict.person}» στην ${atLabel}${near}`;
         }
 
-        function showMutualSwapConfirmDialog(select, analysis) {
-            const modalEl = document.getElementById('mutualSwapConfirmModal');
-            const bodyEl = document.getElementById('mutualSwapConfirmBody');
-            const footerEl = document.getElementById('mutualSwapConfirmFooter');
-            if (!modalEl || !bodyEl || !footerEl || !select || !analysis?.ok) return;
-
-            const dayStrA = formatDutyDateKeyElGR(analysis.dayKey);
-            const dayStrB = formatDutyDateKeyElGR(analysis.otherKey);
-            const swapSummary = `
-                <p class="mb-2">Θα γίνει <strong>αμοιβαία αλλαγή</strong> στην <strong>Ομάδα ${analysis.groupNum}</strong>:</p>
-                <ul class="mb-3">
-                    <li><strong>${escapeHtml(analysis.dayKey)}</strong> (${escapeHtml(dayStrA)}): ο/η <strong>${escapeHtml(analysis.prevPerson)}</strong> → <strong>${escapeHtml(analysis.newPerson)}</strong></li>
-                    <li><strong>${escapeHtml(analysis.otherKey)}</strong> (${escapeHtml(dayStrB)}): ο/η <strong>${escapeHtml(analysis.newPerson)}</strong> → <strong>${escapeHtml(analysis.prevPerson)}</strong></li>
+        function buildMutualSwapConfirmHtml(plan, evaluation) {
+            const dateHere = formatDutyDateLabel(plan.dayKey);
+            const dateThere = plan.otherKey ? formatDutyDateLabel(plan.otherKey) : '—';
+            let html = `
+                <p class="mb-3">Θα πραγματοποιηθεί <strong>αμοιβαία αλλαγή</strong> στην <strong>Ομάδα ${plan.groupNum}</strong>:</p>
+                <ul class="list-group mb-3">
+                    <li class="list-group-item">
+                        <strong>${dateHere}</strong><br>
+                        <span class="text-muted">Τώρα:</span> ${escapeHtml(plan.prevPerson)} → <span class="text-primary"><strong>${escapeHtml(plan.newPerson)}</strong></span>
+                    </li>
+                    <li class="list-group-item">
+                        <strong>${dateThere}</strong><br>
+                        <span class="text-muted">Τώρα:</span> ${escapeHtml(plan.newPerson)} → <span class="text-primary"><strong>${escapeHtml(plan.prevPerson)}</strong></span>
+                    </li>
                 </ul>
-                <p class="small text-muted mb-0"><i class="fas fa-info-circle me-1"></i>Έλεγχος σύγκρουσης: μετά την τοποθέτηση, κανένα από τα δύο άτομα δεν πρέπει να έχει άλλη υπηρεσία στην ίδια ομάδα 1–2 ημέρες πριν ή μετά από την ημέρα που ανατίθεται.</p>
+                <p class="small text-muted mb-2">Έλεγχος σύγκρουσης: μετά την τοποθέτηση, ±2 ημέρες πριν/μετά από κάθε ημέρα (μόνο υπάρχουσες αναθέσεις).</p>
             `;
-
-            if (analysis.hasConflict) {
-                const issueLines = (analysis.issues || []).map(formatMutualSwapIssueLine).join('');
-                bodyEl.innerHTML = `
-                    ${swapSummary}
-                    <div class="alert alert-danger mb-0">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Υπάρχει σύγκρουση.</strong> Επιλέξτε άλλο άτομο.
-                        <ul class="mb-0 mt-2">${issueLines}</ul>
-                    </div>
-                `;
-                footerEl.innerHTML = '<button type="button" class="btn btn-primary" id="mutualSwapPickOtherBtn"><i class="fas fa-user-times me-1"></i>Επιλογή άλλου ατόμου</button>';
+            if (!evaluation.ok) {
+                html += `<div class="alert alert-danger mb-0"><strong>Σύγκρουση — δεν επιτρέπεται η αλλαγή:</strong><ul class="mb-0 mt-2">`;
+                evaluation.conflicts.forEach((c) => {
+                    html += `<li>${escapeHtml(formatMutualSwapConflictLine(c))}</li>`;
+                });
+                html += `</ul><p class="mb-0 mt-2 small">Παρακαλώ επιλέξτε <strong>άλλο άτομο</strong>.</p></div>`;
             } else {
-                bodyEl.innerHTML = `
-                    ${swapSummary}
-                    <div class="alert alert-success mb-0">
-                        <i class="fas fa-check-circle me-2"></i><strong>Δεν εντοπίστηκε σύγκρουση.</strong> Μπορείτε να αποθηκεύσετε τις αλλαγές.
-                    </div>
-                `;
-                footerEl.innerHTML = `
-                    <button type="button" class="btn btn-primary" id="mutualSwapConfirmOkBtn"><i class="fas fa-check me-1"></i>Επιβεβαίωση</button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
-                `;
+                html += `<div class="alert alert-success mb-0"><i class="fas fa-check-circle me-1"></i>Δεν εντοπίστηκε σύγκρουση. Μπορείτε να επιβεβαιώσετε.</div>`;
             }
-
-            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-            const onHidden = () => {
-                modalEl.removeEventListener('hidden.bs.modal', onHidden);
-            };
-            modalEl.addEventListener('hidden.bs.modal', onHidden);
-
-            footerEl.querySelector('#mutualSwapPickOtherBtn')?.addEventListener('click', () => {
-                revertMutualSwapSelect(select);
-                modal.hide();
-            }, { once: true });
-
-            footerEl.querySelector('#mutualSwapConfirmOkBtn')?.addEventListener('click', () => {
-                select.dataset.mutualSwapConfirmToken = buildMutualSwapConfirmToken(
-                    analysis.dayKey,
-                    analysis.groupNum,
-                    analysis.prevPerson,
-                    analysis.newPerson,
-                    analysis.otherKey
-                );
-                select.dataset.lastValidValue = select.value.trim();
-                modal.hide();
-            }, { once: true });
-
-            modalEl.querySelector('[data-bs-dismiss="modal"]')?.addEventListener('click', () => {
-                revertMutualSwapSelect(select);
-            }, { once: true });
-
-            modal.show();
+            return html;
         }
 
-        /** Ενημέρωση disabled/ετικετών options ανά τύπο αλλαγής (αντικατάσταση = v1.452, αμοιβαία = όλα ενεργά). */
-        function refreshDutyPersonSelectOptionStates(select) {
-            if (!select || select.dataset.isCritical === 'true' || !currentEditingDayKey) return;
+        function showMutualSwapConfirmModal(plan, evaluation) {
+            return new Promise((resolve) => {
+                const modalEl = document.getElementById('mutualSwapConfirmModal');
+                const bodyEl = document.getElementById('mutualSwapConfirmBody');
+                const okBtn = document.getElementById('mutualSwapConfirmOkBtn');
+                if (!modalEl || !bodyEl || !okBtn || typeof bootstrap === 'undefined') {
+                    resolve(!!evaluation?.ok);
+                    return;
+                }
+                bodyEl.innerHTML = buildMutualSwapConfirmHtml(plan, evaluation);
+                okBtn.style.display = evaluation.ok ? '' : 'none';
+                okBtn.disabled = !evaluation.ok;
+                let settled = false;
+                const finish = (val) => {
+                    if (settled) return;
+                    settled = true;
+                    resolve(!!val);
+                };
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
+                const onOk = () => {
+                    if (!evaluation.ok) return;
+                    modal.hide();
+                    finish(true);
+                };
+                const onHidden = () => {
+                    modalEl.removeEventListener('hidden.bs.modal', onHidden);
+                    okBtn.removeEventListener('click', onOk);
+                    if (!settled) finish(false);
+                };
+                okBtn.addEventListener('click', onOk);
+                modalEl.addEventListener('hidden.bs.modal', onHidden);
+                modal.show();
+            });
+        }
+
+        async function handleMutualSwapPersonSelect(select) {
+            if (!select || !currentEditingDayKey) return false;
             const group = parseInt(select.dataset.group, 10);
-            if (!Number.isFinite(group)) return;
+            if (!Number.isFinite(group)) return false;
             const dayKey = currentEditingDayKey;
             const prevPerson = (select.dataset.originalName || '').trim();
+            const newVal = select.value.trim();
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            const container = document.getElementById('dutyPersonsContainer');
-            const modeEl = container?.querySelector(`input[name="duty-change-mode-${group}"]:checked`);
-            const mode = modeEl ? modeEl.value : 'replacement';
-            const curVal = select.value.trim();
-
-            select.querySelectorAll('option').forEach((opt) => {
-                const p = (opt.value || '').trim();
-                if (!p) return;
-                const isCurrent = norm(p) === norm(curVal) || norm(p) === norm(prevPerson);
-                const unavailable = opt.dataset.unavailable === '1';
-                let baseLabel = opt.dataset.baseLabel || p;
-                if (!opt.dataset.baseLabel) opt.dataset.baseLabel = baseLabel;
-
-                let suffix = '';
-                let consecutiveConflict = false;
-                if (mode === 'replacement' && norm(p) !== norm(prevPerson)) {
-                    consecutiveConflict = wouldManualDutySelectionCauseConsecutiveConflict(
-                        dayKey, p, group, prevPerson, 'replacement'
-                    );
-                    if (consecutiveConflict && typeof getConsecutiveConflictNeighborInfoSavedOnly === 'function') {
-                        const nearInfo = getConsecutiveConflictNeighborInfoSavedOnly(dayKey, p, group);
-                        if (nearInfo?.dayOffset != null) {
-                            const d = Math.abs(nearInfo.dayOffset);
-                            suffix = ` · Υπηρεσία ${d} ${d === 1 ? 'ημέρα' : 'ημέρες'} ${nearInfo.dayOffset < 0 ? 'πριν' : 'μετά'}`;
-                        } else {
-                            suffix = ' · Υπηρεσία ±2 ημέρες κοντά';
-                        }
-                    } else if (consecutiveConflict) {
-                        suffix = ' · Υπηρεσία ±2 ημέρες κοντά';
-                    }
-                }
-                opt.textContent = baseLabel + suffix;
-                opt.disabled = (unavailable || (mode === 'replacement' && consecutiveConflict)) && !isCurrent;
-            });
+            select.dataset.mutualSwapConfirmed = '0';
+            if (!newVal || norm(newVal) === norm(prevPerson)) {
+                select.dataset.lastValidValue = newVal;
+                return true;
+            }
+            if (!prevPerson) {
+                alert('Για αμοιβαία αλλαγή πρέπει να υπάρχει ήδη ανατεθειμένο άτομο σε αυτή την ημέρα.');
+                select.value = select.dataset.lastValidValue || '';
+                return false;
+            }
+            const plan = buildMutualSwapPlan(dayKey, group, prevPerson, newVal);
+            if (!plan.otherKey) {
+                alert(
+                    `Δεν βρέθηκε άλλη ημέρα (ίδιος τύπος υπηρεσίας) όπου ο/η «${newVal}» είναι ανατεθειμένος/η στην Ομάδα ${group}.\n` +
+                    'Επιλέξτε «Αντικατάσταση» για αλλαγή μόνο αυτής της ημέρας.'
+                );
+                select.value = select.dataset.lastValidValue || prevPerson;
+                return false;
+            }
+            if (typeof isPersonGroupCriticalAssignment === 'function' && isPersonGroupCriticalAssignment(plan.otherKey, newVal, group)) {
+                alert(`Η ανάθεση του/της «${newVal}» την ${plan.otherKey} είναι κρίσιμη (Απόβαση) και δεν μπορεί να αλλάξει.`);
+                select.value = select.dataset.lastValidValue || prevPerson;
+                return false;
+            }
+            const evaluation = evaluateMutualSwapAfterPlacementConflicts(plan);
+            const confirmed = await showMutualSwapConfirmModal(plan, evaluation);
+            if (!evaluation.ok || !confirmed) {
+                select.value = select.dataset.lastValidValue || prevPerson;
+                return false;
+            }
+            select.dataset.mutualSwapConfirmed = '1';
+            select.dataset.mutualSwapPerson = newVal;
+            select.dataset.mutualSwapOtherKey = plan.otherKey;
+            select.dataset.lastValidValue = newVal;
+            return true;
         }
 
         function formatConsecutiveConflictBlockMessage(personLabel, dayKey, groupNum, mode) {
@@ -7051,32 +7022,18 @@
             const prevPerson = (select.dataset.originalName || '').trim();
             const newVal = select.value.trim();
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            delete select.dataset.mutualSwapConfirmToken;
-
+            const container = document.getElementById('dutyPersonsContainer');
+            const modeEl = container?.querySelector(`input[name="duty-change-mode-${group}"]:checked`);
+            const mode = modeEl ? modeEl.value : 'replacement';
+            if (mode === 'mutual_swap') {
+                void handleMutualSwapPersonSelect(select);
+                return true;
+            }
+            select.dataset.mutualSwapConfirmed = '0';
             if (!newVal || norm(newVal) === norm(prevPerson)) {
                 select.dataset.lastValidValue = newVal;
                 return true;
             }
-            const container = document.getElementById('dutyPersonsContainer');
-            const modeEl = container?.querySelector(`input[name="duty-change-mode-${group}"]:checked`);
-            const mode = modeEl ? modeEl.value : 'replacement';
-
-            if (mode === 'mutual_swap') {
-                if (!prevPerson) {
-                    alert('Για αμοιβαία αλλαγή πρέπει να υπάρχει ήδη ανατεθειμένο άτομο σε αυτή την ημέρα.');
-                    revertMutualSwapSelect(select);
-                    return false;
-                }
-                const analysis = analyzeMutualSwapConsecutiveConflicts(dayKey, group, prevPerson, newVal);
-                if (!analysis.ok) {
-                    alert(analysis.error);
-                    revertMutualSwapSelect(select);
-                    return false;
-                }
-                showMutualSwapConfirmDialog(select, analysis);
-                return true;
-            }
-
             if (wouldManualDutySelectionCauseConsecutiveConflict(dayKey, newVal, group, prevPerson, 'replacement')) {
                 alert(formatConsecutiveConflictBlockMessage(newVal, dayKey, group, 'replacement'));
                 const revert = select.dataset.lastValidValue != null ? select.dataset.lastValidValue : prevPerson;
@@ -7092,7 +7049,7 @@
             if (!container) return;
             container.querySelectorAll('.duty-person-select').forEach((select) => {
                 select.dataset.lastValidValue = (select.value || select.dataset.originalName || '').trim();
-                refreshDutyPersonSelectOptionStates(select);
+                select.dataset.mutualSwapConfirmed = '0';
                 select.addEventListener('change', () => validateDutyPersonSelectOnChange(select));
             });
             container.querySelectorAll('input[name^="duty-change-mode-"]').forEach((radio) => {
@@ -7101,22 +7058,21 @@
                     if (!m) return;
                     const sel = container.querySelector(`.duty-person-select[data-group="${m[1]}"]`);
                     if (!sel) return;
-                    delete sel.dataset.mutualSwapConfirmToken;
-                    refreshDutyPersonSelectOptionStates(sel);
-                    if (radio.value === 'replacement') {
-                        const revert = sel.dataset.lastValidValue != null
-                            ? sel.dataset.lastValidValue
-                            : (sel.dataset.originalName || '');
-                        const selectedOpt = Array.from(sel.options).find((o) => o.value === sel.value);
-                        if (sel.value.trim() && selectedOpt?.disabled) {
-                            sel.value = revert;
+                    sel.dataset.mutualSwapConfirmed = '0';
+                    if (radio.value === 'mutual_swap') {
+                        const newVal = sel.value.trim();
+                        const prev = (sel.dataset.originalName || '').trim();
+                        const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                        if (newVal && norm(newVal) !== norm(prev)) {
+                            void handleMutualSwapPersonSelect(sel);
                         }
+                    } else {
+                        validateDutyPersonSelectOnChange(sel);
                     }
-                    validateDutyPersonSelectOnChange(sel);
                 });
             });
         }
-        function saveDayAssignments() {
+        async function saveDayAssignments() {
             if (!currentEditingDayKey) return;
             
             const container = document.getElementById('dutyPersonsContainer');
@@ -7282,43 +7238,48 @@
 
             const mutualGroupsDone = new Set(mutualSwapPlans.map((p) => p.group));
 
-            // Σύγκρουση διαδοχικών υπηρεσιών πριν την αποθήκευση
+            // Αμοιβαία αλλαγή: έλεγχος μετά την τοποθέτηση (±2 ημ.) + επιβεβαίωση popup
+            for (const p of mutualSwapPlans) {
+                const plan = {
+                    dayKey,
+                    otherKey: p.otherKey,
+                    prevPerson: p.prevPerson,
+                    newPerson: p.newPerson,
+                    groupNum: p.group
+                };
+                const evaluation = evaluateMutualSwapAfterPlacementConflicts(plan);
+                if (!evaluation.ok) {
+                    await showMutualSwapConfirmModal(plan, evaluation);
+                    return;
+                }
+                const swapSelect = container.querySelector(`.duty-person-select[data-group="${p.group}"]`);
+                const confirmed =
+                    swapSelect &&
+                    swapSelect.dataset.mutualSwapConfirmed === '1' &&
+                    normPerson(swapSelect.dataset.mutualSwapPerson || '') === normPerson(p.newPerson) &&
+                    String(swapSelect.dataset.mutualSwapOtherKey || '') === String(p.otherKey);
+                if (!confirmed) {
+                    const ok = await showMutualSwapConfirmModal(plan, evaluation);
+                    if (!ok) return;
+                    if (swapSelect) {
+                        swapSelect.dataset.mutualSwapConfirmed = '1';
+                        swapSelect.dataset.mutualSwapPerson = p.newPerson;
+                        swapSelect.dataset.mutualSwapOtherKey = p.otherKey;
+                    }
+                }
+            }
+
+            // Αντικατάσταση: αποκλεισμός ±2 ημ. (υπάρχουσες αναθέσεις κοντά)
             for (const select of selects) {
                 if (select.dataset.isCritical === 'true') continue;
                 const g = parseInt(select.dataset.group, 10);
                 if (!Number.isFinite(g)) continue;
+                if (mutualGroupsDone.has(g)) continue;
                 const prevPerson = typeof parseAssignedPersonForGroupFromAssignment === 'function'
                     ? (parseAssignedPersonForGroupFromAssignment(prevStr, g) || '').trim()
                     : '';
                 const newVal = select.value.trim();
                 if (!newVal || normPerson(prevPerson) === normPerson(newVal)) continue;
-                const modeEl2 = container.querySelector(`input[name="duty-change-mode-${g}"]:checked`);
-                const mode2 = modeEl2 ? modeEl2.value : 'replacement';
-
-                if (mode2 === 'mutual_swap') {
-                    const analysis = analyzeMutualSwapConsecutiveConflicts(dayKey, g, prevPerson, newVal);
-                    if (!analysis.ok) {
-                        alert(analysis.error);
-                        return;
-                    }
-                    const expectedToken = buildMutualSwapConfirmToken(
-                        analysis.dayKey,
-                        analysis.groupNum,
-                        analysis.prevPerson,
-                        analysis.newPerson,
-                        analysis.otherKey
-                    );
-                    if (select.dataset.mutualSwapConfirmToken !== expectedToken) {
-                        showMutualSwapConfirmDialog(select, analysis);
-                        return;
-                    }
-                    if (analysis.hasConflict) {
-                        showMutualSwapConfirmDialog(select, analysis);
-                        return;
-                    }
-                    continue;
-                }
-
                 if (wouldManualDutySelectionCauseConsecutiveConflict(dayKey, newVal, g, prevPerson, 'replacement')) {
                     alert(formatConsecutiveConflictBlockMessage(newVal, dayKey, g, 'replacement'));
                     return;
