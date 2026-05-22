@@ -1267,31 +1267,30 @@
         }
 
         function hasDutyOnDay(dayKey, person, groupNum) {
-            // Determine which document to check based on day type
+            if (!dayKey || !person || !Number.isFinite(groupNum)) return false;
+
+            if (typeof getAssignedPersonForGroupOnDateKey === 'function') {
+                const assigned = getAssignedPersonForGroupOnDateKey(dayKey, groupNum);
+                if (!assigned) return false;
+                const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                return norm(assigned) === norm(person);
+            }
+
             const date = new Date(dayKey + 'T00:00:00');
             if (isNaN(date.getTime())) return false;
-            
-            const dayType = getDayType(date);
-            let assignment = null;
-            
-            if (dayType === 'special-holiday') {
-                assignment = specialHolidayAssignments[dayKey];
-            } else if (dayType === 'weekend-holiday') {
-                assignment = weekendAssignments[dayKey];
-            } else if (dayType === 'semi-normal-day') {
-                assignment = semiNormalAssignments[dayKey];
-            } else if (dayType === 'normal-day') {
-                assignment = normalDayAssignments[dayKey];
-            }
-            
-            // Also check legacy dutyAssignments for backward compatibility
-            if (!assignment) {
-                assignment = dutyAssignments[dayKey];
-            }
-            
+
+            let assignment = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null;
+            if (!assignment) assignment = dutyAssignments?.[dayKey] || null;
             if (!assignment) return false;
-            
-            // Ensure assignment is a string
+
+            if (typeof extractGroupAssignmentsMap === 'function') {
+                const map = extractGroupAssignmentsMap(assignment);
+                const assigned = map[groupNum];
+                if (!assigned) return false;
+                const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                return norm(assigned) === norm(person);
+            }
+
             const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
             const personGroupStr = `${person} (Ομάδα ${groupNum})`;
             return assignmentStr.includes(personGroupStr);

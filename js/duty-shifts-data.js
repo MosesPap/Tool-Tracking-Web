@@ -1054,6 +1054,10 @@
                     return parts.length > 0 ? parts.join(', ') : null;
                 }
                 
+                if (!assignment) {
+                    assignment = dutyAssignments[dateKey] || null;
+                }
+
                 return assignment;
             } catch (error) {
                 console.error(`Error getting assignment for ${dateKey}:`, error);
@@ -3209,13 +3213,27 @@
         }
 
         function parseAssignedPersonForGroupFromAssignment(assignmentStr, groupNum) {
-            if (!assignmentStr) return null;
+            if (!assignmentStr || !Number.isFinite(groupNum)) return null;
+            if (typeof extractGroupAssignmentsMap === 'function') {
+                const map = extractGroupAssignmentsMap(assignmentStr);
+                const p = map[groupNum];
+                return p ? String(p).trim() : null;
+            }
             const parts = String(assignmentStr).split(',').map(p => p.trim()).filter(Boolean);
             for (const part of parts) {
                 const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                 if (m && parseInt(m[2], 10) === groupNum) return m[1].trim();
             }
             return null;
+        }
+
+        /** Actual assignee for group on date (saved assignments: string, object, or legacy dutyAssignments). */
+        function getAssignedPersonForGroupOnDateKey(dateKey, groupNum) {
+            if (!dateKey || !Number.isFinite(groupNum)) return null;
+            let raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dateKey) : null;
+            if (!raw && dutyAssignments?.[dateKey]) raw = dutyAssignments[dateKey];
+            if (!raw) return null;
+            return parseAssignedPersonForGroupFromAssignment(raw, groupNum);
         }
 
         /** Duty category string for a date key: special | weekend | semi | normal (matches getAssignmentForDate routing). */

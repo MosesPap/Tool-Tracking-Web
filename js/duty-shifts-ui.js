@@ -6744,13 +6744,49 @@
             return false;
         }
 
-        function buildAssignmentStringForGroupPatch(dayKey, groupNum, personForGroup) {
-            const prevRaw = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) || '';
+        /** Pending modal selects for the day being edited; otherwise saved assignments only. */
+        function buildGroupAssignmentMapForDay(dayKey, options = {}) {
+            const overrideGroup = options.overrideGroup;
+            const overridePerson = options.overridePerson;
+            const fromModal = options.fromModal !== false;
+            const prevRaw = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null)
+                || dutyAssignments?.[dayKey]
+                || '';
             const map = typeof extractGroupAssignmentsMap === 'function'
                 ? extractGroupAssignmentsMap(prevRaw)
                 : {};
-            if (personForGroup) map[groupNum] = String(personForGroup).trim();
-            else delete map[groupNum];
+
+            if (fromModal && dayKey === currentEditingDayKey) {
+                const container = document.getElementById('dutyPersonsContainer');
+                if (container) {
+                    container.querySelectorAll('.duty-person-select').forEach((sel) => {
+                        const g = parseInt(sel.dataset.group, 10);
+                        if (!Number.isFinite(g)) return;
+                        if (sel.dataset.isCritical === 'true') {
+                            const orig = (sel.dataset.originalName || '').trim();
+                            if (orig) map[g] = orig;
+                            return;
+                        }
+                        const val = sel.value.trim();
+                        if (val) map[g] = val;
+                        else delete map[g];
+                    });
+                }
+            }
+
+            if (overrideGroup != null && Number.isFinite(overrideGroup)) {
+                if (overridePerson) map[overrideGroup] = String(overridePerson).trim();
+                else delete map[overrideGroup];
+            }
+            return map;
+        }
+
+        function buildAssignmentStringForGroupPatch(dayKey, groupNum, personForGroup) {
+            const map = buildGroupAssignmentMapForDay(dayKey, {
+                fromModal: dayKey === currentEditingDayKey,
+                overrideGroup: groupNum,
+                overridePerson: personForGroup
+            });
             return typeof groupMapToAssignmentString === 'function' ? groupMapToAssignmentString(map) : '';
         }
 
@@ -6773,6 +6809,27 @@
             return patches;
         }
 
+        /** Collect persons to validate after a manual change (includes swap/replacement/calc assignees on neighbors). */
+        function collectManualDutyConflictPersonChecks(dayKey, groupNum, newPerson, prevPerson, mode) {
+            const checks = [];
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            if (newPerson && (!prevPerson || norm(prevPerson) !== norm(newPerson))) {
+                checks.push({ person: newPerson, onKey: dayKey, groupNum, mode });
+            }
+            if (mode === 'mutual_swap' && prevPerson && norm(prevPerson) !== norm(newPerson)) {
+                const dutyCat = typeof getDutyCategoryForDateKey === 'function'
+                    ? getDutyCategoryForDateKey(dayKey)
+                    : 'normal';
+                const otherKey = typeof findOtherDateKeyForPersonInGroupDutyCategory === 'function'
+                    ? findOtherDateKeyForPersonInGroupDutyCategory(newPerson, groupNum, dayKey, dutyCat)
+                    : null;
+                if (otherKey) {
+                    checks.push({ person: prevPerson, onKey: otherKey, groupNum, mode: 'mutual_swap' });
+                }
+            }
+            return checks;
+        }
+
         /** True if assigning newPerson (replacement or mutual swap) would create a consecutive-duty conflict. */
         function wouldManualDutySelectionCauseConsecutiveConflict(dayKey, newPerson, groupNum, prevPerson, mode) {
             if (typeof hasConsecutiveDuty !== 'function' || typeof withTemporaryAssignmentPatches !== 'function') {
@@ -6783,16 +6840,11 @@
             if (prevPerson && norm(prevPerson) === norm(newPerson)) return false;
 
             const patches = buildManualDutyConflictPatches(dayKey, groupNum, newPerson, prevPerson, mode);
+            const personChecks = collectManualDutyConflictPersonChecks(dayKey, groupNum, newPerson, prevPerson, mode);
+
             return !!withTemporaryAssignmentPatches(patches, () => {
-                if (hasConsecutiveDuty(dayKey, newPerson, groupNum)) return true;
-                if (mode === 'mutual_swap' && prevPerson) {
-                    const dutyCat = typeof getDutyCategoryForDateKey === 'function'
-                        ? getDutyCategoryForDateKey(dayKey)
-                        : 'normal';
-                    const otherKey = typeof findOtherDateKeyForPersonInGroupDutyCategory === 'function'
-                        ? findOtherDateKeyForPersonInGroupDutyCategory(newPerson, groupNum, dayKey, dutyCat)
-                        : null;
-                    if (otherKey && hasConsecutiveDuty(otherKey, prevPerson, groupNum)) return true;
+                for (const chk of personChecks) {
+                    if (hasConsecutiveDuty(chk.onKey, chk.person, groupNum)) return true;
                 }
                 return false;
             });
@@ -7029,10 +7081,19 @@
 
             const mutualGroupsDone = new Set(mutualSwapPlans.map((p) => p.group));
 
-            // Σύγκρουση διαδοχικών υπηρεσιών πριν την αποθήκευση (αντικατάσταση / αμοιβαία αλλαγή)
+            // Σύγκρουση διαδοχικών υπηρεσιών πριν την αποθήκευση (όλες οι αλλαγές modal + αμοιβαίες άλλες ημέρες)
             const warnConsecutive = (personLabel, conflictDayKey, groupNum, mode) => {
                 alert(formatConsecutiveConflictBlockMessage(personLabel, conflictDayKey, groupNum, mode));
             };
+            const saveConflictPatches = {};
+            const modalDayStr = typeof groupMapToAssignmentString === 'function'
+                ? groupMapToAssignmentString(buildGroupAssignmentMapForDay(dayKey, { fromModal: true }))
+                : (newAssignments.length > 0 ? newAssignments.join(', ') : null);
+            saveConflictPatches[dayKey] = modalDayStr && String(modalDayStr).trim() ? modalDayStr : null;
+            for (const [otherKey, finalStr] of pendingOtherKeyStrings) {
+                saveConflictPatches[otherKey] = finalStr;
+            }
+            const saveConflictChecks = [];
             for (const select of selects) {
                 if (select.dataset.isCritical === 'true') continue;
                 const g = parseInt(select.dataset.group, 10);
@@ -7044,10 +7105,25 @@
                 if (!newVal || normPerson(prevPerson) === normPerson(newVal)) continue;
                 const modeEl2 = container.querySelector(`input[name="duty-change-mode-${g}"]:checked`);
                 const mode2 = modeEl2 ? modeEl2.value : 'replacement';
-                if (wouldManualDutySelectionCauseConsecutiveConflict(dayKey, newVal, g, prevPerson, mode2)) {
-                    warnConsecutive(newVal, dayKey, g, mode2);
-                    return;
-                }
+                saveConflictChecks.push(
+                    ...collectManualDutyConflictPersonChecks(dayKey, g, newVal, prevPerson, mode2)
+                );
+            }
+            if (
+                saveConflictChecks.length > 0 &&
+                typeof withTemporaryAssignmentPatches === 'function' &&
+                typeof hasConsecutiveDuty === 'function'
+            ) {
+                const blocked = withTemporaryAssignmentPatches(saveConflictPatches, () => {
+                    for (const chk of saveConflictChecks) {
+                        if (hasConsecutiveDuty(chk.onKey, chk.person, chk.groupNum)) {
+                            warnConsecutive(chk.person, chk.onKey, chk.groupNum, chk.mode);
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+                if (blocked === false) return;
             }
 
             for (const [otherKey, finalStr] of pendingOtherKeyStrings) {
