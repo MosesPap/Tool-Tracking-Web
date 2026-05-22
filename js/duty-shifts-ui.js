@@ -1776,6 +1776,10 @@
                     alert('Μη έγκυρη ημερομηνία.');
                     return;
                 }
+                if (isDayDetailsMonthLocked(dateObj)) {
+                    alert('Ο μήνας είναι κλειδωμένος. Δεν επιτρέπεται αντικατάσταση.');
+                    return;
+                }
 
                 const dayType = getDayType(dateObj);
                 const typeCategory = (typeof getDayTypeCategoryFromDayType === 'function')
@@ -6240,6 +6244,12 @@
             
             return false; // No available day found
         }
+        function isDayDetailsMonthLocked(date) {
+            if (!date || isNaN(date.getTime())) return false;
+            if (typeof getMonthKeyFromDate !== 'function' || typeof isMonthCalculationLocked !== 'function') return false;
+            return isMonthCalculationLocked(getMonthKeyFromDate(date));
+        }
+
         function showDayDetails(date) {
             try {
                 const key = formatDateKey(date);
@@ -6257,6 +6267,7 @@
                 
                 currentEditingDayKey = key;
                 currentEditingDayDate = date;
+                const monthLocked = isDayDetailsMonthLocked(date);
                 
                 // Get day type color for theme
                 const dayTypeColor = getDayTypeColor(dayType);
@@ -6333,6 +6344,15 @@
                     </div>
                 </div>
             `;
+            if (monthLocked) {
+                content += `
+                    <div class="alert alert-warning mb-3">
+                        <i class="fas fa-lock me-2"></i>
+                        <strong>Ο μήνας είναι κλειδωμένος.</strong> Δεν επιτρέπονται αντικατάσταση ούτε αμοιβαία αλλαγή.
+                        Ξεκλειδώστε τον μήνα από τον διακόπτη «Κλείδωμα μήνα» στο ημερολόγιο για χειροκίνητες αλλαγές.
+                    </div>
+                `;
+            }
             
             if (isSpecialHoliday(date)) {
                 const holidayName = getOrthodoxHolidayName(date);
@@ -6482,8 +6502,11 @@
                     : '';
                 const criticalClass = isCritical ? 'border-danger bg-light' : '';
                 const criticalLabel = isCritical ? '<span class="badge bg-danger ms-2"><i class="fas fa-lock me-1"></i>Κρίσιμη (Απόβαση)</span>' : '';
-                const disabledAttr = isCritical ? 'disabled' : '';
-                const disabledTitle = isCritical ? 'title="Αυτή η ανάθεση είναι κρίσιμη και δεν μπορεί να αλλάξει"' : '';
+                const editBlocked = monthLocked || isCritical;
+                const disabledAttr = editBlocked ? 'disabled' : '';
+                const disabledTitle = monthLocked
+                    ? 'title="Ο μήνας είναι κλειδωμένος — δεν επιτρέπονται αλλαγές"'
+                    : (isCritical ? 'title="Αυτή η ανάθεση είναι κρίσιμη και δεν μπορεί να αλλάξει"' : '');
                 
                 // Add reason display below the person name.
                 // If assignmentReasons is missing (common for missing-period replacements), derive the same reason logic as violations popup.
@@ -6690,7 +6713,7 @@
                     peopleOptions += `<option value="${escapeOpt(person.name)}" selected>${escapeOpt(person.name)} · (τρέχουσα ανάθεση)</option>`;
                 }
                 
-                const changeTypeBlock = isCritical
+                const changeTypeBlock = (isCritical || monthLocked)
                     ? ''
                     : `<div class="duty-change-type-options mt-2 pt-2 border-top">
                         <span class="small text-muted d-block mb-1"><strong>Τύπος αλλαγής</strong> (όταν αλλάζετε το άτομο)</span>
@@ -6731,9 +6754,15 @@
             // Swap details section removed - information is already shown in individual group cards
             
                 document.getElementById('dayDetailsContent').innerHTML = content;
-                wireDayDetailsManualChangeValidation();
+                if (!monthLocked) {
+                    wireDayDetailsManualChangeValidation();
+                }
+                const saveBtn = document.getElementById('dayDetailsSaveBtn');
+                if (saveBtn) {
+                    saveBtn.disabled = monthLocked;
+                    saveBtn.style.display = monthLocked ? 'none' : '';
+                }
                 
-                // Buttons are now in the modal footer, no need to show/hide them
                 modal.show();
             } catch (error) {
                 console.error('Error in showDayDetails:', error);
@@ -6941,6 +6970,11 @@
 
         async function handleMutualSwapPersonSelect(select) {
             if (!select || !currentEditingDayKey) return false;
+            if (typeof currentEditingDayDate !== 'undefined' && isDayDetailsMonthLocked(currentEditingDayDate)) {
+                alert('Ο μήνας είναι κλειδωμένος. Δεν επιτρέπεται αμοιβαία αλλαγή.');
+                select.value = select.dataset.lastValidValue || select.dataset.originalName || '';
+                return false;
+            }
             const group = parseInt(select.dataset.group, 10);
             if (!Number.isFinite(group)) return false;
             const dayKey = currentEditingDayKey;
@@ -7016,6 +7050,7 @@
 
         function validateDutyPersonSelectOnChange(select) {
             if (!select || select.dataset.isCritical === 'true' || !currentEditingDayKey) return true;
+            if (typeof currentEditingDayDate !== 'undefined' && isDayDetailsMonthLocked(currentEditingDayDate)) return true;
             const group = parseInt(select.dataset.group, 10);
             if (!Number.isFinite(group)) return true;
             const dayKey = currentEditingDayKey;
@@ -7074,6 +7109,10 @@
         }
         async function saveDayAssignments() {
             if (!currentEditingDayKey) return;
+            if (typeof currentEditingDayDate !== 'undefined' && isDayDetailsMonthLocked(currentEditingDayDate)) {
+                alert('Ο μήνας είναι κλειδωμένος. Δεν επιτρέπονται αντικατάσταση ούτε αμοιβαία αλλαγή.');
+                return;
+            }
             
             const container = document.getElementById('dutyPersonsContainer');
             const selects = container.querySelectorAll('.duty-person-select');
