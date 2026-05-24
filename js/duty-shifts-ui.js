@@ -1769,149 +1769,6 @@
             }
         }
 
-        function findNextEligibleManualAlternateReplacement(skippedPerson, groupNum, dateObj, typeCategory, list) {
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            if (!Array.isArray(list) || list.length === 0) return null;
-            let startIdx = list.findIndex(p => norm(p) === norm(skippedPerson));
-            if (startIdx < 0) startIdx = 0;
-            for (let off = 1; off < list.length; off++) {
-                const cand = list[(startIdx + off) % list.length];
-                if (!cand) continue;
-                if (norm(cand) === norm(skippedPerson)) continue;
-                if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, typeCategory)) continue;
-                if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(cand, groupNum, dateObj, typeCategory)) continue;
-                return cand;
-            }
-            return null;
-        }
-
-        function buildManualAlternateReplacementReason(skippedPerson, replacement, dateObj) {
-            const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            return `Αντικατάσταση: Παραλείφθηκε ο/η ${skippedPerson} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${replacement}.`;
-        }
-
-        /**
-         * Ενιαία αντικατάσταση επιλαχόν (ίδια λογική για modal ημέρας και ενέργεια «επιλαχόν»).
-         * @returns {Promise<{ok:boolean, replacement?:string}>}
-         */
-        async function applyManualAlternateReplacementCore({
-            groupNum,
-            skippedPerson,
-            replacement = null,
-            dateKey,
-            metaExtra = {},
-            persist = true,
-            skipAssignmentUpdate = false
-        }) {
-            const dateObj = new Date(dateKey + 'T00:00:00');
-            if (isNaN(dateObj.getTime())) {
-                alert('Μη έγκυρη ημερομηνία.');
-                return { ok: false };
-            }
-            if (isDayDetailsMonthLocked(dateObj)) {
-                alert('Ο μήνας είναι κλειδωμένος. Δεν επιτρέπεται αντικατάσταση.');
-                return { ok: false };
-            }
-
-            const dayType = getDayType(dateObj);
-            const typeCategory = (typeof getDayTypeCategoryFromDayType === 'function')
-                ? getDayTypeCategoryFromDayType(dayType)
-                : (dayType === 'special-holiday' ? 'special' : (dayType === 'weekend-holiday' ? 'weekend' : (dayType === 'semi-normal-day' ? 'semi' : 'normal')));
-
-            const groupData = groups[groupNum];
-            const list = groupData?.[typeCategory] || [];
-            if (!Array.isArray(list) || list.length === 0) {
-                alert('Δεν υπάρχει λίστα ατόμων για αυτόν τον τύπο υπηρεσίας.');
-                return { ok: false };
-            }
-
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            const skipped = String(skippedPerson || '').trim();
-            if (!skipped) {
-                alert('Δεν ορίστηκε το άτομο που αντικαθίσταται.');
-                return { ok: false };
-            }
-
-            let repl = replacement ? String(replacement).trim() : null;
-            if (!repl) {
-                repl = findNextEligibleManualAlternateReplacement(skipped, groupNum, dateObj, typeCategory, list);
-            }
-            if (!repl) {
-                alert('Δεν βρέθηκε επιλαχών διαθέσιμος/η για αντικατάσταση.');
-                return { ok: false };
-            }
-            if (norm(repl) === norm(skipped)) {
-                alert('Ο επιλαχών πρέπει να είναι διαφορετικό άτομο από αυτόν/αυτήν που αντικαθίσταται.');
-                return { ok: false };
-            }
-
-            const getAssignmentsObj = () => {
-                if (typeCategory === 'special') return specialHolidayAssignments;
-                if (typeCategory === 'weekend') return weekendAssignments;
-                if (typeCategory === 'semi') return semiNormalAssignments;
-                return normalDayAssignments;
-            };
-            const assignmentsObj = getAssignmentsObj();
-
-            const rawAssignment = assignmentsObj?.[dateKey] || dutyAssignments?.[dateKey] || null;
-            if (!rawAssignment) {
-                alert('Δεν υπάρχει ανάθεση υπηρεσίας σε αυτή την ημερομηνία.');
-                return { ok: false };
-            }
-            const groupMap = extractGroupAssignmentsMap(rawAssignment);
-            const assignedForGroup = groupMap?.[groupNum] || null;
-
-            if (!skipAssignmentUpdate) {
-                if (!assignedForGroup || norm(assignedForGroup) !== norm(skipped)) {
-                    alert('Το άτομο δεν είναι ανατεθειμένο σε υπηρεσία σε αυτή την ημερομηνία.');
-                    return { ok: false };
-                }
-                if (wouldManualDutySelectionCauseConsecutiveConflict(dateKey, repl, groupNum, skipped, 'replacement')) {
-                    alert(formatConsecutiveConflictBlockMessage(repl, dateKey, groupNum, 'replacement'));
-                    return { ok: false };
-                }
-                groupMap[groupNum] = repl;
-                const parts = [];
-                for (let g = 1; g <= 4; g++) {
-                    const pn = groupMap[g];
-                    if (pn) parts.push(`${pn} (Ομάδα ${g})`);
-                }
-                const newAssignmentStr = parts.join(', ');
-                assignmentsObj[dateKey] = newAssignmentStr;
-                dutyAssignments[dateKey] = newAssignmentStr;
-            } else {
-                if (!assignedForGroup || norm(assignedForGroup) !== norm(repl)) {
-                    alert('Η τρέχουσα ανάθεση δεν ταιριάζει με τον επιλεγμένο επιλαχόν. Αποθηκεύστε πρώτα την ημέρα και δοκιμάστε ξανά.');
-                    return { ok: false };
-                }
-            }
-
-            if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
-                clearAssignmentReasonForPersonOnDate(dateKey, groupNum, skipped);
-                clearAssignmentReasonForPersonOnDate(dateKey, groupNum, repl);
-            }
-            const reason = buildManualAlternateReplacementReason(skipped, repl, dateObj);
-            const meta = { manualAlternateReplacement: true, ...metaExtra };
-            if (typeof storeAssignmentReason === 'function') {
-                storeAssignmentReason(dateKey, groupNum, repl, 'skip', reason, skipped, null, meta);
-            }
-
-            if (['normal', 'semi', 'weekend'].includes(typeCategory)) {
-                try {
-                    await runManualAlternateReplacementEffects(groupNum, skipped, repl, dateKey, typeCategory);
-                } catch (e) {
-                    console.warn('Manual alternate baseline/reflow failed:', e);
-                }
-            }
-
-            if (persist) {
-                await saveData();
-                renderCalendar();
-                updateStatistics();
-            }
-            return { ok: true, replacement: repl };
-        }
-
         /** Baseline + same-month reflow after manual alternate (καθημερινές / ημιαργίες / αργίες). */
         async function runManualAlternateReplacementEffects(groupNum, personName, replacement, dateKey, typeCategory) {
             const dateObj = new Date(dateKey + 'T00:00:00');
@@ -2091,17 +1948,151 @@
             }
         }
 
+        /**
+         * Ενιαία αντικατάσταση επιλαχόντα (ίδια για «Ενέργειες ατόμου» και modal ημέρας).
+         * @param {number} groupNum
+         * @param {string} skippedPerson — αυτός που παραλείπεται (ήταν ανατεθειμένος)
+         * @param {string} dateKey
+         * @param {{ replacement?: string|null, skipFinalSave?: boolean, skipCalendarReload?: boolean }} [options]
+         * @returns {Promise<boolean>} false αν αποτυχία ελέγχου
+         */
+        async function applyManualAlternateReplacementForDate(groupNum, skippedPerson, dateKey, options = {}) {
+            const replacementExplicit = options.replacement != null && String(options.replacement).trim()
+                ? String(options.replacement).trim()
+                : null;
+            const skipFinalSave = options.skipFinalSave === true;
+            const skipCalendarReload = options.skipCalendarReload === true;
+
+            const dateObj = new Date(dateKey + 'T00:00:00');
+            if (isNaN(dateObj.getTime())) {
+                alert('Μη έγκυρη ημερομηνία.');
+                return false;
+            }
+            if (isDayDetailsMonthLocked(dateObj)) {
+                alert('Ο μήνας είναι κλειδωμένος. Δεν επιτρέπεται αντικατάσταση.');
+                return false;
+            }
+
+            const dayType = getDayType(dateObj);
+            const typeCategory = (typeof getDayTypeCategoryFromDayType === 'function')
+                ? getDayTypeCategoryFromDayType(dayType)
+                : (dayType === 'special-holiday' ? 'special' : (dayType === 'weekend-holiday' ? 'weekend' : (dayType === 'semi-normal-day' ? 'semi' : 'normal')));
+
+            if (!['normal', 'semi', 'weekend'].includes(typeCategory)) {
+                alert('Η αντικατάσταση επιλαχόντα ισχύει μόνο για καθημερινές, ημιαργίες και αργίες.');
+                return false;
+            }
+
+            const groupData = groups[groupNum];
+            const list = groupData?.[typeCategory] || [];
+            if (!Array.isArray(list) || list.length === 0) {
+                alert('Δεν υπάρχει λίστα ατόμων για αυτόν τον τύπο υπηρεσίας.');
+                return false;
+            }
+
+            const getAssignmentsObj = () => {
+                if (typeCategory === 'weekend') return weekendAssignments;
+                if (typeCategory === 'semi') return semiNormalAssignments;
+                return normalDayAssignments;
+            };
+            const assignmentsObj = getAssignmentsObj();
+
+            const rawAssignment = assignmentsObj?.[dateKey] || dutyAssignments?.[dateKey] || null;
+            if (!rawAssignment) {
+                alert('Δεν υπάρχει ανάθεση υπηρεσίας σε αυτή την ημερομηνία.');
+                return false;
+            }
+            const groupMap = extractGroupAssignmentsMap(rawAssignment);
+            const assignedForGroup = groupMap?.[groupNum] || null;
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const nSkip = norm(skippedPerson);
+            const nAssigned = norm(assignedForGroup);
+            if (!nSkip) {
+                alert('Δεν ορίστηκε το άτομο που παραλείπεται.');
+                return false;
+            }
+            if (nAssigned !== nSkip && (!replacementExplicit || nAssigned !== norm(replacementExplicit))) {
+                alert('Το άτομο δεν είναι ανατεθειμένο σε υπηρεσία σε αυτή την ημερομηνία (ή η ανάθεση άλλαξε ήδη).');
+                return false;
+            }
+
+            let replacement = replacementExplicit;
+            if (!replacement) {
+                let startIdx = list.findIndex(p => norm(p) === nSkip);
+                if (startIdx < 0) startIdx = 0;
+                for (let off = 1; off < list.length; off++) {
+                    const cand = list[(startIdx + off) % list.length];
+                    if (!cand) continue;
+                    if (norm(cand) === nSkip) continue;
+                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, typeCategory)) continue;
+                    if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(cand, groupNum, dateObj, typeCategory)) continue;
+                    replacement = cand;
+                    break;
+                }
+            } else {
+                if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(replacement, groupNum, typeCategory)) {
+                    alert('Ο/η επιλεγμένος/η επιλαχόνος/α είναι απενεργοποιημένος/η για αυτόν τον τύπο υπηρεσίας.');
+                    return false;
+                }
+                if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(replacement, groupNum, dateObj, typeCategory)) {
+                    alert('Ο/η επιλεγμένος/η επιλαχόνος/α είναι απόντης/ουσα σε αυτή την ημερομηνία.');
+                    return false;
+                }
+            }
+            if (!replacement) {
+                alert('Δεν βρέθηκε επιλαχών διαθέσιμος/η για αντικατάσταση.');
+                return false;
+            }
+            if (norm(replacement) === nSkip) {
+                alert('Ο/η επιλαχόνος/α πρέπει να είναι διαφορετικός/ή από τον/την απόντα/ούσα.');
+                return false;
+            }
+
+            if (wouldManualDutySelectionCauseConsecutiveConflict(dateKey, replacement, groupNum, skippedPerson, 'replacement')) {
+                alert(formatConsecutiveConflictBlockMessage(replacement, dateKey, groupNum, 'replacement'));
+                return false;
+            }
+
+            if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
+                clearAssignmentReasonForPersonOnDate(dateKey, groupNum, skippedPerson);
+            }
+
+            groupMap[groupNum] = replacement;
+            const parts = [];
+            for (let g = 1; g <= 4; g++) {
+                const pn = groupMap[g];
+                if (pn) parts.push(`${pn} (Ομάδα ${g})`);
+            }
+            const newAssignmentStr = parts.join(', ');
+            assignmentsObj[dateKey] = newAssignmentStr;
+            dutyAssignments[dateKey] = newAssignmentStr;
+
+            const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const reason = `Αντικατάσταση Επιλαχών: Παραλείφθηκε ο/η ${skippedPerson} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${replacement}.`;
+            if (typeof storeAssignmentReason === 'function') {
+                storeAssignmentReason(dateKey, groupNum, replacement, 'skip', reason, skippedPerson, null, { manualAlternateReplacement: true });
+            }
+
+            try {
+                await runManualAlternateReplacementEffects(groupNum, skippedPerson, replacement, dateKey, typeCategory);
+            } catch (e) {
+                console.warn('Failed baseline/reflow after manual alternate replacement:', e);
+            }
+
+            if (!skipFinalSave) {
+                await saveData();
+                if (!skipCalendarReload) {
+                    renderCalendar();
+                    updateStatistics();
+                }
+            }
+            return true;
+        }
+
         async function applyAlternateReplacementForDate(groupNum, personName, dateKey) {
             try {
-                await applyManualAlternateReplacementCore({
-                    groupNum,
-                    skippedPerson: personName,
-                    replacement: null,
-                    dateKey,
-                    metaExtra: {},
-                    persist: true,
-                    skipAssignmentUpdate: false
-                });
+                const ok = await applyManualAlternateReplacementForDate(groupNum, personName, dateKey, {});
+                if (!ok) return;
             } catch (e) {
                 console.error('Error applying alternate replacement:', e);
                 alert('Σφάλμα κατά την αντικατάσταση: ' + (e?.message || e));
@@ -7196,6 +7187,8 @@
             else if (dtEdit === 'weekend-holiday') editCat = 'weekend';
             else if (dtEdit === 'semi-normal-day') editCat = 'semi';
             
+            const manualReplacementPlans = [];
+
             // Block manual replacement / mutual swap with people disabled or missing on the relevant duty day(s)
             for (const select of selects) {
                 if (select.dataset.isCritical === 'true') continue;
@@ -7212,6 +7205,9 @@
                 }
                 const modeEl = container.querySelector(`input[name="duty-change-mode-${group}"]:checked`);
                 const mode = modeEl ? modeEl.value : 'replacement';
+                if (mode === 'replacement' && prevPerson && normPerson(prevPerson) !== normPerson(newVal)) {
+                    manualReplacementPlans.push({ group, prevPerson, newVal });
+                }
                 if (mode === 'mutual_swap') {
                     if (!prevPerson) continue;
                     const dutyCat = typeof getDutyCategoryForDateKey === 'function'
@@ -7237,7 +7233,6 @@
             }
             
             // Αμοιβαία Αλλαγή: swap assignees between this day and the other duty day where the selected person is assigned (same group + duty type).
-            const manualReplacementEffects = [];
             const mutualSwapPlans = [];
             for (const select of selects) {
                 if (select.dataset.isCritical === 'true') continue;
@@ -7361,6 +7356,16 @@
                 }
             }
 
+            // Ίδια λογική με «Αντικατάσταση επιλαχών» (Ενέργειες ατόμου): baseline, reason, reflow
+            for (const p of manualReplacementPlans) {
+                const ok = await applyManualAlternateReplacementForDate(p.group, p.prevPerson, dayKey, {
+                    replacement: p.newVal,
+                    skipFinalSave: true,
+                    skipCalendarReload: true
+                });
+                if (!ok) return;
+            }
+
             for (const [otherKey, finalStr] of pendingOtherKeyStrings) {
                 if (typeof setAssignmentForDate === 'function') {
                     setAssignmentForDate(otherKey, finalStr);
@@ -7402,37 +7407,31 @@
                 }
             }
             
-            // Αντικατάσταση (ίδια λογική με ενέργεια «επιλαχόν»)
-            for (const select of selects) {
-                if (select.dataset.isCritical === 'true') continue;
+            // Χειροκίνητη ανάθεση (όχι αντικατάσταση επιλαχόντα) — απλή αλλαγή χωρίς prevPerson ή χωρίς mode replacement
+            selects.forEach(select => {
+                if (select.dataset.isCritical === 'true') return;
                 const group = parseInt(select.dataset.group, 10);
-                if (!Number.isFinite(group)) continue;
-                if (mutualGroupsDone.has(group)) continue;
+                if (!Number.isFinite(group)) return;
+                if (mutualGroupsDone.has(group)) return;
                 const prevPerson = typeof parseAssignedPersonForGroupFromAssignment === 'function'
                     ? (parseAssignedPersonForGroupFromAssignment(prevStr, group) || '').trim()
                     : '';
                 const newVal = select.value.trim();
-                if (normPerson(prevPerson) === normPerson(newVal)) continue;
-                if (!newVal) continue;
+                if (normPerson(prevPerson) === normPerson(newVal)) return;
+                if (!newVal) return;
                 const modeEl = container.querySelector(`input[name="duty-change-mode-${group}"]:checked`);
                 const mode = modeEl ? modeEl.value : 'replacement';
-                if (mode === 'mutual_swap') continue;
-                if (!prevPerson) continue;
-                manualReplacementEffects.push({ group, prevPerson, newVal });
-            }
-
-            for (const eff of manualReplacementEffects) {
-                const result = await applyManualAlternateReplacementCore({
-                    groupNum: eff.group,
-                    skippedPerson: eff.prevPerson,
-                    replacement: eff.newVal,
-                    dateKey: dayKey,
-                    metaExtra: { manualDayModal: true },
-                    persist: false,
-                    skipAssignmentUpdate: true
-                });
-                if (!result.ok) return;
-            }
+                if (mode === 'mutual_swap') return;
+                if (mode === 'replacement' && prevPerson) return;
+                const dateObj = new Date(dayKey + 'T00:00:00');
+                const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                if (typeof storeAssignmentReason !== 'function') return;
+                if (prevPerson && typeof clearAssignmentReasonForPersonOnDate === 'function') {
+                    clearAssignmentReasonForPersonOnDate(dayKey, group, prevPerson);
+                }
+                const reason = `Χειροκίνητη ανάθεση: ${newVal} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}.`;
+                storeAssignmentReason(dayKey, group, newVal, 'skip', reason, prevPerson || null, null, { manualDayModal: true });
+            });
             
             // Preserve all original critical assignments
             const newCritical = [];
