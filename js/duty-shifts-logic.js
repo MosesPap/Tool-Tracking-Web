@@ -1261,10 +1261,11 @@
         }
 
         /**
-         * Apply manual-alternate rotation slot (baseline) and one-time defer-skip of replacement person.
-         * Mutates globalRotationPosition and deferManualAlternateSkip maps.
+         * Apply manual-alternate rotation slot (baseline) and defer-skip of replacement person.
+         * deferState[groupNum] = { person, skipOnCursorMatch } — skip only when skipOnCursorMatch is true
+         * (same month after replacement); false = first hit in new month assigns replacement, then skip second hit.
          */
-        function resolveRotationPositionWithManualAlternate(groupNum, groupPeople, rotationDays, globalRotationPosition, deferManualAlternateSkip, dateKey) {
+        function resolveRotationPositionWithManualAlternate(groupNum, groupPeople, rotationDays, globalRotationPosition, deferState, dateKey) {
             const existingManualAlternate = findExistingManualAlternateOnDateGroup(dateKey, groupNum);
             let rotationPosition = Number.isFinite(globalRotationPosition[groupNum])
                 ? globalRotationPosition[groupNum] % rotationDays
@@ -1276,10 +1277,10 @@
                     rotationPosition = bi;
                     globalRotationPosition[groupNum] = rotationPosition;
                 }
-            } else if (deferManualAlternateSkip) {
-                const deferNm = deferManualAlternateSkip[groupNum];
-                if (deferNm) {
-                    const dn = norm(deferNm);
+            } else if (deferState) {
+                const st = deferState[groupNum];
+                if (st?.person && st.skipOnCursorMatch) {
+                    const dn = norm(st.person);
                     let guard = 0;
                     while (
                         guard++ <= rotationDays + 2 &&
@@ -1287,12 +1288,22 @@
                         norm(groupPeople[rotationPosition]) === dn
                     ) {
                         rotationPosition = (rotationPosition + 1) % rotationDays;
-                        delete deferManualAlternateSkip[groupNum];
+                        delete deferState[groupNum];
                     }
                     globalRotationPosition[groupNum] = rotationPosition;
                 }
             }
             return { rotationPosition, existingManualAlternate };
+        }
+
+        function markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferState) {
+            if (!deferState || !assignedPerson) return;
+            const st = deferState[groupNum];
+            if (!st?.person || st.skipOnCursorMatch) return;
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            if (norm(st.person) === norm(assignedPerson)) {
+                st.skipOnCursorMatch = true;
+            }
         }
 
         function applyManualAlternateToAssignedPerson(assignedPerson, existingManualAlternate, wasDisabledOnlySkipped) {
@@ -1318,15 +1329,15 @@
             rotationPosition,
             assignedPerson,
             globalRotationPosition,
-            deferManualAlternateSkip,
+            deferState,
             opts
         ) {
             const wasReplaced = !!(opts && opts.wasReplaced);
             const replacementIndex = opts && opts.replacementIndex != null ? opts.replacementIndex : null;
             const isManualAlt = !!(opts && opts.isManualAlternateReplacement);
-            if (isManualAlt && assignedPerson && deferManualAlternateSkip) {
+            if (isManualAlt && assignedPerson && deferState) {
                 globalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                deferManualAlternateSkip[groupNum] = assignedPerson;
+                deferState[groupNum] = { person: assignedPerson, skipOnCursorMatch: true };
                 return;
             }
             if (wasReplaced && replacementIndex !== null && assignedPerson) {
@@ -7414,7 +7425,8 @@
                 
                 // Track current rotation position globally (continues across months)
                 const globalWeekendRotationPosition = {}; // groupNum -> global position
-                const deferManualAlternateSkipWeekend = {}; // groupNum -> replacement to skip once after manual alternate
+                const deferManualAlternateSkipWeekend = {}; // groupNum -> { person, skipOnCursorMatch }
+                let prevCalMonthKeyWeekendDefer = null;
 
                 // Track weekend assignments as we process them (for consecutive day checking)
                 const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
@@ -7618,6 +7630,13 @@
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     const dayName = getGreekDayName(date);
                     const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    if (prevCalMonthKeyWeekendDefer !== monthKey) {
+                        for (const k of Object.keys(deferManualAlternateSkipWeekend)) delete deferManualAlternateSkipWeekend[k];
+                        if (typeof seedManualAlternateDeferAllGroupsForMonthStart === 'function') {
+                            seedManualAlternateDeferAllGroupsForMonthStart(deferManualAlternateSkipWeekend, 'weekend', date);
+                        }
+                        prevCalMonthKeyWeekendDefer = monthKey;
+                    }
                     
                     if (!assignedPeoplePreviewWeekend[monthKey]) {
                         assignedPeoplePreviewWeekend[monthKey] = {};
@@ -7721,7 +7740,9 @@
                                     );
                                 } else {
                                     // Continue from last person assigned in previous month (month-scoped; falls back to legacy)
-                                    const lastPersonName = getLastRotationPersonForDate('weekend', date, groupNum);
+                                    const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
+                                        ? getRotationSeedPersonForMonthStart('weekend', date, groupNum)
+                                        : getLastRotationPersonForDate('weekend', date, groupNum);
                                     const lastPersonIndex = groupPeople.indexOf(lastPersonName);
                                     if (lastPersonName && lastPersonIndex >= 0) {
                                         // Found last person - start from next person
@@ -7944,6 +7965,7 @@
                                 }
                                 
                                 const isManualAltWeekend = isManualAlternateReplacementOnDate(dateKey, groupNum, assignedPerson);
+                                markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipWeekend);
                                 advanceGlobalRotationAfterDutyAssignment(
                                     groupNum,
                                     groupPeople,
@@ -8725,6 +8747,7 @@
                 const semiAssignments = semiAssignmentsForPreview; // dateKey -> { groupNum -> person name }
                 const globalSemiRotationPosition = {}; // groupNum -> global position (continues across months)
                 const deferManualAlternateSkipSemi = {};
+                let prevCalMonthKeySemiDefer = null;
                 // IMPORTANT: Track semi-normal rotation persons (who SHOULD be assigned according to rotation)
                 // This is separate from assigned persons (who may have been swapped)
                 const semiRotationPersons = semiRotationPersonsForPreview; // dateKey -> { groupNum -> rotationPerson }
@@ -8935,7 +8958,14 @@
                     const dayName = getGreekDayName(date);
                     const month = date.getMonth();
                     const year = date.getFullYear();
-                    const monthKey = `${year}-${month}`;
+                    const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${year}-${String(month + 1).padStart(2, '0')}`;
+                    if (prevCalMonthKeySemiDefer !== monthKey) {
+                        for (const k of Object.keys(deferManualAlternateSkipSemi)) delete deferManualAlternateSkipSemi[k];
+                        if (typeof seedManualAlternateDeferAllGroupsForMonthStart === 'function') {
+                            seedManualAlternateDeferAllGroupsForMonthStart(deferManualAlternateSkipSemi, 'semi', date);
+                        }
+                        prevCalMonthKeySemiDefer = monthKey;
+                    }
                     
                     if (!assignedPeoplePreviewSemi[monthKey]) {
                         assignedPeoplePreviewSemi[monthKey] = {};
@@ -9001,7 +9031,9 @@
                                     );
                                 } else {
                                     // Continue from last person assigned in previous month (month-scoped; falls back to legacy)
-                                    const lastPersonName = getLastRotationPersonForDate('semi', date, groupNum);
+                                    const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
+                                        ? getRotationSeedPersonForMonthStart('semi', date, groupNum)
+                                        : getLastRotationPersonForDate('semi', date, groupNum);
                                     const lastPersonIndex = groupPeople.indexOf(lastPersonName);
                                     if (lastPersonName && lastPersonIndex >= 0) {
                                         // Found last person - start from next person
@@ -9221,6 +9253,7 @@
                                 const isManualAltSemi = assignedPerson
                                     ? isManualAlternateReplacementOnDate(dateKey, groupNum, assignedPerson)
                                     : false;
+                                markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipSemi);
                                 advanceGlobalRotationAfterDutyAssignment(
                                     groupNum,
                                     groupPeople,
@@ -9988,11 +10021,14 @@
                     const month = date.getMonth();
                     const year = date.getFullYear();
                     const monthKey = `${year}-${month}`;
-                    
-                    if (prevMonthKeyNormalAlternateDefer !== null && prevMonthKeyNormalAlternateDefer !== monthKey) {
-                        deferManualAlternateSkipNormal = {};
+                    const calMonthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${year}-${String(month + 1).padStart(2, '0')}`;
+                    if (prevMonthKeyNormalAlternateDefer !== calMonthKey) {
+                        for (const k of Object.keys(deferManualAlternateSkipNormal)) delete deferManualAlternateSkipNormal[k];
+                        if (typeof seedManualAlternateDeferAllGroupsForMonthStart === 'function') {
+                            seedManualAlternateDeferAllGroupsForMonthStart(deferManualAlternateSkipNormal, 'normal', date);
+                        }
+                        prevMonthKeyNormalAlternateDefer = calMonthKey;
                     }
-                    prevMonthKeyNormalAlternateDefer = monthKey;
                     
                     if (!pendingNormalSwaps[monthKey]) {
                         pendingNormalSwaps[monthKey] = {};
@@ -10045,7 +10081,9 @@
                                     );
                                 } else {
                                     // Continue from last person assigned in previous month (month-scoped; falls back to legacy)
-                                    const lastPersonName = getLastRotationPersonForDate('normal', date, groupNum);
+                                    const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
+                                        ? getRotationSeedPersonForMonthStart('normal', date, groupNum)
+                                        : getLastRotationPersonForDate('normal', date, groupNum);
                                     const lastPersonIndex = groupPeople.indexOf(lastPersonName);
                                     if (lastPersonName && lastPersonIndex >= 0) {
                                         // Found last person - start from next person
@@ -10081,7 +10119,9 @@
                                 if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
                                     globalNormalRotationPosition[groupNum] = 0;
                                 } else {
-                                    const lastPersonName = getLastRotationPersonForDate('normal', date, groupNum);
+                                    const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
+                                        ? getRotationSeedPersonForMonthStart('normal', date, groupNum)
+                                        : getLastRotationPersonForDate('normal', date, groupNum);
                                     const lastPersonIndex = groupPeople.indexOf(lastPersonName);
                                     if (lastPersonName && lastPersonIndex >= 0) {
                                         globalNormalRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
@@ -10120,12 +10160,15 @@
                                     globalNormalRotationPosition[groupNum] = rotationPosition;
                                 }
                             } else {
-                                // Skip replacement's next natural rotation index after manual alternate (same month)
-                                const deferNm = deferManualAlternateSkipNormal[groupNum];
-                                if (deferNm) {
-                                    const dn = normalizePersonKey(deferNm);
+                                const st = deferManualAlternateSkipNormal[groupNum];
+                                if (st?.person && st.skipOnCursorMatch) {
+                                    const dn = normalizePersonKey(st.person);
                                     let guard = 0;
-                                    while (guard++ <= rotationDays + 2 && groupPeople[rotationPosition] && normalizePersonKey(groupPeople[rotationPosition]) === dn) {
+                                    while (
+                                        guard++ <= rotationDays + 2 &&
+                                        groupPeople[rotationPosition] &&
+                                        normalizePersonKey(groupPeople[rotationPosition]) === dn
+                                    ) {
                                         rotationPosition = (rotationPosition + 1) % rotationDays;
                                         delete deferManualAlternateSkipNormal[groupNum];
                                     }
@@ -10369,9 +10412,10 @@
                                     if (hasConflict) {
                                         // Person has conflict - STORE THEM so swap logic can process them
                                         // Advance rotation: manual alternate advances from rotation slot (baseline), not replacement index
+                                        markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
                                         if (isManualAlternateReplacement) {
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                            deferManualAlternateSkipNormal[groupNum] = assignedPerson;
+                                            deferManualAlternateSkipNormal[groupNum] = { person: assignedPerson, skipOnCursorMatch: true };
                                         } else if (wasDisabledOnlySkippedInBaseline) {
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                         } else if (wasDisabledPersonSkipped && replacementIndex !== null) {
@@ -10386,9 +10430,10 @@
                                         }
                                     } else {
                                         // No conflict - advance rotation (disabled-only: rotation+1; missing replacement: replacementIndex+1; else assignedIndex+1)
+                                        markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
                                         if (isManualAlternateReplacement) {
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                            deferManualAlternateSkipNormal[groupNum] = assignedPerson;
+                                            deferManualAlternateSkipNormal[groupNum] = { person: assignedPerson, skipOnCursorMatch: true };
                                         } else if (wasDisabledOnlySkippedInBaseline) {
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                         } else if (wasDisabledPersonSkipped && replacementIndex !== null) {

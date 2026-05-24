@@ -944,6 +944,55 @@
             return null;
         }
 
+        /** Latest manual alternate in the calendar month immediately before dateInCurrentMonth. */
+        function findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum) {
+            if (!dateInCurrentMonth || !dayTypeCategory) return null;
+            const prevMonthKey = getPreviousMonthKeyFromDate(dateInCurrentMonth);
+            let latest = null;
+            for (const dk in assignmentReasons || {}) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+                const d = new Date(dk + 'T00:00:00');
+                if (isNaN(d.getTime()) || getMonthKeyFromDate(d) !== prevMonthKey) continue;
+                const dtType = getDayType(d);
+                let cat = 'normal';
+                if (dtType === 'special-holiday') cat = 'special';
+                else if (dtType === 'weekend-holiday') cat = 'weekend';
+                else if (dtType === 'semi-normal-day') cat = 'semi';
+                if (cat !== dayTypeCategory) continue;
+                const manual = findManualAlternateReplacementForGroup(dk, groupNum);
+                if (!manual) continue;
+                if (!latest || dk > latest.dateKey) {
+                    latest = { dateKey: dk, replacementPerson: manual.replacementPerson, baselinePerson: manual.baselinePerson };
+                }
+            }
+            return latest;
+        }
+
+        /**
+         * Defer state: replacement serves next month on first rotation hit; skip their second hit in that month.
+         * deferState[groupNum] = { person, skipOnCursorMatch }
+         */
+        function seedManualAlternateDeferFromPreviousMonth(deferState, dayTypeCategory, dateInMonth, groupNum) {
+            if (!deferState || !dateInMonth) return;
+            const latest = findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInMonth, groupNum);
+            if (latest?.replacementPerson) {
+                deferState[groupNum] = { person: latest.replacementPerson, skipOnCursorMatch: false };
+            }
+        }
+
+        function seedManualAlternateDeferAllGroupsForMonthStart(deferState, dayTypeCategory, dateInMonth) {
+            for (let g = 1; g <= 4; g++) {
+                seedManualAlternateDeferFromPreviousMonth(deferState, dayTypeCategory, dateInMonth, g);
+            }
+        }
+
+        /** Month-start seed: continue from baseline (absent) slot after manual alternate in previous month. */
+        function getRotationSeedPersonForMonthStart(dayTypeCategory, monthStartDate, groupNum) {
+            const latest = findLatestManualAlternateInPreviousMonth(dayTypeCategory, monthStartDate, groupNum);
+            if (latest?.baselinePerson) return latest.baselinePerson;
+            return getLastRotationPersonForDate(dayTypeCategory, monthStartDate, groupNum);
+        }
+
         /**
          * Expected rotation-slot holder for a date (accounts for manual alternate: D replaces A → continue A,B,C, then skip D once).
          */
@@ -974,13 +1023,19 @@
                 keys.sort();
                 const targetIdx = keys.indexOf(dateKey);
                 if (targetIdx < 0) return null;
-                const seed = getLastRotationPersonForDate(dayTypeCategory, monthSeedDate, groupNum);
+                const seed = getRotationSeedPersonForMonthStart(dayTypeCategory, monthSeedDate, groupNum);
                 let idx = 0;
                 if (seed) {
                     const seedIdx = people.indexOf(seed);
                     if (seedIdx >= 0) idx = (seedIdx + 1) % people.length;
                 }
                 let deferSkip = null;
+                let deferSkipOnCursor = false;
+                const prevManual = findLatestManualAlternateInPreviousMonth(dayTypeCategory, monthSeedDate, groupNum);
+                if (prevManual?.replacementPerson) {
+                    deferSkip = prevManual.replacementPerson;
+                    deferSkipOnCursor = false;
+                }
                 for (let i = 0; i < keys.length; i++) {
                     const dk = keys[i];
                     const manual = findManualAlternateReplacementForGroup(dk, groupNum);
@@ -989,18 +1044,34 @@
                         if (i === targetIdx) return manual.baselinePerson;
                         idx = (bIdx + 1) % people.length;
                         deferSkip = manual.replacementPerson;
+                        deferSkipOnCursor = true;
                         continue;
                     }
                     if (i === targetIdx) {
-                        while (deferSkip && people[idx] && normRotPersonName(people[idx]) === normRotPersonName(deferSkip)) {
+                        while (
+                            deferSkip &&
+                            deferSkipOnCursor &&
+                            people[idx] &&
+                            normRotPersonName(people[idx]) === normRotPersonName(deferSkip)
+                        ) {
                             idx = (idx + 1) % people.length;
                             deferSkip = null;
+                            deferSkipOnCursor = false;
                         }
                         return people[idx] || null;
                     }
-                    while (deferSkip && people[idx] && normRotPersonName(people[idx]) === normRotPersonName(deferSkip)) {
+                    while (
+                        deferSkip &&
+                        deferSkipOnCursor &&
+                        people[idx] &&
+                        normRotPersonName(people[idx]) === normRotPersonName(deferSkip)
+                    ) {
                         idx = (idx + 1) % people.length;
                         deferSkip = null;
+                        deferSkipOnCursor = false;
+                    }
+                    if (deferSkip && people[idx] && normRotPersonName(people[idx]) === normRotPersonName(deferSkip) && !deferSkipOnCursor) {
+                        deferSkipOnCursor = true;
                     }
                     idx = (idx + 1) % people.length;
                 }

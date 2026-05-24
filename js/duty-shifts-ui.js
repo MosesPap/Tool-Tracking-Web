@@ -1769,6 +1769,185 @@
             }
         }
 
+        /** Baseline + same-month reflow after manual alternate (καθημερινές / ημιαργίες / αργίες). */
+        async function runManualAlternateReplacementEffects(groupNum, personName, replacement, dateKey, typeCategory) {
+            const dateObj = new Date(dateKey + 'T00:00:00');
+            const getBaselineObj = () => {
+                if (typeCategory === 'special') return rotationBaselineSpecialAssignments;
+                if (typeCategory === 'weekend') return rotationBaselineWeekendAssignments;
+                if (typeCategory === 'semi') return rotationBaselineSemiAssignments;
+                return rotationBaselineNormalAssignments;
+            };
+            const getAssignmentsObj = () => {
+                if (typeCategory === 'special') return specialHolidayAssignments;
+                if (typeCategory === 'weekend') return weekendAssignments;
+                if (typeCategory === 'semi') return semiNormalAssignments;
+                return normalDayAssignments;
+            };
+            const groupData = groups[groupNum];
+            const list = groupData?.[typeCategory] || [];
+            const assignmentsObj = getAssignmentsObj();
+            const baselineObj = getBaselineObj();
+            const existingBaseline = baselineObj?.[dateKey] || null;
+            const baselineMap = extractGroupAssignmentsMap(existingBaseline);
+            baselineMap[groupNum] = personName;
+            const baseParts = [];
+            for (let g = 1; g <= 4; g++) {
+                const pn = baselineMap[g];
+                if (pn) baseParts.push(`${pn} (Ομάδα ${g})`);
+            }
+            const baselineStr = baseParts.join(', ');
+            baselineObj[dateKey] = baselineStr;
+            if (window.db && firebase?.firestore) {
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                const monthName = (typeof getMonthNameFromDateKey === 'function') ? getMonthNameFromDateKey(dateKey) : null;
+                const docId = typeCategory === 'special'
+                    ? 'rotationBaselineSpecialAssignments'
+                    : (typeCategory === 'weekend'
+                        ? 'rotationBaselineWeekendAssignments'
+                        : (typeCategory === 'semi'
+                            ? 'rotationBaselineSemiAssignments'
+                            : 'rotationBaselineNormalAssignments'));
+                if (user && monthName && typeof mergeAndSaveMonthOrganizedAssignmentsDoc === 'function') {
+                    const patch = { [monthName]: { [dateKey]: baselineStr } };
+                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, docId, patch);
+                }
+            }
+            const manualAlternateReflowDayType = {
+                normal: 'normal-day',
+                semi: 'semi-normal-day',
+                weekend: 'weekend-holiday'
+            }[typeCategory];
+            if (!manualAlternateReflowDayType || !Array.isArray(list) || list.length === 0) return;
+            const monthPrefix = dateKey.slice(0, 7) + '-';
+            const normName = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const targetNames = new Set([normName(personName), normName(replacement)]);
+            const rotationList = list.slice();
+            const categoryDayKeys = [];
+            const y = dateObj.getFullYear();
+            const m = dateObj.getMonth();
+            const first = new Date(y, m, 1);
+            const last = new Date(y, m + 1, 0);
+            for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+                const dk = formatDateKey(d);
+                if (getDayType(d) === manualAlternateReflowDayType) categoryDayKeys.push(dk);
+            }
+            categoryDayKeys.sort();
+            const startIdx = categoryDayKeys.indexOf(dateKey);
+            const idxSkipped = rotationList.findIndex(p => normName(p) === normName(personName));
+            let cursor = idxSkipped >= 0 ? ((idxSkipped + 1) % Math.max(1, rotationList.length)) : 0;
+            let deferredReplacement = replacement;
+            const isUnavailableOnDate = (candidateName, dayKey) => {
+                if (!candidateName || !dayKey) return true;
+                const dd = new Date(dayKey + 'T00:00:00');
+                if (isNaN(dd.getTime())) return true;
+                if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidateName, groupNum, typeCategory)) return true;
+                if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(candidateName, groupNum, dd, typeCategory)) return true;
+                return false;
+            };
+            const setGroupAssignmentForDay = (dk, personForGroup) => {
+                const existing = extractGroupAssignmentsMap(assignmentsObj?.[dk] || dutyAssignments?.[dk] || '');
+                existing[groupNum] = personForGroup;
+                const dayParts = [];
+                for (let g = 1; g <= 4; g++) {
+                    const pn = existing[g];
+                    if (pn) dayParts.push(`${pn} (Ομάδα ${g})`);
+                }
+                const rebuilt = dayParts.join(', ');
+                assignmentsObj[dk] = rebuilt;
+                dutyAssignments[dk] = rebuilt;
+            };
+            if (startIdx >= 0 && rotationList.length > 0) {
+                setGroupAssignmentForDay(dateKey, replacement);
+                for (let i = startIdx + 1; i < categoryDayKeys.length; i++) {
+                    const dk = categoryDayKeys[i];
+                    let guard = 0;
+                    while (
+                        guard++ <= rotationList.length + 1 &&
+                        deferredReplacement &&
+                        normName(rotationList[cursor]) === normName(deferredReplacement)
+                    ) {
+                        cursor = (cursor + 1) % rotationList.length;
+                        deferredReplacement = null;
+                    }
+                    let personForGroup = rotationList[cursor];
+                    cursor = (cursor + 1) % rotationList.length;
+                    let searchGuard = 0;
+                    while (searchGuard++ <= rotationList.length + 1 && isUnavailableOnDate(personForGroup, dk)) {
+                        personForGroup = rotationList[cursor];
+                        cursor = (cursor + 1) % rotationList.length;
+                    }
+                    if (isUnavailableOnDate(personForGroup, dk)) {
+                        personForGroup = parseAssignedPersonForGroupFromAssignment(assignmentsObj?.[dk] || dutyAssignments?.[dk] || '', groupNum) || personForGroup;
+                    }
+                    setGroupAssignmentForDay(dk, personForGroup);
+                }
+            }
+            const swapPairIdsToClear = new Set();
+            for (const dk in assignmentReasons) {
+                if (!dk || !dk.startsWith(monthPrefix)) continue;
+                const gMap = assignmentReasons?.[dk]?.[groupNum];
+                if (!gMap || typeof gMap !== 'object') continue;
+                for (const pn in gMap) {
+                    const rr = gMap[pn];
+                    if (!rr || rr.type !== 'swap' || rr.swapPairId == null) continue;
+                    const n1 = normName(pn);
+                    const n2 = normName(rr.swappedWith);
+                    if (targetNames.has(n1) || targetNames.has(n2)) swapPairIdsToClear.add(String(rr.swapPairId));
+                }
+            }
+            if (swapPairIdsToClear.size > 0) {
+                for (const dk in assignmentReasons) {
+                    if (!dk || !dk.startsWith(monthPrefix)) continue;
+                    const gMap = assignmentReasons?.[dk]?.[groupNum];
+                    if (!gMap || typeof gMap !== 'object') continue;
+                    for (const pn in gMap) {
+                        const rr = gMap[pn];
+                        if (rr?.type === 'swap' && rr.swapPairId != null && swapPairIdsToClear.has(String(rr.swapPairId))) {
+                            delete gMap[pn];
+                        }
+                    }
+                    if (Object.keys(gMap).length === 0) delete assignmentReasons[dk][groupNum];
+                }
+            }
+            if (typeCategory === 'normal' && startIdx >= 0 && typeof hasConsecutiveDuty === 'function') {
+                for (let i = startIdx; i < categoryDayKeys.length; i++) {
+                    const dk = categoryDayKeys[i];
+                    const assigned = parseAssignedPersonForGroupFromAssignment(normalDayAssignments?.[dk], groupNum);
+                    if (!assigned) continue;
+                    const simulatedAssignments = {
+                        special: specialHolidayAssignments,
+                        weekend: weekendAssignments,
+                        semi: semiNormalAssignments,
+                        normal: Object.fromEntries(categoryDayKeys.map(k => [k, extractGroupAssignmentsMap(normalDayAssignments?.[k] || '')]))
+                    };
+                    if (!hasConsecutiveDuty(dk, assigned, groupNum, simulatedAssignments)) continue;
+                    for (let j = i + 1; j < categoryDayKeys.length; j++) {
+                        const dk2 = categoryDayKeys[j];
+                        const cand = parseAssignedPersonForGroupFromAssignment(normalDayAssignments?.[dk2], groupNum);
+                        if (!cand) continue;
+                        const d1 = new Date(dk + 'T00:00:00');
+                        const d2 = new Date(dk2 + 'T00:00:00');
+                        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
+                        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(assigned, groupNum, 'normal')) continue;
+                        if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(cand, groupNum, d1, 'normal')) continue;
+                        if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(assigned, groupNum, d2, 'normal')) continue;
+                        const sim2 = { ...simulatedAssignments };
+                        if (!sim2.normal[dk]) sim2.normal[dk] = {};
+                        if (!sim2.normal[dk2]) sim2.normal[dk2] = {};
+                        sim2.normal[dk][groupNum] = cand;
+                        sim2.normal[dk2][groupNum] = assigned;
+                        if (hasConsecutiveDuty(dk, cand, groupNum, sim2)) continue;
+                        if (hasConsecutiveDuty(dk2, assigned, groupNum, sim2)) continue;
+                        setGroupAssignmentForDay(dk, cand);
+                        setGroupAssignmentForDay(dk2, assigned);
+                        break;
+                    }
+                }
+            }
+        }
+
         async function applyAlternateReplacementForDate(groupNum, personName, dateKey) {
             try {
                 const dateObj = new Date(dateKey + 'T00:00:00');
@@ -1854,217 +2033,16 @@
                 assignmentsObj[dateKey] = newAssignmentStr;
                 dutyAssignments[dateKey] = newAssignmentStr;
 
-                // CRITICAL: Preserve baseline rotation for this date as the skipped person (A),
-                // so rotation continuation stays B,C,E... (replacement D does NOT consume their rotation turn).
-                try {
-                    const getBaselineObj = () => {
-                        if (typeCategory === 'special') return rotationBaselineSpecialAssignments;
-                        if (typeCategory === 'weekend') return rotationBaselineWeekendAssignments;
-                        if (typeCategory === 'semi') return rotationBaselineSemiAssignments;
-                        return rotationBaselineNormalAssignments;
-                    };
-                    const baselineObj = getBaselineObj();
-                    const existingBaseline = baselineObj?.[dateKey] || null;
-                    const baselineMap = extractGroupAssignmentsMap(existingBaseline);
-                    baselineMap[groupNum] = personName;
-                    const baseParts = [];
-                    for (let g = 1; g <= 4; g++) {
-                        const pn = baselineMap[g];
-                        if (pn) baseParts.push(`${pn} (Ομάδα ${g})`);
-                    }
-                    const baselineStr = baseParts.join(', ');
-                    baselineObj[dateKey] = baselineStr;
-
-                    // Persist baseline doc for this month (without touching other months)
-                    if (window.db && firebase?.firestore) {
-                        const db = window.db || firebase.firestore();
-                        const user = window.auth?.currentUser;
-                        const monthName = (typeof getMonthNameFromDateKey === 'function') ? getMonthNameFromDateKey(dateKey) : null;
-                        const docId = typeCategory === 'special'
-                            ? 'rotationBaselineSpecialAssignments'
-                            : (typeCategory === 'weekend'
-                                ? 'rotationBaselineWeekendAssignments'
-                                : (typeCategory === 'semi'
-                                    ? 'rotationBaselineSemiAssignments'
-                                    : 'rotationBaselineNormalAssignments'));
-                        if (user && monthName && typeof mergeAndSaveMonthOrganizedAssignmentsDoc === 'function') {
-                            const patch = { [monthName]: { [dateKey]: baselineStr } };
-                            await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, docId, patch);
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Failed to persist baseline after manual alternate replacement:', e);
-                }
-
                 const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const reason = `Αντικατάσταση Επιλαχών: Παραλείφθηκε ο/η ${personName} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${replacement}.`;
                 if (typeof storeAssignmentReason === 'function') {
                     storeAssignmentReason(dateKey, groupNum, replacement, 'skip', reason, personName, null, { manualAlternateReplacement: true });
                 }
 
-                // Manual alternate reflow (normal / semi / weekend): baseline stays skipped person; replacement serves once;
-                // replacement is deferred one rotation turn later in the same month for this duty category.
-                const manualAlternateReflowDayType = {
-                    normal: 'normal-day',
-                    semi: 'semi-normal-day',
-                    weekend: 'weekend-holiday'
-                }[typeCategory];
-                if (manualAlternateReflowDayType) {
-                    try {
-                        const monthPrefix = dateKey.slice(0, 7) + '-';
-                        const normName = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-                        const targetNames = new Set([normName(personName), normName(replacement)]);
-                        const rotationList = Array.isArray(list) ? list.slice() : [];
-
-                        const categoryDayKeys = [];
-                        const y = dateObj.getFullYear();
-                        const m = dateObj.getMonth();
-                        const first = new Date(y, m, 1);
-                        const last = new Date(y, m + 1, 0);
-                        for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
-                            const dk = formatDateKey(d);
-                            if (getDayType(d) === manualAlternateReflowDayType) categoryDayKeys.push(dk);
-                        }
-                        categoryDayKeys.sort();
-
-                        const startIdx = categoryDayKeys.indexOf(dateKey);
-                        const idxSkipped = rotationList.findIndex(p => normName(p) === normName(personName));
-                        let cursor = idxSkipped >= 0 ? ((idxSkipped + 1) % Math.max(1, rotationList.length)) : 0;
-                        let deferredReplacement = replacement;
-                        const isUnavailableOnDate = (candidateName, dayKey) => {
-                            if (!candidateName || !dayKey) return true;
-                            const dd = new Date(dayKey + 'T00:00:00');
-                            if (isNaN(dd.getTime())) return true;
-                            if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidateName, groupNum, typeCategory)) return true;
-                            if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(candidateName, groupNum, dd, typeCategory)) return true;
-                            return false;
-                        };
-
-                        const setGroupAssignmentForDay = (dk, personForGroup) => {
-                            const existing = extractGroupAssignmentsMap(assignmentsObj?.[dk] || dutyAssignments?.[dk] || '');
-                            existing[groupNum] = personForGroup;
-                            const dayParts = [];
-                            for (let g = 1; g <= 4; g++) {
-                                const pn = existing[g];
-                                if (pn) dayParts.push(`${pn} (Ομάδα ${g})`);
-                            }
-                            const rebuilt = dayParts.join(', ');
-                            assignmentsObj[dk] = rebuilt;
-                            dutyAssignments[dk] = rebuilt;
-                        };
-
-                        if (startIdx >= 0 && rotationList.length > 0) {
-                            // Keep chosen manual replacement on selected day
-                            setGroupAssignmentForDay(dateKey, replacement);
-                            // Reflow later days of same category in month (one-time defer-skip of replacement)
-                            for (let i = startIdx + 1; i < categoryDayKeys.length; i++) {
-                                const dk = categoryDayKeys[i];
-                                let guard = 0;
-                                while (
-                                    guard++ <= rotationList.length + 1 &&
-                                    deferredReplacement &&
-                                    normName(rotationList[cursor]) === normName(deferredReplacement)
-                                ) {
-                                    cursor = (cursor + 1) % rotationList.length;
-                                    deferredReplacement = null;
-                                }
-                                let personForGroup = rotationList[cursor];
-                                cursor = (cursor + 1) % rotationList.length;
-                                // Keep original missing/disabled behavior: skip unavailable people on each day.
-                                let searchGuard = 0;
-                                while (searchGuard++ <= rotationList.length + 1 && isUnavailableOnDate(personForGroup, dk)) {
-                                    personForGroup = rotationList[cursor];
-                                    cursor = (cursor + 1) % rotationList.length;
-                                }
-                                if (isUnavailableOnDate(personForGroup, dk)) {
-                                    // No eligible replacement found by rotation scan: keep previously assigned person for safety.
-                                    personForGroup = parseAssignedPersonForGroupFromAssignment(assignmentsObj?.[dk] || dutyAssignments?.[dk] || '', groupNum) || personForGroup;
-                                }
-                                setGroupAssignmentForDay(dk, personForGroup);
-                            }
-                        }
-
-                        const swapPairIdsToClear = new Set();
-
-                        for (const dk in assignmentReasons) {
-                            if (!dk || !dk.startsWith(monthPrefix)) continue;
-                            const gMap = assignmentReasons?.[dk]?.[groupNum];
-                            if (!gMap || typeof gMap !== 'object') continue;
-                            for (const pn in gMap) {
-                                const rr = gMap[pn];
-                                if (!rr || rr.type !== 'swap' || rr.swapPairId == null) continue;
-                                const n1 = normName(pn);
-                                const n2 = normName(rr.swappedWith);
-                                if (targetNames.has(n1) || targetNames.has(n2)) {
-                                    swapPairIdsToClear.add(String(rr.swapPairId));
-                                }
-                            }
-                        }
-
-                        if (swapPairIdsToClear.size > 0) {
-                            const datesToRebuild = new Set();
-                            for (const dk in assignmentReasons) {
-                                if (!dk || !dk.startsWith(monthPrefix)) continue;
-                                const gMap = assignmentReasons?.[dk]?.[groupNum];
-                                if (!gMap || typeof gMap !== 'object') continue;
-                                for (const pn in gMap) {
-                                    const rr = gMap[pn];
-                                    if (!rr) continue;
-                                    if (rr.type === 'swap' && rr.swapPairId != null && swapPairIdsToClear.has(String(rr.swapPairId))) {
-                                        delete gMap[pn];
-                                        datesToRebuild.add(dk);
-                                    }
-                                }
-                                if (Object.keys(gMap).length === 0) {
-                                    delete assignmentReasons[dk][groupNum];
-                                }
-                            }
-
-                            for (const dk of datesToRebuild) {
-                                if (dk === dateKey) continue; // keep manual alternate assignment as-is
-                                // assignment already rebuilt by reflow above; no baseline restore here.
-                            }
-                        }
-
-                        // Conflict pass on reflowed order (normal days only — consecutive-day rules).
-                        if (typeCategory === 'normal' && startIdx >= 0 && typeof hasConsecutiveDuty === 'function') {
-                            for (let i = startIdx; i < categoryDayKeys.length; i++) {
-                                const dk = categoryDayKeys[i];
-                                const assigned = parseAssignedPersonForGroupFromAssignment(normalDayAssignments?.[dk], groupNum);
-                                if (!assigned) continue;
-                                const simulatedAssignments = {
-                                    special: specialHolidayAssignments,
-                                    weekend: weekendAssignments,
-                                    semi: semiNormalAssignments,
-                                    normal: Object.fromEntries(categoryDayKeys.map(k => [k, extractGroupAssignmentsMap(normalDayAssignments?.[k] || '')]))
-                                };
-                                if (!hasConsecutiveDuty(dk, assigned, groupNum, simulatedAssignments)) continue;
-                                for (let j = i + 1; j < categoryDayKeys.length; j++) {
-                                    const dk2 = categoryDayKeys[j];
-                                    const cand = parseAssignedPersonForGroupFromAssignment(normalDayAssignments?.[dk2], groupNum);
-                                    if (!cand) continue;
-                                    const d1 = new Date(dk + 'T00:00:00');
-                                    const d2 = new Date(dk2 + 'T00:00:00');
-                                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
-                                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(assigned, groupNum, 'normal')) continue;
-                                    if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(cand, groupNum, d1, 'normal')) continue;
-                                    if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(assigned, groupNum, d2, 'normal')) continue;
-                                    const sim2 = { ...simulatedAssignments };
-                                    if (!sim2.normal[dk]) sim2.normal[dk] = {};
-                                    if (!sim2.normal[dk2]) sim2.normal[dk2] = {};
-                                    sim2.normal[dk][groupNum] = cand;
-                                    sim2.normal[dk2][groupNum] = assigned;
-                                    if (hasConsecutiveDuty(dk, cand, groupNum, sim2)) continue;
-                                    if (hasConsecutiveDuty(dk2, assigned, groupNum, sim2)) continue;
-                                    setGroupAssignmentForDay(dk, cand);
-                                    setGroupAssignmentForDay(dk2, assigned);
-                                    break;
-                                }
-                            }
-                        }
-                    } catch (swapCleanupErr) {
-                        console.warn('Manual alternate swap cleanup failed:', swapCleanupErr);
-                    }
+                try {
+                    await runManualAlternateReplacementEffects(groupNum, personName, replacement, dateKey, typeCategory);
+                } catch (e) {
+                    console.warn('Failed baseline/reflow after manual alternate replacement:', e);
                 }
 
                 // Persist
@@ -7206,6 +7184,7 @@
             }
             
             // Αμοιβαία Αλλαγή: swap assignees between this day and the other duty day where the selected person is assigned (same group + duty type).
+            const manualReplacementEffects = [];
             const mutualSwapPlans = [];
             for (const select of selects) {
                 if (select.dataset.isCritical === 'true') continue;
@@ -7398,7 +7377,25 @@
                     : `Χειροκίνητη ανάθεση: ${newVal} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}.`;
                 const meta = prevPerson ? { manualAlternateReplacement: true, manualDayModal: true } : { manualDayModal: true };
                 storeAssignmentReason(dayKey, group, newVal, 'skip', reason, prevPerson || null, null, meta);
+                if (prevPerson) {
+                    const dateObj = new Date(dayKey + 'T00:00:00');
+                    const dayType = getDayType(dateObj);
+                    const typeCategory = (typeof getDayTypeCategoryFromDayType === 'function')
+                        ? getDayTypeCategoryFromDayType(dayType)
+                        : (dayType === 'special-holiday' ? 'special' : (dayType === 'weekend-holiday' ? 'weekend' : (dayType === 'semi-normal-day' ? 'semi' : 'normal')));
+                    if (['normal', 'semi', 'weekend'].includes(typeCategory)) {
+                        manualReplacementEffects.push({ group, prevPerson, newVal, typeCategory });
+                    }
+                }
             });
+            
+            for (const eff of manualReplacementEffects) {
+                try {
+                    await runManualAlternateReplacementEffects(eff.group, eff.prevPerson, eff.newVal, dayKey, eff.typeCategory);
+                } catch (e) {
+                    console.warn('Manual alternate effects from day modal failed:', e);
+                }
+            }
             
             // Preserve all original critical assignments
             const newCritical = [];
