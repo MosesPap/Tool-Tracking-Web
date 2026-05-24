@@ -1902,28 +1902,32 @@
                     storeAssignmentReason(dateKey, groupNum, replacement, 'skip', reason, personName, null, { manualAlternateReplacement: true });
                 }
 
-                // Normal-day manual alternate requires a deterministic reflow from this date onward:
-                // baseline slot owner is skipped person (A), replacement serves now (B or D), and replacement is skipped once later in cycle.
-                // Then we clear stale swap pairs for this group/month and run conflict fixes on the new order.
-                if (typeCategory === 'normal') {
+                // Manual alternate reflow (normal / semi / weekend): baseline stays skipped person; replacement serves once;
+                // replacement is deferred one rotation turn later in the same month for this duty category.
+                const manualAlternateReflowDayType = {
+                    normal: 'normal-day',
+                    semi: 'semi-normal-day',
+                    weekend: 'weekend-holiday'
+                }[typeCategory];
+                if (manualAlternateReflowDayType) {
                     try {
                         const monthPrefix = dateKey.slice(0, 7) + '-';
                         const normName = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                         const targetNames = new Set([normName(personName), normName(replacement)]);
                         const rotationList = Array.isArray(list) ? list.slice() : [];
 
-                        const normalKeys = [];
+                        const categoryDayKeys = [];
                         const y = dateObj.getFullYear();
                         const m = dateObj.getMonth();
                         const first = new Date(y, m, 1);
                         const last = new Date(y, m + 1, 0);
                         for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
                             const dk = formatDateKey(d);
-                            if (getDayType(d) === 'normal-day') normalKeys.push(dk);
+                            if (getDayType(d) === manualAlternateReflowDayType) categoryDayKeys.push(dk);
                         }
-                        normalKeys.sort();
+                        categoryDayKeys.sort();
 
-                        const startIdx = normalKeys.indexOf(dateKey);
+                        const startIdx = categoryDayKeys.indexOf(dateKey);
                         const idxSkipped = rotationList.findIndex(p => normName(p) === normName(personName));
                         let cursor = idxSkipped >= 0 ? ((idxSkipped + 1) % Math.max(1, rotationList.length)) : 0;
                         let deferredReplacement = replacement;
@@ -1931,13 +1935,13 @@
                             if (!candidateName || !dayKey) return true;
                             const dd = new Date(dayKey + 'T00:00:00');
                             if (isNaN(dd.getTime())) return true;
-                            if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidateName, groupNum, 'normal')) return true;
-                            if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(candidateName, groupNum, dd, 'normal')) return true;
+                            if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidateName, groupNum, typeCategory)) return true;
+                            if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(candidateName, groupNum, dd, typeCategory)) return true;
                             return false;
                         };
 
                         const setGroupAssignmentForDay = (dk, personForGroup) => {
-                            const existing = extractGroupAssignmentsMap(normalDayAssignments?.[dk] || dutyAssignments?.[dk] || '');
+                            const existing = extractGroupAssignmentsMap(assignmentsObj?.[dk] || dutyAssignments?.[dk] || '');
                             existing[groupNum] = personForGroup;
                             const dayParts = [];
                             for (let g = 1; g <= 4; g++) {
@@ -1945,16 +1949,16 @@
                                 if (pn) dayParts.push(`${pn} (Ομάδα ${g})`);
                             }
                             const rebuilt = dayParts.join(', ');
-                            normalDayAssignments[dk] = rebuilt;
+                            assignmentsObj[dk] = rebuilt;
                             dutyAssignments[dk] = rebuilt;
                         };
 
                         if (startIdx >= 0 && rotationList.length > 0) {
                             // Keep chosen manual replacement on selected day
                             setGroupAssignmentForDay(dateKey, replacement);
-                            // Reflow later normal days in same month with one-time defer-skip of replacement
-                            for (let i = startIdx + 1; i < normalKeys.length; i++) {
-                                const dk = normalKeys[i];
+                            // Reflow later days of same category in month (one-time defer-skip of replacement)
+                            for (let i = startIdx + 1; i < categoryDayKeys.length; i++) {
+                                const dk = categoryDayKeys[i];
                                 let guard = 0;
                                 while (
                                     guard++ <= rotationList.length + 1 &&
@@ -1974,7 +1978,7 @@
                                 }
                                 if (isUnavailableOnDate(personForGroup, dk)) {
                                     // No eligible replacement found by rotation scan: keep previously assigned person for safety.
-                                    personForGroup = parseAssignedPersonForGroupFromAssignment(normalDayAssignments?.[dk] || dutyAssignments?.[dk] || '', groupNum) || personForGroup;
+                                    personForGroup = parseAssignedPersonForGroupFromAssignment(assignmentsObj?.[dk] || dutyAssignments?.[dk] || '', groupNum) || personForGroup;
                                 }
                                 setGroupAssignmentForDay(dk, personForGroup);
                             }
@@ -2022,21 +2026,21 @@
                             }
                         }
 
-                        // Conflict pass on reflowed order (simple forward-swap inside same month normal days).
-                        if (startIdx >= 0 && typeof hasConsecutiveDuty === 'function') {
-                            for (let i = startIdx; i < normalKeys.length; i++) {
-                                const dk = normalKeys[i];
+                        // Conflict pass on reflowed order (normal days only — consecutive-day rules).
+                        if (typeCategory === 'normal' && startIdx >= 0 && typeof hasConsecutiveDuty === 'function') {
+                            for (let i = startIdx; i < categoryDayKeys.length; i++) {
+                                const dk = categoryDayKeys[i];
                                 const assigned = parseAssignedPersonForGroupFromAssignment(normalDayAssignments?.[dk], groupNum);
                                 if (!assigned) continue;
                                 const simulatedAssignments = {
                                     special: specialHolidayAssignments,
                                     weekend: weekendAssignments,
                                     semi: semiNormalAssignments,
-                                    normal: Object.fromEntries(normalKeys.map(k => [k, extractGroupAssignmentsMap(normalDayAssignments?.[k] || '')]))
+                                    normal: Object.fromEntries(categoryDayKeys.map(k => [k, extractGroupAssignmentsMap(normalDayAssignments?.[k] || '')]))
                                 };
                                 if (!hasConsecutiveDuty(dk, assigned, groupNum, simulatedAssignments)) continue;
-                                for (let j = i + 1; j < normalKeys.length; j++) {
-                                    const dk2 = normalKeys[j];
+                                for (let j = i + 1; j < categoryDayKeys.length; j++) {
+                                    const dk2 = categoryDayKeys[j];
                                     const cand = parseAssignedPersonForGroupFromAssignment(normalDayAssignments?.[dk2], groupNum);
                                     if (!cand) continue;
                                     const d1 = new Date(dk + 'T00:00:00');

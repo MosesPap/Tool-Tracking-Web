@@ -1248,22 +1248,122 @@
             return null;
         }
 
+        function findExistingManualAlternateOnDateGroup(dateKey, groupNum) {
+            const gReasons = assignmentReasons?.[dateKey]?.[groupNum];
+            if (!gReasons || typeof gReasons !== 'object') return null;
+            for (const pn in gReasons) {
+                const r = gReasons[pn];
+                if (r && r.type === 'skip' && r.meta && r.meta.manualAlternateReplacement && r.swappedWith) {
+                    return { replacement: pn, baseline: r.swappedWith };
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Apply manual-alternate rotation slot (baseline) and one-time defer-skip of replacement person.
+         * Mutates globalRotationPosition and deferManualAlternateSkip maps.
+         */
+        function resolveRotationPositionWithManualAlternate(groupNum, groupPeople, rotationDays, globalRotationPosition, deferManualAlternateSkip, dateKey) {
+            const existingManualAlternate = findExistingManualAlternateOnDateGroup(dateKey, groupNum);
+            let rotationPosition = Number.isFinite(globalRotationPosition[groupNum])
+                ? globalRotationPosition[groupNum] % rotationDays
+                : 0;
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            if (existingManualAlternate) {
+                const bi = groupPeople.indexOf(existingManualAlternate.baseline);
+                if (bi >= 0) {
+                    rotationPosition = bi;
+                    globalRotationPosition[groupNum] = rotationPosition;
+                }
+            } else if (deferManualAlternateSkip) {
+                const deferNm = deferManualAlternateSkip[groupNum];
+                if (deferNm) {
+                    const dn = norm(deferNm);
+                    let guard = 0;
+                    while (
+                        guard++ <= rotationDays + 2 &&
+                        groupPeople[rotationPosition] &&
+                        norm(groupPeople[rotationPosition]) === dn
+                    ) {
+                        rotationPosition = (rotationPosition + 1) % rotationDays;
+                        delete deferManualAlternateSkip[groupNum];
+                    }
+                    globalRotationPosition[groupNum] = rotationPosition;
+                }
+            }
+            return { rotationPosition, existingManualAlternate };
+        }
+
+        function applyManualAlternateToAssignedPerson(assignedPerson, existingManualAlternate, wasDisabledOnlySkipped) {
+            if (!existingManualAlternate || !assignedPerson || wasDisabledOnlySkipped) return assignedPerson;
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            if (norm(assignedPerson) === norm(existingManualAlternate.baseline)) {
+                return existingManualAlternate.replacement;
+            }
+            return assignedPerson;
+        }
+
+        function isManualAlternateReplacementOnDate(dateKey, groupNum, assignedPerson) {
+            const reason = typeof getAssignmentReason === 'function'
+                ? getAssignmentReason(dateKey, groupNum, assignedPerson)
+                : null;
+            return !!(reason && reason.type === 'skip' && reason.meta && reason.meta.manualAlternateReplacement);
+        }
+
+        function advanceGlobalRotationAfterDutyAssignment(
+            groupNum,
+            groupPeople,
+            rotationDays,
+            rotationPosition,
+            assignedPerson,
+            globalRotationPosition,
+            deferManualAlternateSkip,
+            opts
+        ) {
+            const wasReplaced = !!(opts && opts.wasReplaced);
+            const replacementIndex = opts && opts.replacementIndex != null ? opts.replacementIndex : null;
+            const isManualAlt = !!(opts && opts.isManualAlternateReplacement);
+            if (isManualAlt && assignedPerson && deferManualAlternateSkip) {
+                globalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                deferManualAlternateSkip[groupNum] = assignedPerson;
+                return;
+            }
+            if (wasReplaced && replacementIndex !== null && assignedPerson) {
+                globalRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
+            } else if (assignedPerson) {
+                const assignedIndex = groupPeople.indexOf(assignedPerson);
+                if (assignedIndex !== -1) {
+                    globalRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
+                } else {
+                    globalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                }
+            } else {
+                globalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+            }
+        }
+
         /**
          * Person name to store in lastRotationPositions / month carry-over: after manual alternate (replacement for baseline),
          * use baseline (swappedWith) so the next slot is B,C,E… not the replacement's index again.
+         * Manual mutual two-day swap does not alter cross-month seed (uses assigned person on that date).
          */
-        function getPersonForNormalRotationContinuity(dateKey, groupNum, assignedPerson, normalAssignmentsByDate) {
+        function getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, assignmentsByDate) {
             if (!assignedPerson) return null;
             const reason = getAssignmentReason(dateKey, groupNum, assignedPerson);
             if (reason && reason.type === 'skip' && reason.meta && reason.meta.manualAlternateReplacement && reason.swappedWith) {
                 return reason.swappedWith;
             }
-            if (reason && reason.type === 'swap' && reason.swapPairId != null) {
+            if (reason && reason.type === 'swap' && reason.swapPairId != null && !reason.meta?.mutualTwoDaySwap) {
                 const otherKey = findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey);
-                const swappedOutPerson = otherKey ? (normalAssignmentsByDate?.[otherKey] || {})[groupNum] : null;
+                const swappedOutPerson = otherKey ? (assignmentsByDate?.[otherKey] || {})[groupNum] : null;
                 if (swappedOutPerson) return swappedOutPerson;
             }
             return assignedPerson;
+        }
+
+        function getPersonForNormalRotationContinuity(dateKey, groupNum, assignedPerson, normalAssignmentsByDate) {
+            return getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, normalAssignmentsByDate);
         }
 
         function hasDutyOnDay(dayKey, person, groupNum) {
@@ -5342,6 +5442,9 @@
                         for (const pname in gReasons) {
                             const rr = gReasons[pname];
                             if (!(rr && rr.type === 'skip' && rr.meta && rr.meta.manualAlternateReplacement)) continue;
+                            // Normal-day swap defer applies only to manual alternates on normal days (not semi/weekend).
+                            const dkDate = new Date(dk + 'T00:00:00');
+                            if (!isNaN(dkDate.getTime()) && getDayType(dkDate) !== 'normal-day') continue;
                             if (!manualAlternateEntriesByGroup[gnum]) manualAlternateEntriesByGroup[gnum] = [];
                             manualAlternateEntriesByGroup[gnum].push({ replacement: pname, dateKey: dk });
                         }
@@ -7311,7 +7414,8 @@
                 
                 // Track current rotation position globally (continues across months)
                 const globalWeekendRotationPosition = {}; // groupNum -> global position
-                
+                const deferManualAlternateSkipWeekend = {}; // groupNum -> replacement to skip once after manual alternate
+
                 // Track weekend assignments as we process them (for consecutive day checking)
                 const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
                 if (typeof seedPreservedDutyAssignmentsIntoTemp === 'function') {
@@ -7636,7 +7740,16 @@
                             
                             // PREVIEW MODE: Just show basic rotation WITHOUT skip logic
                             // Skip logic will run when Next is pressed
-                            let rotationPosition = globalWeekendRotationPosition[groupNum] % rotationDays;
+                            const manualAltResolved = resolveRotationPositionWithManualAlternate(
+                                groupNum,
+                                groupPeople,
+                                rotationDays,
+                                globalWeekendRotationPosition,
+                                deferManualAlternateSkipWeekend,
+                                dateKey
+                            );
+                            let rotationPosition = manualAltResolved.rotationPosition;
+                            const existingManualAlternateWeekend = manualAltResolved.existingManualAlternate;
                             
                             // IMPORTANT: Track the rotation person (who SHOULD be assigned according to rotation)
                             // This is the person BEFORE any skip/missing logic
@@ -7651,6 +7764,7 @@
                             let assignedPerson = rotationPerson;
                             let wasReplaced = false;
                             let replacementIndex = null;
+                            let wasDisabledOnlySkippedWeekend = false;
                             
                             // Already assigned via return-from-missing (backward/forward): skip when their turn comes – they already had their duty
                             const wasAssignedByReturnFromMissingWeekend = rotationPerson && assignedByReturnFromMissingWeekend[groupNum]?.has(rotationPerson);
@@ -7704,6 +7818,7 @@
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
                                     wasReplaced = true;
+                                    wasDisabledOnlySkippedWeekend = true;
                                     foundEligible = true;
                                     // Keep baseline as rotation person so we show Βασική Σειρά + Αντικατάσταση
                                     break;
@@ -7798,6 +7913,22 @@
                                 // If no replacement found, keep assignedPerson (missing) so runWeekendSkipLogic can perform same-month swap when user clicks Next
                             }
 
+                            assignedPerson = applyManualAlternateToAssignedPerson(
+                                assignedPerson,
+                                existingManualAlternateWeekend,
+                                wasDisabledOnlySkippedWeekend
+                            );
+                            if (
+                                existingManualAlternateWeekend &&
+                                assignedPerson &&
+                                !wasDisabledOnlySkippedWeekend
+                            ) {
+                                const normW = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                                if (normW(assignedPerson) === normW(existingManualAlternateWeekend.replacement)) {
+                                    weekendRotationPersons[dateKey][groupNum] = existingManualAlternateWeekend.baseline;
+                                }
+                            }
+
                             const displayPerson = assignedPerson;
                             
                             // Store assignment for saving
@@ -7812,23 +7943,22 @@
                                     assignedPeoplePreviewWeekend[monthKey][groupNum][assignedPerson] = dateKey;
                                 }
                                 
-                                // Advance rotation position from the person ACTUALLY assigned (not the skipped person)
-                                // This ensures that when Person A is replaced by Person B, next weekend assigns Person C, not Person B again
-                                if (wasReplaced && replacementIndex !== null) {
-                                    // Person was replaced - advance from replacement's position
-                                    globalWeekendRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
-                                } else {
-                                    // No replacement - advance from assigned person's position
-                                    const assignedIndex = groupPeople.indexOf(assignedPerson);
-                                    if (assignedIndex !== -1) {
-                                        globalWeekendRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
-                                    } else {
-                                        // Fallback: advance from rotation position
-                                        globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                const isManualAltWeekend = isManualAlternateReplacementOnDate(dateKey, groupNum, assignedPerson);
+                                advanceGlobalRotationAfterDutyAssignment(
+                                    groupNum,
+                                    groupPeople,
+                                    rotationDays,
+                                    rotationPosition,
+                                    assignedPerson,
+                                    globalWeekendRotationPosition,
+                                    deferManualAlternateSkipWeekend,
+                                    {
+                                        wasReplaced,
+                                        replacementIndex,
+                                        isManualAlternateReplacement: isManualAltWeekend
                                     }
-                                }
+                                );
                             } else {
-                                // No person found, still advance rotation position
                                 globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                             }
                             
@@ -7862,42 +7992,36 @@
                 calculationSteps.tempWeekendAssignments = simulatedWeekendAssignments;
                 calculationSteps.tempWeekendBaselineAssignments = weekendRotationPersons;
                 calculationSteps.lastWeekendRotationPositions = {};
-                // IMPORTANT: Find the last ASSIGNED person (after replacement), not the rotation person
-                // This ensures that when Person A is replaced by Person B, next calculation starts from Person B's position
-                // Use the simulatedWeekendAssignments (actual assigned persons) instead of weekendRotationPersons
                 for (let g = 1; g <= 4; g++) {
                     const sortedWeekendKeys = [...weekendHolidays].sort();
-                    let lastAssignedPerson = null;
+                    let lastPersonForRotation = null;
                     for (let i = sortedWeekendKeys.length - 1; i >= 0; i--) {
                         const dateKey = sortedWeekendKeys[i];
-                        if (simulatedWeekendAssignments[dateKey] && simulatedWeekendAssignments[dateKey][g]) {
-                            lastAssignedPerson = simulatedWeekendAssignments[dateKey][g];
-                            break;
-                        }
+                        const ap = simulatedWeekendAssignments[dateKey]?.[g];
+                        if (!ap) continue;
+                        lastPersonForRotation = getPersonForRotationContinuity(dateKey, g, ap, simulatedWeekendAssignments);
+                        break;
                     }
-                    if (lastAssignedPerson) {
-                        calculationSteps.lastWeekendRotationPositions[g] = lastAssignedPerson;
-                        console.log(`[WEEKEND ROTATION] Storing last assigned person ${lastAssignedPerson} for group ${g} (after replacement)`);
+                    if (lastPersonForRotation) {
+                        calculationSteps.lastWeekendRotationPositions[g] = lastPersonForRotation;
+                        console.log(`[WEEKEND ROTATION] Storing last rotation continuity person ${lastPersonForRotation} for group ${g}`);
                     }
                 }
 
-                // Store last rotation person per month (for correct recalculation of individual months)
-                // IMPORTANT: Use the ASSIGNED person (after replacement), not the rotation person
-                // This ensures that when Person A is replaced by Person B, next calculation starts from Person B's position
                 const sortedWeekendKeysForMonth = [...weekendHolidays].sort();
-                const lastWeekendRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
+                const lastWeekendRotationPositionsByMonth = {};
                 for (const dateKey of sortedWeekendKeysForMonth) {
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
                     for (let g = 1; g <= 4; g++) {
-                        // Use the assigned person (after replacement), not the rotation person
                         const assignedPerson = simulatedWeekendAssignments[dateKey]?.[g];
                         if (assignedPerson) {
+                            const personForRotation = getPersonForRotationContinuity(dateKey, g, assignedPerson, simulatedWeekendAssignments);
                             if (!lastWeekendRotationPositionsByMonth[monthKey]) {
                                 lastWeekendRotationPositionsByMonth[monthKey] = {};
                             }
-                            lastWeekendRotationPositionsByMonth[monthKey][g] = assignedPerson;
+                            lastWeekendRotationPositionsByMonth[monthKey][g] = personForRotation;
                         }
                     }
                 }
@@ -8600,6 +8724,7 @@
                 // Track assignments for swapping logic
                 const semiAssignments = semiAssignmentsForPreview; // dateKey -> { groupNum -> person name }
                 const globalSemiRotationPosition = {}; // groupNum -> global position (continues across months)
+                const deferManualAlternateSkipSemi = {};
                 // IMPORTANT: Track semi-normal rotation persons (who SHOULD be assigned according to rotation)
                 // This is separate from assigned persons (who may have been swapped)
                 const semiRotationPersons = semiRotationPersonsForPreview; // dateKey -> { groupNum -> rotationPerson }
@@ -8893,7 +9018,16 @@
                                 }
                             }
                             
-                            let rotationPosition = globalSemiRotationPosition[groupNum] % rotationDays;
+                            const manualAltResolvedSemi = resolveRotationPositionWithManualAlternate(
+                                groupNum,
+                                groupPeople,
+                                rotationDays,
+                                globalSemiRotationPosition,
+                                deferManualAlternateSkipSemi,
+                                dateKey
+                            );
+                            let rotationPosition = manualAltResolvedSemi.rotationPosition;
+                            const existingManualAlternateSemi = manualAltResolvedSemi.existingManualAlternate;
                             
                             // IMPORTANT: Track the rotation person (who SHOULD be assigned according to rotation)
                             // This is the person BEFORE any swap/cross-month logic
@@ -8966,8 +9100,6 @@
                                 }
                                 if (!foundEligible) assignedPerson = null;
                             }
-                            // Store baseline for UI: when disabled skip use assigned person so no swap line (same as normal; avoids next day showing as swap)
-                            semiRotationPersons[dateKey][groupNum] = (wasDisabledOnlySkippedSemi && assignedPerson) ? assignedPerson : rotationPerson;
                             // MISSING (not disabled): show replacement and store reason.
                             if (!isRotationPersonDisabledSemi && assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'semi')) {
                                 if (!assignedPeoplePreviewSemi[monthKey][groupNum]) {
@@ -9001,6 +9133,22 @@
                                     break;
                                 }
                                 if (!foundReplacement) assignedPerson = null;
+                            }
+
+                            assignedPerson = applyManualAlternateToAssignedPerson(
+                                assignedPerson,
+                                existingManualAlternateSemi,
+                                wasDisabledOnlySkippedSemi
+                            );
+                            if (existingManualAlternateSemi && assignedPerson && !wasDisabledOnlySkippedSemi) {
+                                const normS = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                                if (normS(assignedPerson) === normS(existingManualAlternateSemi.replacement)) {
+                                    semiRotationPersons[dateKey][groupNum] = existingManualAlternateSemi.baseline;
+                                } else {
+                                    semiRotationPersons[dateKey][groupNum] = rotationPerson;
+                                }
+                            } else {
+                                semiRotationPersons[dateKey][groupNum] = (wasDisabledOnlySkippedSemi && assignedPerson) ? assignedPerson : rotationPerson;
                             }
                             
                             // Check if this day is a cross-month swap assignment (person swapped from previous month)
@@ -9070,24 +9218,23 @@
                                     }
                                     }
                                     
-                                // Advance rotation position from the person ACTUALLY assigned (not the skipped person)
-                                // This ensures that when Person A is replaced by Person B, next semi-duty assigns Person C, not Person B again
-                                if (wasReplaced && replacementIndex !== null && assignedPerson) {
-                                    // Person was replaced - advance from replacement's position
-                                    globalSemiRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
-                                } else if (assignedPerson) {
-                                    // No replacement - advance from assigned person's position
-                                    const assignedIndex = groupPeople.indexOf(assignedPerson);
-                                    if (assignedIndex !== -1) {
-                                        globalSemiRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
-                                    } else {
-                                        // Fallback: advance from rotation position
-                                        globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                const isManualAltSemi = assignedPerson
+                                    ? isManualAlternateReplacementOnDate(dateKey, groupNum, assignedPerson)
+                                    : false;
+                                advanceGlobalRotationAfterDutyAssignment(
+                                    groupNum,
+                                    groupPeople,
+                                    rotationDays,
+                                    rotationPosition,
+                                    assignedPerson,
+                                    globalSemiRotationPosition,
+                                    deferManualAlternateSkipSemi,
+                                    {
+                                        wasReplaced,
+                                        replacementIndex,
+                                        isManualAlternateReplacement: isManualAltSemi
                                     }
-                                } else {
-                                    // No one assigned - advance from rotation position
-                                    globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                }
+                                );
                             }
                             
                             // Store assignment for potential future swaps
@@ -9130,42 +9277,36 @@
                 calculationSteps.tempSemiAssignments = semiAssignments;
                 calculationSteps.tempSemiBaselineAssignments = semiRotationPersons;
                 calculationSteps.lastSemiRotationPositions = {};
-                // IMPORTANT: Find the last ASSIGNED person (after replacement), not the rotation person
-                // This ensures that when Person A is replaced by Person B, next calculation starts from Person B's position
-                // Use the semiAssignments (actual assigned persons) instead of semiRotationPersons
                 for (let g = 1; g <= 4; g++) {
                     const sortedSemiKeys = [...semiNormalDays].sort();
-                    let lastAssignedPerson = null;
+                    let lastPersonForRotation = null;
                     for (let i = sortedSemiKeys.length - 1; i >= 0; i--) {
                         const dateKey = sortedSemiKeys[i];
-                        if (semiAssignments[dateKey] && semiAssignments[dateKey][g]) {
-                            lastAssignedPerson = semiAssignments[dateKey][g];
-                            break;
-                        }
+                        const ap = semiAssignments[dateKey]?.[g];
+                        if (!ap) continue;
+                        lastPersonForRotation = getPersonForRotationContinuity(dateKey, g, ap, semiAssignments);
+                        break;
                     }
-                    if (lastAssignedPerson) {
-                        calculationSteps.lastSemiRotationPositions[g] = lastAssignedPerson;
-                        console.log(`[SEMI ROTATION] Storing last assigned person ${lastAssignedPerson} for group ${g} (after replacement)`);
+                    if (lastPersonForRotation) {
+                        calculationSteps.lastSemiRotationPositions[g] = lastPersonForRotation;
+                        console.log(`[SEMI ROTATION] Storing last rotation continuity person ${lastPersonForRotation} for group ${g}`);
                     }
                 }
 
-                // Store last rotation person per month (for correct recalculation of individual months)
-                // IMPORTANT: Use the ASSIGNED person (after replacement), not the rotation person
-                // This ensures that when Person A is replaced by Person B, next calculation starts from Person B's position
                 const sortedSemiKeysForMonth = [...semiNormalDays].sort();
-                const lastSemiRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
+                const lastSemiRotationPositionsByMonth = {};
                 for (const dateKey of sortedSemiKeysForMonth) {
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
                     for (let g = 1; g <= 4; g++) {
-                        // Use the assigned person (after replacement), not the rotation person
                         const assignedPerson = semiAssignments[dateKey]?.[g];
                         if (assignedPerson) {
+                            const personForRotation = getPersonForRotationContinuity(dateKey, g, assignedPerson, semiAssignments);
                             if (!lastSemiRotationPositionsByMonth[monthKey]) {
                                 lastSemiRotationPositionsByMonth[monthKey] = {};
                             }
-                            lastSemiRotationPositionsByMonth[monthKey][g] = assignedPerson;
+                            lastSemiRotationPositionsByMonth[monthKey][g] = personForRotation;
                         }
                     }
                 }
