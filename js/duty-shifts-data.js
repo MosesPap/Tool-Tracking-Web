@@ -2853,112 +2853,256 @@
             } catch (_) {}
         }
 
-        // Clear selected dutyShifts documents in Firestore (wipe fields, keep only metadata)
-        // This is a destructive action and intended for admin maintenance.
-        async function clearDutyShiftsFirestoreDocs() {
+        // Firebase cleanup month picker (multi-select across years)
+        let _firebaseCleanupSelectedMonths = new Set();
+        let _firebaseCleanupPickerYear = new Date().getFullYear();
+
+        function formatMonthKeyLabelEl(monthKey) {
+            const parts = String(monthKey || '').split('-');
+            if (parts.length < 2) return monthKey;
+            const y = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10);
+            if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return monthKey;
+            return new Date(y, m - 1, 1).toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
+        }
+
+        function getFirebaseCleanupGreekMonthNames() {
+            const names = [];
+            for (let m = 0; m < 12; m++) {
+                names.push(new Date(2024, m, 1).toLocaleDateString('el-GR', { month: 'long' }));
+            }
+            return names;
+        }
+
+        function monthKeyFromYearMonth(year, monthIndex) {
+            return `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+        }
+
+        function updateFirebaseCleanupSelectionSummary() {
+            const el = document.getElementById('firebaseCleanupSelectionSummary');
+            if (!el) return;
+            const keys = Array.from(_firebaseCleanupSelectedMonths).sort();
+            if (keys.length === 0) {
+                el.innerHTML = '<i class="fas fa-info-circle me-1"></i>Δεν έχει επιλεγεί μήνας.';
+                return;
+            }
+            const labels = keys.map(formatMonthKeyLabelEl);
+            const preview = labels.length <= 4
+                ? labels.join(', ')
+                : labels.slice(0, 3).join(', ') + ` … (+${labels.length - 3} ακόμη)`;
+            el.innerHTML = `<i class="fas fa-check-circle me-1"></i><strong>${keys.length}</strong> μήνες: ${preview}`;
+        }
+
+        function renderFirebaseCleanupMonthPicker() {
+            const yearEl = document.getElementById('firebaseCleanupYear');
+            const monthsEl = document.getElementById('firebaseCleanupMonths');
+            if (!yearEl || !monthsEl) return;
+            yearEl.textContent = String(_firebaseCleanupPickerYear);
+            monthsEl.innerHTML = '';
+            const greekMonths = getFirebaseCleanupGreekMonthNames();
+            greekMonths.forEach((name, index) => {
+                const mk = monthKeyFromYearMonth(_firebaseCleanupPickerYear, index);
+                const selected = _firebaseCleanupSelectedMonths.has(mk);
+                const col = document.createElement('div');
+                col.className = 'col-4 col-sm-3';
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = selected ? 'btn btn-danger w-100' : 'btn btn-outline-danger w-100';
+                btn.textContent = name;
+                btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                btn.addEventListener('click', () => {
+                    if (_firebaseCleanupSelectedMonths.has(mk)) {
+                        _firebaseCleanupSelectedMonths.delete(mk);
+                    } else {
+                        _firebaseCleanupSelectedMonths.add(mk);
+                    }
+                    renderFirebaseCleanupMonthPicker();
+                });
+                col.appendChild(btn);
+                monthsEl.appendChild(col);
+            });
+            updateFirebaseCleanupSelectionSummary();
+        }
+
+        function openFirebaseCleanupMonthPicker() {
+            const modalEl = document.getElementById('firebaseCleanupMonthModal');
+            if (!modalEl) return;
+            _firebaseCleanupSelectedMonths = new Set();
+            _firebaseCleanupPickerYear = (currentDate instanceof Date && !isNaN(currentDate.getTime()))
+                ? currentDate.getFullYear()
+                : new Date().getFullYear();
+
+            const prevBtn = document.getElementById('firebaseCleanupPrevYear');
+            const nextBtn = document.getElementById('firebaseCleanupNextYear');
+            const selectAllBtn = document.getElementById('firebaseCleanupSelectAllYear');
+            const clearBtn = document.getElementById('firebaseCleanupClearSelection');
+            const confirmBtn = document.getElementById('firebaseCleanupConfirmBtn');
+
+            if (prevBtn) {
+                prevBtn.onclick = () => {
+                    _firebaseCleanupPickerYear--;
+                    renderFirebaseCleanupMonthPicker();
+                };
+            }
+            if (nextBtn) {
+                nextBtn.onclick = () => {
+                    _firebaseCleanupPickerYear++;
+                    renderFirebaseCleanupMonthPicker();
+                };
+            }
+            if (selectAllBtn) {
+                selectAllBtn.onclick = () => {
+                    for (let m = 0; m < 12; m++) {
+                        _firebaseCleanupSelectedMonths.add(monthKeyFromYearMonth(_firebaseCleanupPickerYear, m));
+                    }
+                    renderFirebaseCleanupMonthPicker();
+                };
+            }
+            if (clearBtn) {
+                clearBtn.onclick = () => {
+                    _firebaseCleanupSelectedMonths.clear();
+                    renderFirebaseCleanupMonthPicker();
+                };
+            }
+            if (confirmBtn) {
+                confirmBtn.onclick = () => {
+                    void confirmFirebaseCleanupSelectedMonths();
+                };
+            }
+
+            renderFirebaseCleanupMonthPicker();
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        }
+
+        async function stripTempAssignmentsFirestoreMonths(db, user, monthKeys) {
+            if (!db || !user || !Array.isArray(monthKeys) || monthKeys.length === 0) return;
+            const prefixSet = new Set(monthKeys);
+            const snap = await db.collection('dutyShifts').doc('tempAssignments').get();
+            if (!snap.exists) return;
+            const data = snap.data() || {};
+            delete data.lastUpdated;
+            delete data.updatedBy;
+            const out = { ...data };
+            const dateInMonths = (dk) => /^\d{4}-\d{2}-\d{2}$/.test(dk) && prefixSet.has(dk.substring(0, 7));
+            for (const cat of ['normal', 'semi', 'weekend']) {
+                if (!out[cat] || typeof out[cat] !== 'object') continue;
+                const next = { ...out[cat] };
+                for (const dk of Object.keys(next)) {
+                    if (dateInMonths(dk)) delete next[dk];
+                }
+                out[cat] = next;
+            }
+            if (out.special && typeof out.special === 'object') {
+                const next = { ...out.special };
+                for (const k of Object.keys(next)) {
+                    if (prefixSet.has(k)) delete next[k];
+                }
+                out.special = next;
+            }
+            const ts = firebase.firestore.FieldValue.serverTimestamp();
+            const sanitized = sanitizeForFirestore(out);
+            await db.collection('dutyShifts').doc('tempAssignments').set({
+                ...sanitized,
+                lastUpdated: ts,
+                updatedBy: user.uid
+            });
+        }
+
+        /** Delete duty data in Firestore + memory for selected YYYY-MM month keys (all groups). */
+        async function clearDutyShiftsFirestoreDocsForMonths(monthKeys) {
+            if (!window.db) {
+                alert('Firebase not ready');
+                return;
+            }
+            const db = window.db || firebase.firestore();
+            const user = window.auth?.currentUser;
+            if (!user) {
+                alert('User not authenticated');
+                return;
+            }
+            const keys = Array.isArray(monthKeys) ? [...new Set(monthKeys.filter((k) => /^\d{4}-\d{2}$/.test(k)))] : [];
+            if (keys.length === 0) {
+                alert('Επιλέξτε τουλάχιστον έναν μήνα.');
+                return;
+            }
+
+            const labels = keys.map(formatMonthKeyLabelEl);
+            const confirmText =
+                'ΠΡΟΣΟΧΗ: Θα διαγραφούν ΟΛΕΣ οι υπηρεσίες για:\n\n' +
+                labels.map((l) => '• ' + l).join('\n') +
+                '\n\n(αναθέσεις, baseline, αιτίες, θέσεις περιστροφής — όλες οι ομάδες)\n\n' +
+                'Δεν αλλάζουν ομάδες, λίστες, αργίες ή ιεραρχίες.\n\nΣυνέχεια;';
+            if (!confirm(confirmText)) return;
+
+            const loadingAlert = document.createElement('div');
+            loadingAlert.className = 'alert alert-warning position-fixed top-50 start-50 translate-middle';
+            loadingAlert.style.zIndex = '9999';
+            loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Καθαρισμός υπηρεσιών...';
+            document.body.appendChild(loadingAlert);
+
             try {
-                if (!window.db) {
-                    alert('Firebase not ready');
-                    return;
+                if (typeof deleteSelectedMonthsFromDutyDocs === 'function') {
+                    await deleteSelectedMonthsFromDutyDocs(db, user, keys, []);
                 }
-                const db = window.db || firebase.firestore();
-                const user = window.auth?.currentUser;
-                if (!user) {
-                    alert('User not authenticated');
-                    return;
-                }
-                
-                const confirmText =
-                    'ΠΡΟΣΟΧΗ: Αυτό θα καθαρίσει (wipe) τα παρακάτω Firestore έγγραφα:\n' +
-                    '- assignmentReasons\n- lastRotationPositions\n' +
-                    '- normalDayAssignments\n- semiNormalAssignments\n- specialHolidayAssignments\n' +
-                    '- tempAssignments\n- weekendAssignments\n\n' +
-                    '- rotationBaselineSpecialAssignments\n- rotationBaselineWeekendAssignments\n- rotationBaselineSemiAssignments\n- rotationBaselineNormalAssignments\n\n' +
-                    'Αυτό ΔΕΝ επηρεάζει τις ομάδες/λίστες (groups), αργίες, ή ιεραρχίες.\n\nΣυνέχεια;';
+                await stripTempAssignmentsFirestoreMonths(db, user, keys);
 
-                if (!confirm(confirmText)) return;
-
-                const loadingAlert = document.createElement('div');
-                loadingAlert.className = 'alert alert-warning position-fixed top-50 start-50 translate-middle';
-                loadingAlert.style.zIndex = '9999';
-                loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Καθαρισμός Firestore εγγράφων...';
-                document.body.appendChild(loadingAlert);
-
-                const dutyShifts = db.collection('dutyShifts');
-                const batch = db.batch();
-                const ts = firebase.firestore.FieldValue.serverTimestamp();
-
-                const docIds = [
-                    'assignmentReasons',
-                    'normalDayAssignments',
-                    'semiNormalAssignments',
-                    'specialHolidayAssignments',
-                    'tempAssignments',
-                    'weekendAssignments',
-                    'rotationBaselineSpecialAssignments',
-                    'rotationBaselineWeekendAssignments',
-                    'rotationBaselineSemiAssignments',
-                    'rotationBaselineNormalAssignments'
-                ];
-
-                for (const id of docIds) {
-                    batch.set(dutyShifts.doc(id), { lastUpdated: ts, updatedBy: user.uid }, { merge: false });
+                if (typeof clearSelectedMonthsInMemory === 'function') {
+                    clearSelectedMonthsInMemory(keys, []);
                 }
 
-                // Keep explicit empty structure so code that reads it stays stable
-                batch.set(
-                    dutyShifts.doc('lastRotationPositions'),
-                    { normal: {}, semi: {}, weekend: {}, special: {}, lastUpdated: ts, updatedBy: user.uid },
-                    { merge: false }
-                );
+                const prefixSet = new Set(keys);
+                const dateKeyInRange = (dk) => /^\d{4}-\d{2}-\d{2}$/.test(dk) && prefixSet.has(dk.substring(0, 7));
+                for (const dk of Object.keys(criticalAssignments || {})) {
+                    if (dateKeyInRange(dk)) delete criticalAssignments[dk];
+                }
+                for (const dk of Object.keys(dutyAssignments || {})) {
+                    if (dateKeyInRange(dk)) delete dutyAssignments[dk];
+                }
+                if (calculationSteps && calculationSteps.tempAssignments) {
+                    calculationSteps.tempAssignments = null;
+                }
 
-                await batch.commit();
-
-                // Reset in-memory state (so UI updates immediately without refresh)
-                assignmentReasons = {};
-                dutyAssignments = {};
-                lastRotationPositions = { normal: {}, semi: {}, weekend: {}, special: {} };
-                normalDayAssignments = {};
-                semiNormalAssignments = {};
-                weekendAssignments = {};
-                specialHolidayAssignments = {};
-                rotationBaselineSpecialAssignments = {};
-                rotationBaselineWeekendAssignments = {};
-                rotationBaselineSemiAssignments = {};
-                rotationBaselineNormalAssignments = {};
-                rotationBaselineLastByType = { normal: {}, semi: {}, weekend: {}, special: {} };
-                calculationSteps.tempAssignments = null;
-
-                // Clear localStorage backups for these docs to prevent fallback re-populating them
-                [
-                    'dutyShiftsAssignmentReasons',
-                    // 'dutyShiftsAssignments', // deprecated
-                    'dutyShiftsLastRotationPositions',
-                    'dutyShiftsNormalDayAssignments',
-                    'dutyShiftsSemiNormalAssignments',
-                    'dutyShiftsWeekendAssignments',
-                    'dutyShiftsSpecialHolidayAssignments'
-                ].forEach(k => localStorage.removeItem(k));
-
+                saveDataToLocalStorage();
                 renderCalendar();
                 updateStatistics();
 
-                if (loadingAlert && loadingAlert.parentNode) loadingAlert.parentNode.removeChild(loadingAlert);
+                if (loadingAlert.parentNode) loadingAlert.parentNode.removeChild(loadingAlert);
+                const modalEl = document.getElementById('firebaseCleanupMonthModal');
+                if (modalEl) {
+                    const m = bootstrap.Modal.getInstance(modalEl);
+                    if (m) m.hide();
+                }
                 const infoTitle = document.getElementById('infoMessageModalTitleText');
                 const infoBody = document.getElementById('infoMessageModalBody');
                 if (infoTitle) infoTitle.textContent = 'Καθαρισμός Firebase';
-                if (infoBody) infoBody.textContent = 'Ο καθαρισμός ολοκληρώθηκε.';
-                const infoModal = new bootstrap.Modal(document.getElementById('infoMessageModal'));
-                infoModal.show();
+                if (infoBody) {
+                    infoBody.textContent = `Ο καθαρισμός ολοκληρώθηκε για ${keys.length} μήνα/ες.`;
+                }
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('infoMessageModal')).show();
             } catch (error) {
-                console.error('Error clearing dutyShifts docs:', error);
+                console.error('Error clearing duty months:', error);
+                if (loadingAlert.parentNode) loadingAlert.parentNode.removeChild(loadingAlert);
                 const infoTitle = document.getElementById('infoMessageModalTitleText');
                 const infoBody = document.getElementById('infoMessageModalBody');
                 if (infoTitle) infoTitle.textContent = 'Σφάλμα';
-                if (infoBody) infoBody.textContent = 'Σφάλμα κατά τον καθαρισμό: ' + error.message;
-                const infoModal = new bootstrap.Modal(document.getElementById('infoMessageModal'));
-                infoModal.show();
+                if (infoBody) infoBody.textContent = 'Σφάλμα κατά τον καθαρισμό: ' + (error?.message || error);
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('infoMessageModal')).show();
             }
+        }
+
+        async function confirmFirebaseCleanupSelectedMonths() {
+            const monthKeys = Array.from(_firebaseCleanupSelectedMonths).sort();
+            if (monthKeys.length === 0) {
+                alert('Επιλέξτε τουλάχιστον έναν μήνα.');
+                return;
+            }
+            await clearDutyShiftsFirestoreDocsForMonths(monthKeys);
+        }
+
+        /** @deprecated Use openFirebaseCleanupMonthPicker — opens month selector. */
+        function clearDutyShiftsFirestoreDocs() {
+            openFirebaseCleanupMonthPicker();
         }
 
         // Get group name by number
@@ -4222,6 +4366,14 @@
                     }
                     if (Object.keys(block).length > 0) byType[mk] = block;
                     else delete byType[mk];
+                }
+            }
+            if (!groupSet) {
+                for (const dk of Object.keys(criticalAssignments || {})) {
+                    if (dateKeyInRange(dk)) delete criticalAssignments[dk];
+                }
+                for (const dk of Object.keys(dutyAssignments || {})) {
+                    if (dateKeyInRange(dk)) delete dutyAssignments[dk];
                 }
             }
             if (typeof rebuildRotationBaselineLastByType === 'function') rebuildRotationBaselineLastByType();
