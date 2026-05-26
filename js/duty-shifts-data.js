@@ -1170,15 +1170,123 @@
             }
         }
 
-        /** Month-start seed: continue from baseline (absent) slot after manual alternate in previous month. */
-        function getRotationSeedPersonForMonthStart(dayTypeCategory, monthStartDate, groupNum) {
-            const latest =
-                (typeof getManualAlternateDeferFromPreviousMonth === 'function'
-                    ? getManualAlternateDeferFromPreviousMonth(dayTypeCategory, monthStartDate, groupNum)
-                    : null) || findLatestManualAlternateInPreviousMonth(dayTypeCategory, monthStartDate, groupNum);
-            if (latest?.baselinePerson) {
-                return resolvePersonInGroupRotationList(latest.baselinePerson, groupNum, dayTypeCategory);
+        function getBaselineStoreForDayType(dayTypeCategory) {
+            if (dayTypeCategory === 'special') return rotationBaselineSpecialAssignments;
+            if (dayTypeCategory === 'weekend') return rotationBaselineWeekendAssignments;
+            if (dayTypeCategory === 'semi') return rotationBaselineSemiAssignments;
+            return rotationBaselineNormalAssignments;
+        }
+
+        /** Sorted duty date keys in a calendar month (assignments + baseline + reasons). */
+        function getSortedDutyDateKeysInCalendarMonth(monthKey, dayTypeCategory) {
+            const keys = new Set();
+            const addFrom = (obj) => {
+                if (!obj || typeof obj !== 'object') return;
+                for (const dk in obj) {
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(dk) && dk.substring(0, 7) === monthKey) keys.add(dk);
+                }
+            };
+            addFrom(getAssignmentsForDayType(dayTypeCategory));
+            addFrom(getBaselineStoreForDayType(dayTypeCategory));
+            addFrom(assignmentReasons);
+            return [...keys]
+                .filter((dk) => getDutyCategoryForDateKeyLocal(dk) === dayTypeCategory)
+                .sort();
+        }
+
+        /**
+         * Rotation cursor (index of next assignee) at the start of dateInMonth's calendar month.
+         * Simulates previous month baseline slots; manual alternate advances from baseline+1, not replacement.
+         */
+        function computeRotationPositionAtMonthStart(dayTypeCategory, dateInMonth, groupNum, groupPeople) {
+            if (!dateInMonth || !Array.isArray(groupPeople) || groupPeople.length === 0) return 0;
+            const len = groupPeople.length;
+            const norm = normRotPersonName;
+            const findIdx = (name) => {
+                if (!name) return -1;
+                return groupPeople.findIndex((p) => norm(p) === norm(name));
+            };
+            const prevMonthStart = new Date(dateInMonth.getFullYear(), dateInMonth.getMonth() - 1, 1);
+            const prevMonthKey = getPreviousMonthKeyFromDate(dateInMonth);
+
+            let cursor = 0;
+            const seedBeforePrev =
+                getLastBaselineRotationPersonForDate(dayTypeCategory, prevMonthStart, groupNum) ||
+                getLastAssignmentContinuityPersonForPreviousMonth(dayTypeCategory, prevMonthStart, groupNum) ||
+                correctLastRotationPersonForManualAlternate(
+                    dayTypeCategory,
+                    prevMonthStart,
+                    groupNum,
+                    getLastRotationPersonForDate(dayTypeCategory, prevMonthStart, groupNum)
+                );
+            const seedIdx = findIdx(seedBeforePrev);
+            if (seedBeforePrev && seedIdx >= 0) cursor = (seedIdx + 1) % len;
+
+            const dates = getSortedDutyDateKeysInCalendarMonth(prevMonthKey, dayTypeCategory);
+            for (const dk of dates) {
+                const manual = findManualAlternateReplacementForGroup(dk, groupNum);
+                if (manual?.baselinePerson) {
+                    const bi = findIdx(resolvePersonInGroupRotationList(manual.baselinePerson, groupNum, dayTypeCategory));
+                    if (bi >= 0) {
+                        cursor = (bi + 1) % len;
+                        continue;
+                    }
+                }
+                cursor = (cursor % len + 1) % len;
             }
+            return cursor;
+        }
+
+        /** Refresh lastRotationPositions for a month/group from assignments (baseline continuity after manual alternate). */
+        function refreshLastRotationContinuityForMonth(dayTypeCategory, monthKey, groupNum) {
+            if (!monthKey || !groupNum) return;
+            const store = getAssignmentsForDayType(dayTypeCategory);
+            let lastKey = null;
+            for (const dk in store || {}) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || dk.substring(0, 7) !== monthKey) continue;
+                if (getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory) continue;
+                if (!getPersonAssignedOnDateFromStore(dayTypeCategory, dk, groupNum)) continue;
+                if (!lastKey || dk > lastKey) lastKey = dk;
+            }
+            if (lastKey) {
+                const assigned = getPersonAssignedOnDateFromStore(dayTypeCategory, lastKey, groupNum);
+                let continuity = assigned;
+                if (typeof getPersonForRotationContinuity === 'function') {
+                    continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
+                } else {
+                    const manual = findManualAlternateReplacementForGroup(lastKey, groupNum);
+                    if (
+                        manual?.baselinePerson &&
+                        manual?.replacementPerson &&
+                        normRotPersonName(assigned) === normRotPersonName(manual.replacementPerson)
+                    ) {
+                        continuity = resolvePersonInGroupRotationList(manual.baselinePerson, groupNum, dayTypeCategory);
+                    }
+                }
+                if (continuity) {
+                    setLastRotationPersonForMonth(dayTypeCategory, monthKey, groupNum, continuity);
+                    return;
+                }
+            }
+            const baselineLast = rotationBaselineLastByType?.[dayTypeCategory]?.[monthKey]?.[groupNum];
+            if (baselineLast) {
+                setLastRotationPersonForMonth(dayTypeCategory, monthKey, groupNum, baselineLast);
+            }
+        }
+
+        /** Month-start seed person: last baseline slot holder before the next assignee. */
+        function getRotationSeedPersonForMonthStart(dayTypeCategory, monthStartDate, groupNum) {
+            const groupData = typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum];
+            const groupPeople = groupData?.[dayTypeCategory] || groups[groupNum]?.[dayTypeCategory] || [];
+            if (groupPeople.length > 0) {
+                const cursor = computeRotationPositionAtMonthStart(dayTypeCategory, monthStartDate, groupNum, groupPeople);
+                if (Number.isFinite(cursor)) {
+                    const len = groupPeople.length;
+                    return groupPeople[(cursor - 1 + len) % len] || null;
+                }
+            }
+            const fromBaseline = getLastBaselineRotationPersonForDate(dayTypeCategory, monthStartDate, groupNum);
+            if (fromBaseline) return fromBaseline;
             const fromStored = getLastRotationPersonForDate(dayTypeCategory, monthStartDate, groupNum);
             if (fromStored) return fromStored;
             return getLastAssignmentContinuityPersonForPreviousMonth(dayTypeCategory, monthStartDate, groupNum);

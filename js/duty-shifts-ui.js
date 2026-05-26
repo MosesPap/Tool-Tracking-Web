@@ -1804,6 +1804,9 @@
                     await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, docId, patch);
                 }
             }
+            if (typeof rebuildRotationBaselineLastByType === 'function') {
+                rebuildRotationBaselineLastByType();
+            }
             const monthPrefix = dateKey.slice(0, 7) + '-';
             const normName = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
             const targetNames = new Set([normName(personName), normName(replacement)]);
@@ -1969,6 +1972,13 @@
                 await runManualAlternateReplacementEffects(groupNum, skippedPerson, replacement, dateKey, typeCategory);
             } catch (e) {
                 console.warn('Failed baseline/reflow after manual alternate replacement:', e);
+            }
+            if (typeof rebuildRotationBaselineLastByType === 'function') {
+                rebuildRotationBaselineLastByType();
+            }
+            const monthKeyForContinuity = dateKey.substring(0, 7);
+            if (typeof refreshLastRotationContinuityForMonth === 'function') {
+                refreshLastRotationContinuityForMonth(typeCategory, monthKeyForContinuity, groupNum);
             }
 
             if (!skipFinalSave) {

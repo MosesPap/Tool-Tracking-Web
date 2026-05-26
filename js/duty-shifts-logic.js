@@ -1270,7 +1270,9 @@
         }
 
         function findExistingManualAlternateOnDateGroup(dateKey, groupNum) {
-            const gReasons = assignmentReasons?.[dateKey]?.[groupNum];
+            const gReasons = typeof getAssignmentReasonsGroupMap === 'function'
+                ? getAssignmentReasonsGroupMap(dateKey, groupNum)
+                : (assignmentReasons?.[dateKey]?.[groupNum] || assignmentReasons?.[dateKey]?.[String(groupNum)]);
             if (!gReasons || typeof gReasons !== 'object') return null;
             for (const pn in gReasons) {
                 const r = gReasons[pn];
@@ -1326,25 +1328,14 @@
                 globalPos[groupNum] = 0;
                 return;
             }
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            const manualPrev =
-                (typeof getManualAlternateDeferFromPreviousMonth === 'function'
-                    ? getManualAlternateDeferFromPreviousMonth(dayTypeCategory, dateInMonth, groupNum)
-                    : null) ||
-                (typeof findLatestManualAlternateInPreviousMonth === 'function'
-                    ? findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInMonth, groupNum)
-                    : null);
-            if (manualPrev?.baselinePerson) {
-                const baseline =
-                    typeof resolvePersonInGroupRotationList === 'function'
-                        ? resolvePersonInGroupRotationList(manualPrev.baselinePerson, groupNum, dayTypeCategory)
-                        : manualPrev.baselinePerson;
-                const bi = groupPeople.findIndex((p) => norm(p) === norm(baseline));
-                if (bi >= 0) {
-                    globalPos[groupNum] = (bi + 1) % rotationDays;
+            if (typeof computeRotationPositionAtMonthStart === 'function') {
+                const cursor = computeRotationPositionAtMonthStart(dayTypeCategory, dateInMonth, groupNum, groupPeople);
+                if (Number.isFinite(cursor)) {
+                    globalPos[groupNum] = cursor % rotationDays;
                     return;
                 }
             }
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
             const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
                 ? getRotationSeedPersonForMonthStart(dayTypeCategory, dateInMonth, groupNum)
                 : getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
