@@ -516,6 +516,14 @@
                 return typeof normalizeSkipReasonText === 'function' ? normalizeSkipReasonText(reason?.reason || '') : reason?.reason || '';
             }
             const m = reason.meta;
+            if (m?.manualAlternateDeferFulfillment && m?.unavailableReplacement) {
+                const rawCombined = String(reason.reason || '').trim();
+                if (rawCombined) {
+                    return typeof normalizeSkipReasonText === 'function'
+                        ? normalizeSkipReasonText(rawCombined)
+                        : rawCombined;
+                }
+            }
             if (m?.unavailableReplacement && m.replacementPersonName && m.skippedPersonName && m.dateKey) {
                 const d = new Date(m.dateKey + 'T00:00:00');
                 if (!isNaN(d.getTime()) && typeof buildUnavailableReplacementUnifiedMessage === 'function') {
@@ -550,6 +558,24 @@
             return typeof normalizeSkipReasonText === 'function' ? normalizeSkipReasonText(raw) : raw;
         }
         function storeUnavailableReplacementReason(dateKey, groupNum, replacementPersonName, skippedPersonName, dateObj, dutyCategory, swapPairId = null, extraMeta = null) {
+            const deferFulfillment = extraMeta?.deferFulfillment;
+            if (
+                deferFulfillment?.skippedReplacement &&
+                typeof storeCombinedManualAlternateDeferAndUnavailableReason === 'function'
+            ) {
+                const { deferFulfillment: _df, ...restExtra } = extraMeta || {};
+                storeCombinedManualAlternateDeferAndUnavailableReason(
+                    dateKey,
+                    groupNum,
+                    replacementPersonName,
+                    deferFulfillment,
+                    dutyCategory,
+                    skippedPersonName,
+                    dateObj,
+                    restExtra
+                );
+                return;
+            }
             const reason = buildUnavailableReplacementReason({
                 replacementPersonName: replacementPersonName,
                 skippedPersonName: skippedPersonName,
@@ -1300,6 +1326,69 @@
             return `Ανατέθηκε επειδή ο/η ${ctx.skippedReplacement} αντικατέστησε τον/την ${ctx.baselinePerson} ως επιλαχών ${whenPhrase}.`;
         }
 
+        function buildCombinedManualAlternateDeferAndUnavailableReason(deferCtx, unavailableParams, dayTypeCategory, dateKey, groupNum) {
+            const date =
+                unavailableParams?.dateObj instanceof Date && !isNaN(unavailableParams.dateObj.getTime())
+                    ? unavailableParams.dateObj
+                    : new Date(String(dateKey || '') + 'T00:00:00');
+            const enriched = enrichManualAlternateDeferFulfillmentContext(deferCtx, dayTypeCategory, date, groupNum);
+            if (!enriched) return null;
+            const deferPart = buildManualAlternateDeferFulfillmentReason(enriched);
+            const unavailPart = buildUnavailableReplacementReason(unavailableParams);
+            if (!deferPart || !unavailPart) return null;
+            return `${deferPart} ${unavailPart}`;
+        }
+
+        function storeCombinedManualAlternateDeferAndUnavailableReason(
+            dateKey,
+            groupNum,
+            assignedPerson,
+            deferFulfillment,
+            dayTypeCategory,
+            skippedRotationPerson,
+            dateObj,
+            extraMeta = null
+        ) {
+            if (!deferFulfillment?.skippedReplacement || !assignedPerson || !skippedRotationPerson) return false;
+            const date =
+                dateObj instanceof Date && !isNaN(dateObj.getTime())
+                    ? dateObj
+                    : new Date(String(dateKey || '') + 'T00:00:00');
+            const cat =
+                dayTypeCategory ||
+                (typeof getDutyCategoryForDateKeyLocal === 'function'
+                    ? getDutyCategoryForDateKeyLocal(dateKey)
+                    : 'normal');
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            if (norm(assignedPerson) === norm(deferFulfillment.skippedReplacement)) return false;
+            if (norm(assignedPerson) === norm(skippedRotationPerson)) return false;
+            const combined = buildCombinedManualAlternateDeferAndUnavailableReason(
+                deferFulfillment,
+                {
+                    replacementPersonName: assignedPerson,
+                    skippedPersonName: skippedRotationPerson,
+                    dateObj: date,
+                    groupNum,
+                    dutyCategory: cat
+                },
+                cat,
+                dateKey,
+                groupNum
+            );
+            if (!combined) return false;
+            const dk = typeof formatDateKey === 'function' ? formatDateKey(date) : dateKey;
+            const ctx = enrichManualAlternateDeferFulfillmentContext(deferFulfillment, cat, date, groupNum);
+            const meta = {
+                manualAlternateDeferFulfillment: true,
+                deferSkippedReplacement: ctx?.skippedReplacement || deferFulfillment.skippedReplacement,
+                baselinePerson: ctx?.baselinePerson || deferFulfillment.baselinePerson || null,
+                ...getUnavailableReplacementMeta(assignedPerson, skippedRotationPerson, dk, cat),
+                ...(extraMeta || {})
+            };
+            storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', combined, skippedRotationPerson, null, meta);
+            return true;
+        }
+
         function enrichManualAlternateDeferFulfillmentContext(ctx, dayTypeCategory, dateInMonth, groupNum) {
             if (!ctx?.skippedReplacement) return null;
             const out = { ...ctx };
@@ -1326,9 +1415,20 @@
         }
 
         /** Store skip reason + underline for assignee after defer-skip of prior-month alternate replacement. */
-        function tryStoreManualAlternateDeferFulfillmentReason(dateKey, groupNum, assignedPerson, deferFulfillment, dayTypeCategory) {
+        function tryStoreManualAlternateDeferFulfillmentReason(
+            dateKey,
+            groupNum,
+            assignedPerson,
+            deferFulfillment,
+            dayTypeCategory,
+            rotationSlotPerson = null,
+            dateObj = null
+        ) {
             if (!deferFulfillment?.skippedReplacement || !assignedPerson) return false;
-            const date = new Date(dateKey + 'T00:00:00');
+            const date =
+                dateObj instanceof Date && !isNaN(dateObj.getTime())
+                    ? dateObj
+                    : new Date(dateKey + 'T00:00:00');
             const cat =
                 dayTypeCategory ||
                 (typeof getDutyCategoryForDateKeyLocal === 'function'
@@ -1338,14 +1438,50 @@
             if (!ctx) return false;
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
             if (norm(assignedPerson) === norm(ctx.skippedReplacement)) return false;
+            const rotSlot = rotationSlotPerson || null;
+            if (
+                rotSlot &&
+                norm(assignedPerson) !== norm(rotSlot) &&
+                typeof storeCombinedManualAlternateDeferAndUnavailableReason === 'function'
+            ) {
+                const needsUnavailable =
+                    (typeof isPersonMissingOnDate === 'function' &&
+                        isPersonMissingOnDate(rotSlot, groupNum, date, cat)) ||
+                    (typeof isPersonDisabledForDuty === 'function' &&
+                        isPersonDisabledForDuty(rotSlot, groupNum, cat));
+                if (needsUnavailable) {
+                    return storeCombinedManualAlternateDeferAndUnavailableReason(
+                        dateKey,
+                        groupNum,
+                        assignedPerson,
+                        deferFulfillment,
+                        cat,
+                        rotSlot,
+                        date
+                    );
+                }
+            }
             if (typeof getAssignmentReason === 'function') {
                 const existing = getAssignmentReason(dateKey, groupNum, assignedPerson);
-                if (existing && !(existing.meta && existing.meta.manualAlternateDeferFulfillment)) return false;
+                if (existing?.meta?.manualAlternateDeferFulfillment) return false;
+                if (existing?.meta?.unavailableReplacement) {
+                    return storeCombinedManualAlternateDeferAndUnavailableReason(
+                        dateKey,
+                        groupNum,
+                        assignedPerson,
+                        deferFulfillment,
+                        cat,
+                        existing.meta.skippedPersonName || existing.swappedWith,
+                        date
+                    );
+                }
+                if (existing) return false;
             }
             const reason = buildManualAlternateDeferFulfillmentReason(ctx);
             if (!reason) return false;
             storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reason, ctx.skippedReplacement, null, {
-                manualAlternateDeferFulfillment: true
+                manualAlternateDeferFulfillment: true,
+                deferSkippedReplacement: ctx.skippedReplacement
             });
             return true;
         }
@@ -1364,12 +1500,26 @@
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || !Number.isFinite(groupNum)) continue;
                 const finalPerson = finalByDate[dateKey]?.[groupNum];
                 const baselinePerson = baselineByDate[dateKey]?.[groupNum];
-                if (!finalPerson || !baselinePerson) continue;
-                if (norm(finalPerson) !== norm(baselinePerson)) continue;
+                if (!finalPerson) continue;
                 if (norm(finalPerson) === norm(rawCtx.skippedReplacement)) continue;
+                const rotationSlotPerson = rawCtx.rotationSlotPerson || null;
+                const date = new Date(dateKey + 'T00:00:00');
                 if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
                     clearAssignmentReasonForPersonOnDate(dateKey, groupNum, rawCtx.skippedReplacement);
                 }
+                if (rotationSlotPerson && norm(finalPerson) !== norm(rotationSlotPerson)) {
+                    tryStoreManualAlternateDeferFulfillmentReason(
+                        dateKey,
+                        groupNum,
+                        finalPerson,
+                        rawCtx,
+                        dayTypeCategory,
+                        rotationSlotPerson,
+                        date
+                    );
+                    continue;
+                }
+                if (!baselinePerson || norm(finalPerson) !== norm(baselinePerson)) continue;
                 tryStoreManualAlternateDeferFulfillmentReason(dateKey, groupNum, finalPerson, rawCtx, dayTypeCategory);
             }
         }
@@ -8165,13 +8315,19 @@
                                     }
                                 }
                                 if (swapPerson) {
+                                    const unavailableExtra =
+                                        manualAltResolved.deferFulfillment?.skippedReplacement
+                                            ? { deferFulfillment: manualAltResolved.deferFulfillment }
+                                            : null;
                                     storeUnavailableReplacementReason(
                                         dateKey,
                                         groupNum,
                                         swapPerson,
                                         assignedPerson,
                                         date,
-                                        'weekend'
+                                        'weekend',
+                                        null,
+                                        unavailableExtra
                                     );
                                     assignedPerson = swapPerson;
                                     wasReplaced = true;
@@ -8676,6 +8832,7 @@
                             }
                             globalSemiPos[groupNum] = pos;
                             if (deferFulfillmentSemiRun) {
+                                deferFulfillmentSemiRun.rotationSlotPerson = groupPeople[pos] || null;
                                 semiDeferFulfillmentPending[`${dateKey}:${groupNum}`] = deferFulfillmentSemiRun;
                             }
                         }
@@ -8947,8 +9104,8 @@
                     const finalPerson = finalAssignments[dateKey]?.[groupNum] || '-';
                     if (finalPerson !== '-' && typeof getAssignmentReason === 'function') {
                         const deferR = getAssignmentReason(dateKey, groupNum, finalPerson);
-                        if (deferR?.meta?.manualAlternateDeferFulfillment && deferR.swappedWith) {
-                            basePerson = deferR.swappedWith;
+                        if (deferR?.meta?.manualAlternateDeferFulfillment && (deferR.swappedWith || deferR.meta?.deferSkippedReplacement)) {
+                            basePerson = deferR.meta?.deferSkippedReplacement || deferR.swappedWith;
                         }
                     }
                     html += '<td>' + buildBaselineComputedCellHtml(basePerson, finalPerson) + '</td>';
@@ -10627,13 +10784,19 @@
                                     replacementIndex = idx;
                                     foundReplacement = true;
                                     wasDisabledPersonSkipped = true;
+                                    const unavailableExtraNormal =
+                                        deferFulfillmentNormal?.skippedReplacement
+                                            ? { deferFulfillment: deferFulfillmentNormal }
+                                            : null;
                                     storeUnavailableReplacementReason(
                                         dateKey,
                                         groupNum,
                                         assignedPerson,
                                         rotationPerson,
                                         date,
-                                        'normal'
+                                        'normal',
+                                        null,
+                                        unavailableExtraNormal
                                     );
                                     break;
                                 }
@@ -10727,13 +10890,19 @@
                                     // Found eligible replacement
                                     assignedPerson = candidate;
                                     foundReplacement = true;
+                                    const unavailableExtraNormal2 =
+                                        deferFulfillmentNormal?.skippedReplacement
+                                            ? { deferFulfillment: deferFulfillmentNormal }
+                                            : null;
                                     storeUnavailableReplacementReason(
                                         dateKey,
                                         groupNum,
                                         assignedPerson,
                                         rotationPerson,
                                         date,
-                                        'normal'
+                                        'normal',
+                                        null,
+                                        unavailableExtraNormal2
                                     );
                                     break;
                                 }
