@@ -35,6 +35,8 @@
         // Track skip/swap reasons for each assignment
         // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap'|'shift', reason: '...', swappedWith: '...', swapPairId, meta? }
         let assignmentReasons = {};
+        /** Carry-over: replacement skipped once in month after manual alternate (per duty category). */
+        let manualAlternateDeferCarry = { normal: {}, semi: {}, weekend: {}, special: {} };
         // Track critical assignments from last duties - these must NEVER be deleted
         // Format: { "2025-12-25": ["Person Name (Ομάδα 1)", ...], ... }
         let criticalAssignments = {};
@@ -928,18 +930,86 @@
             return String(n || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
         }
 
+        function getAssignmentReasonsGroupMap(dateKey, groupNum) {
+            const root = assignmentReasons?.[dateKey];
+            if (!root || typeof root !== 'object') return null;
+            return root[groupNum] || root[String(groupNum)] || null;
+        }
+
+        function resolvePersonInGroupRotationList(personName, groupNum, dayTypeCategory) {
+            if (!personName) return personName;
+            const list = groups[groupNum]?.[dayTypeCategory] || [];
+            if (!Array.isArray(list) || list.length === 0) return personName;
+            const n = normRotPersonName(personName);
+            const found = list.find((p) => normRotPersonName(p) === n);
+            return found || personName;
+        }
+
+        function isManualAlternateReasonEntry(r) {
+            if (!r || r.type !== 'skip') return false;
+            if (r.meta && r.meta.manualAlternateReplacement) return true;
+            return String(r.reason || '').includes('Αντικατάσταση Επιλαχών');
+        }
+
+        function getDutyCategoryForDateKeyLocal(dateKey) {
+            if (typeof getDutyCategoryForDateKey === 'function') {
+                return getDutyCategoryForDateKey(dateKey);
+            }
+            const d = new Date(dateKey + 'T00:00:00');
+            if (isNaN(d.getTime())) return 'normal';
+            const dtType = getDayType(d);
+            if (dtType === 'special-holiday') return 'special';
+            if (dtType === 'weekend-holiday') return 'weekend';
+            if (dtType === 'semi-normal-day') return 'semi';
+            return 'normal';
+        }
+
+        function recordManualAlternateDeferCarry(dayTypeCategory, dateKey, groupNum, replacementPerson, baselinePerson) {
+            if (!dayTypeCategory || !dateKey || !groupNum || !replacementPerson || !baselinePerson) return;
+            const d = new Date(dateKey + 'T00:00:00');
+            if (isNaN(d.getTime())) return;
+            const monthKey = getMonthKeyFromDate(d);
+            if (!manualAlternateDeferCarry[dayTypeCategory]) manualAlternateDeferCarry[dayTypeCategory] = {};
+            if (!manualAlternateDeferCarry[dayTypeCategory][monthKey]) {
+                manualAlternateDeferCarry[dayTypeCategory][monthKey] = {};
+            }
+            manualAlternateDeferCarry[dayTypeCategory][monthKey][groupNum] = {
+                replacementPerson: resolvePersonInGroupRotationList(replacementPerson, groupNum, dayTypeCategory),
+                baselinePerson: resolvePersonInGroupRotationList(baselinePerson, groupNum, dayTypeCategory),
+                sourceDateKey: dateKey
+            };
+        }
+
+        function getManualAlternateDeferFromPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum) {
+            if (!dateInCurrentMonth || !dayTypeCategory || !groupNum) return null;
+            const prevMonthKey = getPreviousMonthKeyFromDate(dateInCurrentMonth);
+            const fromCarry = manualAlternateDeferCarry?.[dayTypeCategory]?.[prevMonthKey]?.[groupNum];
+            if (fromCarry?.replacementPerson) {
+                return {
+                    dateKey: fromCarry.sourceDateKey || null,
+                    replacementPerson: fromCarry.replacementPerson,
+                    baselinePerson: fromCarry.baselinePerson || null
+                };
+            }
+            return findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum);
+        }
+
         /**
          * Manual "Αντικατάσταση Επιλαχών": replacement holds the duty but baseline (swappedWith) owns the rotation slot.
          */
         function findManualAlternateReplacementForGroup(dateKey, groupNum) {
-            const byGroup = assignmentReasons?.[dateKey]?.[groupNum];
+            const byGroup = getAssignmentReasonsGroupMap(dateKey, groupNum);
             if (!byGroup || typeof byGroup !== 'object') return null;
             for (const replKey in byGroup) {
                 const r = byGroup[replKey];
-                if (!r || r.type !== 'skip' || !r.meta || !r.meta.manualAlternateReplacement) continue;
+                if (!isManualAlternateReasonEntry(r)) continue;
                 const baselinePerson = r.swappedWith || null;
                 if (!baselinePerson) continue;
-                return { replacementPerson: replKey, baselinePerson };
+                const cat = getDutyCategoryForDateKeyLocal(dateKey);
+                return {
+                    replacementPerson: resolvePersonInGroupRotationList(replKey, groupNum, cat),
+                    baselinePerson: resolvePersonInGroupRotationList(baselinePerson, groupNum, cat)
+                };
             }
             return null;
         }
@@ -948,17 +1018,21 @@
         function findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum) {
             if (!dateInCurrentMonth || !dayTypeCategory) return null;
             const prevMonthKey = getPreviousMonthKeyFromDate(dateInCurrentMonth);
-            let latest = null;
+            const dateKeysToScan = new Set();
             for (const dk in assignmentReasons || {}) {
-                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+                if (/^\d{4}-\d{2}-\d{2}$/.test(dk) && dk.substring(0, 7) === prevMonthKey) dateKeysToScan.add(dk);
+            }
+            for (const store of [semiNormalAssignments, normalDayAssignments, weekendAssignments, specialHolidayAssignments]) {
+                if (!store || typeof store !== 'object') continue;
+                for (const dk in store) {
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(dk) && dk.substring(0, 7) === prevMonthKey) dateKeysToScan.add(dk);
+                }
+            }
+            let latest = null;
+            for (const dk of dateKeysToScan) {
                 const d = new Date(dk + 'T00:00:00');
-                if (isNaN(d.getTime()) || getMonthKeyFromDate(d) !== prevMonthKey) continue;
-                const dtType = getDayType(d);
-                let cat = 'normal';
-                if (dtType === 'special-holiday') cat = 'special';
-                else if (dtType === 'weekend-holiday') cat = 'weekend';
-                else if (dtType === 'semi-normal-day') cat = 'semi';
-                if (cat !== dayTypeCategory) continue;
+                if (isNaN(d.getTime())) continue;
+                if (getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory) continue;
                 const manual = findManualAlternateReplacementForGroup(dk, groupNum);
                 if (!manual) continue;
                 if (!latest || dk > latest.dateKey) {
@@ -974,9 +1048,46 @@
          */
         function seedManualAlternateDeferFromPreviousMonth(deferState, dayTypeCategory, dateInMonth, groupNum) {
             if (!deferState || !dateInMonth) return;
-            const latest = findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInMonth, groupNum);
+            const latest = getManualAlternateDeferFromPreviousMonth(dayTypeCategory, dateInMonth, groupNum);
             if (latest?.replacementPerson) {
-                deferState[groupNum] = { person: latest.replacementPerson, skipOnCursorMatch: true };
+                deferState[groupNum] = {
+                    person: resolvePersonInGroupRotationList(latest.replacementPerson, groupNum, dayTypeCategory),
+                    skipOnCursorMatch: true
+                };
+            }
+        }
+
+        function buildAssignmentReasonsSavePayload() {
+            return {
+                ...assignmentReasons,
+                _manualAlternateDeferCarry: manualAlternateDeferCarry
+            };
+        }
+
+        /** Rebuild carry-over map from saved reasons (e.g. after load or before calc). */
+        function rebuildManualAlternateDeferCarryFromReasons() {
+            const rebuilt = { normal: {}, semi: {}, weekend: {}, special: {} };
+            for (const dk in assignmentReasons || {}) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+                const cat = getDutyCategoryForDateKeyLocal(dk);
+                for (let g = 1; g <= 4; g++) {
+                    const manual = findManualAlternateReplacementForGroup(dk, g);
+                    if (!manual) continue;
+                    const d = new Date(dk + 'T00:00:00');
+                    if (isNaN(d.getTime())) continue;
+                    const monthKey = getMonthKeyFromDate(d);
+                    if (!rebuilt[cat][monthKey]) rebuilt[cat][monthKey] = {};
+                    rebuilt[cat][monthKey][g] = {
+                        replacementPerson: manual.replacementPerson,
+                        baselinePerson: manual.baselinePerson,
+                        sourceDateKey: dk
+                    };
+                }
+            }
+            for (const cat of ['normal', 'semi', 'weekend', 'special']) {
+                const prev = manualAlternateDeferCarry[cat] || {};
+                const next = rebuilt[cat] || {};
+                manualAlternateDeferCarry[cat] = { ...prev, ...next };
             }
         }
 
@@ -988,7 +1099,9 @@
 
         /** Month-start seed: continue from baseline (absent) slot after manual alternate in previous month. */
         function getRotationSeedPersonForMonthStart(dayTypeCategory, monthStartDate, groupNum) {
-            const latest = findLatestManualAlternateInPreviousMonth(dayTypeCategory, monthStartDate, groupNum);
+            const latest = typeof getManualAlternateDeferFromPreviousMonth === 'function'
+                ? getManualAlternateDeferFromPreviousMonth(dayTypeCategory, monthStartDate, groupNum)
+                : findLatestManualAlternateInPreviousMonth(dayTypeCategory, monthStartDate, groupNum);
             if (latest?.baselinePerson) return latest.baselinePerson;
             return getLastRotationPersonForDate(dayTypeCategory, monthStartDate, groupNum);
         }
@@ -2018,12 +2131,19 @@
                 
                 // Load assignment reasons
                 if (assignmentReasonsDoc.exists) {
-                    const data = assignmentReasonsDoc.data();
+                    const data = assignmentReasonsDoc.data() || {};
                     delete data.lastUpdated;
                     delete data.updatedBy;
-                    assignmentReasons = data || {};
+                    if (data._manualAlternateDeferCarry && typeof data._manualAlternateDeferCarry === 'object') {
+                        manualAlternateDeferCarry = data._manualAlternateDeferCarry;
+                        delete data._manualAlternateDeferCarry;
+                    }
+                    assignmentReasons = data;
                 } else {
                     assignmentReasons = {};
+                }
+                if (typeof rebuildManualAlternateDeferCarryFromReasons === 'function') {
+                    rebuildManualAlternateDeferCarryFromReasons();
                 }
 
                 // Load per-month calculation locks (κλείδωμα μήνα)
@@ -2352,9 +2472,34 @@
             // Load assignment reasons (swap/skip indicators)
             const savedAssignmentReasons = localStorage.getItem('dutyShiftsAssignmentReasons');
             if (savedAssignmentReasons) {
-                assignmentReasons = JSON.parse(savedAssignmentReasons);
+                try {
+                    const parsed = JSON.parse(savedAssignmentReasons);
+                    if (parsed && typeof parsed === 'object') {
+                        if (parsed._manualAlternateDeferCarry && typeof parsed._manualAlternateDeferCarry === 'object') {
+                            manualAlternateDeferCarry = parsed._manualAlternateDeferCarry;
+                            delete parsed._manualAlternateDeferCarry;
+                        }
+                        assignmentReasons = parsed;
+                    } else {
+                        assignmentReasons = {};
+                    }
+                } catch (_) {
+                    assignmentReasons = {};
+                }
             } else {
                 assignmentReasons = {};
+            }
+            const savedDeferCarry = localStorage.getItem('dutyShiftsManualAlternateDeferCarry');
+            if (savedDeferCarry) {
+                try {
+                    const parsedDefer = JSON.parse(savedDeferCarry);
+                    if (parsedDefer && typeof parsedDefer === 'object') {
+                        manualAlternateDeferCarry = parsedDefer;
+                    }
+                } catch (_) { /* ignore */ }
+            }
+            if (typeof rebuildManualAlternateDeferCarryFromReasons === 'function') {
+                rebuildManualAlternateDeferCarryFromReasons();
             }
 
             applyNormalWeekPairSwapDisabledGroupsFromValue(readNormalWeekPairSwapDisabledGroupsFromLocalStorage());
@@ -2719,7 +2864,11 @@
                     if (Object.keys(assignmentReasons).length > 0) {
                         console.log('Sample assignmentReasons being saved:', Object.entries(assignmentReasons).slice(0, 3));
                     }
-                    const sanitizedReasons = sanitizeForFirestore(assignmentReasons);
+                    const reasonsPayload = {
+                        ...assignmentReasons,
+                        _manualAlternateDeferCarry: manualAlternateDeferCarry
+                    };
+                    const sanitizedReasons = sanitizeForFirestore(reasonsPayload);
                     await db.collection('dutyShifts').doc('assignmentReasons').set({
                         ...sanitizedReasons,
                         lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
@@ -2824,7 +2973,11 @@
             localStorage.setItem('dutyShiftsSpecialHolidayAssignments', JSON.stringify(specialHolidayAssignments));
             // Deprecated: do not persist dutyAssignments
             localStorage.setItem('dutyShiftsCriticalAssignments', JSON.stringify(criticalAssignments));
-            localStorage.setItem('dutyShiftsAssignmentReasons', JSON.stringify(assignmentReasons));
+            localStorage.setItem('dutyShiftsAssignmentReasons', JSON.stringify({
+                ...assignmentReasons,
+                _manualAlternateDeferCarry: manualAlternateDeferCarry
+            }));
+            localStorage.setItem('dutyShiftsManualAlternateDeferCarry', JSON.stringify(manualAlternateDeferCarry));
             localStorage.setItem('dutyShiftsLastRotationPositions', JSON.stringify(lastRotationPositions));
             localStorage.setItem('dutyShiftsRankings', JSON.stringify(rankings));
             const locksOnly = {};

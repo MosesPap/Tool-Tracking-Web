@@ -1961,6 +1961,9 @@
             if (typeof storeAssignmentReason === 'function') {
                 storeAssignmentReason(dateKey, groupNum, replacement, 'skip', reason, skippedPerson, null, { manualAlternateReplacement: true });
             }
+            if (typeof recordManualAlternateDeferCarry === 'function') {
+                recordManualAlternateDeferCarry(typeCategory, dateKey, groupNum, replacement, skippedPerson);
+            }
 
             try {
                 await runManualAlternateReplacementEffects(groupNum, skippedPerson, replacement, dateKey, typeCategory);

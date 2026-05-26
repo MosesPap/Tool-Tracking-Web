@@ -2561,6 +2561,10 @@
                 }
                 
                 // Clear only selected groups for the month (others unchanged)
+                if (typeof rebuildManualAlternateDeferCarryFromReasons === 'function') {
+                    rebuildManualAlternateDeferCarryFromReasons();
+                }
+
                 if (monthKeysForRange.length > 0) {
                     if (typeof captureDutyShiftsCancelRestoreSnapshot === 'function') {
                         calculationSteps.cancelRestoreSnapshot = captureDutyShiftsCancelRestoreSnapshot(
@@ -4983,7 +4987,10 @@
                     // Save assignment reasons to Firestore
                     try {
                         if (Object.keys(assignmentReasons).length > 0) {
-                            const sanitizedReasons = sanitizeForFirestore(assignmentReasons);
+                            const payload = typeof buildAssignmentReasonsSavePayload === 'function'
+                                ? buildAssignmentReasonsSavePayload()
+                                : assignmentReasons;
+                            const sanitizedReasons = sanitizeForFirestore(payload);
                             await db.collection('dutyShifts').doc('assignmentReasons').set({
                                 ...sanitizedReasons,
                                 lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
@@ -6991,7 +6998,10 @@
                     // Save assignment reasons to Firestore
                     try {
                         if (Object.keys(assignmentReasons).length > 0) {
-                            const sanitizedReasons = sanitizeForFirestore(assignmentReasons);
+                            const payload = typeof buildAssignmentReasonsSavePayload === 'function'
+                                ? buildAssignmentReasonsSavePayload()
+                                : assignmentReasons;
+                            const sanitizedReasons = sanitizeForFirestore(payload);
                             await db.collection('dutyShifts').doc('assignmentReasons').set({
                                 ...sanitizedReasons,
                                 lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
@@ -8483,10 +8493,12 @@
                     if (person && isPersonDisabledForDuty(person, groupNum, 'semi')) {
                         let eligiblePerson = null;
                         let eligibleIndex = -1;
+                        const deferSkipPersonRun = deferManualAlternateSkipSemiRun[groupNum]?.person;
                         for (let offset = 1; offset <= rotationDays * 2; offset++) {
                             const idx = (pos + offset) % rotationDays;
                             const candidate = groupPeople[idx];
                             if (!candidate) continue;
+                            if (deferSkipPersonRun && normSemiRun(candidate) === normSemiRun(deferSkipPersonRun)) continue;
                             if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                             eligiblePerson = candidate;
@@ -8499,10 +8511,12 @@
                         // MISSING: At the missing semi date assign the next person in rotation; next semi must go to person AFTER them (no double assignment)
                         let eligiblePerson = null;
                         let eligibleIndex = -1;
+                        const deferSkipPersonRunMissing = deferManualAlternateSkipSemiRun[groupNum]?.person;
                         for (let offset = 1; offset <= rotationDays * 2; offset++) {
                             const idx = (pos + offset) % rotationDays;
                             const candidate = groupPeople[idx];
                             if (!candidate) continue;
+                            if (deferSkipPersonRunMissing && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunMissing)) continue;
                             if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                             eligiblePerson = candidate;
