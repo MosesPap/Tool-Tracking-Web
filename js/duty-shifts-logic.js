@@ -1291,7 +1291,7 @@
                 : 0;
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
             if (existingManualAlternate) {
-                const bi = groupPeople.indexOf(existingManualAlternate.baseline);
+                const bi = groupPeople.findIndex(p => norm(p) === norm(existingManualAlternate.baseline));
                 if (bi >= 0) {
                     rotationPosition = bi;
                     globalRotationPosition[groupNum] = rotationPosition;
@@ -1313,6 +1313,32 @@
                 }
             }
             return { rotationPosition, existingManualAlternate };
+        }
+
+        /** Re-seed global rotation cursor at calendar month start (baseline continuity after manual alternate). */
+        function reseedGlobalRotationPositionAtMonthStart(dayTypeCategory, dateInMonth, groupNum, groupPeople, globalPos) {
+            const rotationDays = groupPeople.length;
+            if (!rotationDays) return;
+            const startDate = calculationSteps?.startDate;
+            const isFebruary2026 = startDate && startDate.getFullYear() === 2026 && startDate.getMonth() === 1;
+            const isAprilStart = startDate && startDate.getMonth() === 3;
+            if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
+                globalPos[groupNum] = 0;
+                return;
+            }
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
+                ? getRotationSeedPersonForMonthStart(dayTypeCategory, dateInMonth, groupNum)
+                : getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+            const lastPersonIndex = lastPersonName
+                ? groupPeople.findIndex(p => norm(p) === norm(lastPersonName))
+                : -1;
+            if (lastPersonName && lastPersonIndex >= 0) {
+                globalPos[groupNum] = (lastPersonIndex + 1) % rotationDays;
+            } else {
+                const daysSinceStart = getRotationPosition(dateInMonth, dayTypeCategory, groupNum);
+                globalPos[groupNum] = daysSinceStart % rotationDays;
+            }
         }
 
         function markManualAlternateDeferFulfilled() {
@@ -1348,7 +1374,8 @@
             const wasReplaced = !!(opts && opts.wasReplaced);
             const replacementIndex = opts && opts.replacementIndex != null ? opts.replacementIndex : null;
             const isManualAlt = !!(opts && opts.isManualAlternateReplacement);
-            if (isManualAlt && assignedPerson) {
+            const hasManualAltOnDate = !!(opts && opts.existingManualAlternate);
+            if ((isManualAlt || hasManualAltOnDate) && assignedPerson) {
                 globalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                 return;
             }
@@ -4231,7 +4258,7 @@
                     Object.assign(weekendAssignments, mergedWeekendFinal);
                     
                     // IMPORTANT: Update rotation positions based on FINAL assignments (after skip logic)
-                    // This ensures that when Person A is replaced by Person B, next calculation starts from Person B's position
+                    // Uses baseline (swappedWith) after manual alternate so next month continues A,B,C not replacement
                     // Group assignments by month and find the last assigned person for each month/group
                     const finalWeekendRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
                     const sortedDateKeys = Object.keys(updatedAssignments).sort();
@@ -4248,8 +4275,10 @@
                                 if (!finalWeekendRotationPositionsByMonth[monthKey]) {
                                     finalWeekendRotationPositionsByMonth[monthKey] = {};
                                 }
-                                // Store the last assigned person for this month/group (will be overwritten by later dates)
-                                finalWeekendRotationPositionsByMonth[monthKey][groupNum] = assignedPerson;
+                                const personForRotation = typeof getPersonForRotationContinuity === 'function'
+                                    ? getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, updatedAssignments)
+                                    : assignedPerson;
+                                finalWeekendRotationPositionsByMonth[monthKey][groupNum] = personForRotation;
                             }
                         }
                     }
@@ -7514,6 +7543,7 @@
                 const globalWeekendRotationPosition = {}; // groupNum -> global position
                 const deferManualAlternateSkipWeekend = {}; // groupNum -> { person, skipOnCursorMatch }
                 let prevCalMonthKeyWeekendDefer = null;
+                let prevCalMonthKeyWeekendRot = null;
 
                 // Track weekend assignments as we process them (for consecutive day checking)
                 const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
@@ -7724,6 +7754,16 @@
                         }
                         prevCalMonthKeyWeekendDefer = monthKey;
                     }
+                    if (prevCalMonthKeyWeekendRot !== monthKey) {
+                        for (let g = 1; g <= 4; g++) {
+                            const gd = (typeof groupsForDuty === 'function' ? groupsForDuty(g) : groups[g]) || {};
+                            const people = gd.weekend || [];
+                            if (people.length) {
+                                reseedGlobalRotationPositionAtMonthStart('weekend', date, g, people, globalWeekendRotationPosition);
+                            }
+                        }
+                        prevCalMonthKeyWeekendRot = monthKey;
+                    }
                     
                     if (!assignedPeoplePreviewWeekend[monthKey]) {
                         assignedPeoplePreviewWeekend[monthKey] = {};
@@ -7811,39 +7851,7 @@
                             }
                             const rotationDays = groupPeople.length;
                             if (globalWeekendRotationPosition[groupNum] === undefined) {
-                                // If start date is February 2026, always start from first person (position 0)
-                                const isFebruary2026 = calculationSteps.startDate && 
-                                    calculationSteps.startDate.getFullYear() === 2026 && 
-                                    calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
-                                const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
-                                
-                                if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
-                                    // Always start from first person for February 2026
-                                    globalWeekendRotationPosition[groupNum] = 0;
-                                    console.log(
-                                        `[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} weekend - ${
-                                            isAprilStart ? 'April start' : 'February 2026'
-                                        }`
-                                    );
-                                } else {
-                                    // Continue from last person assigned in previous month (month-scoped; falls back to legacy)
-                                    const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
-                                        ? getRotationSeedPersonForMonthStart('weekend', date, groupNum)
-                                        : getLastRotationPersonForDate('weekend', date, groupNum);
-                                    const lastPersonIndex = groupPeople.indexOf(lastPersonName);
-                                    if (lastPersonName && lastPersonIndex >= 0) {
-                                        // Found last person - start from next person
-                                        globalWeekendRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
-                                        console.log(`[WEEKEND ROTATION] Continuing from last person ${lastPersonName} (index ${lastPersonIndex}) for group ${groupNum}, starting at position ${globalWeekendRotationPosition[groupNum]}`);
-                                    } else {
-                                        // Last person not found in list - use rotation calculation
-                                const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
-                                globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
-                                        if (lastPersonName) {
-                                            console.log(`[WEEKEND ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalWeekendRotationPosition[groupNum]}`);
-                                        }
-                                    }
-                                }
+                                reseedGlobalRotationPositionAtMonthStart('weekend', date, groupNum, groupPeople, globalWeekendRotationPosition);
                             }
                             
                             // PREVIEW MODE: Just show basic rotation WITHOUT skip logic
@@ -7897,8 +7905,6 @@
                                     replacementIndex = idx;
                                     wasReplaced = true;
                                     foundEligible = true;
-                                    // Keep baseline as rotation person so we show Βασική Σειρά + Αντικατάσταση
-                                    globalWeekendRotationPosition[groupNum] = (idx + 1) % rotationDays;
                                     break;
                                 }
                                 if (!foundEligible) assignedPerson = null;
@@ -8064,7 +8070,8 @@
                                     {
                                         wasReplaced,
                                         replacementIndex,
-                                        isManualAlternateReplacement: isManualAltWeekend
+                                        isManualAlternateReplacement: isManualAltWeekend,
+                                        existingManualAlternate: existingManualAlternateWeekend
                                     }
                                 );
                             } else {

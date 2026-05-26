@@ -5742,8 +5742,10 @@
                                 if (!finalWeekendRotationPositionsByMonth[monthKey]) {
                                     finalWeekendRotationPositionsByMonth[monthKey] = {};
                                 }
-                                // Store the last assigned person for this month/group (will be overwritten by later dates)
-                                finalWeekendRotationPositionsByMonth[monthKey][groupNum] = assignedPerson;
+                                const personForRotation = typeof getPersonForRotationContinuity === 'function'
+                                    ? getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, updatedAssignments)
+                                    : assignedPerson;
+                                finalWeekendRotationPositionsByMonth[monthKey][groupNum] = personForRotation;
                             }
                         }
                     }
