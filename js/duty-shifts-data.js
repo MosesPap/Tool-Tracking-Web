@@ -828,58 +828,117 @@
         // Returns the last rotation person that should seed the rotation for the given date's month.
         // IMPORTANT: When calculating month M, we read from previous month (M-1), not M.
         // If the immediate previous month doesn't exist, finds the most recent available month.
+        function getPersonAssignedOnDateFromStore(dayTypeCategory, dateKey, groupNum) {
+            const store = getAssignmentsForDayType(dayTypeCategory);
+            const raw = store?.[dateKey];
+            if (!raw) return null;
+            const map = typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : null;
+            if (!map || typeof map !== 'object') return null;
+            return map[groupNum] || map[String(groupNum)] || null;
+        }
+
+        /** Last person in previous month for continuity (baseline after manual alternate, not replacement). */
+        function getLastAssignmentContinuityPersonForPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum) {
+            const prevMonthKey = getPreviousMonthKeyFromDate(dateInCurrentMonth);
+            const store = getAssignmentsForDayType(dayTypeCategory);
+            if (!store || typeof store !== 'object') return null;
+            let lastKey = null;
+            for (const dk in store) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || dk.substring(0, 7) !== prevMonthKey) continue;
+                const assigned = getPersonAssignedOnDateFromStore(dayTypeCategory, dk, groupNum);
+                if (!assigned) continue;
+                if (!lastKey || dk > lastKey) lastKey = dk;
+            }
+            if (!lastKey) return null;
+            const assigned = getPersonAssignedOnDateFromStore(dayTypeCategory, lastKey, groupNum);
+            if (typeof getPersonForRotationContinuity === 'function') {
+                return getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
+            }
+            const manual = findManualAlternateReplacementForGroup(lastKey, groupNum);
+            if (manual?.replacementPerson && manual?.baselinePerson) {
+                const n = normRotPersonName;
+                if (n(assigned) === n(manual.replacementPerson)) {
+                    return resolvePersonInGroupRotationList(manual.baselinePerson, groupNum, dayTypeCategory);
+                }
+            }
+            return assigned;
+        }
+
+        function correctLastRotationPersonForManualAlternate(dayType, date, groupNum, personName) {
+            if (!personName) return personName;
+            const latest =
+                (typeof getManualAlternateDeferFromPreviousMonth === 'function'
+                    ? getManualAlternateDeferFromPreviousMonth(dayType, date, groupNum)
+                    : null) ||
+                (typeof findLatestManualAlternateInPreviousMonth === 'function'
+                    ? findLatestManualAlternateInPreviousMonth(dayType, date, groupNum)
+                    : null);
+            if (!latest?.replacementPerson || !latest?.baselinePerson) return personName;
+            const n = normRotPersonName;
+            if (n(personName) === n(latest.replacementPerson)) {
+                return resolvePersonInGroupRotationList(latest.baselinePerson, groupNum, dayType);
+            }
+            return personName;
+        }
+
         function getLastRotationPersonForDate(dayType, date, groupNum) {
             const byType = lastRotationPositions?.[dayType] || {};
             const prevMonthKey = getPreviousMonthKeyFromDate(date);
+            let person = null;
 
             // Month-scoped format
             if (byType && typeof byType === 'object' && !Array.isArray(byType)) {
                 const monthEntry = byType[prevMonthKey];
                 if (monthEntry && typeof monthEntry === 'object' && !Array.isArray(monthEntry) && monthEntry[groupNum]) {
-                    return monthEntry[groupNum];
+                    person = monthEntry[groupNum];
                 }
             }
 
             // Legacy flat format fallback
-            if (byType && byType[groupNum]) {
-                return byType[groupNum];
+            if (!person && byType && byType[groupNum]) {
+                person = byType[groupNum];
             }
 
             // Baseline fallback: derive last rotation person from rotationBaseline docs (previous month)
-            let baselineMonth = rotationBaselineLastByType?.[dayType]?.[prevMonthKey];
-            if (baselineMonth && baselineMonth[groupNum]) {
-                return baselineMonth[groupNum];
+            if (!person) {
+                let baselineMonth = rotationBaselineLastByType?.[dayType]?.[prevMonthKey];
+                if (baselineMonth && baselineMonth[groupNum]) {
+                    person = baselineMonth[groupNum];
+                }
             }
-            
-            // If immediate previous month not found, find the most recent available month
-            const baselineByType = rotationBaselineLastByType?.[dayType];
-            if (baselineByType && typeof baselineByType === 'object') {
-                const availableMonths = Object.keys(baselineByType)
-                    .filter(k => isMonthKey(k))
-                    .sort((a, b) => {
-                        const [aYear, aMonth] = a.split('-').map(Number);
-                        const [bYear, bMonth] = b.split('-').map(Number);
-                        if (aYear !== bYear) return bYear - aYear;
-                        return bMonth - aMonth;
-                    });
-                
-                // Find the most recent month that is before or equal to prevMonthKey
-                // Since sorted descending, first match is the most recent
-                const [targetYear, targetMonth] = prevMonthKey.split('-').map(Number);
-                for (const monthKey of availableMonths) {
-                    const [year, month] = monthKey.split('-').map(Number);
-                    // Check if this month is before or equal to target month
-                    if (year < targetYear || (year === targetYear && month <= targetMonth)) {
-                        baselineMonth = baselineByType[monthKey];
-                        if (baselineMonth && baselineMonth[groupNum]) {
-                            console.log(`[ROTATION FALLBACK] Using most recent available month ${monthKey} (instead of ${prevMonthKey}) for group ${groupNum}, person: ${baselineMonth[groupNum]}`);
-                            return baselineMonth[groupNum];
+
+            if (!person) {
+                const baselineByType = rotationBaselineLastByType?.[dayType];
+                if (baselineByType && typeof baselineByType === 'object') {
+                    const availableMonths = Object.keys(baselineByType)
+                        .filter(k => isMonthKey(k))
+                        .sort((a, b) => {
+                            const [aYear, aMonth] = a.split('-').map(Number);
+                            const [bYear, bMonth] = b.split('-').map(Number);
+                            if (aYear !== bYear) return bYear - aYear;
+                            return bMonth - aMonth;
+                        });
+
+                    const [targetYear, targetMonth] = prevMonthKey.split('-').map(Number);
+                    for (const monthKey of availableMonths) {
+                        const [year, month] = monthKey.split('-').map(Number);
+                        if (year < targetYear || (year === targetYear && month <= targetMonth)) {
+                            const baselineMonth = baselineByType[monthKey];
+                            if (baselineMonth && baselineMonth[groupNum]) {
+                                console.log(`[ROTATION FALLBACK] Using most recent available month ${monthKey} (instead of ${prevMonthKey}) for group ${groupNum}, person: ${baselineMonth[groupNum]}`);
+                                person = baselineMonth[groupNum];
+                                break;
+                            }
                         }
                     }
                 }
             }
-            
-            return null;
+
+            if (person) {
+                return correctLastRotationPersonForManualAlternate(dayType, date, groupNum, person);
+            }
+
+            return getLastAssignmentContinuityPersonForPreviousMonth(dayType, date, groupNum);
         }
 
         // Baseline-only variant for Excel "ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ": ignores swaps/final assignments.
@@ -1028,15 +1087,29 @@
                     if (/^\d{4}-\d{2}-\d{2}$/.test(dk) && dk.substring(0, 7) === prevMonthKey) dateKeysToScan.add(dk);
                 }
             }
+            const people = groups[groupNum]?.[dayTypeCategory] || [];
+            const norm = normRotPersonName;
+            const inRotationList = (p) => p && people.some((x) => norm(x) === norm(p));
+
             let latest = null;
             for (const dk of dateKeysToScan) {
                 const d = new Date(dk + 'T00:00:00');
                 if (isNaN(d.getTime())) continue;
-                if (getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory) continue;
                 const manual = findManualAlternateReplacementForGroup(dk, groupNum);
                 if (!manual) continue;
+                if (!inRotationList(manual.baselinePerson) && !inRotationList(manual.replacementPerson)) continue;
+                const assignedOnDate = getPersonAssignedOnDateFromStore(dayTypeCategory, dk, groupNum);
+                const categoryMatches =
+                    getDutyCategoryForDateKeyLocal(dk) === dayTypeCategory ||
+                    !!assignedOnDate ||
+                    inRotationList(manual.baselinePerson);
+                if (!categoryMatches) continue;
                 if (!latest || dk > latest.dateKey) {
-                    latest = { dateKey: dk, replacementPerson: manual.replacementPerson, baselinePerson: manual.baselinePerson };
+                    latest = {
+                        dateKey: dk,
+                        replacementPerson: resolvePersonInGroupRotationList(manual.replacementPerson, groupNum, dayTypeCategory),
+                        baselinePerson: resolvePersonInGroupRotationList(manual.baselinePerson, groupNum, dayTypeCategory)
+                    };
                 }
             }
             return latest;
@@ -1099,11 +1172,16 @@
 
         /** Month-start seed: continue from baseline (absent) slot after manual alternate in previous month. */
         function getRotationSeedPersonForMonthStart(dayTypeCategory, monthStartDate, groupNum) {
-            const latest = typeof getManualAlternateDeferFromPreviousMonth === 'function'
-                ? getManualAlternateDeferFromPreviousMonth(dayTypeCategory, monthStartDate, groupNum)
-                : findLatestManualAlternateInPreviousMonth(dayTypeCategory, monthStartDate, groupNum);
-            if (latest?.baselinePerson) return latest.baselinePerson;
-            return getLastRotationPersonForDate(dayTypeCategory, monthStartDate, groupNum);
+            const latest =
+                (typeof getManualAlternateDeferFromPreviousMonth === 'function'
+                    ? getManualAlternateDeferFromPreviousMonth(dayTypeCategory, monthStartDate, groupNum)
+                    : null) || findLatestManualAlternateInPreviousMonth(dayTypeCategory, monthStartDate, groupNum);
+            if (latest?.baselinePerson) {
+                return resolvePersonInGroupRotationList(latest.baselinePerson, groupNum, dayTypeCategory);
+            }
+            const fromStored = getLastRotationPersonForDate(dayTypeCategory, monthStartDate, groupNum);
+            if (fromStored) return fromStored;
+            return getLastAssignmentContinuityPersonForPreviousMonth(dayTypeCategory, monthStartDate, groupNum);
         }
 
         /**

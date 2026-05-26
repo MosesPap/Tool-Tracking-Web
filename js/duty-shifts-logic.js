@@ -1327,6 +1327,24 @@
                 return;
             }
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const manualPrev =
+                (typeof getManualAlternateDeferFromPreviousMonth === 'function'
+                    ? getManualAlternateDeferFromPreviousMonth(dayTypeCategory, dateInMonth, groupNum)
+                    : null) ||
+                (typeof findLatestManualAlternateInPreviousMonth === 'function'
+                    ? findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInMonth, groupNum)
+                    : null);
+            if (manualPrev?.baselinePerson) {
+                const baseline =
+                    typeof resolvePersonInGroupRotationList === 'function'
+                        ? resolvePersonInGroupRotationList(manualPrev.baselinePerson, groupNum, dayTypeCategory)
+                        : manualPrev.baselinePerson;
+                const bi = groupPeople.findIndex((p) => norm(p) === norm(baseline));
+                if (bi >= 0) {
+                    globalPos[groupNum] = (bi + 1) % rotationDays;
+                    return;
+                }
+            }
             const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
                 ? getRotationSeedPersonForMonthStart(dayTypeCategory, dateInMonth, groupNum)
                 : getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
@@ -7569,23 +7587,27 @@
                 // Build baseline weekend (rotation-only) for return-from-missing check
                 const baselineWeekendByDate = {};
                 const baselineWeekendRotationPosition = {};
+                let prevCalMonthKeyBaselineWeekend = null;
                 for (const dk of sortedWeekends) {
                     const dt = new Date(dk + 'T00:00:00');
+                    const monthKeyBaseline = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(dt) : `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+                    if (prevCalMonthKeyBaselineWeekend !== monthKeyBaseline) {
+                        for (let g = 1; g <= 4; g++) {
+                            const grp = (typeof groupsForDuty === 'function' ? groupsForDuty(g) : groups[g]) || { weekend: [] };
+                            const people = grp.weekend || [];
+                            if (people.length) {
+                                reseedGlobalRotationPositionAtMonthStart('weekend', dt, g, people, baselineWeekendRotationPosition);
+                            }
+                        }
+                        prevCalMonthKeyBaselineWeekend = monthKeyBaseline;
+                    }
                     for (let g = 1; g <= 4; g++) {
-                        const grp = groups[g] || { weekend: [] };
+                        const grp = (typeof groupsForDuty === 'function' ? groupsForDuty(g) : groups[g]) || { weekend: [] };
                         const people = grp.weekend || [];
                         if (people.length === 0) continue;
                         const rotLen = people.length;
                         if (baselineWeekendRotationPosition[g] === undefined) {
-                            const isFeb2026 = calculationSteps.startDate && calculationSteps.startDate.getFullYear() === 2026 && calculationSteps.startDate.getMonth() === 1;
-                            const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
-                            if (isFeb2026 || (isAprilStart && (g === 1 || g === 2))) baselineWeekendRotationPosition[g] = 0;
-                            else {
-                                const last = getLastRotationPersonForDate('weekend', dt, g);
-                                const idx = people.indexOf(last);
-                                if (last && idx >= 0) baselineWeekendRotationPosition[g] = (idx + 1) % rotLen;
-                                else baselineWeekendRotationPosition[g] = getRotationPosition(dt, 'weekend', g) % rotLen;
-                            }
+                            reseedGlobalRotationPositionAtMonthStart('weekend', dt, g, people, baselineWeekendRotationPosition);
                         }
                         const pos = baselineWeekendRotationPosition[g] % rotLen;
                         if (!baselineWeekendByDate[dk]) baselineWeekendByDate[dk] = {};
