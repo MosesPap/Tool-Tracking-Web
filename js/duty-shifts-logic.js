@@ -1300,21 +1300,78 @@
             return `Ανατέθηκε επειδή ο/η ${ctx.skippedReplacement} αντικατέστησε τον/την ${ctx.baselinePerson} ως επιλαχών ${whenPhrase}.`;
         }
 
+        function enrichManualAlternateDeferFulfillmentContext(ctx, dayTypeCategory, dateInMonth, groupNum) {
+            if (!ctx?.skippedReplacement) return null;
+            const out = { ...ctx };
+            if (!out.baselinePerson) {
+                const date =
+                    dateInMonth instanceof Date && !isNaN(dateInMonth.getTime())
+                        ? dateInMonth
+                        : new Date(String(dateInMonth || '') + 'T00:00:00');
+                const latest =
+                    typeof getManualAlternateDeferFromPreviousMonth === 'function'
+                        ? getManualAlternateDeferFromPreviousMonth(dayTypeCategory, date, groupNum)
+                        : typeof findLatestManualAlternateInPreviousMonth === 'function'
+                          ? findLatestManualAlternateInPreviousMonth(dayTypeCategory, date, groupNum)
+                          : null;
+                if (latest?.baselinePerson) {
+                    out.baselinePerson =
+                        typeof resolvePersonInGroupRotationList === 'function'
+                            ? resolvePersonInGroupRotationList(latest.baselinePerson, groupNum, dayTypeCategory)
+                            : latest.baselinePerson;
+                }
+                if (!out.sourceDateKey && latest?.dateKey) out.sourceDateKey = latest.dateKey;
+            }
+            return out.baselinePerson ? out : null;
+        }
+
         /** Store skip reason + underline for assignee after defer-skip of prior-month alternate replacement. */
-        function tryStoreManualAlternateDeferFulfillmentReason(dateKey, groupNum, assignedPerson, deferFulfillment) {
-            if (!deferFulfillment?.skippedReplacement || !deferFulfillment?.baselinePerson || !assignedPerson) return false;
+        function tryStoreManualAlternateDeferFulfillmentReason(dateKey, groupNum, assignedPerson, deferFulfillment, dayTypeCategory) {
+            if (!deferFulfillment?.skippedReplacement || !assignedPerson) return false;
+            const date = new Date(dateKey + 'T00:00:00');
+            const cat =
+                dayTypeCategory ||
+                (typeof getDutyCategoryForDateKeyLocal === 'function'
+                    ? getDutyCategoryForDateKeyLocal(dateKey)
+                    : 'normal');
+            const ctx = enrichManualAlternateDeferFulfillmentContext(deferFulfillment, cat, date, groupNum);
+            if (!ctx) return false;
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            if (norm(assignedPerson) === norm(deferFulfillment.skippedReplacement)) return false;
+            if (norm(assignedPerson) === norm(ctx.skippedReplacement)) return false;
             if (typeof getAssignmentReason === 'function') {
                 const existing = getAssignmentReason(dateKey, groupNum, assignedPerson);
                 if (existing && !(existing.meta && existing.meta.manualAlternateDeferFulfillment)) return false;
             }
-            const reason = buildManualAlternateDeferFulfillmentReason(deferFulfillment);
+            const reason = buildManualAlternateDeferFulfillmentReason(ctx);
             if (!reason) return false;
-            storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reason, deferFulfillment.skippedReplacement, null, {
+            storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reason, ctx.skippedReplacement, null, {
                 manualAlternateDeferFulfillment: true
             });
             return true;
+        }
+
+        /** Apply defer-fulfillment reasons after semi (etc.) conflict swaps — attach to final assignee only. */
+        function applyPendingManualAlternateDeferFulfillmentReasons(finalByDate, baselineByDate, pendingMap, dayTypeCategory) {
+            if (!pendingMap || !finalByDate || !baselineByDate) return;
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            for (const pendingKey of Object.keys(pendingMap)) {
+                const rawCtx = pendingMap[pendingKey];
+                if (!rawCtx) continue;
+                const colon = pendingKey.lastIndexOf(':');
+                if (colon < 0) continue;
+                const dateKey = pendingKey.slice(0, colon);
+                const groupNum = parseInt(pendingKey.slice(colon + 1), 10);
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || !Number.isFinite(groupNum)) continue;
+                const finalPerson = finalByDate[dateKey]?.[groupNum];
+                const baselinePerson = baselineByDate[dateKey]?.[groupNum];
+                if (!finalPerson || !baselinePerson) continue;
+                if (norm(finalPerson) !== norm(baselinePerson)) continue;
+                if (norm(finalPerson) === norm(rawCtx.skippedReplacement)) continue;
+                if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
+                    clearAssignmentReasonForPersonOnDate(dateKey, groupNum, rawCtx.skippedReplacement);
+                }
+                tryStoreManualAlternateDeferFulfillmentReason(dateKey, groupNum, finalPerson, rawCtx, dayTypeCategory);
+            }
         }
 
         /**
@@ -8673,16 +8730,6 @@
                         normSemiRun(baseline[dateKey][groupNum]) === normSemiRun(existingManualAlternateSemiRun.replacement)) {
                         nextPos = (pos + 1) % rotationDays;
                     }
-                    const deferKeySemiRun = `${dateKey}:${groupNum}`;
-                    if (semiDeferFulfillmentPending[deferKeySemiRun] && baseline[dateKey][groupNum]) {
-                        tryStoreManualAlternateDeferFulfillmentReason(
-                            dateKey,
-                            groupNum,
-                            baseline[dateKey][groupNum],
-                            semiDeferFulfillmentPending[deferKeySemiRun]
-                        );
-                        delete semiDeferFulfillmentPending[deferKeySemiRun];
-                    }
                     globalSemiPos[groupNum] = nextPos;
                 }
             }
@@ -8805,6 +8852,13 @@
                 }
             }
 
+            applyPendingManualAlternateDeferFulfillmentReasons(
+                finalAssignments,
+                baseline,
+                semiDeferFulfillmentPending,
+                'semi'
+            );
+
             // 4) Last rotation positions: use final assignments (after swaps) per month
             const lastSemiRotationPositionsByMonth = {};
             for (const dateKey of sortedSemi) {
@@ -8854,6 +8908,18 @@
                             }
                             const sanitized = sanitizeForFirestore(lastRotationPositions);
                             await db.collection('dutyShifts').doc('lastRotationPositions').set({ ...sanitized, lastUpdated: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: user.uid });
+                            if (Object.keys(assignmentReasons).length > 0) {
+                                const payload =
+                                    typeof buildAssignmentReasonsSavePayload === 'function'
+                                        ? buildAssignmentReasonsSavePayload()
+                                        : assignmentReasons;
+                                const sanitizedReasons = sanitizeForFirestore(payload);
+                                await db.collection('dutyShifts').doc('assignmentReasons').set({
+                                    ...sanitizedReasons,
+                                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                    updatedBy: user.uid
+                                });
+                            }
                         })()
                     ]);
                     Object.assign(rotationBaselineSemiAssignments, formattedBaseline);
@@ -8877,8 +8943,14 @@
                 if (!m) continue;
                 html += '<tr><td><strong>' + m.dateStr + '</strong></td><td>' + m.dayName + '</td>';
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const basePerson = baseline[dateKey]?.[groupNum] || '-';
+                    let basePerson = baseline[dateKey]?.[groupNum] || '-';
                     const finalPerson = finalAssignments[dateKey]?.[groupNum] || '-';
+                    if (finalPerson !== '-' && typeof getAssignmentReason === 'function') {
+                        const deferR = getAssignmentReason(dateKey, groupNum, finalPerson);
+                        if (deferR?.meta?.manualAlternateDeferFulfillment && deferR.swappedWith) {
+                            basePerson = deferR.swappedWith;
+                        }
+                    }
                     html += '<td>' + buildBaselineComputedCellHtml(basePerson, finalPerson) + '</td>';
                 }
                 html += '</tr>';
