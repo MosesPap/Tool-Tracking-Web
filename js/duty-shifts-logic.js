@@ -1283,15 +1283,66 @@
             return null;
         }
 
+        /** Greek reason when someone is assigned after skipping prior-month alternate replacement once. */
+        function buildManualAlternateDeferFulfillmentReason(ctx) {
+            if (!ctx?.skippedReplacement || !ctx?.baselinePerson) return '';
+            let monthLabel = '';
+            if (ctx.sourceDateKey && /^\d{4}-\d{2}-\d{2}$/.test(ctx.sourceDateKey)) {
+                const d = new Date(ctx.sourceDateKey + 'T00:00:00');
+                if (!isNaN(d.getTime())) {
+                    monthLabel = d.toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
+                }
+            }
+            if (!monthLabel && ctx.prevMonthKey && /^\d{4}-\d{2}$/.test(ctx.prevMonthKey)) {
+                const [y, mo] = ctx.prevMonthKey.split('-').map(Number);
+                if (Number.isFinite(y) && Number.isFinite(mo)) {
+                    monthLabel = new Date(y, mo - 1, 1).toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
+                }
+            }
+            if (!monthLabel) monthLabel = 'τον προηγούμενο μήνα';
+            return `Ανατέθηκε επειδή ο/η ${ctx.skippedReplacement} αντικατέστησε τον/την ${ctx.baselinePerson} ως επιλαχόνος τον ${monthLabel}.`;
+        }
+
+        /** Store skip reason + underline for assignee after defer-skip of prior-month alternate replacement. */
+        function tryStoreManualAlternateDeferFulfillmentReason(dateKey, groupNum, assignedPerson, deferFulfillment) {
+            if (!deferFulfillment?.skippedReplacement || !deferFulfillment?.baselinePerson || !assignedPerson) return false;
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            if (norm(assignedPerson) === norm(deferFulfillment.skippedReplacement)) return false;
+            if (typeof getAssignmentReason === 'function') {
+                const existing = getAssignmentReason(dateKey, groupNum, assignedPerson);
+                if (existing && !(existing.meta && existing.meta.manualAlternateDeferFulfillment)) return false;
+            }
+            const reason = buildManualAlternateDeferFulfillmentReason(deferFulfillment);
+            if (!reason) return false;
+            storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reason, deferFulfillment.skippedReplacement, null, {
+                manualAlternateDeferFulfillment: true
+            });
+            return true;
+        }
+
         /**
          * Manual alternate on date: rotation slot = baseline. deferState from previous month: skip replacement once when cursor hits them.
          */
-        function resolveRotationPositionWithManualAlternate(groupNum, groupPeople, rotationDays, globalRotationPosition, deferState, dateKey) {
+        function resolveRotationPositionWithManualAlternate(
+            groupNum,
+            groupPeople,
+            rotationDays,
+            globalRotationPosition,
+            deferState,
+            dateKey,
+            dayTypeCategory
+        ) {
             const existingManualAlternate = findExistingManualAlternateOnDateGroup(dateKey, groupNum);
             let rotationPosition = Number.isFinite(globalRotationPosition[groupNum])
                 ? globalRotationPosition[groupNum] % rotationDays
                 : 0;
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            let deferFulfillment = null;
+            const dutyCat =
+                dayTypeCategory ||
+                (typeof getDutyCategoryForDateKeyLocal === 'function' ? getDutyCategoryForDateKeyLocal(dateKey) : null) ||
+                (typeof getDutyCategoryForDateKey === 'function' ? getDutyCategoryForDateKey(dateKey) : 'normal');
+
             if (existingManualAlternate) {
                 const bi = groupPeople.findIndex(p => norm(p) === norm(existingManualAlternate.baseline));
                 if (bi >= 0) {
@@ -1302,6 +1353,26 @@
                 const st = deferState[groupNum];
                 if (st?.person) {
                     const dn = norm(st.person);
+                    const atDeferPerson =
+                        groupPeople[rotationPosition] && norm(groupPeople[rotationPosition]) === dn;
+                    if (atDeferPerson && dutyCat) {
+                        const dateInMonth = new Date(dateKey + 'T00:00:00');
+                        const latest =
+                            typeof getManualAlternateDeferFromPreviousMonth === 'function'
+                                ? getManualAlternateDeferFromPreviousMonth(dutyCat, dateInMonth, groupNum)
+                                : typeof findLatestManualAlternateInPreviousMonth === 'function'
+                                  ? findLatestManualAlternateInPreviousMonth(dutyCat, dateInMonth, groupNum)
+                                  : null;
+                        deferFulfillment = {
+                            skippedReplacement: st.person,
+                            baselinePerson: latest?.baselinePerson || null,
+                            sourceDateKey: latest?.dateKey || null,
+                            prevMonthKey:
+                                typeof getPreviousMonthKeyFromDate === 'function'
+                                    ? getPreviousMonthKeyFromDate(dateInMonth)
+                                    : null
+                        };
+                    }
                     let guard = 0;
                     while (
                         guard++ <= rotationDays + 2 &&
@@ -1314,7 +1385,7 @@
                     globalRotationPosition[groupNum] = rotationPosition;
                 }
             }
-            return { rotationPosition, existingManualAlternate };
+            return { rotationPosition, existingManualAlternate, deferFulfillment };
         }
 
         /** Re-seed global rotation cursor at calendar month start (baseline continuity after manual alternate). */
@@ -3004,7 +3075,8 @@
                                 rotationDays,
                                 globalSpecialRotationPosition,
                                 deferManualAlternateSkipSpecial,
-                                dateKey
+                                dateKey,
+                                'special'
                             );
                             let rotationPosition = manualAltResolvedSpecial.rotationPosition % rotationDays;
                             const existingManualAlternateSpecial = manualAltResolvedSpecial.existingManualAlternate;
@@ -3179,6 +3251,19 @@
                             
                             // Store assignment for saving
                             if (assignedPerson) {
+                                if (
+                                    manualAltResolvedSpecial.deferFulfillment &&
+                                    !wasDisabledOnlySkippedSpecial &&
+                                    tryStoreManualAlternateDeferFulfillmentReason(
+                                        dateKey,
+                                        groupNum,
+                                        assignedPerson,
+                                        manualAltResolvedSpecial.deferFulfillment
+                                    )
+                                ) {
+                                    specialRotationPersons[dateKey][groupNum] =
+                                        manualAltResolvedSpecial.deferFulfillment.skippedReplacement;
+                                }
                                 if (!tempSpecialAssignments[dateKey]) {
                                     tempSpecialAssignments[dateKey] = {};
                                 }
@@ -7875,7 +7960,8 @@
                                 rotationDays,
                                 globalWeekendRotationPosition,
                                 deferManualAlternateSkipWeekend,
-                                dateKey
+                                dateKey,
+                                'weekend'
                             );
                             let rotationPosition = manualAltResolved.rotationPosition;
                             const existingManualAlternateWeekend = manualAltResolved.existingManualAlternate;
@@ -8070,6 +8156,19 @@
                                     assignedPeoplePreviewWeekend[monthKey][groupNum][assignedPerson] = dateKey;
                                 }
                                 
+                                if (
+                                    manualAltResolved.deferFulfillment &&
+                                    !wasDisabledOnlySkippedWeekend &&
+                                    tryStoreManualAlternateDeferFulfillmentReason(
+                                        dateKey,
+                                        groupNum,
+                                        assignedPerson,
+                                        manualAltResolved.deferFulfillment
+                                    )
+                                ) {
+                                    weekendRotationPersons[dateKey][groupNum] =
+                                        manualAltResolved.deferFulfillment.skippedReplacement;
+                                }
                                 const isManualAltWeekend = isManualAlternateReplacementOnDate(dateKey, groupNum, assignedPerson);
                                 markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipWeekend);
                                 advanceGlobalRotationAfterDutyAssignment(
@@ -8431,6 +8530,7 @@
             const baseline = {}; // dateKey -> { groupNum -> person }
             const globalSemiPos = {}; // groupNum -> index (continues across semi days)
             const deferManualAlternateSkipSemiRun = {};
+            const semiDeferFulfillmentPending = {}; // `${dateKey}:${groupNum}` -> defer context
             let prevCalMonthKeySemiDeferRun = null;
             for (const dateKey of sortedSemi) {
                 const meta = semiMeta[dateKey];
@@ -8495,6 +8595,22 @@
                         const stDefer = deferManualAlternateSkipSemiRun[groupNum];
                         if (stDefer?.person) {
                             const dn = normSemiRun(stDefer.person);
+                            let deferFulfillmentSemiRun = null;
+                            if (groupPeople[pos] && normSemiRun(groupPeople[pos]) === dn) {
+                                const latestSemi =
+                                    typeof getManualAlternateDeferFromPreviousMonth === 'function'
+                                        ? getManualAlternateDeferFromPreviousMonth('semi', date, groupNum)
+                                        : null;
+                                deferFulfillmentSemiRun = {
+                                    skippedReplacement: stDefer.person,
+                                    baselinePerson: latestSemi?.baselinePerson || null,
+                                    sourceDateKey: latestSemi?.dateKey || null,
+                                    prevMonthKey:
+                                        typeof getPreviousMonthKeyFromDate === 'function'
+                                            ? getPreviousMonthKeyFromDate(date)
+                                            : null
+                                };
+                            }
                             let guard = 0;
                             while (
                                 guard++ <= rotationDays + 2 &&
@@ -8505,6 +8621,9 @@
                                 delete deferManualAlternateSkipSemiRun[groupNum];
                             }
                             globalSemiPos[groupNum] = pos;
+                            if (deferFulfillmentSemiRun) {
+                                semiDeferFulfillmentPending[`${dateKey}:${groupNum}`] = deferFulfillmentSemiRun;
+                            }
                         }
                     }
                     let person = groupPeople[pos];
@@ -8556,6 +8675,16 @@
                     if (existingManualAlternateSemiRun && baseline[dateKey][groupNum] &&
                         normSemiRun(baseline[dateKey][groupNum]) === normSemiRun(existingManualAlternateSemiRun.replacement)) {
                         nextPos = (pos + 1) % rotationDays;
+                    }
+                    const deferKeySemiRun = `${dateKey}:${groupNum}`;
+                    if (semiDeferFulfillmentPending[deferKeySemiRun] && baseline[dateKey][groupNum]) {
+                        tryStoreManualAlternateDeferFulfillmentReason(
+                            dateKey,
+                            groupNum,
+                            baseline[dateKey][groupNum],
+                            semiDeferFulfillmentPending[deferKeySemiRun]
+                        );
+                        delete semiDeferFulfillmentPending[deferKeySemiRun];
                     }
                     globalSemiPos[groupNum] = nextPos;
                 }
@@ -9221,7 +9350,8 @@
                                 rotationDays,
                                 globalSemiRotationPosition,
                                 deferManualAlternateSkipSemi,
-                                dateKey
+                                dateKey,
+                                'semi'
                             );
                             let rotationPosition = manualAltResolvedSemi.rotationPosition;
                             const existingManualAlternateSemi = manualAltResolvedSemi.existingManualAlternate;
@@ -9440,6 +9570,21 @@
                                 semiAssignments[dateKey] = {};
                             }
                             semiAssignments[dateKey][groupNum] = assignedPerson;
+                            if (
+                                assignedPerson &&
+                                manualAltResolvedSemi.deferFulfillment &&
+                                !wasDisabledOnlySkippedSemi &&
+                                tryStoreManualAlternateDeferFulfillmentReason(
+                                    dateKey,
+                                    groupNum,
+                                    assignedPerson,
+                                    manualAltResolvedSemi.deferFulfillment
+                                )
+                            ) {
+                                if (!semiRotationPersons[dateKey]) semiRotationPersons[dateKey] = {};
+                                semiRotationPersons[dateKey][groupNum] =
+                                    manualAltResolvedSemi.deferFulfillment.skippedReplacement;
+                            }
                             
                             // Track that this person has been assigned (to prevent duplicate assignment later)
                             if (assignedPerson && assignedPeoplePreviewSemi[monthKey] && assignedPeoplePreviewSemi[monthKey][groupNum]) {
@@ -10303,43 +10448,20 @@
                                 }
                             }
                             
-                            let existingManualAlternate = null;
-                            const gReasonsEarly = assignmentReasons[dateKey]?.[groupNum];
-                            if (gReasonsEarly) {
-                                for (const pn in gReasonsEarly) {
-                                    const r = gReasonsEarly[pn];
-                                    if (r && r.type === 'skip' && r.meta && r.meta.manualAlternateReplacement && r.swappedWith) {
-                                        existingManualAlternate = { replacement: pn, baseline: r.swappedWith };
-                                        break;
-                                    }
-                                }
-                            }
+                            let existingManualAlternate = findExistingManualAlternateOnDateGroup(dateKey, groupNum);
 
-                            let rotationPosition = globalNormalRotationPosition[groupNum] % rotationDays;
-
-                            // Manual alternate day: rotation slot is baseline (A), not wherever the global cursor was.
-                            if (existingManualAlternate) {
-                                const bi = groupPeople.indexOf(existingManualAlternate.baseline);
-                                if (bi >= 0) {
-                                    rotationPosition = bi;
-                                    globalNormalRotationPosition[groupNum] = rotationPosition;
-                                }
-                            } else {
-                                const st = deferManualAlternateSkipNormal[groupNum];
-                                if (st?.person) {
-                                    const dn = normalizePersonKey(st.person);
-                                    let guard = 0;
-                                    while (
-                                        guard++ <= rotationDays + 2 &&
-                                        groupPeople[rotationPosition] &&
-                                        normalizePersonKey(groupPeople[rotationPosition]) === dn
-                                    ) {
-                                        rotationPosition = (rotationPosition + 1) % rotationDays;
-                                        delete deferManualAlternateSkipNormal[groupNum];
-                                    }
-                                    globalNormalRotationPosition[groupNum] = rotationPosition;
-                                }
-                            }
+                            const manualAltResolvedNormal = resolveRotationPositionWithManualAlternate(
+                                groupNum,
+                                groupPeople,
+                                rotationDays,
+                                globalNormalRotationPosition,
+                                deferManualAlternateSkipNormal,
+                                dateKey,
+                                'normal'
+                            );
+                            let rotationPosition = manualAltResolvedNormal.rotationPosition % rotationDays;
+                            existingManualAlternate = manualAltResolvedNormal.existingManualAlternate || existingManualAlternate;
+                            const deferFulfillmentNormal = manualAltResolvedNormal.deferFulfillment;
                             
                             // IMPORTANT: Track the rotation person (who SHOULD be assigned according to rotation)
                             // This is the person BEFORE any swap/cross-month/missing logic
@@ -10627,6 +10749,21 @@
                                 normalAssignments[dateKey] = {};
                             }
                             normalAssignments[dateKey][groupNum] = assignedPerson;
+                            
+                            if (
+                                assignedPerson &&
+                                deferFulfillmentNormal &&
+                                !wasDisabledOnlySkippedInBaseline &&
+                                tryStoreManualAlternateDeferFulfillmentReason(
+                                    dateKey,
+                                    groupNum,
+                                    assignedPerson,
+                                    deferFulfillmentNormal
+                                )
+                            ) {
+                                if (!normalRotationPersons[dateKey]) normalRotationPersons[dateKey] = {};
+                                normalRotationPersons[dateKey][groupNum] = deferFulfillmentNormal.skippedReplacement;
+                            }
                             
                             // Track that this person has been assigned (to prevent nearby duplicate assignments)
                             if (assignedPerson && assignedPeoplePreview[monthKey] && assignedPeoplePreview[monthKey][groupNum]) {
