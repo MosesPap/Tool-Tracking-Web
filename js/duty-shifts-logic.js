@@ -933,12 +933,33 @@
             if (isFeb2026 || (isApril && (groupNum === 1 || groupNum === 2))) {
                 posState = 0;
             } else {
-                const last = getLastRotationPersonForDate('semi', firstDt, groupNum);
-                const idx = groupPeople.indexOf(last);
+                const last = typeof getRotationSeedPersonForMonthStart === 'function'
+                    ? getRotationSeedPersonForMonthStart('semi', firstDt, groupNum)
+                    : getLastRotationPersonForDate('semi', firstDt, groupNum);
+                const normMap = (s) => normalizePersonKey(s);
+                const idx = last ? groupPeople.findIndex(p => normMap(p) === normMap(last)) : -1;
                 posState = (last && idx >= 0) ? (idx + 1) % rotLen : 0;
             }
+            let deferSkip = null;
+            if (typeof findLatestManualAlternateInPreviousMonth === 'function') {
+                const prevManual = findLatestManualAlternateInPreviousMonth('semi', firstDt, groupNum);
+                if (prevManual?.replacementPerson) deferSkip = prevManual.replacementPerson;
+            }
+            const normMap = (s) => normalizePersonKey(s);
             for (const dk of semiDays) {
-                const pos = posState % rotLen;
+                if (typeof findManualAlternateReplacementForGroup === 'function') {
+                    const manual = findManualAlternateReplacementForGroup(dk, groupNum);
+                    if (manual) {
+                        const bIdx = groupPeople.findIndex(p => normMap(p) === normMap(manual.baselinePerson));
+                        if (bIdx >= 0) posState = (bIdx + 1) % rotLen;
+                        continue;
+                    }
+                }
+                let pos = posState % rotLen;
+                if (deferSkip && groupPeople[pos] && normMap(groupPeople[pos]) === normMap(deferSkip)) {
+                    pos = (pos + 1) % rotLen;
+                    deferSkip = null;
+                }
                 out[dk] = groupPeople[pos];
                 posState = (pos + 1) % rotLen;
             }
@@ -8379,10 +8400,19 @@
             // 1) Build baseline by rotation order (per group); at return-from-missing targets place returning person and continue rotation from displaced
             const baseline = {}; // dateKey -> { groupNum -> person }
             const globalSemiPos = {}; // groupNum -> index (continues across semi days)
+            const deferManualAlternateSkipSemiRun = {};
+            let prevCalMonthKeySemiDeferRun = null;
             for (const dateKey of sortedSemi) {
                 const meta = semiMeta[dateKey];
                 if (!meta) continue;
                 const { date, monthKey } = meta;
+                if (prevCalMonthKeySemiDeferRun !== monthKey) {
+                    for (const k of Object.keys(deferManualAlternateSkipSemiRun)) delete deferManualAlternateSkipSemiRun[k];
+                    if (typeof seedManualAlternateDeferAllGroupsForMonthStart === 'function') {
+                        seedManualAlternateDeferAllGroupsForMonthStart(deferManualAlternateSkipSemiRun, 'semi', date);
+                    }
+                    prevCalMonthKeySemiDeferRun = monthKey;
+                }
                 if (!baseline[dateKey]) baseline[dateKey] = {};
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
@@ -8414,13 +8444,40 @@
                         const isAprilStart = startDate && startDate.getMonth() === 3; // April
                         if (isFeb2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) globalSemiPos[groupNum] = 0;
                         else {
-                            const lastPerson = getLastRotationPersonForDate('semi', date, groupNum);
-                            const idx = groupPeople.indexOf(lastPerson);
+                            const lastPerson = typeof getRotationSeedPersonForMonthStart === 'function'
+                                ? getRotationSeedPersonForMonthStart('semi', date, groupNum)
+                                : getLastRotationPersonForDate('semi', date, groupNum);
+                            const idx = lastPerson
+                                ? groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(lastPerson))
+                                : -1;
                             globalSemiPos[groupNum] = (lastPerson && idx >= 0) ? (idx + 1) % rotationDays : (getRotationPosition(date, 'semi', groupNum) % rotationDays);
                         }
                     }
-                    const pos = globalSemiPos[groupNum] % rotationDays;
-                    const person = groupPeople[pos];
+                    let pos = globalSemiPos[groupNum] % rotationDays;
+                    const existingManualAlternateSemiRun = findExistingManualAlternateOnDateGroup(dateKey, groupNum);
+                    if (existingManualAlternateSemiRun) {
+                        const bi = groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(existingManualAlternateSemiRun.baseline));
+                        if (bi >= 0) {
+                            pos = bi;
+                            globalSemiPos[groupNum] = pos;
+                        }
+                    } else {
+                        const stDefer = deferManualAlternateSkipSemiRun[groupNum];
+                        if (stDefer?.person) {
+                            const dn = normSemiRun(stDefer.person);
+                            let guard = 0;
+                            while (
+                                guard++ <= rotationDays + 2 &&
+                                groupPeople[pos] &&
+                                normSemiRun(groupPeople[pos]) === dn
+                            ) {
+                                pos = (pos + 1) % rotationDays;
+                                delete deferManualAlternateSkipSemiRun[groupNum];
+                            }
+                            globalSemiPos[groupNum] = pos;
+                        }
+                    }
+                    let person = groupPeople[pos];
                     let nextPos = (pos + 1) % rotationDays; // default: next slot goes to person after current pos
                     // DISABLED: When rotation person is disabled, whole baseline shifts – store eligible person, no replacement line.
                     if (person && isPersonDisabledForDuty(person, groupNum, 'semi')) {
@@ -8456,6 +8513,15 @@
                         if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays; // next semi goes to person after the one we assigned
                     } else {
                         baseline[dateKey][groupNum] = person;
+                    }
+                    baseline[dateKey][groupNum] = applyManualAlternateToAssignedPerson(
+                        baseline[dateKey][groupNum],
+                        existingManualAlternateSemiRun,
+                        false
+                    );
+                    if (existingManualAlternateSemiRun && baseline[dateKey][groupNum] &&
+                        normSemiRun(baseline[dateKey][groupNum]) === normSemiRun(existingManualAlternateSemiRun.replacement)) {
+                        nextPos = (pos + 1) % rotationDays;
                     }
                     globalSemiPos[groupNum] = nextPos;
                 }
@@ -8586,7 +8652,15 @@
                 if (!m) continue;
                 if (!lastSemiRotationPositionsByMonth[m.monthKey]) lastSemiRotationPositionsByMonth[m.monthKey] = {};
                 const g = finalAssignments[dateKey];
-                if (g) for (let groupNum = 1; groupNum <= 4; groupNum++) if (g[groupNum]) lastSemiRotationPositionsByMonth[m.monthKey][groupNum] = g[groupNum];
+                if (g) {
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        if (!g[groupNum]) continue;
+                        const personForRotation = typeof getPersonForRotationContinuity === 'function'
+                            ? getPersonForRotationContinuity(dateKey, groupNum, g[groupNum], finalAssignments)
+                            : g[groupNum];
+                        if (personForRotation) lastSemiRotationPositionsByMonth[m.monthKey][groupNum] = personForRotation;
+                    }
+                }
             }
 
             try {
@@ -9090,7 +9164,8 @@
                                     const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
                                         ? getRotationSeedPersonForMonthStart('semi', date, groupNum)
                                         : getLastRotationPersonForDate('semi', date, groupNum);
-                                    const lastPersonIndex = groupPeople.indexOf(lastPersonName);
+                                    const normSemiSeed = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                                    const lastPersonIndex = groupPeople.findIndex(p => normSemiSeed(p) === normSemiSeed(lastPersonName));
                                     if (lastPersonName && lastPersonIndex >= 0) {
                                         // Found last person - start from next person
                                         globalSemiRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
