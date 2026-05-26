@@ -1784,7 +1784,7 @@
                     <button class="btn btn-sm btn-info" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
                         <i class="fas fa-sort-numeric-down me-1"></i>Ιεραρχία
                     </button>
-                    <button class="btn btn-sm btn-primary" onclick="openCalculateDutiesModal()">
+                    <button class="btn btn-sm btn-primary" onclick="openCalcMonthPicker()">
                         <i class="fas fa-calculator me-1"></i>Υπολογισμός Υπηρεσιών
                     </button>
                     <button class="btn btn-sm btn-success" onclick="openExcelMonthPicker()">
@@ -2442,6 +2442,33 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
                     <button type="button" class="btn btn-info" onclick="saveRecurringHoliday()">Αποθήκευση</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calculation month picker modal (Greek) -->
+    <div class="modal fade" id="calcMonthPickerModal" tabindex="-1" aria-labelledby="calcMonthPickerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="calcMonthPickerModalLabel"><i class="fas fa-calculator me-2"></i>Επιλογή μήνα υπολογισμού</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="calcMonthPickerPrevYear">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <h5 class="mb-0" id="calcMonthPickerYear"></h5>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="calcMonthPickerNextYear">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <div class="row g-2" id="calcMonthPickerMonths"></div>
+                    <div class="alert alert-info mt-3 mb-0">
+                        <small><i class="fas fa-info-circle me-1"></i>Επιλέξτε τον μήνα για τον οποίο θέλετε να ξεκινήσει ο υπολογισμός υπηρεσιών.</small>
+                    </div>
                 </div>
             </div>
         </div>

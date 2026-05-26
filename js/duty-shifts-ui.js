@@ -5270,14 +5270,73 @@
             // So days passed = currentIndex - (lastDutyIndex + 1) = currentIndex - lastDutyIndex - 1
             return currentIndex - lastDutyIndex - 1;
         }
-        function openCalculateDutiesModal() {
-            // Set default to current month
-            const currentYear = currentDate.getFullYear();
-            const currentMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
+        function openCalcMonthPicker() {
+            const modalEl = document.getElementById('calcMonthPickerModal');
+            const yearEl = document.getElementById('calcMonthPickerYear');
+            const monthsEl = document.getElementById('calcMonthPickerMonths');
+            if (!modalEl || !yearEl || !monthsEl) {
+                openCalculateDutiesModal();
+                return;
+            }
+
+            const greekMonthNames = (() => {
+                const names = [];
+                for (let m = 0; m < 12; m++) {
+                    names.push(new Date(2024, m, 1).toLocaleDateString('el-GR', { month: 'long' }));
+                }
+                return names;
+            })();
+
+            const base = (currentDate instanceof Date && !isNaN(currentDate.getTime())) ? currentDate : new Date();
+            let pickerYear = base.getFullYear();
+
+            const renderPickerMonths = () => {
+                yearEl.textContent = pickerYear;
+                monthsEl.innerHTML = '';
+                greekMonthNames.forEach((name, index) => {
+                    const col = document.createElement('div');
+                    col.className = 'col-4';
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'btn btn-outline-primary w-100';
+                    btn.textContent = name;
+                    btn.addEventListener('click', () => {
+                        const monthValue = `${pickerYear}-${String(index + 1).padStart(2, '0')}`;
+                        const pickerModal = bootstrap.Modal.getInstance(modalEl);
+                        const openCalcModal = () => openCalculateDutiesModal(monthValue);
+                        if (pickerModal) {
+                            modalEl.addEventListener('hidden.bs.modal', openCalcModal, { once: true });
+                            pickerModal.hide();
+                        } else {
+                            openCalcModal();
+                        }
+                    });
+                    col.appendChild(btn);
+                    monthsEl.appendChild(col);
+                });
+            };
+
+            const prevBtn = document.getElementById('calcMonthPickerPrevYear');
+            const nextBtn = document.getElementById('calcMonthPickerNextYear');
+            if (prevBtn) prevBtn.onclick = () => { pickerYear--; renderPickerMonths(); };
+            if (nextBtn) nextBtn.onclick = () => { pickerYear++; renderPickerMonths(); };
+
+            renderPickerMonths();
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        function openCalculateDutiesModal(preselectedMonth) {
             const startMonthInput = document.getElementById('calculateStartMonth');
             
             if (startMonthInput) {
-                startMonthInput.value = `${currentYear}-${currentMonth}`;
+                if (preselectedMonth && /^\d{4}-\d{2}$/.test(String(preselectedMonth))) {
+                    startMonthInput.value = String(preselectedMonth);
+                } else {
+                    const currentYear = currentDate.getFullYear();
+                    const currentMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
+                    startMonthInput.value = `${currentYear}-${currentMonth}`;
+                }
             }
             for (let g = 1; g <= 4; g++) {
                 const stripCb = document.getElementById(`calcStripManualOverridesG${g}`);
