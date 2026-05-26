@@ -1286,21 +1286,18 @@
         /** Greek reason when someone is assigned after skipping prior-month alternate replacement once. */
         function buildManualAlternateDeferFulfillmentReason(ctx) {
             if (!ctx?.skippedReplacement || !ctx?.baselinePerson) return '';
-            let monthLabel = '';
+            let whenPhrase = 'σε προηγούμενη ημερομηνία';
             if (ctx.sourceDateKey && /^\d{4}-\d{2}-\d{2}$/.test(ctx.sourceDateKey)) {
                 const d = new Date(ctx.sourceDateKey + 'T00:00:00');
                 if (!isNaN(d.getTime())) {
-                    monthLabel = d.toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
+                    const dateStr = d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    const dayArt =
+                        typeof getGreekDayAccusativeArticle === 'function' ? getGreekDayAccusativeArticle(d) : 'την';
+                    const dayName = typeof getGreekDayName === 'function' ? getGreekDayName(d) : '';
+                    whenPhrase = dayName ? `${dayArt} ${dayName} ${dateStr}` : `στις ${dateStr}`;
                 }
             }
-            if (!monthLabel && ctx.prevMonthKey && /^\d{4}-\d{2}$/.test(ctx.prevMonthKey)) {
-                const [y, mo] = ctx.prevMonthKey.split('-').map(Number);
-                if (Number.isFinite(y) && Number.isFinite(mo)) {
-                    monthLabel = new Date(y, mo - 1, 1).toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
-                }
-            }
-            if (!monthLabel) monthLabel = 'τον προηγούμενο μήνα';
-            return `Ανατέθηκε επειδή ο/η ${ctx.skippedReplacement} αντικατέστησε τον/την ${ctx.baselinePerson} ως επιλαχόνος τον ${monthLabel}.`;
+            return `Ανατέθηκε επειδή ο/η ${ctx.skippedReplacement} αντικατέστησε τον/την ${ctx.baselinePerson} ως επιλαχών ${whenPhrase}.`;
         }
 
         /** Store skip reason + underline for assignee after defer-skip of prior-month alternate replacement. */
