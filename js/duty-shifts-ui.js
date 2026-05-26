@@ -1026,17 +1026,17 @@
                 const fromIndex = parseInt(draggedElement.dataset.index);
                 const toIndex = parseInt(this.dataset.index);
                 const modifiedListId = `${listType}List_${groupNum}`;
-
+                
                 const applyListReorder = (effKey) => {
-                    const list = groups[groupNum][listType];
-                    const person = list[fromIndex];
-                    list.splice(fromIndex, 1);
-                    list.splice(toIndex, 0, person);
-                    if (!groups[groupNum].priorities) groups[groupNum].priorities = {};
+                const list = groups[groupNum][listType];
+                const person = list[fromIndex];
+                list.splice(fromIndex, 1);
+                list.splice(toIndex, 0, person);
+                if (!groups[groupNum].priorities) groups[groupNum].priorities = {};
                         list.forEach((personName, idx) => {
-                            if (!groups[groupNum].priorities[personName]) {
-                                groups[groupNum].priorities[personName] = {};
-                            }
+                    if (!groups[groupNum].priorities[personName]) {
+                        groups[groupNum].priorities[personName] = {};
+                    }
                             groups[groupNum].priorities[personName][listType] = idx + 1;
                         });
                         if (typeof syncGroupListArraysFromPriorities === 'function') {
@@ -1053,7 +1053,7 @@
                             alert(`Η αλλαγή σειράς καταχωρήθηκε.\nΙσχύει από ${effLabel}${suffix}`);
                         }
                     }
-                    saveData();
+                saveData();
                     renderGroups(true, [modifiedListId]);
                 };
 
@@ -1068,7 +1068,7 @@
                                 : undefined,
                         onConfirm: (effKey) => applyListReorder(effKey),
                         onCancel: () => {
-                            renderGroups(true, [modifiedListId]);
+                renderGroups(true, [modifiedListId]);
                         }
                     });
                 } else {
@@ -1771,67 +1771,67 @@
 
         /** Baseline only after manual alternate — calculated month is not reflowed (defer applies on next month calc). */
         async function runManualAlternateReplacementEffects(groupNum, personName, replacement, dateKey, typeCategory) {
-            const getBaselineObj = () => {
-                if (typeCategory === 'special') return rotationBaselineSpecialAssignments;
-                if (typeCategory === 'weekend') return rotationBaselineWeekendAssignments;
-                if (typeCategory === 'semi') return rotationBaselineSemiAssignments;
-                return rotationBaselineNormalAssignments;
-            };
-            const baselineObj = getBaselineObj();
-            const existingBaseline = baselineObj?.[dateKey] || null;
-            const baselineMap = extractGroupAssignmentsMap(existingBaseline);
-            baselineMap[groupNum] = personName;
-            const baseParts = [];
-            for (let g = 1; g <= 4; g++) {
-                const pn = baselineMap[g];
-                if (pn) baseParts.push(`${pn} (Ομάδα ${g})`);
-            }
-            const baselineStr = baseParts.join(', ');
-            baselineObj[dateKey] = baselineStr;
-            if (window.db && firebase?.firestore) {
-                const db = window.db || firebase.firestore();
-                const user = window.auth?.currentUser;
-                const monthName = (typeof getMonthNameFromDateKey === 'function') ? getMonthNameFromDateKey(dateKey) : null;
-                const docId = typeCategory === 'special'
-                    ? 'rotationBaselineSpecialAssignments'
-                    : (typeCategory === 'weekend'
-                        ? 'rotationBaselineWeekendAssignments'
-                        : (typeCategory === 'semi'
-                            ? 'rotationBaselineSemiAssignments'
-                            : 'rotationBaselineNormalAssignments'));
-                if (user && monthName && typeof mergeAndSaveMonthOrganizedAssignmentsDoc === 'function') {
-                    const patch = { [monthName]: { [dateKey]: baselineStr } };
-                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, docId, patch);
-                }
-            }
+                    const getBaselineObj = () => {
+                        if (typeCategory === 'special') return rotationBaselineSpecialAssignments;
+                        if (typeCategory === 'weekend') return rotationBaselineWeekendAssignments;
+                        if (typeCategory === 'semi') return rotationBaselineSemiAssignments;
+                        return rotationBaselineNormalAssignments;
+                    };
+                    const baselineObj = getBaselineObj();
+                    const existingBaseline = baselineObj?.[dateKey] || null;
+                    const baselineMap = extractGroupAssignmentsMap(existingBaseline);
+                    baselineMap[groupNum] = personName;
+                    const baseParts = [];
+                    for (let g = 1; g <= 4; g++) {
+                        const pn = baselineMap[g];
+                        if (pn) baseParts.push(`${pn} (Ομάδα ${g})`);
+                    }
+                    const baselineStr = baseParts.join(', ');
+                    baselineObj[dateKey] = baselineStr;
+                    if (window.db && firebase?.firestore) {
+                        const db = window.db || firebase.firestore();
+                        const user = window.auth?.currentUser;
+                        const monthName = (typeof getMonthNameFromDateKey === 'function') ? getMonthNameFromDateKey(dateKey) : null;
+                        const docId = typeCategory === 'special'
+                            ? 'rotationBaselineSpecialAssignments'
+                            : (typeCategory === 'weekend'
+                                ? 'rotationBaselineWeekendAssignments'
+                                : (typeCategory === 'semi'
+                                    ? 'rotationBaselineSemiAssignments'
+                                    : 'rotationBaselineNormalAssignments'));
+                        if (user && monthName && typeof mergeAndSaveMonthOrganizedAssignmentsDoc === 'function') {
+                            const patch = { [monthName]: { [dateKey]: baselineStr } };
+                            await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, docId, patch);
+                        }
+                    }
             if (typeof rebuildRotationBaselineLastByType === 'function') {
                 rebuildRotationBaselineLastByType();
             }
-            const monthPrefix = dateKey.slice(0, 7) + '-';
-            const normName = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            const targetNames = new Set([normName(personName), normName(replacement)]);
-            const swapPairIdsToClear = new Set();
-            for (const dk in assignmentReasons) {
-                if (!dk || !dk.startsWith(monthPrefix)) continue;
-                const gMap = assignmentReasons?.[dk]?.[groupNum];
-                if (!gMap || typeof gMap !== 'object') continue;
-                for (const pn in gMap) {
-                    const rr = gMap[pn];
-                    if (!rr || rr.type !== 'swap' || rr.swapPairId == null) continue;
-                    const n1 = normName(pn);
-                    const n2 = normName(rr.swappedWith);
+                        const monthPrefix = dateKey.slice(0, 7) + '-';
+                        const normName = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                        const targetNames = new Set([normName(personName), normName(replacement)]);
+                        const swapPairIdsToClear = new Set();
+                        for (const dk in assignmentReasons) {
+                            if (!dk || !dk.startsWith(monthPrefix)) continue;
+                            const gMap = assignmentReasons?.[dk]?.[groupNum];
+                            if (!gMap || typeof gMap !== 'object') continue;
+                            for (const pn in gMap) {
+                                const rr = gMap[pn];
+                                if (!rr || rr.type !== 'swap' || rr.swapPairId == null) continue;
+                                const n1 = normName(pn);
+                                const n2 = normName(rr.swappedWith);
                     if (targetNames.has(n1) || targetNames.has(n2)) swapPairIdsToClear.add(String(rr.swapPairId));
-                }
-            }
-            if (swapPairIdsToClear.size > 0) {
-                for (const dk in assignmentReasons) {
-                    if (!dk || !dk.startsWith(monthPrefix)) continue;
-                    const gMap = assignmentReasons?.[dk]?.[groupNum];
-                    if (!gMap || typeof gMap !== 'object') continue;
-                    for (const pn in gMap) {
-                        const rr = gMap[pn];
+                                }
+                            }
+                        if (swapPairIdsToClear.size > 0) {
+                            for (const dk in assignmentReasons) {
+                                if (!dk || !dk.startsWith(monthPrefix)) continue;
+                                const gMap = assignmentReasons?.[dk]?.[groupNum];
+                                if (!gMap || typeof gMap !== 'object') continue;
+                                for (const pn in gMap) {
+                                    const rr = gMap[pn];
                         if (rr?.type === 'swap' && rr.swapPairId != null && swapPairIdsToClear.has(String(rr.swapPairId))) {
-                            delete gMap[pn];
+                                        delete gMap[pn];
                         }
                     }
                     if (Object.keys(gMap).length === 0) delete assignmentReasons[dk][groupNum];
@@ -1914,13 +1914,13 @@
                 if (startIdx < 0) startIdx = 0;
                 for (let off = 1; off < list.length; off++) {
                     const cand = list[(startIdx + off) % list.length];
-                    if (!cand) continue;
+                                    if (!cand) continue;
                     if (norm(cand) === nSkip) continue;
                     if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, typeCategory)) continue;
                     if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(cand, groupNum, dateObj, typeCategory)) continue;
                     replacement = cand;
-                    break;
-                }
+                                    break;
+                                }
             } else {
                 if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(replacement, groupNum, typeCategory)) {
                     alert('Ο/η επιλεγμένος/η επιλαχόνος/α είναι απενεργοποιημένος/η για αυτόν τον τύπο υπηρεσίας.');
@@ -1984,8 +1984,8 @@
             if (!skipFinalSave) {
                 await saveData();
                 if (!skipCalendarReload) {
-                    renderCalendar();
-                    updateStatistics();
+                renderCalendar();
+                updateStatistics();
                 }
             }
             return true;
@@ -2131,26 +2131,26 @@
                 const g = groups[groupNum];
                 if (!g) return;
                 if (!g.disabledPersons) g.disabledPersons = {};
-                const any = st.all || st.special || st.weekend || st.semi || st.normal;
-                const keyName = (typeof normalizePersonKey === 'function') ? normalizePersonKey(personName) : String(personName || '').trim();
-                if (!any) {
-                    delete g.disabledPersons[personName];
-                    if (keyName) delete g.disabledPersons[keyName];
+            const any = st.all || st.special || st.weekend || st.semi || st.normal;
+            const keyName = (typeof normalizePersonKey === 'function') ? normalizePersonKey(personName) : String(personName || '').trim();
+            if (!any) {
+                delete g.disabledPersons[personName];
+                if (keyName) delete g.disabledPersons[keyName];
                 } else if (keyName) {
                     g.disabledPersons[keyName] = st;
                 } else {
                     g.disabledPersons[personName] = st;
                 }
-                saveData();
-                renderGroups();
-                const modal = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
-                if (modal) modal.hide();
-                openPersonActionsModal(
-                    currentPersonActionsGroup,
-                    currentPersonActionsName,
-                    currentPersonActionsIndex != null ? currentPersonActionsIndex : 0,
-                    currentPersonActionsListType || 'normal'
-                );
+            saveData();
+            renderGroups();
+            const modal = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
+            if (modal) modal.hide();
+            openPersonActionsModal(
+                currentPersonActionsGroup,
+                currentPersonActionsName,
+                currentPersonActionsIndex != null ? currentPersonActionsIndex : 0,
+                currentPersonActionsListType || 'normal'
+            );
             }
         }
         function openMissingDisabledPeopleModal() {
@@ -3316,12 +3316,12 @@
             if (!canMove) return;
 
             const applyMove = (effKey) => {
-                if (direction === 'up' && index > 0) {
-                    [list[index - 1], list[index]] = [list[index], list[index - 1]];
-                } else if (direction === 'down' && index < list.length - 1) {
-                    [list[index], list[index + 1]] = [list[index + 1], list[index]];
-                }
-                normalizeGroupPriorities(groupNumber);
+            if (direction === 'up' && index > 0) {
+                [list[index - 1], list[index]] = [list[index], list[index - 1]];
+            } else if (direction === 'down' && index < list.length - 1) {
+                [list[index], list[index + 1]] = [list[index + 1], list[index]];
+            }
+            normalizeGroupPriorities(groupNumber);
                 if (typeof syncGroupListArraysFromPriorities === 'function') {
                     syncGroupListArraysFromPriorities(groupNumber);
                 }
@@ -3338,8 +3338,8 @@
                         alert(`Η αλλαγή σειράς καταχωρήθηκε.\nΙσχύει από ${effLabel}${suffix}`);
                     }
                 }
-                saveData();
-                renderGroups();
+            saveData();
+            renderGroups();
             };
 
             if (isFlexibleStatusEffectiveDatesEnabled()) {
@@ -3785,7 +3785,7 @@
                         ? formatScheduledStatusEffectiveLabel(effNorm || effKey)
                         : effNorm || effKey || '';
             }
-
+            
             // Close modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('transferPositionModal'));
             modal.hide();
@@ -5335,8 +5335,8 @@
                 } else {
                     const currentYear = currentDate.getFullYear();
                     const currentMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
-                    startMonthInput.value = `${currentYear}-${currentMonth}`;
-                }
+                startMonthInput.value = `${currentYear}-${currentMonth}`;
+            }
             }
             for (let g = 1; g <= 4; g++) {
                 const stripCb = document.getElementById(`calcStripManualOverridesG${g}`);
@@ -6556,7 +6556,7 @@
                                                   dutyCategory: dayTypeCategory
                                               })
                                             : `Αντικατέστησε τον/την ${bp} (μη διαθέσιμος/η). Ανατέθηκε ο/η ${person.name}.`;
-                                } else {
+                            } else {
                                     derivedReasonText = buildUnavailableReplacementReason({
                                         skippedPersonName: bp,
                                         replacementPersonName: person.name,
@@ -6639,7 +6639,7 @@
                 } else if (reason) {
                     reasonDisplayText =
                         reason.type === 'skip'
-                            ? normalizeSkipReasonText(reason.reason)
+                        ? normalizeSkipReasonText(reason.reason)
                             : reason.type === 'swap'
                               ? normalizeSwapReasonText(reason.reason)
                               : reason.reason;
