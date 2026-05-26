@@ -969,14 +969,14 @@
         }
 
         /**
-         * Defer state: replacement serves next month on first rotation hit; skip their second hit in that month.
-         * deferState[groupNum] = { person, skipOnCursorMatch }
+         * Defer state: in the month after manual alternate, skip replacement person once when rotation reaches them.
+         * deferState[groupNum] = { person, skipOnCursorMatch: true }
          */
         function seedManualAlternateDeferFromPreviousMonth(deferState, dayTypeCategory, dateInMonth, groupNum) {
             if (!deferState || !dateInMonth) return;
             const latest = findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInMonth, groupNum);
             if (latest?.replacementPerson) {
-                deferState[groupNum] = { person: latest.replacementPerson, skipOnCursorMatch: false };
+                deferState[groupNum] = { person: latest.replacementPerson, skipOnCursorMatch: true };
             }
         }
 
@@ -1034,7 +1034,7 @@
                 const prevManual = findLatestManualAlternateInPreviousMonth(dayTypeCategory, monthSeedDate, groupNum);
                 if (prevManual?.replacementPerson) {
                     deferSkip = prevManual.replacementPerson;
-                    deferSkipOnCursor = false;
+                    deferSkipOnCursor = true;
                 }
                 for (let i = 0; i < keys.length; i++) {
                     const dk = keys[i];
@@ -1043,8 +1043,6 @@
                     if (manual && bIdx >= 0) {
                         if (i === targetIdx) return manual.baselinePerson;
                         idx = (bIdx + 1) % people.length;
-                        deferSkip = manual.replacementPerson;
-                        deferSkipOnCursor = true;
                         continue;
                     }
                     if (i === targetIdx) {
@@ -1069,9 +1067,6 @@
                         idx = (idx + 1) % people.length;
                         deferSkip = null;
                         deferSkipOnCursor = false;
-                    }
-                    if (deferSkip && people[idx] && normRotPersonName(people[idx]) === normRotPersonName(deferSkip) && !deferSkipOnCursor) {
-                        deferSkipOnCursor = true;
                     }
                     idx = (idx + 1) % people.length;
                 }

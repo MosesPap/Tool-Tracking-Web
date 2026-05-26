@@ -1261,9 +1261,7 @@
         }
 
         /**
-         * Apply manual-alternate rotation slot (baseline) and defer-skip of replacement person.
-         * deferState[groupNum] = { person, skipOnCursorMatch } — skip only when skipOnCursorMatch is true
-         * (same month after replacement); false = first hit in new month assigns replacement, then skip second hit.
+         * Manual alternate on date: rotation slot = baseline. deferState from previous month: skip replacement once when cursor hits them.
          */
         function resolveRotationPositionWithManualAlternate(groupNum, groupPeople, rotationDays, globalRotationPosition, deferState, dateKey) {
             const existingManualAlternate = findExistingManualAlternateOnDateGroup(dateKey, groupNum);
@@ -1279,7 +1277,7 @@
                 }
             } else if (deferState) {
                 const st = deferState[groupNum];
-                if (st?.person && st.skipOnCursorMatch) {
+                if (st?.person) {
                     const dn = norm(st.person);
                     let guard = 0;
                     while (
@@ -1296,14 +1294,8 @@
             return { rotationPosition, existingManualAlternate };
         }
 
-        function markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferState) {
-            if (!deferState || !assignedPerson) return;
-            const st = deferState[groupNum];
-            if (!st?.person || st.skipOnCursorMatch) return;
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            if (norm(st.person) === norm(assignedPerson)) {
-                st.skipOnCursorMatch = true;
-            }
+        function markManualAlternateDeferFulfilled() {
+            /* defer cleared in resolveRotationPositionWithManualAlternate when skip applied */
         }
 
         function applyManualAlternateToAssignedPerson(assignedPerson, existingManualAlternate, wasDisabledOnlySkipped) {
@@ -1335,9 +1327,8 @@
             const wasReplaced = !!(opts && opts.wasReplaced);
             const replacementIndex = opts && opts.replacementIndex != null ? opts.replacementIndex : null;
             const isManualAlt = !!(opts && opts.isManualAlternateReplacement);
-            if (isManualAlt && assignedPerson && deferState) {
+            if (isManualAlt && assignedPerson) {
                 globalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                deferState[groupNum] = { person: assignedPerson, skipOnCursorMatch: true };
                 return;
             }
             if (wasReplaced && replacementIndex !== null && assignedPerson) {
@@ -2774,6 +2765,25 @@
                                 isAprilStart ? 'April start' : 'February 2026'
                             }`
                         );
+                    } else if (firstDateKey && typeof getRotationSeedPersonForMonthStart === 'function') {
+                        const seedPerson = getRotationSeedPersonForMonthStart('special', new Date(firstDateKey + 'T00:00:00'), groupNum);
+                        const seedIdx = seedPerson ? groupPeople.indexOf(seedPerson) : -1;
+                        if (seedPerson && seedIdx >= 0) {
+                            globalSpecialRotationPosition[groupNum] = (seedIdx + 1) % rotationDays;
+                            console.log(`[SPECIAL ROTATION] From manual-alternate seed ${seedPerson} (index ${seedIdx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`);
+                        } else if (baselineDateKeysBeforePeriod.length > 0) {
+                            const lastBaselineDateKey = baselineDateKeysBeforePeriod[0];
+                            const lastBaselinePerson = getBaselinePersonForGroup(lastBaselineDateKey, groupNum);
+                            const idx = lastBaselinePerson ? groupPeople.indexOf(lastBaselinePerson) : -1;
+                            if (idx >= 0) {
+                                globalSpecialRotationPosition[groupNum] = (idx + 1) % rotationDays;
+                                console.log(`[SPECIAL ROTATION] From baseline ${lastBaselineDateKey} last baseline person ${lastBaselinePerson} (index ${idx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`);
+                            } else {
+                                globalSpecialRotationPosition[groupNum] = 0;
+                            }
+                        } else {
+                            globalSpecialRotationPosition[groupNum] = 0;
+                        }
                     } else if (baselineDateKeysBeforePeriod.length > 0) {
                         const lastBaselineDateKey = baselineDateKeysBeforePeriod[0];
                         const lastBaselinePerson = getBaselinePersonForGroup(lastBaselineDateKey, groupNum);
@@ -2848,6 +2858,8 @@
                 const assignedReturnFromMissingInForEach = new Set();
                 // When a return-from-missing person takes a slot, the displaced baseline gets the next available special (cascade).
                 const displacedByReturnFromMissing = { 1: [], 2: [], 3: [], 4: [] };
+                const deferManualAlternateSkipSpecial = {};
+                let prevCalMonthKeySpecialDefer = null;
 
                 sortedSpecial.forEach((dateKey, specialIndex) => {
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
@@ -2855,6 +2867,14 @@
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     const dayName = getGreekDayName(date);
                     const monthKeyForConflict = getMonthKeyFromDate(date);
+                    const calMonthKeySpecial = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    if (prevCalMonthKeySpecialDefer !== calMonthKeySpecial) {
+                        for (const k of Object.keys(deferManualAlternateSkipSpecial)) delete deferManualAlternateSkipSpecial[k];
+                        if (typeof seedManualAlternateDeferAllGroupsForMonthStart === 'function') {
+                            seedManualAlternateDeferAllGroupsForMonthStart(deferManualAlternateSkipSpecial, 'special', date);
+                        }
+                        prevCalMonthKeySpecialDefer = calMonthKeySpecial;
+                    }
                     if (!simulatedSpecialAssignmentsForConflict[monthKeyForConflict]) {
                         simulatedSpecialAssignmentsForConflict[monthKeyForConflict] = {};
                     }
@@ -2914,8 +2934,20 @@
                             html += '<td class="text-muted">-</td>';
                         } else {
                             const rotationDays = groupPeople.length;
-                            const rotationPosition = globalSpecialRotationPosition[groupNum] != null ? globalSpecialRotationPosition[groupNum] : 0;
-                            const rotationPerson = groupPeople[rotationPosition % rotationDays];
+                            if (globalSpecialRotationPosition[groupNum] === undefined) {
+                                globalSpecialRotationPosition[groupNum] = 0;
+                            }
+                            const manualAltResolvedSpecial = resolveRotationPositionWithManualAlternate(
+                                groupNum,
+                                groupPeople,
+                                rotationDays,
+                                globalSpecialRotationPosition,
+                                deferManualAlternateSkipSpecial,
+                                dateKey
+                            );
+                            let rotationPosition = manualAltResolvedSpecial.rotationPosition % rotationDays;
+                            const existingManualAlternateSpecial = manualAltResolvedSpecial.existingManualAlternate;
+                            const rotationPerson = groupPeople[rotationPosition];
                             if (!specialRotationPersons[dateKey]) {
                                 specialRotationPersons[dateKey] = {};
                             }
@@ -3062,6 +3094,26 @@
                                 if (!foundReplacement) assignedPerson = null;
                             }
 
+                            assignedPerson = applyManualAlternateToAssignedPerson(
+                                assignedPerson,
+                                existingManualAlternateSpecial,
+                                wasDisabledOnlySkippedSpecial
+                            );
+                            if (
+                                existingManualAlternateSpecial &&
+                                assignedPerson &&
+                                !wasDisabledOnlySkippedSpecial
+                            ) {
+                                const normSp = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                                if (normSp(assignedPerson) === normSp(existingManualAlternateSpecial.replacement)) {
+                                    specialRotationPersons[dateKey][groupNum] = existingManualAlternateSpecial.baseline;
+                                } else {
+                                    specialRotationPersons[dateKey][groupNum] = rotationPerson;
+                                }
+                            } else {
+                                specialRotationPersons[dateKey][groupNum] = rotationPerson;
+                            }
+
                             // Step 1 is special-holidays only: preview reflects missing replacement only (no weekend skip logic here).
                             
                             // Store assignment for saving
@@ -3076,17 +3128,21 @@
                                     simulatedSpecialAssignmentsForConflict[monthKeyForConflict][groupNum] = new Set();
                                 }
                                 simulatedSpecialAssignmentsForConflict[monthKeyForConflict][groupNum].add(assignedPerson);
-                                // Advance rotation: when replaced, use replacementIndex (disabled) or rotationPosition+1 (missing); else assignedIndex+1
-                                if (wasReplaced && replacementIndex !== null) {
-                                    if (wasDisabledOnlySkippedSpecial) {
-                                        globalSpecialRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
-                                    } else {
-                                        globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                const isManualAltSpecial = isManualAlternateReplacementOnDate(dateKey, groupNum, assignedPerson);
+                                advanceGlobalRotationAfterDutyAssignment(
+                                    groupNum,
+                                    groupPeople,
+                                    rotationDays,
+                                    rotationPosition,
+                                    assignedPerson,
+                                    globalSpecialRotationPosition,
+                                    deferManualAlternateSkipSpecial,
+                                    {
+                                        wasReplaced,
+                                        replacementIndex,
+                                        isManualAlternateReplacement: isManualAltSpecial
                                     }
-                                } else {
-                                    const assignedIndex = groupPeople.indexOf(assignedPerson);
-                                    globalSpecialRotationPosition[groupNum] = (assignedIndex !== -1 ? (assignedIndex + 1) : (rotationPosition + 1)) % rotationDays;
-                                }
+                                );
                             } else {
                                 globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                             }
@@ -10161,7 +10217,7 @@
                                 }
                             } else {
                                 const st = deferManualAlternateSkipNormal[groupNum];
-                                if (st?.person && st.skipOnCursorMatch) {
+                                if (st?.person) {
                                     const dn = normalizePersonKey(st.person);
                                     let guard = 0;
                                     while (
@@ -10415,7 +10471,6 @@
                                         markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
                                         if (isManualAlternateReplacement) {
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                            deferManualAlternateSkipNormal[groupNum] = { person: assignedPerson, skipOnCursorMatch: true };
                                         } else if (wasDisabledOnlySkippedInBaseline) {
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                         } else if (wasDisabledPersonSkipped && replacementIndex !== null) {
@@ -10433,7 +10488,6 @@
                                         markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
                                         if (isManualAlternateReplacement) {
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                            deferManualAlternateSkipNormal[groupNum] = { person: assignedPerson, skipOnCursorMatch: true };
                                         } else if (wasDisabledOnlySkippedInBaseline) {
                                             globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                         } else if (wasDisabledPersonSkipped && replacementIndex !== null) {
