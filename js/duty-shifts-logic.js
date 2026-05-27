@@ -1065,7 +1065,7 @@
             if (thirdDayAfterEnd) {
                 for (const wk of sortedWeekends) {
                     if (wk < thirdDayAfterEnd) continue;
-                    if (wk.substring(0, 7) !== periodMonthPrefix) break;
+                    if (wk.substring(0, 7) !== periodMonthPrefix) continue;
                     const t = tryKey(wk);
                     if (t) return t;
                 }
@@ -1081,7 +1081,18 @@
                 const t = tryKey(wk);
                 if (t) backward = t;
             }
-            return backward;
+            if (backward) return backward;
+            // Fallback: any eligible weekend in preferred month (e.g. before pStart when forward is after calcEnd)
+            for (const wk of sortedWeekends) {
+                if (wk.substring(0, 7) !== periodMonthPrefix) continue;
+                const t = tryKey(wk);
+                if (t) return t;
+            }
+            for (const wk of sortedWeekends) {
+                const t = tryKey(wk);
+                if (t) return t;
+            }
+            return null;
         }
 
         /** First eligible semi on/after threshold: prefer same calendar month as threshold, then any later semi in range. */
@@ -1121,7 +1132,16 @@
                     const t = tryKey(dk);
                     if (t) backward = t;
                 }
-                return backward;
+                if (backward) return backward;
+            }
+            for (const dk of sortedSemi) {
+                if (monthPrefix && dk.substring(0, 7) !== monthPrefix) continue;
+                const t = tryKey(dk);
+                if (t) return t;
+            }
+            for (const dk of sortedSemi) {
+                const t = tryKey(dk);
+                if (t) return t;
             }
             return null;
         }
@@ -8082,39 +8102,47 @@
                                 const prevMonthEndKey = prevMonthEnd ? formatDateKey(prevMonthEnd) : null;
                                 const periodEndsInRange = (pEndKey >= calcStartKeyW && pEndKey <= calcEndKeyW);
                                 const periodEndsInPrevMonth = (prevMonthStartKey && prevMonthEndKey && pEndKey >= prevMonthStartKey && pEndKey <= prevMonthEndKey);
-                                if (!periodEndsInRange && !periodEndsInPrevMonth) continue;
+                                const returnKeyForRangeW = addDaysW(pEndKey, 1);
+                                const returnInCalcRangeW = returnKeyForRangeW && returnKeyForRangeW >= calcStartKeyW && returnKeyForRangeW <= calcEndKeyW;
+                                const periodOverlapsCalcW = (pStartKey <= calcEndKeyW && pEndKey >= calcStartKeyW);
+                                const acceptWeekendReturnPeriod = periodEndsInRange || periodEndsInPrevMonth || returnInCalcRangeW || periodOverlapsCalcW;
+                                if (!acceptWeekendReturnPeriod) continue;
                                 const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                 if (processedWeekendReturn.has(dedupeKey)) continue;
                                 processedWeekendReturn.add(dedupeKey);
-                                const scanStartKey = periodEndsInPrevMonth ? maxKeyW(prevMonthStartKey, pStartKey) : maxKeyW(calcStartKeyW, pStartKey);
-                                const scanEndKey = periodEndsInPrevMonth ? pEndKey : minKeyW(pEndKey, calcEndKeyW);
-                                if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
+                                const overlapStartKeyW = maxKeyW(pStartKey, calcStartKeyW);
+                                const overlapEndKeyW = minKeyW(pEndKey, calcEndKeyW);
                                 let hadMissedWeekend = false;
                                 let firstMissedWeekendKey = null;
-                                if (periodEndsInRange) {
+                                if (overlapStartKeyW && overlapEndKeyW && overlapStartKeyW <= overlapEndKeyW) {
                                     for (const wk of sortedWeekends) {
-                                        if (wk < scanStartKey) continue;
-                                        if (wk > scanEndKey) break;
+                                        if (wk < overlapStartKeyW) continue;
+                                        if (wk > overlapEndKeyW) break;
                                         const base = baselineWeekendByDate[wk]?.[groupNum];
                                         if (base && normW(base) === normW(personName)) {
                                             hadMissedWeekend = true;
                                             if (!firstMissedWeekendKey) firstMissedWeekendKey = wk;
                                         }
                                     }
-                                } else {
-                                    const periodStartDate = new Date(pStartKey + 'T00:00:00');
-                                    const periodEndDate = new Date(pEndKey + 'T00:00:00');
-                                    for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
-                                        const checkDateKey = formatDateKey(checkDate);
-                                        const dayType = getDayType(checkDate);
-                                        if (dayType === 'weekend-holiday') {
-                                            const rotationPos = getRotationPosition(checkDate, 'weekend', groupNum);
-                                            const groupPeopleForCheck = weekendList;
-                                            if (groupPeopleForCheck.length > 0) {
-                                                const expectedPerson = groupPeopleForCheck[rotationPos % groupPeopleForCheck.length];
-                                                if (expectedPerson && normW(expectedPerson) === normW(personName)) {
-                                                    hadMissedWeekend = true;
-                                                    if (!firstMissedWeekendKey) firstMissedWeekendKey = checkDateKey;
+                                }
+                                if (!hadMissedWeekend && (periodEndsInPrevMonth || periodEndsInRange)) {
+                                    const scanStartKey = periodEndsInPrevMonth ? maxKeyW(prevMonthStartKey, pStartKey) : maxKeyW(calcStartKeyW, pStartKey);
+                                    const scanEndKey = periodEndsInPrevMonth ? pEndKey : minKeyW(pEndKey, calcEndKeyW);
+                                    if (scanStartKey && scanEndKey && scanStartKey <= scanEndKey) {
+                                        const periodStartDate = new Date(pStartKey + 'T00:00:00');
+                                        const periodEndDate = new Date(pEndKey + 'T00:00:00');
+                                        for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
+                                            const checkDateKey = formatDateKey(checkDate);
+                                            if (checkDateKey < scanStartKey || checkDateKey > scanEndKey) continue;
+                                            const dayType = getDayType(checkDate);
+                                            if (dayType === 'weekend-holiday') {
+                                                const rotationPos = getRotationPosition(checkDate, 'weekend', groupNum);
+                                                if (weekendList.length > 0) {
+                                                    const expectedPerson = weekendList[rotationPos % weekendList.length];
+                                                    if (expectedPerson && normW(expectedPerson) === normW(personName)) {
+                                                        hadMissedWeekend = true;
+                                                        if (!firstMissedWeekendKey) firstMissedWeekendKey = checkDateKey;
+                                                    }
                                                 }
                                             }
                                         }
@@ -8226,8 +8254,21 @@
                             const designatedWeekend = returnFromMissingWeekendTargets[dateKey]?.[groupNum];
                             const normWeekend = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                             const matchingPerson = designatedWeekend && groupPeople.find(p => normWeekend(p) === normWeekend(designatedWeekend.personName));
-                            if (designatedWeekend && matchingPerson && !isPersonMissingOnDate(matchingPerson, groupNum, date, 'weekend')) {
-                                const assignedPerson = matchingPerson;
+                            const assignedPersonForReturn = matchingPerson || designatedWeekend?.personName || null;
+                            const missingStartW = designatedWeekend?.missingStart || null;
+                            const missingEndW = designatedWeekend?.missingEnd || null;
+                            const placementInsideAbsenceW =
+                                missingStartW &&
+                                missingEndW &&
+                                dateKey >= missingStartW &&
+                                dateKey <= missingEndW;
+                            if (
+                                designatedWeekend &&
+                                assignedPersonForReturn &&
+                                !placementInsideAbsenceW &&
+                                !isPersonMissingOnDate(assignedPersonForReturn, groupNum, date, 'weekend')
+                            ) {
+                                const assignedPerson = assignedPersonForReturn;
                                 if (!assignedByReturnFromMissingWeekend[groupNum]) assignedByReturnFromMissingWeekend[groupNum] = new Set();
                                 assignedByReturnFromMissingWeekend[groupNum].add(assignedPerson);
                                 // Next slot goes to the displaced (baseline) person – set position to displaced person's index so we get F, A, B, C
