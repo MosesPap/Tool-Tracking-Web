@@ -8055,6 +8055,19 @@
                                         }
                                     }
                                 }
+                                // Fallback: when baselineWeekendByDate does not reflect the actual expected slot
+                                // (e.g. edge continuity cases), use expected-rotation computation.
+                                if (!hadMissedWeekend && typeof computeExpectedRotationPersonForDate === 'function') {
+                                    for (const wk of sortedWeekends) {
+                                        if (wk < scanStartKey) continue;
+                                        if (wk > scanEndKey) break;
+                                        const expected = computeExpectedRotationPersonForDate('weekend', wk, groupNum);
+                                        if (expected && normW(expected) === normW(personName)) {
+                                            hadMissedWeekend = true;
+                                            break;
+                                        }
+                                    }
+                                }
                                 if (!hadMissedWeekend) continue;
                                 const dayAfterEnd = addDaysW(pEndKey, 1);
                                 if (!dayAfterEnd) continue;
