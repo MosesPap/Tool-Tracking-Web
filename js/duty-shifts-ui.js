@@ -6501,7 +6501,35 @@
                 // If assignmentReasons is missing (common for missing-period replacements), derive the same reason logic as violations popup.
                 // Also align with calendar underline: assigned vs rotation baseline differs (manual alternate, legacy data, key mismatch).
                 let derivedReasonText = '';
-                if (!reason && person.name && person.group && !(rawReason && rawReason.type === 'shift')) {
+                if (
+                    rawReason &&
+                    rawReason.type === 'skip' &&
+                    rawReason.meta?.returnFromMissing &&
+                    (rawReason.meta.insertedByShift || rawReason.meta.fromDeferred)
+                ) {
+                    const rawReturn = String(rawReason.reason || '').trim();
+                    if (rawReturn) {
+                        derivedReasonText =
+                            typeof normalizeSkipReasonText === 'function'
+                                ? normalizeSkipReasonText(rawReturn)
+                                : rawReturn;
+                    } else if (
+                        rawReason.meta.baselineDateKey &&
+                        rawReason.swappedWith &&
+                        typeof buildReturnFromMissingPlacementUnifiedMessage === 'function'
+                    ) {
+                        derivedReasonText = buildReturnFromMissingPlacementUnifiedMessage({
+                            returningPersonName: person.name,
+                            displacedPersonName: rawReason.swappedWith,
+                            placementDateKey: key,
+                            baselineDateKey: rawReason.meta.baselineDateKey,
+                            missingStartKey: rawReason.meta.missingStart || null,
+                            missingEndKey: rawReason.meta.missingEnd || null,
+                            reasonOfMissing: rawReason.meta.reasonOfMissing || null
+                        });
+                    }
+                }
+                if (!derivedReasonText && !reason && person.name && person.group && !(rawReason && rawReason.type === 'shift')) {
                     const expected = getExpectedPersonForDay(person.group);
                     if (expected && normPick(expected) !== normPick(person.name)) {
                         if (isPersonMissingOnDate(expected, person.group, date, dayTypeCategory)) {

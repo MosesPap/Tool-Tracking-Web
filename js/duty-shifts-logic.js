@@ -516,6 +516,29 @@
                 return typeof normalizeSkipReasonText === 'function' ? normalizeSkipReasonText(reason?.reason || '') : reason?.reason || '';
             }
             const m = reason.meta;
+            if (m?.returnFromMissing && (m.insertedByShift || m.fromDeferred)) {
+                const rawReturn = String(reason.reason || '').trim();
+                if (rawReturn) {
+                    return typeof normalizeSkipReasonText === 'function'
+                        ? normalizeSkipReasonText(rawReturn)
+                        : rawReturn;
+                }
+                if (
+                    m.baselineDateKey &&
+                    reason.swappedWith &&
+                    typeof buildReturnFromMissingPlacementUnifiedMessage === 'function'
+                ) {
+                    return buildReturnFromMissingPlacementUnifiedMessage({
+                        returningPersonName: assignedPerson,
+                        displacedPersonName: reason.swappedWith,
+                        placementDateKey: dateKey,
+                        baselineDateKey: m.baselineDateKey,
+                        missingStartKey: m.missingStart || null,
+                        missingEndKey: m.missingEnd || m.missingEndKey || null,
+                        reasonOfMissing: m.reasonOfMissing || null
+                    });
+                }
+            }
             if (m?.manualAlternateDeferFulfillment && m?.unavailableReplacement) {
                 const rawCombined = String(reason.reason || '').trim();
                 if (rawCombined) {
@@ -6224,9 +6247,19 @@
                                         const d = dateKeyToDate(dateKey);
                                         return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
                                     };
-                                    const missingRangeStr = formatDDMMYYYY(pStartKey) + ' - ' + formatDDMMYYYY(pEndKey);
                                     const reasonOfMissing = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
-                                    const assignmentReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${missingRangeStr}) λόγω ${reasonOfMissing}`;
+                                    const assignmentReasonText =
+                                        typeof buildReturnFromMissingPlacementUnifiedMessage === 'function'
+                                            ? buildReturnFromMissingPlacementUnifiedMessage({
+                                                  returningPersonName: personName,
+                                                  displacedPersonName: ins.originalAtTarget || null,
+                                                  placementDateKey: targetKey,
+                                                  baselineDateKey: firstMissedKey,
+                                                  missingStartKey: pStartKey,
+                                                  missingEndKey: pEndKey,
+                                                  reasonOfMissing
+                                              })
+                                            : `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${formatDDMMYYYY(pStartKey)} - ${formatDDMMYYYY(pEndKey)}) λόγω ${reasonOfMissing}`;
                                     storeAssignmentReason(
                                         targetKey,
                                         groupNum,
@@ -6235,7 +6268,15 @@
                                         assignmentReasonText,
                                         ins.originalAtTarget || null,
                                         null,
-                                        { returnFromMissing: true, insertedByShift: true, missingEnd: pEndKey, isBackwardAssignment }
+                                        {
+                                            returnFromMissing: true,
+                                            insertedByShift: true,
+                                            missingEnd: pEndKey,
+                                            missingStart: pStartKey,
+                                            baselineDateKey: firstMissedKey,
+                                            reasonOfMissing,
+                                            isBackwardAssignment
+                                        }
                                     );
 
                                     // IMPORTANT: Do NOT underline / do NOT treat as swap the people that got pushed forward.

@@ -8153,6 +8153,53 @@
          * conflictWithLabel: «Ημιαργία» | «Αργία»
          */
         /**
+         * Ενιαίο μήνυμα όταν επιστρέφει από απουσία (πρόωρη/μετατοπισμένη ανάθεση): ο επιστρέφων αντικατέστησε κάποιον
+         * επειδή είχε baseline υπηρεσία αλλά θα απουσιάζει στην περίοδο απουσίας.
+         */
+        function buildReturnFromMissingPlacementUnifiedMessage({
+            returningPersonName,
+            displacedPersonName,
+            placementDateKey,
+            baselineDateKey,
+            missingStartKey,
+            missingEndKey,
+            reasonOfMissing
+        }) {
+            const rep = String(returningPersonName || '').trim();
+            const displaced = String(displacedPersonName || '').trim();
+            if (!rep || !displaced || !placementDateKey || !baselineDateKey) return '';
+            const placementD = new Date(placementDateKey + 'T00:00:00');
+            const baselineD = new Date(baselineDateKey + 'T00:00:00');
+            if (isNaN(placementD.getTime()) || isNaN(baselineD.getTime())) return '';
+            const placementDateStr =
+                typeof formatDateKeyAsGreekDMY === 'function'
+                    ? formatDateKeyAsGreekDMY(placementDateKey)
+                    : placementD.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const baselineDateStr =
+                typeof formatDateKeyAsGreekDMY === 'function'
+                    ? formatDateKeyAsGreekDMY(baselineDateKey)
+                    : baselineD.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const placementDayName =
+                typeof getGreekDayName === 'function' ? getGreekDayName(placementD) : '';
+            const baselineDayName = typeof getGreekDayName === 'function' ? getGreekDayName(baselineD) : '';
+            const formatRangePart = (startKey, endKey) => {
+                if (!startKey || !endKey) return '';
+                const s =
+                    typeof formatDateKeyAsGreekDMY === 'function' ? formatDateKeyAsGreekDMY(startKey) : startKey;
+                const e =
+                    typeof formatDateKeyAsGreekDMY === 'function' ? formatDateKeyAsGreekDMY(endKey) : endKey;
+                return `${s} - ${e}`;
+            };
+            const missingRangeStr = formatRangePart(missingStartKey, missingEndKey);
+            const reasonPart = String(reasonOfMissing || '').trim() || '(δεν αναφέρεται λόγος)';
+            return (
+                `Ο/Η ${rep} αντικατέστησε τον/την ${displaced} στις ${placementDateStr} ημέρα ${placementDayName} ` +
+                `επειδή ο/η ${rep} είχε υπηρεσία στις ${baselineDateStr} ημέρα ${baselineDayName} ` +
+                `αλλά θα απουσιάζει από ${missingRangeStr} λόγω ${reasonPart}.`
+            );
+        }
+
+        /**
          * Ενιαίο μήνυμα αντικατάστασης: απουσία (π.χ. Φύλλο Πορείας) ή απενεργοποίηση.
          */
         function buildUnavailableReplacementUnifiedMessage({ replacementPersonName, skippedPersonName, dateObj, groupNum, dutyCategory = null }) {
