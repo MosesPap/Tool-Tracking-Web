@@ -1031,10 +1031,21 @@
             return false;
         }
 
+        /** Count baseline weekend slots for a person in a calendar month (YYYY-MM). */
+        function countBaselineWeekendsForPersonInMonth(personName, monthPrefix, groupNum, baselineWeekendByDate, normFn) {
+            if (!personName || !monthPrefix || !baselineWeekendByDate) return 0;
+            let count = 0;
+            for (const wk of Object.keys(baselineWeekendByDate)) {
+                if (!wk.startsWith(monthPrefix)) continue;
+                const base = baselineWeekendByDate[wk]?.[groupNum];
+                if (base && normFn(base) === normFn(personName)) count++;
+            }
+            return count;
+        }
+
         /**
-         * Weekend/holiday return-from-missing target: same month as absence when possible;
-         * forward after 3rd day from period end, else backward before period start;
-         * never within absence or ±2 days around it.
+         * Weekend return-from-missing target: only displaces someone who truly has baseline
+         * weekend duty that month (not special-holiday-only / zero baseline slots).
          */
         function pickWeekendReturnFromMissingTargetKey(
             sortedWeekends,
@@ -1044,9 +1055,16 @@
             calcEndKey,
             occupiedMap,
             groupNum,
-            preferredMonthAnchorKey = null
+            preferredMonthAnchorKey = null,
+            baselineWeekendByDate = null,
+            returningPersonName = null,
+            simulatedSpecialAssignments = null,
+            normFn = null
         ) {
             if (!pStartKey || !pEndKey || !Array.isArray(sortedWeekends) || !calcStartKey || !calcEndKey) return null;
+            const norm =
+                normFn ||
+                ((s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim()));
             const addDaysLocal = (dk, days) => {
                 if (!dk || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
                 const d = new Date(dk + 'T00:00:00');
@@ -1054,45 +1072,84 @@
                 d.setDate(d.getDate() + (days || 0));
                 return typeof formatDateKey === 'function' ? formatDateKey(d) : null;
             };
-            const tryKey = (dk) => {
-                if (!dk || dk < calcStartKey || dk > calcEndKey) return null;
-                if (occupiedMap?.[dk]?.[groupNum]) return null;
-                if (isDutyDateTooCloseToMissingPeriod(dk, pStartKey, pEndKey, 2)) return null;
-                return dk;
-            };
             const thirdDayAfterEnd = addDaysLocal(pEndKey, 3);
             const periodMonthPrefix = (preferredMonthAnchorKey || pEndKey).substring(0, 7);
-            if (thirdDayAfterEnd) {
-                for (const wk of sortedWeekends) {
-                    if (wk < thirdDayAfterEnd) continue;
-                    if (wk.substring(0, 7) !== periodMonthPrefix) continue;
-                    const t = tryKey(wk);
-                    if (t) return t;
+
+            const personHasSpecialInMonth = (personName, monthKey) => {
+                const set = simulatedSpecialAssignments?.[monthKey]?.[groupNum];
+                if (!set) return false;
+                for (const name of set) {
+                    if (norm(name) === norm(personName)) return true;
                 }
-                for (const wk of sortedWeekends) {
-                    if (wk < thirdDayAfterEnd) continue;
-                    const t = tryKey(wk);
-                    if (t) return t;
+                return false;
+            };
+
+            const isValidDisplacementSlot = (wk) => {
+                const displaced = baselineWeekendByDate?.[wk]?.[groupNum];
+                if (!displaced) return false;
+                if (returningPersonName && norm(displaced) === norm(returningPersonName)) return false;
+                const monthKey =
+                    typeof getMonthKeyFromDate === 'function'
+                        ? getMonthKeyFromDate(new Date(wk + 'T00:00:00'))
+                        : wk.substring(0, 7);
+                if (personHasSpecialInMonth(displaced, monthKey)) return false;
+                const baselineCount = countBaselineWeekendsForPersonInMonth(
+                    displaced,
+                    wk.substring(0, 7),
+                    groupNum,
+                    baselineWeekendByDate,
+                    norm
+                );
+                if (baselineCount < 1) return false;
+                return true;
+            };
+
+            const scoreCandidate = (wk) => {
+                if (!wk || wk < calcStartKey || wk > calcEndKey) return -1;
+                if (occupiedMap?.[wk]?.[groupNum]) return -1;
+                if (isDutyDateTooCloseToMissingPeriod(wk, pStartKey, pEndKey, 2)) return -1;
+                if (!isValidDisplacementSlot(wk)) return -1;
+                const displaced = baselineWeekendByDate[wk][groupNum];
+                const monthKey =
+                    typeof getMonthKeyFromDate === 'function'
+                        ? getMonthKeyFromDate(new Date(wk + 'T00:00:00'))
+                        : wk.substring(0, 7);
+                let score = 0;
+                if (wk.substring(0, 7) === periodMonthPrefix) score += 40;
+                if (thirdDayAfterEnd && wk >= thirdDayAfterEnd) score += 30;
+                else if (wk < pStartKey) score += 20;
+                const baselineCount = countBaselineWeekendsForPersonInMonth(
+                    displaced,
+                    wk.substring(0, 7),
+                    groupNum,
+                    baselineWeekendByDate,
+                    norm
+                );
+                if (baselineCount >= 2) score += 25;
+                if (
+                    typeof isPersonMissingOnDate === 'function' &&
+                    isPersonMissingOnDate(displaced, groupNum, new Date(wk + 'T00:00:00'), 'weekend')
+                ) {
+                    score += 50;
+                }
+                if (preferredMonthAnchorKey) {
+                    const missedDt = new Date(preferredMonthAnchorKey + 'T00:00:00');
+                    const wkDt = new Date(wk + 'T00:00:00');
+                    score -= Math.min(15, Math.abs(Math.round((wkDt - missedDt) / 86400000)));
+                }
+                return score;
+            };
+
+            let bestKey = null;
+            let bestScore = -1;
+            for (const wk of sortedWeekends) {
+                const s = scoreCandidate(wk);
+                if (s > bestScore) {
+                    bestScore = s;
+                    bestKey = wk;
                 }
             }
-            let backward = null;
-            for (const wk of sortedWeekends) {
-                if (wk >= pStartKey) break;
-                const t = tryKey(wk);
-                if (t) backward = t;
-            }
-            if (backward) return backward;
-            // Fallback: any eligible weekend in preferred month (e.g. before pStart when forward is after calcEnd)
-            for (const wk of sortedWeekends) {
-                if (wk.substring(0, 7) !== periodMonthPrefix) continue;
-                const t = tryKey(wk);
-                if (t) return t;
-            }
-            for (const wk of sortedWeekends) {
-                const t = tryKey(wk);
-                if (t) return t;
-            }
-            return null;
+            return bestKey;
         }
 
         /** First eligible semi on/after threshold: prefer same calendar month as threshold, then any later semi in range. */
@@ -8125,29 +8182,6 @@
                                         }
                                     }
                                 }
-                                if (!hadMissedWeekend && (periodEndsInPrevMonth || periodEndsInRange)) {
-                                    const scanStartKey = periodEndsInPrevMonth ? maxKeyW(prevMonthStartKey, pStartKey) : maxKeyW(calcStartKeyW, pStartKey);
-                                    const scanEndKey = periodEndsInPrevMonth ? pEndKey : minKeyW(pEndKey, calcEndKeyW);
-                                    if (scanStartKey && scanEndKey && scanStartKey <= scanEndKey) {
-                                        const periodStartDate = new Date(pStartKey + 'T00:00:00');
-                                        const periodEndDate = new Date(pEndKey + 'T00:00:00');
-                                        for (let checkDate = new Date(periodStartDate); checkDate <= periodEndDate; checkDate.setDate(checkDate.getDate() + 1)) {
-                                            const checkDateKey = formatDateKey(checkDate);
-                                            if (checkDateKey < scanStartKey || checkDateKey > scanEndKey) continue;
-                                            const dayType = getDayType(checkDate);
-                                            if (dayType === 'weekend-holiday') {
-                                                const rotationPos = getRotationPosition(checkDate, 'weekend', groupNum);
-                                                if (weekendList.length > 0) {
-                                                    const expectedPerson = weekendList[rotationPos % weekendList.length];
-                                                    if (expectedPerson && normW(expectedPerson) === normW(personName)) {
-                                                        hadMissedWeekend = true;
-                                                        if (!firstMissedWeekendKey) firstMissedWeekendKey = checkDateKey;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
                                 if (!hadMissedWeekend) continue;
                                 let targetWeekendKey = pickWeekendReturnFromMissingTargetKey(
                                     sortedWeekends,
@@ -8157,7 +8191,11 @@
                                     calcEndKeyW,
                                     returnFromMissingWeekendTargets,
                                     groupNum,
-                                    firstMissedWeekendKey
+                                    firstMissedWeekendKey,
+                                    baselineWeekendByDate,
+                                    personName,
+                                    simulatedSpecialAssignments,
+                                    normW
                                 );
                                 if (!targetWeekendKey) continue;
                                 const isBackwardAssignment = targetWeekendKey < pStartKey;
