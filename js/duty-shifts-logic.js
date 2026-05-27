@@ -1015,13 +1015,92 @@
             return out;
         }
 
+        /** Inside absence period or within bufferDays calendar days before start / after end — not valid return-from-missing placement. */
+        function isDutyDateTooCloseToMissingPeriod(dateKey, pStartKey, pEndKey, bufferDays = 2) {
+            if (!dateKey || !pStartKey || !pEndKey) return false;
+            if (dateKey >= pStartKey && dateKey <= pEndKey) return true;
+            const d = new Date(dateKey + 'T00:00:00');
+            const start = new Date(pStartKey + 'T00:00:00');
+            const end = new Date(pEndKey + 'T00:00:00');
+            if (isNaN(d.getTime()) || isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+            const msDay = 86400000;
+            const fromStart = Math.round((d - start) / msDay);
+            const fromEnd = Math.round((d - end) / msDay);
+            if (fromStart < 0 && fromStart >= -bufferDays) return true;
+            if (fromEnd > 0 && fromEnd <= bufferDays) return true;
+            return false;
+        }
+
+        /**
+         * Weekend/holiday return-from-missing target: same month as absence when possible;
+         * forward after 3rd day from period end, else backward before period start;
+         * never within absence or ±2 days around it.
+         */
+        function pickWeekendReturnFromMissingTargetKey(
+            sortedWeekends,
+            pStartKey,
+            pEndKey,
+            calcStartKey,
+            calcEndKey,
+            occupiedMap,
+            groupNum,
+            preferredMonthAnchorKey = null
+        ) {
+            if (!pStartKey || !pEndKey || !Array.isArray(sortedWeekends) || !calcStartKey || !calcEndKey) return null;
+            const addDaysLocal = (dk, days) => {
+                if (!dk || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
+                const d = new Date(dk + 'T00:00:00');
+                if (isNaN(d.getTime())) return null;
+                d.setDate(d.getDate() + (days || 0));
+                return typeof formatDateKey === 'function' ? formatDateKey(d) : null;
+            };
+            const tryKey = (dk) => {
+                if (!dk || dk < calcStartKey || dk > calcEndKey) return null;
+                if (occupiedMap?.[dk]?.[groupNum]) return null;
+                if (isDutyDateTooCloseToMissingPeriod(dk, pStartKey, pEndKey, 2)) return null;
+                return dk;
+            };
+            const thirdDayAfterEnd = addDaysLocal(pEndKey, 3);
+            const periodMonthPrefix = (preferredMonthAnchorKey || pEndKey).substring(0, 7);
+            if (thirdDayAfterEnd) {
+                for (const wk of sortedWeekends) {
+                    if (wk < thirdDayAfterEnd) continue;
+                    if (wk.substring(0, 7) !== periodMonthPrefix) break;
+                    const t = tryKey(wk);
+                    if (t) return t;
+                }
+                for (const wk of sortedWeekends) {
+                    if (wk < thirdDayAfterEnd) continue;
+                    const t = tryKey(wk);
+                    if (t) return t;
+                }
+            }
+            let backward = null;
+            for (const wk of sortedWeekends) {
+                if (wk >= pStartKey) break;
+                const t = tryKey(wk);
+                if (t) backward = t;
+            }
+            return backward;
+        }
+
         /** First eligible semi on/after threshold: prefer same calendar month as threshold, then any later semi in range. */
-        function pickSemiReturnFromMissingTargetKey(sortedSemi, thirdDayAfterEnd, calcStartKey, calcEndKey, occupiedMap, groupNum) {
+        function pickSemiReturnFromMissingTargetKey(
+            sortedSemi,
+            thirdDayAfterEnd,
+            calcStartKey,
+            calcEndKey,
+            occupiedMap,
+            groupNum,
+            pStartKey = null,
+            pEndKey = null
+        ) {
             if (!thirdDayAfterEnd || !Array.isArray(sortedSemi) || sortedSemi.length === 0 || !calcStartKey || !calcEndKey) return null;
             const monthPrefix = thirdDayAfterEnd.substring(0, 7);
             const tryKey = (dk) => {
                 if (!dk || dk < calcStartKey || dk > calcEndKey) return null;
                 if (occupiedMap?.[dk]?.[groupNum]) return null;
+                if (pStartKey && pEndKey && isDutyDateTooCloseToMissingPeriod(dk, pStartKey, pEndKey, 2)) return null;
                 return dk;
             };
             for (const dk of sortedSemi) {
@@ -1034,6 +1113,15 @@
                 if (dk < thirdDayAfterEnd) continue;
                 const t = tryKey(dk);
                 if (t) return t;
+            }
+            if (pStartKey) {
+                let backward = null;
+                for (const dk of sortedSemi) {
+                    if (dk >= pStartKey) break;
+                    const t = tryKey(dk);
+                    if (t) backward = t;
+                }
+                return backward;
             }
             return null;
         }
@@ -7942,8 +8030,7 @@
                     }
                 }
                 
-                // Return-from-missing for weekend/holiday: place on first weekend on/after (period end + 2 days),
-                // otherwise fallback to last weekend before (period start - 2 days), inside the calculated range.
+                // Return-from-missing for weekend: first weekend on or after (period end + 3 calendar days), or backward to last weekend before period start
                 const returnFromMissingWeekendTargets = {}; // dateKey -> { groupNum -> { personName, missingEnd, isBackwardAssignment } }
                 const calcStartKeyW = (startDate && !isNaN(new Date(startDate).getTime())) ? formatDateKey(new Date(startDate)) : null;
                 const calcEndKeyW = (endDate && !isNaN(new Date(endDate).getTime())) ? formatDateKey(new Date(endDate)) : null;
@@ -8003,6 +8090,7 @@
                                 const scanEndKey = periodEndsInPrevMonth ? pEndKey : minKeyW(pEndKey, calcEndKeyW);
                                 if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
                                 let hadMissedWeekend = false;
+                                let firstMissedWeekendKey = null;
                                 if (periodEndsInRange) {
                                     for (const wk of sortedWeekends) {
                                         if (wk < scanStartKey) continue;
@@ -8010,7 +8098,7 @@
                                         const base = baselineWeekendByDate[wk]?.[groupNum];
                                         if (base && normW(base) === normW(personName)) {
                                             hadMissedWeekend = true;
-                                            break;
+                                            if (!firstMissedWeekendKey) firstMissedWeekendKey = wk;
                                         }
                                     }
                                 } else {
@@ -8026,46 +8114,25 @@
                                                 const expectedPerson = groupPeopleForCheck[rotationPos % groupPeopleForCheck.length];
                                                 if (expectedPerson && normW(expectedPerson) === normW(personName)) {
                                                     hadMissedWeekend = true;
-                                                    break;
+                                                    if (!firstMissedWeekendKey) firstMissedWeekendKey = checkDateKey;
                                                 }
                                             }
                                         }
                                     }
                                 }
                                 if (!hadMissedWeekend) continue;
-                                const twoDaysAfterEnd = addDaysW(pEndKey, 2);
-                                const twoDaysBeforeStart = addDaysW(pStartKey, -2);
-                                if (!twoDaysAfterEnd || !twoDaysBeforeStart) continue;
-                                let targetWeekendKey = null;
-                                let isBackwardAssignment = false;
-                                // Prefer forward placement: first weekend on/after end+2 (same run/range).
-                                targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, twoDaysAfterEnd);
-                                if (targetWeekendKey && (targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW)) {
-                                    targetWeekendKey = null;
-                                }
-                                if (!targetWeekendKey) {
-                                    // Fallback backward: closest weekend strictly before start-2.
-                                    targetWeekendKey = findLastWeekendBefore(sortedWeekends, twoDaysBeforeStart);
-                                    isBackwardAssignment = true;
-                                }
-                                if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) continue;
-                                // If this (date, group) is already taken by another return-from-missing, use next free weekend in range
-                                let weekendIdx = sortedWeekends.indexOf(targetWeekendKey);
-                                if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
-                                    for (let i = weekendIdx + 1; i < sortedWeekends.length; i++) {
-                                        const wk = sortedWeekends[i];
-                                        if (wk < calcStartKeyW || wk > calcEndKeyW) break;
-                                        if (!returnFromMissingWeekendTargets[wk]?.[groupNum]) { targetWeekendKey = wk; break; }
-                                    }
-                                    if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
-                                        for (let i = weekendIdx - 1; i >= 0; i--) {
-                                            const wk = sortedWeekends[i];
-                                            if (wk < calcStartKeyW || wk > calcEndKeyW) continue;
-                                            if (!returnFromMissingWeekendTargets[wk]?.[groupNum]) { targetWeekendKey = wk; break; }
-                                        }
-                                    }
-                                }
-                                if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) continue;
+                                let targetWeekendKey = pickWeekendReturnFromMissingTargetKey(
+                                    sortedWeekends,
+                                    pStartKey,
+                                    pEndKey,
+                                    calcStartKeyW,
+                                    calcEndKeyW,
+                                    returnFromMissingWeekendTargets,
+                                    groupNum,
+                                    firstMissedWeekendKey
+                                );
+                                if (!targetWeekendKey) continue;
+                                const isBackwardAssignment = targetWeekendKey < pStartKey;
                                 const formatDDMMYYYYW = (dk) => {
                                     const d = new Date(dk + 'T00:00:00');
                                     return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
@@ -8073,7 +8140,15 @@
                                 const missingRangeStrW = formatDDMMYYYYW(pStartKey) + ' - ' + formatDDMMYYYYW(pEndKey);
                                 const reasonOfMissingW = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                                 if (!returnFromMissingWeekendTargets[targetWeekendKey]) returnFromMissingWeekendTargets[targetWeekendKey] = {};
-                                returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = { personName, missingEnd: pEndKey, isBackwardAssignment, missingRangeStr: missingRangeStrW, reasonOfMissing: reasonOfMissingW };
+                                returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = {
+                                    personName,
+                                    missingEnd: pEndKey,
+                                    missingStart: pStartKey,
+                                    firstMissedDateKey: firstMissedWeekendKey,
+                                    isBackwardAssignment,
+                                    missingRangeStr: missingRangeStrW,
+                                    reasonOfMissing: reasonOfMissingW
+                                };
                             }
                         }
                     }
@@ -8160,8 +8235,29 @@
                                 const originalIndex = displacedPerson != null ? groupPeople.indexOf(displacedPerson) : -1;
                                 if (globalWeekendRotationPosition[groupNum] === undefined) globalWeekendRotationPosition[groupNum] = 0;
                                 globalWeekendRotationPosition[groupNum] = (originalIndex >= 0 ? originalIndex : (groupPeople.indexOf(assignedPerson) + 1)) % groupPeople.length;
-                                const reasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designatedWeekend.missingRangeStr || ''}) λόγω ${designatedWeekend.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
-                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonText, null, null, { returnFromMissing: true, insertedByShift: true, missingEnd: designatedWeekend.missingEnd, isBackwardAssignment: designatedWeekend.isBackwardAssignment });
+                                const reasonText =
+                                    typeof buildReturnFromMissingPlacementUnifiedMessage === 'function' &&
+                                    designatedWeekend.firstMissedDateKey &&
+                                    displacedPerson
+                                        ? buildReturnFromMissingPlacementUnifiedMessage({
+                                              returningPersonName: assignedPerson,
+                                              displacedPersonName: displacedPerson,
+                                              placementDateKey: dateKey,
+                                              baselineDateKey: designatedWeekend.firstMissedDateKey,
+                                              missingStartKey: designatedWeekend.missingStart || null,
+                                              missingEndKey: designatedWeekend.missingEnd,
+                                              reasonOfMissing: designatedWeekend.reasonOfMissing || null
+                                          })
+                                        : `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designatedWeekend.missingRangeStr || ''}) λόγω ${designatedWeekend.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
+                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonText, displacedPerson ?? null, null, {
+                                    returnFromMissing: true,
+                                    insertedByShift: true,
+                                    missingEnd: designatedWeekend.missingEnd,
+                                    missingStart: designatedWeekend.missingStart || null,
+                                    baselineDateKey: designatedWeekend.firstMissedDateKey || null,
+                                    reasonOfMissing: designatedWeekend.reasonOfMissing || null,
+                                    isBackwardAssignment: designatedWeekend.isBackwardAssignment
+                                });
                                 if (!weekendRotationPersons[dateKey]) weekendRotationPersons[dateKey] = {};
                                 // Keep baseline = displaced (rotation) person so we always show Βασική Σειρά + Αντικατάσταση
                                 weekendRotationPersons[dateKey][groupNum] = displacedPerson ?? assignedPerson;
@@ -8729,18 +8825,16 @@
                             // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
                             const thirdDayAfterEnd = addDaysToDateKeyRun(pEndKey, 3);
                             if (!thirdDayAfterEnd) continue;
-                            // Backward: avoid assigning one day before missing period starts
-                            const dayBeforeStart = addDaysToDateKeyRun(pStartKey, -1);
-                            let targetSemiKey = pickSemiReturnFromMissingTargetKey(sortedSemi, thirdDayAfterEnd, calcStartKey, calcEndKey, returnFromMissingSemiTargetsRun, groupNum);
-                            if (!targetSemiKey) {
-                                // Backward: last semi before period start, but not the day before period start
-                                let backwardCandidate = findLastSemiBeforeRun(sortedSemi, pStartKey);
-                                if (backwardCandidate && dayBeforeStart && backwardCandidate === dayBeforeStart) {
-                                    const idx = sortedSemi.indexOf(backwardCandidate);
-                                    backwardCandidate = (idx > 0) ? sortedSemi[idx - 1] : null;
-                                }
-                                if (backwardCandidate && backwardCandidate >= calcStartKey && backwardCandidate <= calcEndKey) targetSemiKey = backwardCandidate;
-                            }
+                            let targetSemiKey = pickSemiReturnFromMissingTargetKey(
+                                sortedSemi,
+                                thirdDayAfterEnd,
+                                calcStartKey,
+                                calcEndKey,
+                                returnFromMissingSemiTargetsRun,
+                                groupNum,
+                                pStartKey,
+                                pEndKey
+                            );
                             if (!targetSemiKey || targetSemiKey < calcStartKey || targetSemiKey > calcEndKey) continue;
                             if (returnFromMissingSemiTargetsRun[targetSemiKey]?.[groupNum]) {
                                 const semiIdx = sortedSemi.indexOf(targetSemiKey);
@@ -9462,18 +9556,16 @@
                                 // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
                                 const thirdDayAfterEnd = addDaysToDateKeyLocal(pEndKey, 3);
                                 if (!thirdDayAfterEnd) continue;
-                                // Backward: avoid assigning one day before missing period starts
-                                const dayBeforeStart = addDaysToDateKeyLocal(pStartKey, -1);
-                                let targetSemiKey = pickSemiReturnFromMissingTargetKey(sortedSemi, thirdDayAfterEnd, calcStartKey, calcEndKey, returnFromMissingSemiTargets, groupNum);
-                                if (!targetSemiKey) {
-                                    // Backward: last semi before period start, but not the day before period start
-                                    let backwardCandidate = findLastSemiBefore(sortedSemi, pStartKey);
-                                    if (backwardCandidate && dayBeforeStart && backwardCandidate === dayBeforeStart) {
-                                        const idx = sortedSemi.indexOf(backwardCandidate);
-                                        backwardCandidate = (idx > 0) ? sortedSemi[idx - 1] : null;
-                                    }
-                                    if (backwardCandidate && backwardCandidate >= calcStartKey && backwardCandidate <= calcEndKey) targetSemiKey = backwardCandidate;
-                                }
+                                let targetSemiKey = pickSemiReturnFromMissingTargetKey(
+                                    sortedSemi,
+                                    thirdDayAfterEnd,
+                                    calcStartKey,
+                                    calcEndKey,
+                                    returnFromMissingSemiTargets,
+                                    groupNum,
+                                    pStartKey,
+                                    pEndKey
+                                );
                                 
                                 if (!targetSemiKey || targetSemiKey < calcStartKey || targetSemiKey > calcEndKey) continue;
                                 if (returnFromMissingSemiTargets[targetSemiKey]?.[groupNum]) {
