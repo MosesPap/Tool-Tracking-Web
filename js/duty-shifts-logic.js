@@ -1015,45 +1015,6 @@
             return out;
         }
 
-        /** First eligible weekend on/after threshold: prefer same calendar month as threshold, then any later weekend in range. */
-        function pickWeekendReturnFromMissingTargetKey(sortedWeekends, thirdDayAfterEnd, calcStartKey, calcEndKey, occupiedMap, groupNum) {
-            if (!thirdDayAfterEnd || !Array.isArray(sortedWeekends) || sortedWeekends.length === 0 || !calcStartKey || !calcEndKey) {
-                return null;
-            }
-            const monthPrefix = thirdDayAfterEnd.substring(0, 7);
-            const tryKey = (dk) => {
-                if (!dk || dk < calcStartKey || dk > calcEndKey) return null;
-                if (occupiedMap?.[dk]?.[groupNum]) return null;
-                return dk;
-            };
-            for (const dk of sortedWeekends) {
-                if (dk < thirdDayAfterEnd) continue;
-                if (dk.substring(0, 7) !== monthPrefix) break;
-                const t = tryKey(dk);
-                if (t) return t;
-            }
-            for (const dk of sortedWeekends) {
-                if (dk < thirdDayAfterEnd) continue;
-                const t = tryKey(dk);
-                if (t) return t;
-            }
-            return null;
-        }
-
-        /** Last weekend strictly before beforeKey, within calc range, optionally skipping one date. */
-        function findLastWeekendBeforeInCalcRange(sortedWeekends, beforeKey, calcStartKey, calcEndKey, avoidDateKey) {
-            if (!beforeKey || !Array.isArray(sortedWeekends)) return null;
-            let last = null;
-            for (const dk of sortedWeekends) {
-                if (dk >= beforeKey) break;
-                if (calcStartKey && dk < calcStartKey) continue;
-                if (calcEndKey && dk > calcEndKey) continue;
-                if (avoidDateKey && dk === avoidDateKey) continue;
-                last = dk;
-            }
-            return last;
-        }
-
         /** First eligible semi on/after threshold: prefer same calendar month as threshold, then any later semi in range. */
         function pickSemiReturnFromMissingTargetKey(sortedSemi, thirdDayAfterEnd, calcStartKey, calcEndKey, occupiedMap, groupNum) {
             if (!thirdDayAfterEnd || !Array.isArray(sortedSemi) || sortedSemi.length === 0 || !calcStartKey || !calcEndKey) return null;
@@ -1749,6 +1710,11 @@
             const reason = getAssignmentReason(dateKey, groupNum, assignedPerson);
             if (reason && reason.type === 'skip' && reason.meta && reason.meta.manualAlternateReplacement && reason.swappedWith) {
                 return reason.swappedWith;
+            }
+            // Day-modal manual assign: final person differs from calendar but baseline rotation slot unchanged.
+            if (reason && reason.type === 'skip' && reason.meta?.preserveBaseline) {
+                const bp = String(reason.meta?.baselinePerson || '').trim();
+                if (bp) return bp;
             }
             // Missing/disabled replacement should preserve baseline slot continuity:
             // if A/B were unavailable and G covered, next slot remains after the skipped baseline person.
@@ -8041,7 +8007,6 @@
                                 const scanEndKey = periodEndsInPrevMonth ? pEndKey : minKeyW(pEndKey, calcEndKeyW);
                                 if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
                                 let hadMissedWeekend = false;
-                                let firstMissedWeekendKey = null;
                                 if (periodEndsInRange) {
                                     for (const wk of sortedWeekends) {
                                         if (wk < scanStartKey) continue;
@@ -8049,7 +8014,7 @@
                                         const base = baselineWeekendByDate[wk]?.[groupNum];
                                         if (base && normW(base) === normW(personName)) {
                                             hadMissedWeekend = true;
-                                            if (!firstMissedWeekendKey) firstMissedWeekendKey = wk;
+                                            break;
                                         }
                                     }
                                 } else {
@@ -8065,35 +8030,39 @@
                                                 const expectedPerson = groupPeopleForCheck[rotationPos % groupPeopleForCheck.length];
                                                 if (expectedPerson && normW(expectedPerson) === normW(personName)) {
                                                     hadMissedWeekend = true;
-                                                    if (!firstMissedWeekendKey) firstMissedWeekendKey = checkDateKey;
+                                                    break;
                                                 }
                                             }
                                         }
                                     }
                                 }
                                 if (!hadMissedWeekend) continue;
+                                const dayAfterEnd = addDaysW(pEndKey, 1);
+                                if (!dayAfterEnd) continue;
                                 const thirdDayAfterEnd = addDaysW(pEndKey, 3);
                                 if (!thirdDayAfterEnd) continue;
-                                const dayBeforeStart = addDaysW(pStartKey, -1);
+                                const returnMonthStart = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 1, 1);
+                                const returnMonthStartKey = formatDateKey(returnMonthStart);
+                                const returnMonthEnd = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 2, 0);
+                                const returnMonthEndKey = formatDateKey(returnMonthEnd);
+                                let hasWeekendInReturnMonth = false;
+                                for (const wk of sortedWeekends) {
+                                    if (wk >= returnMonthStartKey && wk <= returnMonthEndKey) {
+                                        hasWeekendInReturnMonth = true;
+                                        break;
+                                    }
+                                }
                                 let targetWeekendKey = null;
                                 let isBackwardAssignment = false;
-                                targetWeekendKey = pickWeekendReturnFromMissingTargetKey(
-                                    sortedWeekends,
-                                    thirdDayAfterEnd,
-                                    calcStartKeyW,
-                                    calcEndKeyW,
-                                    returnFromMissingWeekendTargets,
-                                    groupNum
-                                );
+                                if (hasWeekendInReturnMonth) {
+                                    targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, thirdDayAfterEnd);
+                                    if (targetWeekendKey && targetWeekendKey < returnMonthStartKey) {
+                                        targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, returnMonthStartKey);
+                                    }
+                                }
                                 if (!targetWeekendKey) {
-                                    targetWeekendKey = findLastWeekendBeforeInCalcRange(
-                                        sortedWeekends,
-                                        pStartKey,
-                                        calcStartKeyW,
-                                        calcEndKeyW,
-                                        dayBeforeStart
-                                    );
-                                    if (targetWeekendKey) isBackwardAssignment = true;
+                                    targetWeekendKey = findLastWeekendBefore(sortedWeekends, pStartKey);
+                                    isBackwardAssignment = true;
                                 }
                                 if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) continue;
                                 // If this (date, group) is already taken by another return-from-missing, use next free weekend in range
@@ -8120,15 +8089,7 @@
                                 const missingRangeStrW = formatDDMMYYYYW(pStartKey) + ' - ' + formatDDMMYYYYW(pEndKey);
                                 const reasonOfMissingW = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                                 if (!returnFromMissingWeekendTargets[targetWeekendKey]) returnFromMissingWeekendTargets[targetWeekendKey] = {};
-                                returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = {
-                                    personName,
-                                    missingEnd: pEndKey,
-                                    missingStart: pStartKey,
-                                    firstMissedWeekendKey,
-                                    isBackwardAssignment,
-                                    missingRangeStr: missingRangeStrW,
-                                    reasonOfMissing: reasonOfMissingW
-                                };
+                                returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = { personName, missingEnd: pEndKey, isBackwardAssignment, missingRangeStr: missingRangeStrW, reasonOfMissing: reasonOfMissingW };
                             }
                         }
                     }
@@ -8215,38 +8176,8 @@
                                 const originalIndex = displacedPerson != null ? groupPeople.indexOf(displacedPerson) : -1;
                                 if (globalWeekendRotationPosition[groupNum] === undefined) globalWeekendRotationPosition[groupNum] = 0;
                                 globalWeekendRotationPosition[groupNum] = (originalIndex >= 0 ? originalIndex : (groupPeople.indexOf(assignedPerson) + 1)) % groupPeople.length;
-                                const reasonText =
-                                    typeof buildReturnFromMissingPlacementUnifiedMessage === 'function' &&
-                                    designatedWeekend.firstMissedWeekendKey &&
-                                    displacedPerson
-                                        ? buildReturnFromMissingPlacementUnifiedMessage({
-                                              returningPersonName: assignedPerson,
-                                              displacedPersonName: displacedPerson,
-                                              placementDateKey: dateKey,
-                                              baselineDateKey: designatedWeekend.firstMissedWeekendKey,
-                                              missingStartKey: designatedWeekend.missingStart || null,
-                                              missingEndKey: designatedWeekend.missingEnd || null,
-                                              reasonOfMissing: designatedWeekend.reasonOfMissing || null
-                                          })
-                                        : `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designatedWeekend.missingRangeStr || ''}) λόγω ${designatedWeekend.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
-                                storeAssignmentReason(
-                                    dateKey,
-                                    groupNum,
-                                    assignedPerson,
-                                    'skip',
-                                    reasonText,
-                                    displacedPerson || null,
-                                    null,
-                                    {
-                                        returnFromMissing: true,
-                                        insertedByShift: true,
-                                        missingEnd: designatedWeekend.missingEnd,
-                                        missingStart: designatedWeekend.missingStart,
-                                        baselineDateKey: designatedWeekend.firstMissedWeekendKey,
-                                        reasonOfMissing: designatedWeekend.reasonOfMissing,
-                                        isBackwardAssignment: designatedWeekend.isBackwardAssignment
-                                    }
-                                );
+                                const reasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designatedWeekend.missingRangeStr || ''}) λόγω ${designatedWeekend.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
+                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonText, null, null, { returnFromMissing: true, insertedByShift: true, missingEnd: designatedWeekend.missingEnd, isBackwardAssignment: designatedWeekend.isBackwardAssignment });
                                 if (!weekendRotationPersons[dateKey]) weekendRotationPersons[dateKey] = {};
                                 // Keep baseline = displaced (rotation) person so we always show Βασική Σειρά + Αντικατάσταση
                                 weekendRotationPersons[dateKey][groupNum] = displacedPerson ?? assignedPerson;

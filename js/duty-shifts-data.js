@@ -3921,9 +3921,16 @@
             return out;
         }
 
-        /** Reasons from day modal, mutual swap, or αντικατάσταση επιλαχών — do not overwrite on month recalc. */
+        /** Reasons from day modal, mutual swap, αντικατάσταση επιλαχών, or baseline-preserving manual assign — do not overwrite on month recalc. */
         function isProtectedManualDutyReasonEntry(r) {
-            return !!(r && r.meta && (r.meta.manualDayModal || r.meta.manualAlternateReplacement || r.meta.mutualTwoDaySwap));
+            return !!(
+                r &&
+                r.meta &&
+                (r.meta.manualDayModal ||
+                    r.meta.manualAlternateReplacement ||
+                    r.meta.mutualTwoDaySwap ||
+                    r.meta.preserveBaseline)
+            );
         }
 
         function hasProtectedManualDutyReasonOnDateGroup(dateKey, groupNum) {
@@ -8196,6 +8203,31 @@
                 `Ο/Η ${rep} αντικατέστησε τον/την ${displaced} στις ${placementDateStr} ημέρα ${placementDayName} ` +
                 `επειδή ο/η ${rep} είχε υπηρεσία στις ${baselineDateStr} ημέρα ${baselineDayName} ` +
                 `αλλά θα απουσιάζει από ${missingRangeStr} λόγω ${reasonPart}.`
+            );
+        }
+
+        /**
+         * Χειροκίνητη ανάθεση από modal ημέρας: αλλάζει μόνο την τελική ανάθεση, όχι τη βασική σειρά περιστροφής.
+         */
+        function buildManualDutyAssignmentPreserveBaselineMessage({
+            assignedPersonName,
+            displacedPersonName,
+            baselinePersonName,
+            dateObj
+        }) {
+            const assigned = String(assignedPersonName || '').trim();
+            const displaced = String(displacedPersonName || '').trim();
+            const baseline = String(baselinePersonName || '').trim();
+            if (!assigned || !displaced || !dateObj || isNaN(dateObj.getTime())) return '';
+            const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const dayName = typeof getGreekDayName === 'function' ? getGreekDayName(dateObj) : '';
+            const baselineClause = baseline
+                ? ` Η βασική σειρά παραμένει (ο/η ${baseline}).`
+                : ' Η βασική σειρά περιστροφής δεν αλλάζει.';
+            return (
+                `Ο/Η ${assigned} ανατέθηκε χειροκίνητα στη θέση του/την ${displaced} στις ${dateStr}` +
+                (dayName ? ` ημέρα ${dayName}` : '') +
+                `.${baselineClause}`
             );
         }
 

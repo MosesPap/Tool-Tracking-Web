@@ -6474,7 +6474,10 @@
                 }
                 let reasonBadge = '';
                 if (reason) {
-                    if (reason.type === 'skip') {
+                    if (reason.type === 'skip' && reason.meta?.preserveBaseline) {
+                        const displayReason = normalizeSkipReasonText(reason.reason);
+                        reasonBadge = `<span class="badge bg-primary ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-user-edit me-1"></i>Χειροκίνητη ανάθεση</span>`;
+                    } else if (reason.type === 'skip') {
                         const displayReason = normalizeSkipReasonText(reason.reason);
                         reasonBadge = `<span class="badge bg-warning ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-user-check me-1"></i>Αντικατάσταση</span>`;
                     } else if (reason.type === 'swap') {
@@ -6482,7 +6485,12 @@
                         reasonBadge = `<span class="badge bg-info ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-exchange-alt me-1"></i>Αμοιβαία Αλλαγή${reason.swappedWith ? ` με ${escapeHtml(String(reason.swappedWith))}` : ''}</span>`;
                     }
                 }
-                const defaultChangeMode = rawReason && rawReason.type === 'skip' ? 'replacement' : 'mutual_swap';
+                const defaultChangeMode =
+                    rawReason?.meta?.preserveBaseline
+                        ? 'manual_assign'
+                        : rawReason && rawReason.type === 'skip'
+                          ? 'replacement'
+                          : 'mutual_swap';
                 
                 const groupName = person.group ? getGroupName(person.group) : 'Άγνωστη Ομάδα';
                 const missingBufferDay = person.name && person.group && typeof isPersonOnMissingBufferDay === 'function' && isPersonOnMissingBufferDay(person.name, person.group, key);
@@ -6632,7 +6640,33 @@
                     }
                 }
                 let reasonDisplayText;
-                if (
+                if (reason && reason.type === 'skip' && reason.meta?.preserveBaseline) {
+                    const rawManual = String(reason.reason || '').trim();
+                    if (rawManual) {
+                        reasonDisplayText =
+                            typeof normalizeSkipReasonText === 'function'
+                                ? normalizeSkipReasonText(rawManual)
+                                : rawManual;
+                    } else if (
+                        typeof buildManualDutyAssignmentPreserveBaselineMessage === 'function' &&
+                        reason.swappedWith
+                    ) {
+                        const baselinePerson =
+                            reason.meta?.baselinePerson ||
+                            (typeof getRotationBaselineAssignmentForType === 'function'
+                                ? parseAssignedPersonForGroupFromAssignment(
+                                      getRotationBaselineAssignmentForType(dayTypeCategory, key),
+                                      person.group
+                                  )
+                                : null);
+                        reasonDisplayText = buildManualDutyAssignmentPreserveBaselineMessage({
+                            assignedPersonName: person.name,
+                            displacedPersonName: reason.swappedWith,
+                            baselinePersonName: baselinePerson,
+                            dateObj: date
+                        });
+                    }
+                } else if (
                     reason &&
                     reason.type === 'skip' &&
                     dayTypeCategory === 'weekend' &&
@@ -6696,7 +6730,14 @@
                         const unavailable = isPersonUnavailableForManualDutyOnDate(p, person.group, date, dayTypeCategory);
                         const prevForConflict = (person.name || '').trim();
                         let consecutiveConflict = false;
-                        if (!isCritical && defaultChangeMode !== 'mutual_swap' && p && normPick(p) !== normPick(prevForConflict)) {
+                        const modeForOpts = container?.querySelector(`input[name="duty-change-mode-${person.group}"]:checked`)?.value || defaultChangeMode;
+                        if (
+                            !isCritical &&
+                            modeForOpts !== 'mutual_swap' &&
+                            modeForOpts !== 'manual_assign' &&
+                            p &&
+                            normPick(p) !== normPick(prevForConflict)
+                        ) {
                             consecutiveConflict = wouldManualDutySelectionCauseConsecutiveConflict(
                                 key, p, person.group, prevForConflict, 'replacement'
                             );
@@ -6742,7 +6783,11 @@
                             <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-repl-${person.group}" value="replacement" ${defaultChangeMode === 'replacement' ? 'checked' : ''}>
                             <label class="form-check-label" for="duty-mode-repl-${person.group}">Αντικατάσταση</label>
                         </div>
-                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση:</strong> αποκλείονται άτομα με υπηρεσία ±2 ημέρες κοντά. <strong>Αμοιβαία Αλλαγή:</strong> επιλέγετε άτομο ελεύθερα· μετά εμφανίζεται παράθυρο με τις δύο ημερομηνίες αντιμεταθέσεως και έλεγχο σύγκρουσης μετά την τοποθέτηση (±2 ημέρες).</small>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-manual-${person.group}" value="manual_assign" ${defaultChangeMode === 'manual_assign' ? 'checked' : ''}>
+                            <label class="form-check-label" for="duty-mode-manual-${person.group}">Χειροκίνητη ανάθεση</label>
+                        </div>
+                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση (επιλαχών):</strong> αλλάζει και τη βασική σειρά· αποκλείονται άτομα με υπηρεσία ±2 ημέρες κοντά. <strong>Χειροκίνητη ανάθεση:</strong> αλλάζει μόνο ποιος εμφανίζεται αυτή την ημέρα· η βασική σειρά δεν αλλάζει. <strong>Αμοιβαία Αλλαγή:</strong> αντιμετάθεση δύο ημερομηνιών με έλεγχο σύγκρουσης (±2 ημέρες).</small>
                     </div>`;
                 
                 content += `
@@ -7086,6 +7131,27 @@
                 select.dataset.lastValidValue = newVal;
                 return true;
             }
+            if (mode === 'manual_assign') {
+                if (
+                    typeof isPersonUnavailableForManualDutyOnDate === 'function' &&
+                    typeof currentEditingDayDate !== 'undefined' &&
+                    currentEditingDayDate
+                ) {
+                    let editCat = 'normal';
+                    const dtEdit = typeof getDayType === 'function' ? getDayType(currentEditingDayDate) : 'normal-day';
+                    if ((typeof isSpecialHoliday === 'function' && isSpecialHoliday(currentEditingDayDate)) || dtEdit === 'special-holiday') editCat = 'special';
+                    else if (dtEdit === 'weekend-holiday') editCat = 'weekend';
+                    else if (dtEdit === 'semi-normal-day') editCat = 'semi';
+                    if (isPersonUnavailableForManualDutyOnDate(newVal, group, currentEditingDayDate, editCat)) {
+                        alert(`Ο/η «${newVal}» δεν μπορεί να ανατεθεί: είναι απενεργοποιημένος/η ή απόντης/ουσα για αυτόν τον τύπο υπηρεσίας την ημερομηνία που επεξεργάζεστε.`);
+                        const revert = select.dataset.lastValidValue != null ? select.dataset.lastValidValue : prevPerson;
+                        select.value = revert;
+                        return false;
+                    }
+                }
+                select.dataset.lastValidValue = newVal;
+                return true;
+            }
             if (wouldManualDutySelectionCauseConsecutiveConflict(dayKey, newVal, group, prevPerson, 'replacement')) {
                 alert(formatConsecutiveConflictBlockMessage(newVal, dayKey, group, 'replacement'));
                 const revert = select.dataset.lastValidValue != null ? select.dataset.lastValidValue : prevPerson;
@@ -7179,6 +7245,7 @@
             else if (dtEdit === 'semi-normal-day') editCat = 'semi';
             
             const manualReplacementPlans = [];
+            const manualAssignPlans = [];
 
             // Block manual replacement / mutual swap with people disabled or missing on the relevant duty day(s)
             for (const select of selects) {
@@ -7198,6 +7265,9 @@
                 const mode = modeEl ? modeEl.value : 'replacement';
                 if (mode === 'replacement' && prevPerson && normPerson(prevPerson) !== normPerson(newVal)) {
                     manualReplacementPlans.push({ group, prevPerson, newVal });
+                }
+                if (mode === 'manual_assign' && prevPerson && normPerson(prevPerson) !== normPerson(newVal)) {
+                    manualAssignPlans.push({ group, prevPerson, newVal });
                 }
                 if (mode === 'mutual_swap') {
                     if (!prevPerson) continue;
@@ -7330,12 +7400,15 @@
                 }
             }
 
-            // Αντικατάσταση: αποκλεισμός ±2 ημ. (υπάρχουσες αναθέσεις κοντά)
+            // Αντικατάσταση: αποκλεισμός ±2 ημ. (υπάρχουσες αναθέσεις κοντά) — όχι για χειροκίνητη ανάθεση
             for (const select of selects) {
                 if (select.dataset.isCritical === 'true') continue;
                 const g = parseInt(select.dataset.group, 10);
                 if (!Number.isFinite(g)) continue;
                 if (mutualGroupsDone.has(g)) continue;
+                const modeEl = container.querySelector(`input[name="duty-change-mode-${g}"]:checked`);
+                const mode = modeEl ? modeEl.value : 'replacement';
+                if (mode === 'manual_assign') continue;
                 const prevPerson = typeof parseAssignedPersonForGroupFromAssignment === 'function'
                     ? (parseAssignedPersonForGroupFromAssignment(prevStr, g) || '').trim()
                     : '';
@@ -7396,9 +7469,37 @@
                     storeAssignmentReason(dayKey, p.group, p.newPerson, 'swap', reasonHere, p.prevPerson, pairId, { manualDayModal: true, mutualTwoDaySwap: true, otherDateKey: p.otherKey });
                     storeAssignmentReason(p.otherKey, p.group, p.prevPerson, 'swap', reasonThere, p.newPerson, pairId, { manualDayModal: true, mutualTwoDaySwap: true, otherDateKey: dayKey });
                 }
+                for (const p of manualAssignPlans) {
+                    const baselineStr =
+                        typeof getRotationBaselineAssignmentForType === 'function'
+                            ? getRotationBaselineAssignmentForType(editCat, dayKey)
+                            : '';
+                    const baselinePerson =
+                        typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                            ? (parseAssignedPersonForGroupFromAssignment(baselineStr, p.group) || '').trim()
+                            : '';
+                    if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
+                        clearAssignmentReasonForPersonOnDate(dayKey, p.group, p.prevPerson);
+                    }
+                    const reason =
+                        typeof buildManualDutyAssignmentPreserveBaselineMessage === 'function'
+                            ? buildManualDutyAssignmentPreserveBaselineMessage({
+                                  assignedPersonName: p.newVal,
+                                  displacedPersonName: p.prevPerson,
+                                  baselinePersonName: baselinePerson,
+                                  dateObj: editDate
+                              })
+                            : `Ο/Η ${p.newVal} ανατέθηκε χειροκίνητα στη θέση του/την ${p.prevPerson}. Η βασική σειρά δεν αλλάζει.`;
+                    storeAssignmentReason(dayKey, p.group, p.newVal, 'skip', reason, p.prevPerson, null, {
+                        manualDayModal: true,
+                        preserveBaseline: true,
+                        displacedPerson: p.prevPerson,
+                        baselinePerson: baselinePerson || null
+                    });
+                }
             }
             
-            // Χειροκίνητη ανάθεση (όχι αντικατάσταση επιλαχόντα) — απλή αλλαγή χωρίς prevPerson ή χωρίς mode replacement
+            // Χειροκίνητη ανάθεση (legacy / χωρίς ραδιοκουμπί manual_assign) — απλή αλλαγή χωρίς prevPerson ή χωρίς mode replacement
             selects.forEach(select => {
                 if (select.dataset.isCritical === 'true') return;
                 const group = parseInt(select.dataset.group, 10);
@@ -7413,6 +7514,7 @@
                 const modeEl = container.querySelector(`input[name="duty-change-mode-${group}"]:checked`);
                 const mode = modeEl ? modeEl.value : 'replacement';
                 if (mode === 'mutual_swap') return;
+                if (mode === 'manual_assign') return;
                 if (mode === 'replacement' && prevPerson) return;
                 const dateObj = new Date(dayKey + 'T00:00:00');
                 const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
