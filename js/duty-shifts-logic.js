@@ -8049,34 +8049,66 @@
                                 }
                                 let targetWeekendKey = null;
                                 let isBackwardAssignment = false;
+                                const canPlaceReturnOnWeekendKey = (wk) => {
+                                    if (!wk || wk < calcStartKeyW || wk > calcEndKeyW) return false;
+                                    const wkDate = new Date(wk + 'T00:00:00');
+                                    if (isNaN(wkDate.getTime())) return false;
+                                    if (isPersonMissingOnDate(personName, groupNum, wkDate, 'weekend')) return false;
+                                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(personName, groupNum, 'weekend')) return false;
+                                    if (returnFromMissingWeekendTargets[wk]?.[groupNum]) return false;
+                                    return true;
+                                };
                                 if (hasWeekendInReturnMonth) {
                                     targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, thirdDayAfterEnd);
                                     if (targetWeekendKey && targetWeekendKey < returnMonthStartKey) {
                                         targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, returnMonthStartKey);
                                     }
+                                    if (targetWeekendKey && !canPlaceReturnOnWeekendKey(targetWeekendKey)) {
+                                        let foundForward = null;
+                                        for (const wk of sortedWeekends) {
+                                            if (wk < thirdDayAfterEnd) continue;
+                                            if (wk < returnMonthStartKey) continue;
+                                            if (canPlaceReturnOnWeekendKey(wk)) {
+                                                foundForward = wk;
+                                                break;
+                                            }
+                                        }
+                                        targetWeekendKey = foundForward;
+                                    }
                                 }
                                 if (!targetWeekendKey) {
-                                    targetWeekendKey = findLastWeekendBefore(sortedWeekends, pStartKey);
-                                    isBackwardAssignment = true;
+                                    const backwardCandidates = [];
+                                    for (const wk of sortedWeekends) {
+                                        if (wk >= pStartKey) break;
+                                        backwardCandidates.push(wk);
+                                    }
+                                    for (let i = backwardCandidates.length - 1; i >= 0; i--) {
+                                        const wk = backwardCandidates[i];
+                                        if (canPlaceReturnOnWeekendKey(wk)) {
+                                            targetWeekendKey = wk;
+                                            isBackwardAssignment = true;
+                                            break;
+                                        }
+                                    }
                                 }
-                                if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) continue;
+                                if (!targetWeekendKey || !canPlaceReturnOnWeekendKey(targetWeekendKey)) continue;
                                 // If this (date, group) is already taken by another return-from-missing, use next free weekend in range
                                 let weekendIdx = sortedWeekends.indexOf(targetWeekendKey);
                                 if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
                                     for (let i = weekendIdx + 1; i < sortedWeekends.length; i++) {
                                         const wk = sortedWeekends[i];
                                         if (wk < calcStartKeyW || wk > calcEndKeyW) break;
-                                        if (!returnFromMissingWeekendTargets[wk]?.[groupNum]) { targetWeekendKey = wk; break; }
+                                        if (canPlaceReturnOnWeekendKey(wk)) { targetWeekendKey = wk; break; }
                                     }
                                     if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
                                         for (let i = weekendIdx - 1; i >= 0; i--) {
                                             const wk = sortedWeekends[i];
                                             if (wk < calcStartKeyW || wk > calcEndKeyW) continue;
-                                            if (!returnFromMissingWeekendTargets[wk]?.[groupNum]) { targetWeekendKey = wk; break; }
+                                            if (canPlaceReturnOnWeekendKey(wk)) { targetWeekendKey = wk; break; }
                                         }
                                     }
                                 }
-                                if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) continue;
+                                if (!canPlaceReturnOnWeekendKey(targetWeekendKey)) continue;
                                 const formatDDMMYYYYW = (dk) => {
                                     const d = new Date(dk + 'T00:00:00');
                                     return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
