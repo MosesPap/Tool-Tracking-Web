@@ -1688,6 +1688,11 @@
             if (reason && reason.type === 'skip' && reason.meta && reason.meta.manualAlternateReplacement && reason.swappedWith) {
                 return reason.swappedWith;
             }
+            // Missing/disabled replacement should preserve baseline slot continuity:
+            // if A/B were unavailable and G covered, next slot remains after the skipped baseline person.
+            if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
+                return reason.swappedWith;
+            }
             if (reason && reason.type === 'swap' && reason.swapPairId != null && !reason.meta?.mutualTwoDaySwap) {
                 const otherKey = findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey);
                 const swappedOutPerson = otherKey ? (assignmentsByDate?.[otherKey] || {})[groupNum] : null;
