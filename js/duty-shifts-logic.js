@@ -8036,17 +8036,6 @@
                                 if (!dayAfterEnd) continue;
                                 const thirdDayAfterEnd = addDaysW(pEndKey, 3);
                                 if (!thirdDayAfterEnd) continue;
-                                const returnMonthStart = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 1, 1);
-                                const returnMonthStartKey = formatDateKey(returnMonthStart);
-                                const returnMonthEnd = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 2, 0);
-                                const returnMonthEndKey = formatDateKey(returnMonthEnd);
-                                let hasWeekendInReturnMonth = false;
-                                for (const wk of sortedWeekends) {
-                                    if (wk >= returnMonthStartKey && wk <= returnMonthEndKey) {
-                                        hasWeekendInReturnMonth = true;
-                                        break;
-                                    }
-                                }
                                 let targetWeekendKey = null;
                                 let isBackwardAssignment = false;
                                 const canPlaceReturnOnWeekendKey = (wk) => {
@@ -8058,23 +8047,17 @@
                                     if (returnFromMissingWeekendTargets[wk]?.[groupNum]) return false;
                                     return true;
                                 };
-                                if (hasWeekendInReturnMonth) {
-                                    targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, thirdDayAfterEnd);
-                                    if (targetWeekendKey && targetWeekendKey < returnMonthStartKey) {
-                                        targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, returnMonthStartKey);
-                                    }
-                                    if (targetWeekendKey && !canPlaceReturnOnWeekendKey(targetWeekendKey)) {
-                                        let foundForward = null;
-                                        for (const wk of sortedWeekends) {
-                                            if (wk < thirdDayAfterEnd) continue;
-                                            if (wk < returnMonthStartKey) continue;
-                                            if (canPlaceReturnOnWeekendKey(wk)) {
-                                                foundForward = wk;
-                                                break;
-                                            }
+                                targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, thirdDayAfterEnd);
+                                if (targetWeekendKey && !canPlaceReturnOnWeekendKey(targetWeekendKey)) {
+                                    let foundForward = null;
+                                    for (const wk of sortedWeekends) {
+                                        if (wk < thirdDayAfterEnd) continue;
+                                        if (canPlaceReturnOnWeekendKey(wk)) {
+                                            foundForward = wk;
+                                            break;
                                         }
-                                        targetWeekendKey = foundForward;
                                     }
+                                    targetWeekendKey = foundForward;
                                 }
                                 if (!targetWeekendKey) {
                                     const backwardCandidates = [];
