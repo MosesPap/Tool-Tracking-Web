@@ -6730,11 +6730,10 @@
                         const unavailable = isPersonUnavailableForManualDutyOnDate(p, person.group, date, dayTypeCategory);
                         const prevForConflict = (person.name || '').trim();
                         let consecutiveConflict = false;
-                        const modeForOpts = container?.querySelector(`input[name="duty-change-mode-${person.group}"]:checked`)?.value || defaultChangeMode;
                         if (
                             !isCritical &&
-                            modeForOpts !== 'mutual_swap' &&
-                            modeForOpts !== 'manual_assign' &&
+                            defaultChangeMode !== 'mutual_swap' &&
+                            defaultChangeMode !== 'manual_assign' &&
                             p &&
                             normPick(p) !== normPick(prevForConflict)
                         ) {
