@@ -1084,7 +1084,7 @@
                 return false;
             };
 
-            const isValidDisplacementSlot = (wk) => {
+            const isValidDisplacementSlot = (wk, strictness) => {
                 const displaced = baselineWeekendByDate?.[wk]?.[groupNum];
                 if (!displaced) return false;
                 if (returningPersonName && norm(displaced) === norm(returningPersonName)) return false;
@@ -1092,7 +1092,6 @@
                     typeof getMonthKeyFromDate === 'function'
                         ? getMonthKeyFromDate(new Date(wk + 'T00:00:00'))
                         : wk.substring(0, 7);
-                if (personHasSpecialInMonth(displaced, monthKey)) return false;
                 const baselineCount = countBaselineWeekendsForPersonInMonth(
                     displaced,
                     wk.substring(0, 7),
@@ -1101,20 +1100,31 @@
                     norm
                 );
                 if (baselineCount < 1) return false;
+                const hasSpecial = personHasSpecialInMonth(displaced, monthKey);
+                if (strictness === 'strict') {
+                    return !hasSpecial;
+                }
+                if (strictness === 'relaxed') {
+                    return !hasSpecial || baselineCount >= 2;
+                }
+                // open: last resort — still require a baseline holder, but allow special-only if nothing else exists
                 return true;
             };
 
-            const scoreCandidate = (wk) => {
+            const scoreCandidate = (wk, strictness) => {
                 if (!wk || wk < calcStartKey || wk > calcEndKey) return -1;
                 if (occupiedMap?.[wk]?.[groupNum]) return -1;
                 if (isDutyDateTooCloseToMissingPeriod(wk, pStartKey, pEndKey, 2)) return -1;
-                if (!isValidDisplacementSlot(wk)) return -1;
+                if (!isValidDisplacementSlot(wk, strictness)) return -1;
                 const displaced = baselineWeekendByDate[wk][groupNum];
                 const monthKey =
                     typeof getMonthKeyFromDate === 'function'
                         ? getMonthKeyFromDate(new Date(wk + 'T00:00:00'))
                         : wk.substring(0, 7);
                 let score = 0;
+                if (strictness === 'strict') score += 100;
+                else if (strictness === 'relaxed') score += 50;
+                else if (strictness === 'open') score += 5;
                 if (wk.substring(0, 7) === periodMonthPrefix) score += 40;
                 if (thirdDayAfterEnd && wk >= thirdDayAfterEnd) score += 30;
                 else if (wk < pStartKey) score += 20;
@@ -1126,6 +1136,7 @@
                     norm
                 );
                 if (baselineCount >= 2) score += 25;
+                if (personHasSpecialInMonth(displaced, monthKey)) score -= 80;
                 if (
                     typeof isPersonMissingOnDate === 'function' &&
                     isPersonMissingOnDate(displaced, groupNum, new Date(wk + 'T00:00:00'), 'weekend')
@@ -1140,16 +1151,20 @@
                 return score;
             };
 
-            let bestKey = null;
-            let bestScore = -1;
-            for (const wk of sortedWeekends) {
-                const s = scoreCandidate(wk);
-                if (s > bestScore) {
-                    bestScore = s;
-                    bestKey = wk;
+            const pickBest = (strictness) => {
+                let bestKey = null;
+                let bestScore = -1;
+                for (const wk of sortedWeekends) {
+                    const s = scoreCandidate(wk, strictness);
+                    if (s > bestScore) {
+                        bestScore = s;
+                        bestKey = wk;
+                    }
                 }
-            }
-            return bestKey;
+                return bestKey;
+            };
+
+            return pickBest('strict') || pickBest('relaxed') || pickBest('open');
         }
 
         /** First eligible semi on/after threshold: prefer same calendar month as threshold, then any later semi in range. */
@@ -8182,6 +8197,22 @@
                                         }
                                     }
                                 }
+                                if (!hadMissedWeekend) {
+                                    const periodScanStart = maxKeyW(calcStartKeyW, pStartKey);
+                                    const periodScanEnd = minKeyW(calcEndKeyW, pEndKey);
+                                    if (periodScanStart && periodScanEnd && periodScanStart <= periodScanEnd) {
+                                        for (const wk of sortedWeekends) {
+                                            if (wk < periodScanStart) continue;
+                                            if (wk > periodScanEnd) break;
+                                            const base = baselineWeekendByDate[wk]?.[groupNum];
+                                            if (base && normW(base) === normW(personName)) {
+                                                hadMissedWeekend = true;
+                                                if (!firstMissedWeekendKey) firstMissedWeekendKey = wk;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
                                 if (!hadMissedWeekend) continue;
                                 let targetWeekendKey = pickWeekendReturnFromMissingTargetKey(
                                     sortedWeekends,
@@ -8300,12 +8331,16 @@
                                 missingEndW &&
                                 dateKey >= missingStartW &&
                                 dateKey <= missingEndW;
-                            if (
-                                designatedWeekend &&
-                                assignedPersonForReturn &&
+                            const returnPlacementAfterAbsenceW =
+                                missingEndW && dateKey > missingEndW;
+                            const returnPlacementBeforeAbsenceW =
+                                missingStartW && dateKey < missingStartW;
+                            const returnPersonEligibleOnPlacementW =
                                 !placementInsideAbsenceW &&
-                                !isPersonMissingOnDate(assignedPersonForReturn, groupNum, date, 'weekend')
-                            ) {
+                                (returnPlacementAfterAbsenceW ||
+                                    returnPlacementBeforeAbsenceW ||
+                                    !isPersonMissingOnDate(assignedPersonForReturn, groupNum, date, 'weekend'));
+                            if (designatedWeekend && assignedPersonForReturn && returnPersonEligibleOnPlacementW) {
                                 const assignedPerson = assignedPersonForReturn;
                                 if (!assignedByReturnFromMissingWeekend[groupNum]) assignedByReturnFromMissingWeekend[groupNum] = new Set();
                                 assignedByReturnFromMissingWeekend[groupNum].add(assignedPerson);
