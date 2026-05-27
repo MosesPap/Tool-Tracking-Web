@@ -1213,6 +1213,21 @@
             };
             const prevMonthStart = new Date(dateInMonth.getFullYear(), dateInMonth.getMonth() - 1, 1);
             const prevMonthKey = getPreviousMonthKeyFromDate(dateInMonth);
+            const prevManualAlternate = findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInMonth, groupNum);
+
+            // Fast path: no manual alternate in previous month -> seed directly from previous month baseline continuity.
+            // This avoids synthetic cursor drift and preserves exact baseline carry-over.
+            if (!prevManualAlternate?.replacementPerson) {
+                const lastBaselinePerson =
+                    getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum) ||
+                    getLastAssignmentContinuityPersonForPreviousMonth(dayTypeCategory, dateInMonth, groupNum) ||
+                    getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+                const baselineIdx = findIdx(lastBaselinePerson);
+                if (lastBaselinePerson && baselineIdx >= 0) {
+                    return (baselineIdx + 1) % len;
+                }
+                return 0;
+            }
 
             let cursor = 0;
             const seedBeforePrev =
