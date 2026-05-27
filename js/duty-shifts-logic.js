@@ -4188,6 +4188,18 @@
                         if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
+                        const existingReasonForCurrent = getAssignmentReason(dateKey, groupNum, currentPerson);
+                        const isLockedReturnFromMissingWeekend =
+                            !!(
+                                existingReasonForCurrent &&
+                                existingReasonForCurrent.type === 'skip' &&
+                                existingReasonForCurrent.meta?.returnFromMissing &&
+                                existingReasonForCurrent.meta?.insertedByShift
+                            );
+                        if (isLockedReturnFromMissingWeekend) {
+                            assignedWeekendInMonth[monthKey][groupNum].add(currentPerson);
+                            continue;
+                        }
                         const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(currentPerson) || false;
                         const alreadyAssignedThisMonth = assignedWeekendInMonth[monthKey][groupNum].has(currentPerson);
                         if (!hasSpecialHoliday && !alreadyAssignedThisMonth) {
@@ -4266,6 +4278,18 @@
                         if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
+                        const existingReasonForCurrent = getAssignmentReason(dateKey, groupNum, currentPerson);
+                        const isLockedReturnFromMissingWeekend =
+                            !!(
+                                existingReasonForCurrent &&
+                                existingReasonForCurrent.type === 'skip' &&
+                                existingReasonForCurrent.meta?.returnFromMissing &&
+                                existingReasonForCurrent.meta?.insertedByShift
+                            );
+                        if (isLockedReturnFromMissingWeekend) {
+                            assignedWeekendInMonth[monthKey][groupNum].add(currentPerson);
+                            continue;
+                        }
                         if (!isPersonMissingOnDate(currentPerson, groupNum, date, 'weekend')) continue;
                         const rotationDays = groupPeople.length;
                         let currentIndex = groupPeople.indexOf(currentPerson);
