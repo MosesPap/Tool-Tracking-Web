@@ -1218,13 +1218,13 @@
             // Fast path: no manual alternate in previous month -> seed directly from previous month baseline continuity.
             // This avoids synthetic cursor drift and preserves exact baseline carry-over.
             if (!prevManualAlternate?.replacementPerson) {
-                const lastBaselinePerson =
-                    getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum) ||
+                const lastContinuityPerson =
                     getLastAssignmentContinuityPersonForPreviousMonth(dayTypeCategory, dateInMonth, groupNum) ||
-                    getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-                const baselineIdx = findIdx(lastBaselinePerson);
-                if (lastBaselinePerson && baselineIdx >= 0) {
-                    return (baselineIdx + 1) % len;
+                    getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum) ||
+                    getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+                const continuityIdx = findIdx(lastContinuityPerson);
+                if (lastContinuityPerson && continuityIdx >= 0) {
+                    return (continuityIdx + 1) % len;
                 }
                 return 0;
             }
