@@ -494,6 +494,50 @@
         window.clearDutyCalcContextDateKey = clearDutyCalcContextDateKey;
         window.groupsForDuty = groupsForDuty;
         window.getSortedGroupListForRotation = getSortedGroupListForRotation;
+
+        /** Missing periods for a person — match storage key or any normalized alias in missingPeriods. */
+        function getMissingPeriodsForPersonInGroup(groupNum, personName) {
+            const groupData = groups[groupNum];
+            const missingMap = groupData?.missingPeriods;
+            if (!missingMap || typeof missingMap !== 'object') return [];
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) => String(s || '').trim();
+            const nk = norm(personName);
+            if (Array.isArray(missingMap[personName]) && missingMap[personName].length) {
+                return missingMap[personName];
+            }
+            for (const key of Object.keys(missingMap)) {
+                if (norm(key) === nk && Array.isArray(missingMap[key])) return missingMap[key];
+            }
+            return [];
+        }
+
+        /** True if person is on weekend rotation for this group (raw roster or date-scoped list). */
+        function isPersonOnWeekendDutyForGroup(groupNum, personName, dateKey) {
+            if (!personName || !Number.isFinite(groupNum)) return false;
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) => String(s || '').trim();
+            const nk = norm(personName);
+            const raw = groups[groupNum]?.weekend || [];
+            if (raw.some((p) => norm(p) === nk)) return true;
+            const sorted =
+                typeof getSortedGroupListForRotation === 'function'
+                    ? getSortedGroupListForRotation(groupNum, 'weekend')
+                    : raw;
+            if (sorted.some((p) => norm(p) === nk)) return true;
+            if (dateKey && typeof getGroupRotationListAtDate === 'function') {
+                const atDate = getGroupRotationListAtDate(groupNum, 'weekend', dateKey);
+                if (atDate.some((p) => norm(p) === nk)) return true;
+            }
+            return false;
+        }
+
+        window.getMissingPeriodsForPersonInGroup = getMissingPeriodsForPersonInGroup;
+        window.isPersonOnWeekendDutyForGroup = isPersonOnWeekendDutyForGroup;
         window.syncGroupListArraysFromPriorities = syncGroupListArraysFromPriorities;
         window.scheduleListOrdersForGroup = scheduleListOrdersForGroup;
         function getPendingScheduledStatusSummary(personName, groupNum) {

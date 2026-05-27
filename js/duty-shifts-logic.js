@@ -1249,14 +1249,25 @@
                     const hit = weekendList.find((p) => normW(p) === nk);
                     return hit || key;
                 };
+                const getPeriodsForPerson = (personKey) =>
+                    typeof getMissingPeriodsForPersonInGroup === 'function'
+                        ? getMissingPeriodsForPersonInGroup(groupNum, personKey)
+                        : Array.isArray(missingMap[personKey])
+                          ? missingMap[personKey]
+                          : [];
                 for (const personNameRaw of Object.keys(missingMap)) {
                     const personName = resolveWeekendPersonKey(personNameRaw);
-                    if (!weekendList.some((p) => normW(p) === normW(personName))) continue;
-                    const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
+                    const periods = getPeriodsForPerson(personNameRaw);
+                    if (!periods.length) continue;
                     for (const period of periods) {
                         const pStartKey = inputValueToDateKey(period?.start);
                         const pEndKey = inputValueToDateKey(period?.end);
                         if (!pStartKey || !pEndKey) continue;
+                        const onWeekendDuty =
+                            typeof isPersonOnWeekendDutyForGroup === 'function'
+                                ? isPersonOnWeekendDutyForGroup(groupNum, personName, pStartKey)
+                                : weekendList.some((p) => normW(p) === normW(personName));
+                        if (!onWeekendDuty) continue;
                         const periodEndsInRange = pEndKey >= calcStartKey && pEndKey <= calcEndKey;
                         const periodEndsInPrevMonth =
                             prevMonthStartKey && prevMonthEndKey && pEndKey >= prevMonthStartKey && pEndKey <= prevMonthEndKey;
@@ -8334,6 +8345,14 @@
                               baselineWeekendByDate
                           )
                         : {};
+
+                if (Object.keys(returnFromMissingWeekendTargets).length > 0) {
+                    applyWeekendReturnFromMissingTargetsToAssignments(
+                        returnFromMissingWeekendTargets,
+                        simulatedWeekendAssignments,
+                        baselineWeekendByDate
+                    );
+                }
                 
                 sortedWeekends.forEach((dateKey, weekendIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
@@ -8412,12 +8431,19 @@
                             const matchingPerson =
                                 designatedWeekend &&
                                 groupPeople.find((p) => normWeekend(p) === normWeekend(designatedWeekend.personName));
+                            const preAppliedReturn =
+                                designatedWeekend &&
+                                simulatedWeekendAssignments[dateKey]?.[groupNum] &&
+                                normWeekend(simulatedWeekendAssignments[dateKey][groupNum]) ===
+                                    normWeekend(designatedWeekend.personName)
+                                    ? simulatedWeekendAssignments[dateKey][groupNum]
+                                    : null;
                             if (
                                 designatedWeekend &&
-                                matchingPerson &&
-                                !isPersonMissingOnDate(matchingPerson, groupNum, date, 'weekend')
+                                (matchingPerson || preAppliedReturn) &&
+                                !isPersonMissingOnDate(matchingPerson || preAppliedReturn, groupNum, date, 'weekend')
                             ) {
-                                const assignedPerson = matchingPerson;
+                                const assignedPerson = matchingPerson || preAppliedReturn;
                                 if (!assignedByReturnFromMissingWeekend[groupNum]) assignedByReturnFromMissingWeekend[groupNum] = new Set();
                                 assignedByReturnFromMissingWeekend[groupNum].add(assignedPerson);
                                 // Next slot goes to the displaced (baseline) person – set position to displaced person's index so we get F, A, B, C
@@ -12230,7 +12256,10 @@
             const mpGroup = homeGroup != null ? homeGroup : groupNum;
             const groupData = groups[mpGroup] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, mpGroup, dutyCategory, date)) return true;
-            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            const missingPeriods =
+                typeof getMissingPeriodsForPersonInGroup === 'function'
+                    ? getMissingPeriodsForPersonInGroup(mpGroup, person)
+                    : groupData.missingPeriods?.[person] || [];
             if (missingPeriods.length === 0) return false;
             
             const checkDate = new Date(date);
