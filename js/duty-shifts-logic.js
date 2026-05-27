@@ -484,6 +484,14 @@
             }
             return 'Κώλυμα/Απουσία';
         }
+        function isDebugTrackedReturnFromMissingPerson(personName) {
+            const norm = (s) =>
+                String(s || '')
+                    .trim()
+                    .replace(/\s+/g, ' ')
+                    .toUpperCase();
+            return norm(personName) === 'ΕΣΜΙΑΣ ΟΝΗΣΙΦΟΡΟΥ ΠΑΝΙΚΟΣ';
+        }
         function buildUnavailableReplacementReason({ skippedPersonName, replacementPersonName, dateObj, groupNum, dutyCategory = null }) {
             if (typeof buildUnavailableReplacementUnifiedMessage === 'function') {
                 const unified = buildUnavailableReplacementUnifiedMessage({
@@ -3621,6 +3629,16 @@
                             targetKey = dk;
                             break;
                         }
+                    }
+                    if (isDebugTrackedReturnFromMissingPerson(personName)) {
+                        console.log('[RFM DEBUG][SPECIAL] target-resolution', {
+                            personName,
+                            groupNum,
+                            missedDateKey,
+                            missingStartKey,
+                            sameMonthSpecials,
+                            targetKey
+                        });
                     }
                     if (!targetKey) continue;
                     usedReturnFromMissingSpecial.add(`${targetKey}:${groupNum}`);
@@ -8065,6 +8083,19 @@
                                         }
                                     }
                                 }
+                                if (isDebugTrackedReturnFromMissingPerson(personName)) {
+                                    console.log('[RFM DEBUG][WEEKEND] missed-check', {
+                                        personName,
+                                        groupNum,
+                                        pStartKey,
+                                        pEndKey,
+                                        periodEndsInRange,
+                                        periodEndsInPrevMonth,
+                                        scanStartKey,
+                                        scanEndKey,
+                                        hadMissedWeekend
+                                    });
+                                }
                                 if (!hadMissedWeekend) continue;
                                 const dayAfterEnd = addDaysW(pEndKey, 1);
                                 if (!dayAfterEnd) continue;
@@ -8093,6 +8124,19 @@
                                     targetWeekendKey = findLastWeekendBefore(sortedWeekends, pStartKey);
                                     isBackwardAssignment = true;
                                 }
+                                if (isDebugTrackedReturnFromMissingPerson(personName)) {
+                                    console.log('[RFM DEBUG][WEEKEND] target-candidate', {
+                                        personName,
+                                        groupNum,
+                                        dayAfterEnd,
+                                        thirdDayAfterEnd,
+                                        hasWeekendInReturnMonth,
+                                        targetWeekendKey,
+                                        isBackwardAssignment,
+                                        calcStartKeyW,
+                                        calcEndKeyW
+                                    });
+                                }
                                 if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) continue;
                                 // If this (date, group) is already taken by another return-from-missing, use next free weekend in range
                                 let weekendIdx = sortedWeekends.indexOf(targetWeekendKey);
@@ -8119,6 +8163,16 @@
                                 const reasonOfMissingW = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                                 if (!returnFromMissingWeekendTargets[targetWeekendKey]) returnFromMissingWeekendTargets[targetWeekendKey] = {};
                                 returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = { personName, missingEnd: pEndKey, isBackwardAssignment, missingRangeStr: missingRangeStrW, reasonOfMissing: reasonOfMissingW };
+                                if (isDebugTrackedReturnFromMissingPerson(personName)) {
+                                    console.log('[RFM DEBUG][WEEKEND] target-selected', {
+                                        personName,
+                                        groupNum,
+                                        targetWeekendKey,
+                                        isBackwardAssignment,
+                                        missingRangeStrW,
+                                        reasonOfMissingW
+                                    });
+                                }
                             }
                         }
                     }
