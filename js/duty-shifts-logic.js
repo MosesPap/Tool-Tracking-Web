@@ -3205,7 +3205,7 @@
                             // Only count as return-from-missing if the missed special is BEFORE the current range (not a future month).
                             if (firstDateKeyInRange && missedDateKey >= firstDateKeyInRange) continue;
                             addedReturnFromPrevMonths.add(dedupeKey);
-                            returnFromMissingSpecial.push({ personName, groupNum, missedDateKey });
+                            returnFromMissingSpecial.push({ personName, groupNum, missedDateKey, missingStartKey: pStartKey, missingEndKey: pEndKey });
                             console.log(`[SPECIAL RETURN-FROM-MISSING] ${personName} (group ${groupNum}) missed special ${missedDateKey} (before current range); will assign in current range`);
                             break;
                         }
@@ -3424,7 +3424,17 @@
                                         missedDateKey: dateKey,
                                         assignedReturnFromMissing: true
                                     });
-                                    returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
+                                    const rotMissingPeriodA =
+                                        typeof getPersonMissingPeriod === 'function'
+                                            ? getPersonMissingPeriod(rotationPerson, groupNum, date)
+                                            : null;
+                                    returnFromMissingSpecial.push({
+                                        personName: rotationPerson,
+                                        groupNum,
+                                        missedDateKey: dateKey,
+                                        missingStartKey: rotMissingPeriodA?.start || null,
+                                        missingEndKey: rotMissingPeriodA?.end || null
+                                    });
                                     if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
                                     reservedReturnFromMissingByGroup[groupNum].add(rotationPerson);
                                     break;
@@ -3450,7 +3460,17 @@
                                             replacementType: 'next-in-baseline',
                                             missedDateKey: dateKey
                                         });
-                                        returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
+                                        const rotMissingPeriodB =
+                                            typeof getPersonMissingPeriod === 'function'
+                                                ? getPersonMissingPeriod(rotationPerson, groupNum, date)
+                                                : null;
+                                        returnFromMissingSpecial.push({
+                                            personName: rotationPerson,
+                                            groupNum,
+                                            missedDateKey: dateKey,
+                                            missingStartKey: rotMissingPeriodB?.start || null,
+                                            missingEndKey: rotMissingPeriodB?.end || null
+                                        });
                                         if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
                                         reservedReturnFromMissingByGroup[groupNum].add(rotationPerson);
                                         break;
@@ -3560,7 +3580,7 @@
                     return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
                 });
                 for (const entry of returnFromMissingSortedByBaselineOrder) {
-                    const { personName, groupNum, missedDateKey } = entry;
+                    const { personName, groupNum, missedDateKey, missingStartKey } = entry;
                     if (assignedReturnFromMissingInForEach.has(`${personName}|${groupNum}`)) continue;
                     if (isAlreadyAssignedInSavedForLoop(personName, groupNum)) continue;
                     const missedDate = new Date(missedDateKey + 'T00:00:00');
@@ -3581,6 +3601,20 @@
                     if (!targetKey) {
                         for (const dk of sortedSpecial) {
                             if (dk <= missedDateKey) continue;
+                            if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
+                            const dateObj = new Date(dk + 'T00:00:00');
+                            if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
+                            targetKey = dk;
+                            break;
+                        }
+                    }
+                    // If there is no later special slot, allow same-month backward placement (like normal/weekend reinsertion).
+                    if (!targetKey) {
+                        const backwardThresholdKey = missingStartKey || missedDateKey;
+                        const backwardCandidates = sameMonthSpecials
+                            .filter((dk) => dk < backwardThresholdKey)
+                            .sort((a, b) => (a > b ? -1 : (a < b ? 1 : 0)));
+                        for (const dk of backwardCandidates) {
                             if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
                             const dateObj = new Date(dk + 'T00:00:00');
                             if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
@@ -4188,18 +4222,6 @@
                         if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
-                        const existingReasonForCurrent = getAssignmentReason(dateKey, groupNum, currentPerson);
-                        const isLockedReturnFromMissingWeekend =
-                            !!(
-                                existingReasonForCurrent &&
-                                existingReasonForCurrent.type === 'skip' &&
-                                existingReasonForCurrent.meta?.returnFromMissing &&
-                                existingReasonForCurrent.meta?.insertedByShift
-                            );
-                        if (isLockedReturnFromMissingWeekend) {
-                            assignedWeekendInMonth[monthKey][groupNum].add(currentPerson);
-                            continue;
-                        }
                         const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(currentPerson) || false;
                         const alreadyAssignedThisMonth = assignedWeekendInMonth[monthKey][groupNum].has(currentPerson);
                         if (!hasSpecialHoliday && !alreadyAssignedThisMonth) {
@@ -4278,18 +4300,6 @@
                         if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (!currentPerson) continue;
-                        const existingReasonForCurrent = getAssignmentReason(dateKey, groupNum, currentPerson);
-                        const isLockedReturnFromMissingWeekend =
-                            !!(
-                                existingReasonForCurrent &&
-                                existingReasonForCurrent.type === 'skip' &&
-                                existingReasonForCurrent.meta?.returnFromMissing &&
-                                existingReasonForCurrent.meta?.insertedByShift
-                            );
-                        if (isLockedReturnFromMissingWeekend) {
-                            assignedWeekendInMonth[monthKey][groupNum].add(currentPerson);
-                            continue;
-                        }
                         if (!isPersonMissingOnDate(currentPerson, groupNum, date, 'weekend')) continue;
                         const rotationDays = groupPeople.length;
                         let currentIndex = groupPeople.indexOf(currentPerson);
@@ -8055,80 +8065,52 @@
                                         }
                                     }
                                 }
-                                // Fallback: when baselineWeekendByDate does not reflect the actual expected slot
-                                // (e.g. edge continuity cases), use expected-rotation computation.
-                                if (!hadMissedWeekend && typeof computeExpectedRotationPersonForDate === 'function') {
-                                    for (const wk of sortedWeekends) {
-                                        if (wk < scanStartKey) continue;
-                                        if (wk > scanEndKey) break;
-                                        const expected = computeExpectedRotationPersonForDate('weekend', wk, groupNum);
-                                        if (expected && normW(expected) === normW(personName)) {
-                                            hadMissedWeekend = true;
-                                            break;
-                                        }
-                                    }
-                                }
                                 if (!hadMissedWeekend) continue;
                                 const dayAfterEnd = addDaysW(pEndKey, 1);
                                 if (!dayAfterEnd) continue;
                                 const thirdDayAfterEnd = addDaysW(pEndKey, 3);
                                 if (!thirdDayAfterEnd) continue;
+                                const returnMonthStart = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 1, 1);
+                                const returnMonthStartKey = formatDateKey(returnMonthStart);
+                                const returnMonthEnd = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 2, 0);
+                                const returnMonthEndKey = formatDateKey(returnMonthEnd);
+                                let hasWeekendInReturnMonth = false;
+                                for (const wk of sortedWeekends) {
+                                    if (wk >= returnMonthStartKey && wk <= returnMonthEndKey) {
+                                        hasWeekendInReturnMonth = true;
+                                        break;
+                                    }
+                                }
                                 let targetWeekendKey = null;
                                 let isBackwardAssignment = false;
-                                const canPlaceReturnOnWeekendKey = (wk) => {
-                                    if (!wk || wk < calcStartKeyW || wk > calcEndKeyW) return false;
-                                    const wkDate = new Date(wk + 'T00:00:00');
-                                    if (isNaN(wkDate.getTime())) return false;
-                                    if (isPersonMissingOnDate(personName, groupNum, wkDate, 'weekend')) return false;
-                                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(personName, groupNum, 'weekend')) return false;
-                                    if (returnFromMissingWeekendTargets[wk]?.[groupNum]) return false;
-                                    return true;
-                                };
-                                targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, thirdDayAfterEnd);
-                                if (targetWeekendKey && !canPlaceReturnOnWeekendKey(targetWeekendKey)) {
-                                    let foundForward = null;
-                                    for (const wk of sortedWeekends) {
-                                        if (wk < thirdDayAfterEnd) continue;
-                                        if (canPlaceReturnOnWeekendKey(wk)) {
-                                            foundForward = wk;
-                                            break;
-                                        }
+                                if (hasWeekendInReturnMonth) {
+                                    targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, thirdDayAfterEnd);
+                                    if (targetWeekendKey && targetWeekendKey < returnMonthStartKey) {
+                                        targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, returnMonthStartKey);
                                     }
-                                    targetWeekendKey = foundForward;
                                 }
                                 if (!targetWeekendKey) {
-                                    const backwardCandidates = [];
-                                    for (const wk of sortedWeekends) {
-                                        if (wk >= pStartKey) break;
-                                        backwardCandidates.push(wk);
-                                    }
-                                    for (let i = backwardCandidates.length - 1; i >= 0; i--) {
-                                        const wk = backwardCandidates[i];
-                                        if (canPlaceReturnOnWeekendKey(wk)) {
-                                            targetWeekendKey = wk;
-                                            isBackwardAssignment = true;
-                                            break;
-                                        }
-                                    }
+                                    targetWeekendKey = findLastWeekendBefore(sortedWeekends, pStartKey);
+                                    isBackwardAssignment = true;
                                 }
-                                if (!targetWeekendKey || !canPlaceReturnOnWeekendKey(targetWeekendKey)) continue;
+                                if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) continue;
                                 // If this (date, group) is already taken by another return-from-missing, use next free weekend in range
                                 let weekendIdx = sortedWeekends.indexOf(targetWeekendKey);
                                 if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
                                     for (let i = weekendIdx + 1; i < sortedWeekends.length; i++) {
                                         const wk = sortedWeekends[i];
                                         if (wk < calcStartKeyW || wk > calcEndKeyW) break;
-                                        if (canPlaceReturnOnWeekendKey(wk)) { targetWeekendKey = wk; break; }
+                                        if (!returnFromMissingWeekendTargets[wk]?.[groupNum]) { targetWeekendKey = wk; break; }
                                     }
                                     if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
                                         for (let i = weekendIdx - 1; i >= 0; i--) {
                                             const wk = sortedWeekends[i];
                                             if (wk < calcStartKeyW || wk > calcEndKeyW) continue;
-                                            if (canPlaceReturnOnWeekendKey(wk)) { targetWeekendKey = wk; break; }
+                                            if (!returnFromMissingWeekendTargets[wk]?.[groupNum]) { targetWeekendKey = wk; break; }
                                         }
                                     }
                                 }
-                                if (!canPlaceReturnOnWeekendKey(targetWeekendKey)) continue;
+                                if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) continue;
                                 const formatDDMMYYYYW = (dk) => {
                                     const d = new Date(dk + 'T00:00:00');
                                     return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
