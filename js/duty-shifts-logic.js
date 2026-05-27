@@ -8058,7 +8058,16 @@
                                     for (const wk of sortedWeekends) {
                                         if (wk < scanStartKey) continue;
                                         if (wk > scanEndKey) break;
-                                        const base = baselineWeekendByDate[wk]?.[groupNum];
+                                        const basePreview = baselineWeekendByDate[wk]?.[groupNum] || null;
+                                        const baseStored =
+                                            typeof getRotationBaselineAssignmentForType === 'function' &&
+                                            typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                                                ? parseAssignedPersonForGroupFromAssignment(
+                                                      getRotationBaselineAssignmentForType('weekend', wk),
+                                                      groupNum
+                                                  )
+                                                : null;
+                                        const base = basePreview || baseStored;
                                         if (base && normW(base) === normW(personName)) {
                                             hadMissedWeekend = true;
                                             break;
