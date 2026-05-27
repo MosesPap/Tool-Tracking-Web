@@ -116,14 +116,19 @@
         }
         /**
          * Αν η «ισχύς από» πέσει στο τελευταίο ημερολογιακό δεκαήμερο του μήνα της,
-         * για υπολογισμούς μεταφέρεται στην 1η του επόμενου μήνα (ο μήνας της ημερομηνίας δεν επηρεάζεται από αυτή την ημερομηνία).
-         * Παράδειγμα: 22/03/2026 → 01/04/2026 (ο Μάρτιος έχει 31 μέρες → δεκαήμερο από 22).
+         * για υπολογισμούς μεταφέρεται στην 1η του επόμενου μήνα.
+         * Εξαίρεση: όταν ο χρήστης επιλέξει ρητά τη σημερινή ημερομηνία,
+         * η ισχύς παραμένει σήμερα ώστε η αλλαγή να φανεί άμεσα στο UI.
          */
         function normalizeStatusEffectiveFromDateKey(dateKey) {
             if (!dateKey || String(dateKey) === PERSON_STATUS_SCHEDULE_EPOCH) return dateKey;
             if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey))) return dateKey;
             const d = dateFromDateKey(dateKey);
             if (!d) return dateKey;
+            const todayKey = typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null;
+            if (todayKey && String(dateKey) === todayKey) {
+                return dateKey;
+            }
             const y = d.getFullYear();
             const m = d.getMonth();
             const day = d.getDate();
