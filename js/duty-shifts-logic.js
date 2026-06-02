@@ -623,78 +623,41 @@
                 meta
             );
         }
-        /** True when stored reason is an absence/disabled replacement (not return-from-missing, swap, or manual). */
-        function isPreviewUnavailableReplacementReason(reason) {
+        /** Απουσία/απενεργοποίηση — όχι return-from-missing, swap, χειροκίνητη. */
+        function isUnavailableReplacementReason(reason) {
             if (!reason || reason.type !== 'skip') return false;
             const m = reason.meta || {};
             if (m.returnFromMissing || m.preserveBaseline || m.manualAlternateReplacement || m.manualAlternateDeferFulfillment) {
                 return false;
             }
-            if (m.unavailableReplacement) return true;
-            if (reason.swapPairId != null && reason.swapPairId !== undefined) return false;
-            const raw = String(reason.reason || '');
-            return raw.includes('αντικατέστησε τον/την') || raw.includes('Απενεργοποιημένος');
+            return !!m.unavailableReplacement;
         }
-        /** Remove stale absence-replacement reasons on one date/group when final assignee changed (e.g. ΤΥΡΡΗ → ΒΙΟΛΑΡΗΣ). */
-        function clearStaleUnavailableReplacementReasonsOnDateGroup(dateKey, groupNum, baselinePerson, assignedPerson) {
-            if (!dateKey || !Number.isFinite(groupNum) || groupNum < 1) return;
-            const gmap = assignmentReasons[dateKey]?.[groupNum];
-            if (!gmap) return;
+        /** Καθαρίζει λάθος/παλιούς λόγους αντικατάστασης σε ένα κελί ΣΚ πριν τον τελικό συγχρονισμό. */
+        function purgeStaleWeekendReplacementReasons(dateKey, groupNum, assignedPerson, expectedSkippedBaseline) {
+            if (!dateKey || !Number.isFinite(groupNum) || groupNum < 1 || !assignedPerson) return;
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
             const assignedNorm = norm(assignedPerson);
+            const skippedNorm = expectedSkippedBaseline ? norm(expectedSkippedBaseline) : '';
+            const onAssignee = getAssignmentReason(dateKey, groupNum, assignedPerson);
+            if (
+                onAssignee &&
+                isUnavailableReplacementReason(onAssignee) &&
+                skippedNorm &&
+                onAssignee.swappedWith &&
+                norm(onAssignee.swappedWith) !== skippedNorm
+            ) {
+                clearAssignmentReasonForPersonOnDate(dateKey, groupNum, assignedPerson);
+            }
+            const gmap = assignmentReasons[dateKey]?.[groupNum];
+            if (!gmap) return;
             for (const pn of Object.keys(gmap)) {
                 if (assignedNorm && norm(pn) === assignedNorm) continue;
-                const r = gmap[pn];
-                if (!isPreviewUnavailableReplacementReason(r)) continue;
+                if (!isUnavailableReplacementReason(gmap[pn])) continue;
                 clearAssignmentReasonForPersonOnDate(dateKey, groupNum, pn);
             }
         }
-        /** Pure rotation baseline (πριν skip) overrides preview slot baseline για αποθήκευση/underline. */
-        function mergeWeekendRotationBaselineMaps(pureRotationBaseline, previewRotationBaseline) {
-            const merged = {};
-            const keys = new Set([
-                ...Object.keys(pureRotationBaseline || {}),
-                ...Object.keys(previewRotationBaseline || {})
-            ]);
-            for (const dk of keys) {
-                merged[dk] = { ...(previewRotationBaseline?.[dk] || {}) };
-                if (pureRotationBaseline?.[dk]) {
-                    Object.assign(merged[dk], pureRotationBaseline[dk]);
-                }
-            }
-            return merged;
-        }
-        function applyWeekendPreviewReasonAndBaselineSync(
-            simulatedAssignments,
-            pureRotationBaseline,
-            previewRotationBaseline,
-            returnTargets
-        ) {
-            const mergedBaseline = mergeWeekendRotationBaselineMaps(
-                pureRotationBaseline,
-                previewRotationBaseline
-            );
-            refreshAllWeekendAssignmentReasonsFromPreview(
-                simulatedAssignments,
-                mergedBaseline,
-                returnTargets
-            );
-            calculationSteps.tempWeekendBaselineAssignments = mergedBaseline;
-            if (typeof formatGroupAssignmentsToStringMap === 'function') {
-                const formatted = formatGroupAssignmentsToStringMap(mergedBaseline);
-                if (typeof rotationBaselineWeekendAssignments !== 'undefined') {
-                    Object.assign(rotationBaselineWeekendAssignments, formatted);
-                }
-            }
-            if (typeof renderCalendar === 'function') {
-                renderCalendar();
-            }
-            return mergedBaseline;
-        }
-        /**
-         * Align assignmentReasons with preview baseline vs final assignee (calendar underline + day modal).
-         */
-        function syncWeekendUnavailableReplacementReasonFromPreview(dateKey, groupNum, baselinePerson, assignedPerson, dateObj) {
+        /** Ένα κελί: baseline σειράς (απουσία/απενεργ.) vs τελική ανάθεση → assignmentReasons. */
+        function syncWeekendReplacementReason(dateKey, groupNum, baselinePerson, assignedPerson, dateObj) {
             if (!dateKey || !Number.isFinite(groupNum) || groupNum < 1 || !assignedPerson) return;
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
             const date =
@@ -702,54 +665,47 @@
                     ? dateObj
                     : new Date(String(dateKey || '') + 'T00:00:00');
             if (isNaN(date.getTime())) return;
-            clearStaleUnavailableReplacementReasonsOnDateGroup(
-                dateKey,
-                groupNum,
-                baselinePerson,
-                assignedPerson
-            );
-            const existingOnAssigneeEarly = getAssignmentReason(dateKey, groupNum, assignedPerson);
+            purgeStaleWeekendReplacementReasons(dateKey, groupNum, assignedPerson, baselinePerson);
+            if (!baselinePerson || norm(baselinePerson) === norm(assignedPerson)) return;
+            const existing = getAssignmentReason(dateKey, groupNum, assignedPerson);
             if (
-                baselinePerson &&
-                existingOnAssigneeEarly &&
-                isPreviewUnavailableReplacementReason(existingOnAssigneeEarly) &&
-                existingOnAssigneeEarly.swappedWith &&
-                norm(existingOnAssigneeEarly.swappedWith) !== norm(baselinePerson)
+                existing?.meta?.returnFromMissing ||
+                existing?.meta?.preserveBaseline ||
+                existing?.meta?.manualAlternateReplacement ||
+                existing?.meta?.manualAlternateDeferFulfillment
             ) {
-                clearAssignmentReasonForPersonOnDate(dateKey, groupNum, assignedPerson);
-            }
-            if (baselinePerson && norm(baselinePerson) === norm(assignedPerson)) {
                 return;
             }
-            if (!baselinePerson) return;
-            const existingOnAssignee = getAssignmentReason(dateKey, groupNum, assignedPerson);
-            if (existingOnAssignee?.meta?.returnFromMissing || existingOnAssignee?.meta?.preserveBaseline) return;
-            if (existingOnAssignee?.meta?.manualAlternateReplacement || existingOnAssignee?.meta?.manualAlternateDeferFulfillment) {
-                return;
-            }
-            const needsUnavailableReason =
+            const baselineUnavailable =
                 (typeof isPersonMissingOnDate === 'function' &&
                     isPersonMissingOnDate(baselinePerson, groupNum, date, 'weekend')) ||
                 (typeof isPersonDisabledForDuty === 'function' &&
                     isPersonDisabledForDuty(baselinePerson, groupNum, 'weekend'));
-            if (!needsUnavailableReason) return;
-            clearStaleUnavailableReplacementReasonsOnDateGroup(dateKey, groupNum, baselinePerson, assignedPerson);
+            if (!baselineUnavailable) return;
             if (
-                existingOnAssignee &&
-                isPreviewUnavailableReplacementReason(existingOnAssignee) &&
-                existingOnAssignee.swappedWith &&
-                norm(existingOnAssignee.swappedWith) === norm(baselinePerson)
+                existing &&
+                isUnavailableReplacementReason(existing) &&
+                existing.swappedWith &&
+                norm(existing.swappedWith) === norm(baselinePerson)
             ) {
                 return;
             }
             storeUnavailableReplacementReason(dateKey, groupNum, assignedPerson, baselinePerson, date, 'weekend');
         }
-        /** Sweep all weekend preview cells so assignmentReasons match temp assignments + rotation baseline. */
-        function refreshAllWeekendAssignmentReasonsFromPreview(
-            weekendAssignments,
-            weekendBaselineByDate,
-            returnTargets
-        ) {
+        /** Συγχώνευση baseline: καθαρή σειρά (πριν skip) κυριαρχεί έναντι preview slot. */
+        function mergeWeekendBaselineMaps(rotationBaseline, previewSlotBaseline) {
+            const merged = {};
+            const keys = new Set([
+                ...Object.keys(rotationBaseline || {}),
+                ...Object.keys(previewSlotBaseline || {})
+            ]);
+            for (const dk of keys) {
+                merged[dk] = { ...(previewSlotBaseline?.[dk] || {}) };
+                if (rotationBaseline?.[dk]) Object.assign(merged[dk], rotationBaseline[dk]);
+            }
+            return merged;
+        }
+        function refreshWeekendReplacementReasons(weekendAssignments, weekendBaselineByDate) {
             const dateKeys = new Set([
                 ...Object.keys(weekendAssignments || {}),
                 ...Object.keys(weekendBaselineByDate || {}),
@@ -762,40 +718,23 @@
                     const baseline = weekendBaselineByDate?.[dateKey]?.[groupNum] || null;
                     const assigned = weekendAssignments?.[dateKey]?.[groupNum] || null;
                     if (!assigned) continue;
-                    syncWeekendUnavailableReplacementReasonFromPreview(
-                        dateKey,
-                        groupNum,
-                        baseline,
-                        assigned,
-                        dateObj
-                    );
+                    syncWeekendReplacementReason(dateKey, groupNum, baseline, assigned, dateObj);
                 }
             }
-            if (!returnTargets || typeof returnTargets !== 'object') return;
-            for (const targetKey of Object.keys(returnTargets)) {
-                const groups = returnTargets[targetKey];
-                if (!groups || typeof groups !== 'object') continue;
-                for (const groupNumStr of Object.keys(groups)) {
-                    const groupNum = parseInt(groupNumStr, 10);
-                    if (!Number.isFinite(groupNum) || groupNum < 1 || groupNum > 4) continue;
-                    const tgt = groups[groupNumStr];
-                    const missed = tgt?.missedWeekendKeys || [];
-                    for (const missedKey of missed) {
-                        const baseline = weekendBaselineByDate?.[missedKey]?.[groupNum] || null;
-                        const assigned = weekendAssignments?.[missedKey]?.[groupNum] || null;
-                        if (!baseline || !assigned) continue;
-                        const dateObj = new Date(missedKey + 'T00:00:00');
-                        if (isNaN(dateObj.getTime())) continue;
-                        syncWeekendUnavailableReplacementReasonFromPreview(
-                            missedKey,
-                            groupNum,
-                            baseline,
-                            assigned,
-                            dateObj
-                        );
-                    }
+        }
+        /** Τέλος preview ΣΚ: baseline + λόγοι + ημερολόγιο στη μνήμη. */
+        function finalizeWeekendPreview(weekendAssignments, rotationBaseline, previewSlotBaseline) {
+            const mergedBaseline = mergeWeekendBaselineMaps(rotationBaseline, previewSlotBaseline);
+            refreshWeekendReplacementReasons(weekendAssignments, mergedBaseline);
+            calculationSteps.tempWeekendBaselineAssignments = mergedBaseline;
+            if (typeof formatGroupAssignmentsToStringMap === 'function') {
+                const formatted = formatGroupAssignmentsToStringMap(mergedBaseline);
+                if (typeof rotationBaselineWeekendAssignments !== 'undefined') {
+                    Object.assign(rotationBaselineWeekendAssignments, formatted);
                 }
             }
+            if (typeof renderCalendar === 'function') renderCalendar();
+            return mergedBaseline;
         }
         function normalizeSkipReasonText(reasonText) {
             const raw = String(reasonText || '').trim();
@@ -4680,12 +4619,11 @@
                 // Store final assignments (after skip logic) for saving when OK is pressed
                 calculationSteps.finalWeekendAssignments = updatedAssignments;
 
-                const weekendBaselineForReasonSync =
-                    calculationSteps.tempWeekendBaselineAssignments || {};
-                refreshAllWeekendAssignmentReasonsFromPreview(updatedAssignments, weekendBaselineForReasonSync);
-                if (typeof renderCalendar === 'function') {
-                    renderCalendar();
-                }
+                refreshWeekendReplacementReasons(
+                    updatedAssignments,
+                    calculationSteps.tempWeekendBaselineAssignments || {}
+                );
+                if (typeof renderCalendar === 'function') renderCalendar();
                 
                 // Show popup with results (will save when OK is pressed)
                 showWeekendSkipResults(skippedPeople, updatedAssignments);
@@ -9322,22 +9260,11 @@
                                     simulatedWeekendAssignments[dateKey] = {};
                                 }
                                 simulatedWeekendAssignments[dateKey][groupNum] = assignedPerson;
-                                const baselineForReasonSync =
-                                    baselineWeekendByDate[dateKey]?.[groupNum] ||
-                                    weekendRotationPersons[dateKey]?.[groupNum] ||
-                                    rotationPerson;
-                                if (baselineForReasonSync) {
-                                    syncWeekendUnavailableReplacementReasonFromPreview(
-                                        dateKey,
-                                        groupNum,
-                                        baselineForReasonSync,
-                                        assignedPerson,
-                                        date
-                                    );
-                                }
                                 if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                     const baselineMissed =
-                                        weekendRotationPersons[dateKey]?.[groupNum] || rotationPerson;
+                                        baselineWeekendByDate[dateKey]?.[groupNum] ||
+                                        weekendRotationPersons[dateKey]?.[groupNum] ||
+                                        rotationPerson;
                                     const normDbg = (s) =>
                                         typeof normalizePersonKey === 'function'
                                             ? normalizePersonKey(s)
@@ -9436,13 +9363,11 @@
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempWeekendAssignments = simulatedWeekendAssignments;
-                const mergedWeekendBaselineForStorage = applyWeekendPreviewReasonAndBaselineSync(
+                finalizeWeekendPreview(
                     simulatedWeekendAssignments,
                     baselineWeekendByDate,
-                    weekendRotationPersons,
-                    returnFromMissingWeekendTargets
+                    weekendRotationPersons
                 );
-                calculationSteps.tempWeekendBaselineAssignments = mergedWeekendBaselineForStorage;
                 calculationSteps.lastWeekendRotationPositions = {};
                 for (let g = 1; g <= 4; g++) {
                     const sortedWeekendKeys = [...weekendHolidays].sort();
