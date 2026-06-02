@@ -8225,8 +8225,7 @@
                     rangeStartKey,
                     rangeEndKey,
                     groupNum,
-                    personName,
-                    weekendList,
+                    rosterPersonName,
                     normFn
                 ) => {
                     const missed = [];
@@ -8235,22 +8234,12 @@
                         if (wk < rangeStartKey) continue;
                         if (wk > rangeEndKey) break;
                         const base = baselineWeekendByDate[wk]?.[groupNum];
+                        if (!base || normFn(base) !== normFn(rosterPersonName)) continue;
                         const dMiss = new Date(wk + 'T00:00:00');
-                        const baseMatch = base && normFn(base) === normFn(personName);
                         const missingOnDuty =
                             typeof isPersonMissingOnDate === 'function' &&
-                            isPersonMissingOnDate(personName, groupNum, dMiss, 'weekend');
-                        if (baseMatch && missingOnDuty) {
-                            if (!missed.includes(wk)) missed.push(wk);
-                            continue;
-                        }
-                        if (!baseMatch && missingOnDuty && weekendList.length > 0) {
-                            const rotPos = getRotationPosition(dMiss, 'weekend', groupNum) % weekendList.length;
-                            const exp = weekendList[rotPos];
-                            if (exp && normFn(exp) === normFn(personName) && !missed.includes(wk)) {
-                                missed.push(wk);
-                            }
-                        }
+                            isPersonMissingOnDate(rosterPersonName, groupNum, dMiss, 'weekend');
+                        if (missingOnDuty && !missed.includes(wk)) missed.push(wk);
                     }
                     return missed;
                 };
@@ -8277,8 +8266,15 @@
                                 }
                                 continue;
                             }
+                            const rosterPersonName =
+                                weekendList.find((p) => normW(p) === normW(personName)) || personName;
+                            const periodsNorm = getMissingPeriodsForPersonNorm(groupNum, rosterPersonName);
                             const periods = mergeMissingPeriodsForWeekendReturn(
-                                Array.isArray(missingMap[personName]) ? missingMap[personName] : []
+                                periodsNorm.length
+                                    ? periodsNorm
+                                    : Array.isArray(missingMap[personName])
+                                      ? missingMap[personName]
+                                      : []
                             );
                             for (const period of periods) {
                                 const pStartKey = period.start;
@@ -8304,7 +8300,7 @@
                                     }
                                     continue;
                                 }
-                                const personReturnKey = `${groupNum}|${normW(personName)}`;
+                                const personReturnKey = `${groupNum}|${normW(rosterPersonName)}`;
                                 if (processedWeekendReturn.has(personReturnKey)) continue;
                                 processedWeekendReturn.add(personReturnKey);
                                 const scanStartKey = periodEndsInPrevMonth ? maxKeyW(prevMonthStartKey, pStartKey) : maxKeyW(calcStartKeyW, pStartKey);
@@ -8333,8 +8329,7 @@
                                         scanStartKey,
                                         scanEndKey,
                                         groupNum,
-                                        personName,
-                                        weekendList,
+                                        rosterPersonName,
                                         normW
                                     );
                                 } else {
@@ -8363,8 +8358,7 @@
                                             maxKeyW(scanStartKey, missedWeekendKeysForReturn[0]),
                                             scanEndKey,
                                             groupNum,
-                                            personName,
-                                            weekendList,
+                                            rosterPersonName,
                                             normW
                                         );
                                     }
@@ -8392,7 +8386,7 @@
                                     calcStartKeyW,
                                     calcEndKeyW,
                                     groupNum,
-                                    personName,
+                                    rosterPersonName,
                                     missedWeekendKeysForReturn,
                                     returnFromMissingWeekendTargets
                                 );
@@ -8453,7 +8447,7 @@
                                         calcStartKeyW,
                                         calcEndKeyW,
                                         groupNum,
-                                        personName,
+                                        rosterPersonName,
                                         missedWeekendKeysForReturn,
                                         returnFromMissingWeekendTargets
                                     );
@@ -8487,7 +8481,7 @@
                                 const reasonOfMissingW = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                                 if (!returnFromMissingWeekendTargets[targetWeekendKey]) returnFromMissingWeekendTargets[targetWeekendKey] = {};
                                 returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = {
-                                    personName,
+                                    personName: rosterPersonName,
                                     missingEnd: pEndKey,
                                     isBackwardAssignment,
                                     missingRangeStr: missingRangeStrW,
@@ -12542,6 +12536,19 @@
             return false; // No available day found
         }
         // saveDayAssignments() is defined in duty-shifts-ui.js (uses setAssignmentForDate for correct persistence)
+        function getMissingPeriodsForPersonNorm(groupNum, person) {
+            const groupData = groups[groupNum] || {};
+            const mp = groupData.missingPeriods || {};
+            const target = normalizePersonKey(person);
+            if (!target) return [];
+            for (const key of Object.keys(mp)) {
+                if (normalizePersonKey(key) === target) {
+                    const arr = mp[key];
+                    return Array.isArray(arr) ? arr : [];
+                }
+            }
+            return [];
+        }
         function isPersonMissingOnDate(person, groupNum, date, dutyCategory = null) {
             const homeGroup =
                 typeof getPersonHomeGroupAtDate === 'function' && date
@@ -12555,7 +12562,7 @@
             const mpGroup = homeGroup != null ? homeGroup : groupNum;
             const groupData = groups[mpGroup] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, mpGroup, dutyCategory, date)) return true;
-            const missingPeriods = groupData.missingPeriods?.[person] || [];
+            const missingPeriods = getMissingPeriodsForPersonNorm(mpGroup, person);
             if (missingPeriods.length === 0) return false;
             
             const checkDate = new Date(date);
