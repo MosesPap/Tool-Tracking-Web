@@ -8231,6 +8231,25 @@
                         }
                     }
                 }
+                const calendarDaysFromTo = (fromKey, toKey) => {
+                    if (!fromKey || !toKey) return Infinity;
+                    const a = new Date(fromKey + 'T00:00:00');
+                    const b = new Date(toKey + 'T00:00:00');
+                    if (isNaN(a.getTime()) || isNaN(b.getTime())) return Infinity;
+                    return Math.round((b - a) / (1000 * 60 * 60 * 24));
+                };
+                const isSaturdayOrSundayKey = (dateKey) => {
+                    const dow = new Date(dateKey + 'T00:00:00').getDay();
+                    return dow === 0 || dow === 6;
+                };
+                /** Μετά τη λήξη απουσίας: όχι Σάβ/Κυρ εντός 2 ημερολογιακών ημερών (π.χ. λήξη Παρ→ όχι Σάβ/Κυρ). */
+                const isWeekendTargetTooSoonAfterAbsenceEnd = (absenceEndKey, candidateWeekendKey) => {
+                    if (!absenceEndKey || !candidateWeekendKey) return false;
+                    const daysAfter = calendarDaysFromTo(absenceEndKey, candidateWeekendKey);
+                    if (daysAfter <= 0) return true;
+                    if (daysAfter > 2) return false;
+                    return isSaturdayOrSundayKey(candidateWeekendKey);
+                };
                 const findSameMonthReturnWeekendTarget = (
                     sorted,
                     calcStartKey,
@@ -8238,7 +8257,8 @@
                     groupNum,
                     personName,
                     missedWeekendKeys,
-                    returnTargets
+                    returnTargets,
+                    absenceEndKey
                 ) => {
                     const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                     const missed = (missedWeekendKeys || []).slice().sort();
@@ -8262,6 +8282,13 @@
                     const tryPick = (wk, isBackward) => {
                         if (missedSet.has(wk)) return null;
                         if (returnTargets[wk]?.[groupNum]) return null;
+                        if (
+                            !isBackward &&
+                            absenceEndKey &&
+                            isWeekendTargetTooSoonAfterAbsenceEnd(absenceEndKey, wk)
+                        ) {
+                            return null;
+                        }
                         const d = new Date(wk + 'T00:00:00');
                         if (
                             typeof isPersonMissingOnDate === 'function' &&
@@ -8529,7 +8556,8 @@
                                     groupNum,
                                     rosterPersonName,
                                     missedWeekendKeysForReturn,
-                                    returnFromMissingWeekendTargets
+                                    returnFromMissingWeekendTargets,
+                                    pEndKey
                                 );
                                 if (sameMonthPick) {
                                     targetWeekendKey = sameMonthPick.targetWeekendKey;
@@ -8546,13 +8574,14 @@
                                                       : null)
                                                 : null;
                                         const alt = dutyWeekendDebug.scanAlternateWeekendDates({
-                                            personName,
+                                            personName: rosterPersonName,
                                             groupNum,
                                             sortedWeekends,
                                             calcStartKey: calcStartKeyW,
                                             calcEndKey: calcEndKeyW,
                                             assignedWeekendInMonth: null,
-                                            simulatedSpecialMonthSet: null
+                                            simulatedSpecialMonthSet: null,
+                                            absenceEndKey: pEndKey
                                         });
                                         dutyWeekendDebug.recordAbsentPlacement({
                                             groupNum,
@@ -8590,7 +8619,8 @@
                                         groupNum,
                                         rosterPersonName,
                                         missedWeekendKeysForReturn,
-                                        returnFromMissingWeekendTargets
+                                        returnFromMissingWeekendTargets,
+                                        pEndKey
                                     );
                                     if (busyPick && !returnFromMissingWeekendTargets[busyPick.targetWeekendKey]?.[groupNum]) {
                                         targetWeekendKey = busyPick.targetWeekendKey;
@@ -8641,7 +8671,9 @@
                                         reasonCode: 'RETURN_PLANNED',
                                         message:
                                             `Χάθηκε ΣΚ: ${missedWeekendKeysForReturn.join(', ')}. Θα ανατεθεί στον ίδιο μήνα στην ${targetWeekendKey}` +
-                                            (isBackwardAssignment ? ' (πριν την απουσία)' : ' (μετά την απουσία)') +
+                                            (isBackwardAssignment
+                                                ? ' (πριν την απουσία)'
+                                                : ` (μετά την απουσία — όχι Σάβ/Κυρ εντός 2 ημ. από λήξη ${pEndKey})`) +
                                             '.'
                                     });
                                 }

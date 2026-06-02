@@ -31,6 +31,8 @@
         RETURN_TARGET_BUSY: 'Η ημέρα-στόχος ΣΚ είναι ήδη δεσμευμένη για άλλον return-from-missing',
         RETURN_PLANNED: 'Προγραμματίστηκε ανάθεση σε άλλη ημέρα ΣΚ/αργίας (ίδιος μήνας)',
         RETURN_NO_SAME_MONTH_SLOT: 'Δεν βρέθηκε ελεύθερο ΣΚ στον ίδιο μήνα όπου ο απόντας είναι διαθέσιμος',
+        RETURN_TOO_SOON_AFTER_ABSENCE_END:
+            'Σάββατο/Κυριακή εντός 2 ημερολογιακών ημερών από τη λήξη απουσίας — αποκλείεται ως στόχος',
         RETURN_APPLIED: 'Τοποθετήθηκε στην προγραμματισμένη ημέρα ΣΚ/αργίας',
         RETURN_FAILED_STILL_MISSING_ON_TARGET: 'Προγραμματίστηκε αλλά απουσιάζει και την ημέρα-στόχο',
         RETURN_FAILED_NOT_IN_LIST: 'Προγραμματίστηκε αλλά δεν βρέθηκε στη λίστα weekend την ημέρα-στόχο',
@@ -101,6 +103,17 @@
         );
     }
 
+    function isWeekendReturnTooSoonAfterAbsenceEnd(absenceEndKey, candidateWeekendKey) {
+        if (!absenceEndKey || !candidateWeekendKey) return false;
+        const a = new Date(absenceEndKey + 'T00:00:00');
+        const b = new Date(candidateWeekendKey + 'T00:00:00');
+        if (isNaN(a.getTime()) || isNaN(b.getTime())) return false;
+        const daysAfter = Math.round((b - a) / (1000 * 60 * 60 * 24));
+        if (daysAfter <= 0 || daysAfter > 2) return false;
+        const dow = b.getDay();
+        return dow === 0 || dow === 6;
+    }
+
     function scanAlternateWeekendDates(ctx) {
         const {
             personName,
@@ -109,7 +122,8 @@
             calcStartKey,
             calcEndKey,
             assignedWeekendInMonth,
-            simulatedSpecialMonthSet
+            simulatedSpecialMonthSet,
+            absenceEndKey
         } = ctx;
         const rows = [];
         if (!sortedWeekends || !personName) return rows;
@@ -118,6 +132,9 @@
             if (calcEndKey && dk > calcEndKey) continue;
             const d = new Date(dk + 'T00:00:00');
             const codes = [];
+            if (absenceEndKey && isWeekendReturnTooSoonAfterAbsenceEnd(absenceEndKey, dk)) {
+                codes.push('RETURN_TOO_SOON_AFTER_ABSENCE_END');
+            }
             if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(personName, groupNum, d, 'weekend')) {
                 codes.push('MISSING_ON_DATE');
             }
