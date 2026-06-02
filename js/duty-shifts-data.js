@@ -608,7 +608,19 @@
 
         function inputValueToDateKey(value) {
             if (!value) return null;
-            const d = new Date(String(value) + 'T00:00:00');
+            const s = String(value).trim();
+            if (!s) return null;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+                const iso = new Date(s + 'T00:00:00');
+                return isNaN(iso.getTime()) ? null : formatDateKey(iso);
+            }
+            const dmY = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (dmY) {
+                const isoStr = `${dmY[3]}-${dmY[2].padStart(2, '0')}-${dmY[1].padStart(2, '0')}`;
+                const dGr = new Date(isoStr + 'T00:00:00');
+                return isNaN(dGr.getTime()) ? null : formatDateKey(dGr);
+            }
+            const d = new Date(s + 'T00:00:00');
             if (isNaN(d.getTime())) return null;
             return formatDateKey(d);
         }

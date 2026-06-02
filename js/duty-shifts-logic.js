@@ -8193,6 +8193,67 @@
                 };
                 const maxKeyW = (a, b) => (!a ? b : (!b ? a : (a > b ? a : b)));
                 const minKeyW = (a, b) => (!a ? b : (!b ? a : (a < b ? a : b)));
+                const mergeMissingPeriodsForWeekendReturn = (periods) => {
+                    const items = [];
+                    for (const p of periods || []) {
+                        let sk = inputValueToDateKey(p?.start);
+                        let ek = inputValueToDateKey(p?.end);
+                        if (!ek) continue;
+                        if (!sk) sk = ek;
+                        if (sk > ek) {
+                            const t = sk;
+                            sk = ek;
+                            ek = t;
+                        }
+                        items.push({ start: sk, end: ek, reason: p?.reason });
+                    }
+                    items.sort((a, b) => a.start.localeCompare(b.start));
+                    const merged = [];
+                    for (const p of items) {
+                        const last = merged[merged.length - 1];
+                        if (last && p.start <= last.end) {
+                            if (p.end > last.end) last.end = p.end;
+                            if (!last.reason && p.reason) last.reason = p.reason;
+                        } else {
+                            merged.push({ start: p.start, end: p.end, reason: p.reason });
+                        }
+                    }
+                    return merged;
+                };
+                const collectMissedWeekendsInRange = (
+                    sorted,
+                    rangeStartKey,
+                    rangeEndKey,
+                    groupNum,
+                    personName,
+                    weekendList,
+                    normFn
+                ) => {
+                    const missed = [];
+                    if (!rangeStartKey || !rangeEndKey || rangeStartKey > rangeEndKey) return missed;
+                    for (const wk of sorted) {
+                        if (wk < rangeStartKey) continue;
+                        if (wk > rangeEndKey) break;
+                        const base = baselineWeekendByDate[wk]?.[groupNum];
+                        const dMiss = new Date(wk + 'T00:00:00');
+                        const baseMatch = base && normFn(base) === normFn(personName);
+                        const missingOnDuty =
+                            typeof isPersonMissingOnDate === 'function' &&
+                            isPersonMissingOnDate(personName, groupNum, dMiss, 'weekend');
+                        if (baseMatch && missingOnDuty) {
+                            if (!missed.includes(wk)) missed.push(wk);
+                            continue;
+                        }
+                        if (!baseMatch && missingOnDuty && weekendList.length > 0) {
+                            const rotPos = getRotationPosition(dMiss, 'weekend', groupNum) % weekendList.length;
+                            const exp = weekendList[rotPos];
+                            if (exp && normFn(exp) === normFn(personName) && !missed.includes(wk)) {
+                                missed.push(wk);
+                            }
+                        }
+                    }
+                    return missed;
+                };
                 if (calcStartKeyW && calcEndKeyW && sortedWeekends.length > 0) {
                     const processedWeekendReturn = new Set();
                     const normW = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
@@ -8216,12 +8277,13 @@
                                 }
                                 continue;
                             }
-                            const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
+                            const periods = mergeMissingPeriodsForWeekendReturn(
+                                Array.isArray(missingMap[personName]) ? missingMap[personName] : []
+                            );
                             for (const period of periods) {
-                                const pStartKey = inputValueToDateKey(period?.start);
-                                const pEndKey = inputValueToDateKey(period?.end);
+                                const pStartKey = period.start;
+                                const pEndKey = period.end;
                                 if (!pStartKey || !pEndKey) continue;
-                                const pEndDate = new Date(pEndKey + 'T00:00:00');
                                 const calcStartDateObj = calcStartKeyW ? new Date(calcStartKeyW + 'T00:00:00') : null;
                                 const prevMonthStart = calcStartDateObj ? new Date(calcStartDateObj.getFullYear(), calcStartDateObj.getMonth() - 1, 1) : null;
                                 const prevMonthStartKey = prevMonthStart ? formatDateKey(prevMonthStart) : null;
@@ -8242,37 +8304,39 @@
                                     }
                                     continue;
                                 }
-                                const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
-                                if (processedWeekendReturn.has(dedupeKey)) continue;
-                                processedWeekendReturn.add(dedupeKey);
+                                const personReturnKey = `${groupNum}|${normW(personName)}`;
+                                if (processedWeekendReturn.has(personReturnKey)) continue;
+                                processedWeekendReturn.add(personReturnKey);
                                 const scanStartKey = periodEndsInPrevMonth ? maxKeyW(prevMonthStartKey, pStartKey) : maxKeyW(calcStartKeyW, pStartKey);
                                 const scanEndKey = periodEndsInPrevMonth ? pEndKey : minKeyW(pEndKey, calcEndKeyW);
                                 if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
-                                let hadMissedWeekend = false;
-                                const missedWeekendKeysForReturn = [];
+                                const formatRangeStrW = (sk, ek) => {
+                                    const fmt = (dk) => {
+                                        const d = new Date(dk + 'T00:00:00');
+                                        return (
+                                            (d.getDate() < 10 ? '0' : '') +
+                                            d.getDate() +
+                                            '/' +
+                                            (d.getMonth() + 1 < 10 ? '0' : '') +
+                                            (d.getMonth() + 1) +
+                                            '/' +
+                                            d.getFullYear()
+                                        );
+                                    };
+                                    return fmt(sk) + ' - ' + fmt(ek);
+                                };
+                                const missingRangeStrForDebug = formatRangeStrW(pStartKey, pEndKey);
+                                let missedWeekendKeysForReturn = [];
                                 if (periodEndsInRange) {
-                                    for (const wk of sortedWeekends) {
-                                        if (wk < scanStartKey) continue;
-                                        if (wk > scanEndKey) break;
-                                        const base = baselineWeekendByDate[wk]?.[groupNum];
-                                        const dMiss = new Date(wk + 'T00:00:00');
-                                        const baseMatch = base && normW(base) === normW(personName);
-                                        const missingOnDuty =
-                                            typeof isPersonMissingOnDate === 'function' &&
-                                            isPersonMissingOnDate(personName, groupNum, dMiss, 'weekend');
-                                        let rotationMatch = false;
-                                        if (!baseMatch && missingOnDuty && weekendList.length > 0) {
-                                            const rotPos = getRotationPosition(dMiss, 'weekend', groupNum) % weekendList.length;
-                                            const exp = weekendList[rotPos];
-                                            rotationMatch = !!(exp && normW(exp) === normW(personName));
-                                        }
-                                        if (baseMatch || (missingOnDuty && rotationMatch)) {
-                                            hadMissedWeekend = true;
-                                            if (!missedWeekendKeysForReturn.includes(wk)) {
-                                                missedWeekendKeysForReturn.push(wk);
-                                            }
-                                        }
-                                    }
+                                    missedWeekendKeysForReturn = collectMissedWeekendsInRange(
+                                        sortedWeekends,
+                                        scanStartKey,
+                                        scanEndKey,
+                                        groupNum,
+                                        personName,
+                                        weekendList,
+                                        normW
+                                    );
                                 } else {
                                     const periodStartDate = new Date(pStartKey + 'T00:00:00');
                                     const periodEndDate = new Date(pEndKey + 'T00:00:00');
@@ -8285,7 +8349,6 @@
                                             if (groupPeopleForCheck.length > 0) {
                                                 const expectedPerson = groupPeopleForCheck[rotationPos % groupPeopleForCheck.length];
                                                 if (expectedPerson && normW(expectedPerson) === normW(personName)) {
-                                                    hadMissedWeekend = true;
                                                     if (!missedWeekendKeysForReturn.includes(checkDateKey)) {
                                                         missedWeekendKeysForReturn.push(checkDateKey);
                                                     }
@@ -8294,16 +8357,30 @@
                                             }
                                         }
                                     }
+                                    if (missedWeekendKeysForReturn.length) {
+                                        missedWeekendKeysForReturn = collectMissedWeekendsInRange(
+                                            sortedWeekends,
+                                            maxKeyW(scanStartKey, missedWeekendKeysForReturn[0]),
+                                            scanEndKey,
+                                            groupNum,
+                                            personName,
+                                            weekendList,
+                                            normW
+                                        );
+                                    }
                                 }
+                                const hadMissedWeekend = missedWeekendKeysForReturn.length > 0;
                                 if (!hadMissedWeekend) {
                                     if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                         dutyWeekendDebug.recordAbsentPlacement({
                                             groupNum,
                                             personName,
                                             absenceEndKey: pEndKey,
+                                            missingRangeStr: missingRangeStrForDebug,
                                             status: 'skipped',
                                             reasonCode: 'RETURN_NO_MISSED_WEEKEND',
-                                            message: 'Δεν βρέθηκε ΣΚ/αργία που θα ήταν baseline του κατά την απουσία.'
+                                            message:
+                                                `Δεν βρέθηκε ΣΚ/αργία (baseline) στην περίοδο ${missingRangeStrForDebug} — ελέγξτε διπλές/σύντομες εγγραφές απουσίας με ίδια λήξη.`
                                         });
                                     }
                                     continue;
@@ -8422,7 +8499,7 @@
                                         groupNum,
                                         personName,
                                         absenceEndKey: pEndKey,
-                                        missingRangeStr: missingRangeStrW,
+                                        missingRangeStr: missingRangeStrW || missingRangeStrForDebug,
                                         targetDateKey: targetWeekendKey,
                                         isBackwardAssignment,
                                         status: 'planned',
