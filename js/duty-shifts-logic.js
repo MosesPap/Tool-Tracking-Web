@@ -8220,6 +8220,12 @@
                     }
                     return merged;
                 };
+                const personKeysMatch = (a, b, normFn) => {
+                    if (typeof personScheduleKey === 'function') {
+                        return personScheduleKey(a) === personScheduleKey(b);
+                    }
+                    return normFn(a) === normFn(b);
+                };
                 const collectMissedWeekendsInRange = (
                     sorted,
                     rangeStartKey,
@@ -8234,11 +8240,11 @@
                         if (wk < rangeStartKey) continue;
                         if (wk > rangeEndKey) break;
                         const base = baselineWeekendByDate[wk]?.[groupNum];
-                        if (!base || normFn(base) !== normFn(rosterPersonName)) continue;
+                        if (!base || !personKeysMatch(base, rosterPersonName, normFn)) continue;
                         const dMiss = new Date(wk + 'T00:00:00');
                         const missingOnDuty =
                             typeof isPersonMissingOnDate === 'function' &&
-                            isPersonMissingOnDate(rosterPersonName, groupNum, dMiss, 'weekend');
+                            isPersonMissingOnDate(base, groupNum, dMiss, 'weekend');
                         if (missingOnDuty && !missed.includes(wk)) missed.push(wk);
                     }
                     return missed;
@@ -8249,12 +8255,17 @@
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const g = groups[groupNum];
                         const missingMap = g?.missingPeriods || {};
-                        const weekendList =
-                            typeof getSortedGroupListForRotation === 'function'
-                                ? getSortedGroupListForRotation(groupNum, 'weekend')
-                                : (g?.weekend || []);
                         for (const personName of Object.keys(missingMap)) {
-                            if (!weekendList.some(p => normW(p) === normW(personName))) {
+                            const weekendListProbe =
+                                typeof getGroupRotationListAtDate === 'function'
+                                    ? getGroupRotationListAtDate(groupNum, 'weekend', calcEndKeyW)
+                                    : typeof getSortedGroupListForRotation === 'function'
+                                      ? getSortedGroupListForRotation(groupNum, 'weekend')
+                                      : g?.weekend || [];
+                            if (
+                                !weekendListProbe.some((p) => personKeysMatch(p, personName, normW)) &&
+                                !(g?.weekend || []).some((p) => personKeysMatch(p, personName, normW))
+                            ) {
                                 if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                     dutyWeekendDebug.recordAbsentPlacement({
                                         groupNum,
@@ -8266,8 +8277,14 @@
                                 }
                                 continue;
                             }
+                            const weekendList =
+                                typeof getSortedGroupListForRotation === 'function'
+                                    ? getSortedGroupListForRotation(groupNum, 'weekend')
+                                    : g?.weekend || [];
                             const rosterPersonName =
-                                weekendList.find((p) => normW(p) === normW(personName)) || personName;
+                                weekendList.find((p) => personKeysMatch(p, personName, normW)) ||
+                                (g?.weekend || []).find((p) => personKeysMatch(p, personName, normW)) ||
+                                personName;
                             const periodsNorm = getMissingPeriodsForPersonNorm(groupNum, rosterPersonName);
                             const periods = mergeMissingPeriodsForWeekendReturn(
                                 periodsNorm.length
@@ -8535,7 +8552,10 @@
                     }
                     if (prevCalMonthKeyWeekendRot !== monthKey) {
                         for (let g = 1; g <= 4; g++) {
-                            const gd = (typeof groupsForDuty === 'function' ? groupsForDuty(g) : groups[g]) || {};
+                            const gd =
+                                (typeof groupsForDuty === 'function'
+                                    ? groupsForDuty(g, dateKey)
+                                    : groups[g]) || {};
                             const people = gd.weekend || [];
                             if (people.length) {
                                 reseedGlobalRotationPositionAtMonthStart('weekend', date, g, people, globalWeekendRotationPosition);
@@ -8597,7 +8617,10 @@
                             }
                             continue;
                         }
-                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
+                        const groupData =
+                            (typeof groupsForDuty === 'function'
+                                ? groupsForDuty(groupNum, dateKey)
+                                : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
                         const groupPeople = groupData.weekend || [];
                         
                         if (groupPeople.length === 0) {
@@ -12562,17 +12585,32 @@
             const mpGroup = homeGroup != null ? homeGroup : groupNum;
             const groupData = groups[mpGroup] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             if (isPersonDisabledForDuty(person, mpGroup, dutyCategory, date)) return true;
-            const missingPeriods = getMissingPeriodsForPersonNorm(mpGroup, person);
-            if (missingPeriods.length === 0) return false;
-            
+            const groupsToCheck = [];
+            if (Number.isFinite(mpGroup)) groupsToCheck.push(mpGroup);
+            if (Number.isFinite(groupNum) && groupNum !== mpGroup) groupsToCheck.push(groupNum);
             const checkDate = new Date(date);
             checkDate.setHours(0, 0, 0, 0);
-            
-            return missingPeriods.some(period => {
-                const start = new Date(period.start + 'T00:00:00');
-                const end = new Date(period.end + 'T00:00:00');
-                return checkDate >= start && checkDate <= end;
-            });
+            for (const gNum of groupsToCheck) {
+                const missingPeriods = getMissingPeriodsForPersonNorm(gNum, person);
+                if (missingPeriods.length === 0) continue;
+                const inRange = missingPeriods.some((period) => {
+                    const startKey =
+                        typeof inputValueToDateKey === 'function'
+                            ? inputValueToDateKey(period.start)
+                            : null;
+                    const endKey =
+                        typeof inputValueToDateKey === 'function'
+                            ? inputValueToDateKey(period.end)
+                            : null;
+                    if (!startKey || !endKey) return false;
+                    const start = new Date(startKey + 'T00:00:00');
+                    const end = new Date(endKey + 'T00:00:00');
+                    if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+                    return checkDate >= start && checkDate <= end;
+                });
+                if (inRange) return true;
+            }
+            return false;
         }
         /**
          * True if the given calendar day is immediately before any missing-period start

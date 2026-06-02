@@ -209,6 +209,17 @@
                     noteMissedWeekendForAbsent(g, base, plan.absenceEndKey, dk, null);
                     continue;
                 }
+                if (plan && (plan.status === 'skipped' || plan.reasonCode === 'RETURN_NO_MISSED_WEEKEND')) {
+                    noteMissedWeekendForAbsent(g, base, plan.absenceEndKey, dk, null);
+                    if (plan.status === 'skipped') {
+                        plan.status = 'failed';
+                        plan.reasonCode = 'RETURN_MISSED_BASELINE_NOT_PLANNED';
+                        plan.message =
+                            (plan.message || '') +
+                            ` Εντοπίστηκε χαμένο ΣΚ ${dk} (baseline) αλλά δεν προγραμματίστηκε ανάθεση — διορθώθηκε η ανίχνευση.`;
+                    }
+                    continue;
+                }
                 const uKey = `${g}|${normPerson(base)}|${dk}`;
                 if (unresolved.has(uKey)) continue;
                 unresolved.add(uKey);
