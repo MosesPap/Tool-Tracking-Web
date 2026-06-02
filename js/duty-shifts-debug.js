@@ -23,12 +23,25 @@
         GROUP_NOT_RECALCULATED: 'Η ομάδα δεν επανυπολογίστηκε (διατήρηση παλιάς ανάθεσης)',
         STILL_MISSING_AFTER_LOGIC: 'Μένει ο απόντας — δεν βρέθηκε αντικαταστάτης',
         UNCHANGED: 'Χωρίς αλλαγή (ήδη επιλέξιμος)',
-        PHASE_SKIPPED: 'Η φάση δεν εφαρμόστηκε'
+        PHASE_SKIPPED: 'Η φάση δεν εφαρμόστηκε',
+        RETURN_NOT_ON_WEEKEND_LIST: 'Δεν είναι στη λίστα weekend — δεν επιλέγεται return-from-missing',
+        RETURN_PERIOD_OUT_OF_RANGE: 'Η απουσία δεν τελειώνει εντός περιόδου υπολογισμού / προηγ. μήνα',
+        RETURN_NO_MISSED_WEEKEND: 'Δεν βρέθηκε ΣΚ/αργία που θα έπρεπε να είχε (baseline) στην περίοδο απουσίας',
+        RETURN_TARGET_OUT_OF_CALC_RANGE: 'Ο υπολογισμένος στόχος ΣΚ είναι εκτός επιλεγμένων μηνών',
+        RETURN_TARGET_BUSY: 'Η ημέρα-στόχος ΣΚ είναι ήδη δεσμευμένη για άλλον return-from-missing',
+        RETURN_PLANNED: 'Προγραμματίστηκε ανάθεση σε άλλη ημέρα ΣΚ/αργίας',
+        RETURN_APPLIED: 'Τοποθετήθηκε στην προγραμματισμένη ημέρα ΣΚ/αργίας',
+        RETURN_FAILED_STILL_MISSING_ON_TARGET: 'Προγραμματίστηκε αλλά απουσιάζει και την ημέρα-στόχο',
+        RETURN_FAILED_NOT_IN_LIST: 'Προγραμματίστηκε αλλά δεν βρέθηκε στη λίστα weekend την ημέρα-στόχο',
+        RETURN_NEVER_PLANNED: 'Απουσία σε ΣΚ/αργία χωρίς κανένα προγραμματισμένο return-from-missing',
+        SWAP_MOVES_ABSENT_TO: 'Με ανταλλαγή ημερομηνιών ο απόντας πηγαίνει σε άλλη ημέρα ΣΚ'
     };
 
     const state = {
         enabled: false,
         entries: [],
+        absentPlacements: [],
+        absentByKey: {},
         filter: { dateKey: null, groupNum: null, personName: null },
         currentSlot: null
     };
@@ -59,7 +72,11 @@
                     slot.rotationPerson,
                     slot.currentPerson,
                     slot.finalPerson,
-                    slot.skippedPerson
+                    slot.skippedPerson,
+                    slot.outcome?.replacementOnDate,
+                    slot.outcome?.absentPersonPlan?.targetDateKey
+                        ? null
+                        : slot.outcome?.absentPersonPlan?.personName
                 ]
                     .filter(Boolean)
                     .map(normPerson);
@@ -67,6 +84,165 @@
             }
         }
         return true;
+    }
+
+    function absentKey(groupNum, personName, absenceEndKey) {
+        return `${groupNum}|${normPerson(personName)}|${absenceEndKey || ''}`;
+    }
+
+    function findPlanForPerson(groupNum, personName) {
+        const n = normPerson(personName);
+        if (!n) return null;
+        return (
+            state.absentPlacements.find(
+                (p) => Number(p.groupNum) === Number(groupNum) && normPerson(p.personName) === n
+            ) || null
+        );
+    }
+
+    function scanAlternateWeekendDates(ctx) {
+        const {
+            personName,
+            groupNum,
+            sortedWeekends,
+            calcStartKey,
+            calcEndKey,
+            assignedWeekendInMonth,
+            simulatedSpecialMonthSet
+        } = ctx;
+        const rows = [];
+        if (!sortedWeekends || !personName) return rows;
+        for (const dk of sortedWeekends) {
+            if (calcStartKey && dk < calcStartKey) continue;
+            if (calcEndKey && dk > calcEndKey) continue;
+            const d = new Date(dk + 'T00:00:00');
+            const codes = [];
+            if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(personName, groupNum, d, 'weekend')) {
+                codes.push('MISSING_ON_DATE');
+            }
+            if (assignedWeekendInMonth && assignedWeekendInMonth.has(personName)) {
+                codes.push('ALREADY_ASSIGNED_WEEKEND_MONTH');
+            }
+            if (simulatedSpecialMonthSet && simulatedSpecialMonthSet.has(personName)) {
+                codes.push('HAS_SPECIAL_SAME_MONTH');
+            }
+            rows.push({
+                dateKey: dk,
+                accepted: codes.length === 0,
+                reasonCodes: codes.length ? codes : ['ACCEPTED']
+            });
+        }
+        return rows;
+    }
+
+    /**
+     * Καταγραφή: πού θα ανατεθεί ο απόντας (return-from-missing) ή γιατί όχι.
+     */
+    function recordAbsentPlacement(rec) {
+        if (!isEnabled()) return null;
+        const key = rec.id || absentKey(rec.groupNum, rec.personName, rec.absenceEndKey);
+        let row = state.absentByKey[key];
+        if (!row) {
+            row = { id: key, t: Date.now(), missedOnDateKeys: [] };
+            state.absentByKey[key] = row;
+            state.absentPlacements.push(row);
+        }
+        Object.assign(row, rec);
+        if (rec.missedOnDateKey) {
+            const mk = rec.missedOnDateKey;
+            if (!row.missedOnDateKeys.includes(mk)) row.missedOnDateKeys.push(mk);
+        }
+        return row;
+    }
+
+    function noteMissedWeekendForAbsent(groupNum, personName, absenceEndKey, missedDateKey, replacementOnMissedDate) {
+        if (!isEnabled()) return;
+        const row = state.absentByKey[absentKey(groupNum, personName, absenceEndKey)] || findPlanForPerson(groupNum, personName);
+        if (row) {
+            if (missedDateKey && !row.missedOnDateKeys.includes(missedDateKey)) {
+                row.missedOnDateKeys.push(missedDateKey);
+            }
+            if (replacementOnMissedDate != null) row.replacementOnMissedDate = replacementOnMissedDate;
+        } else {
+            recordAbsentPlacement({
+                groupNum,
+                personName,
+                absenceEndKey,
+                missedOnDateKey: missedDateKey,
+                replacementOnMissedDate,
+                status: 'unresolved',
+                reasonCode: 'RETURN_NEVER_PLANNED',
+                message: 'Απουσία σε ΣΚ/αργία χωρίς προγραμματισμένη μελλοντική ανάθεση (return-from-missing).'
+            });
+        }
+    }
+
+    function finalizeMissedWeekendAbsences(ctx) {
+        if (!isEnabled()) return;
+        const {
+            sortedWeekends,
+            baselineWeekendByDate,
+            calcStartKey,
+            calcEndKey,
+            returnFromMissingWeekendTargets,
+            assignedWeekendInMonthPreview,
+            simulatedSpecialAssignments
+        } = ctx;
+        const unresolved = new Set();
+        for (const dk of sortedWeekends || []) {
+            if (calcStartKey && dk < calcStartKey) continue;
+            if (calcEndKey && dk > calcEndKey) continue;
+            const d = new Date(dk + 'T00:00:00');
+            const monthKey =
+                typeof getMonthKeyFromDate === 'function'
+                    ? getMonthKeyFromDate(d)
+                    : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            for (let g = 1; g <= 4; g++) {
+                const base = baselineWeekendByDate?.[dk]?.[g];
+                if (!base) continue;
+                if (typeof isPersonMissingOnDate !== 'function' || !isPersonMissingOnDate(base, g, d, 'weekend')) {
+                    continue;
+                }
+                const plan = findPlanForPerson(g, base);
+                if (plan && plan.targetDateKey) {
+                    noteMissedWeekendForAbsent(g, base, plan.absenceEndKey, dk, null);
+                    continue;
+                }
+                const uKey = `${g}|${normPerson(base)}|${dk}`;
+                if (unresolved.has(uKey)) continue;
+                unresolved.add(uKey);
+                const alt = scanAlternateWeekendDates({
+                    personName: base,
+                    groupNum: g,
+                    sortedWeekends,
+                    calcStartKey,
+                    calcEndKey,
+                    assignedWeekendInMonth: assignedWeekendInMonthPreview?.[monthKey]?.[g] || null,
+                    simulatedSpecialMonthSet: simulatedSpecialAssignments?.[monthKey]?.[g] || null
+                });
+                recordAbsentPlacement({
+                    groupNum: g,
+                    personName: base,
+                    missedOnDateKey: dk,
+                    status: 'unresolved',
+                    reasonCode: 'RETURN_NEVER_PLANNED',
+                    message:
+                        'Ήταν baseline (απουσία) αυτή την ημέρα αλλά δεν δημιουργήθηκε στόχος return-from-missing — δεν θα ανατεθεί αλλού αυτόματα.',
+                    alternateDateScan: alt
+                });
+            }
+        }
+        for (const row of state.absentPlacements) {
+            if (row.status !== 'planned' || !row.targetDateKey) continue;
+            const tgt = returnFromMissingWeekendTargets?.[row.targetDateKey]?.[row.groupNum];
+            if (!tgt || normPerson(tgt.personName) !== normPerson(row.personName)) {
+                row.status = 'failed';
+                row.reasonCode = row.reasonCode || 'RETURN_TARGET_BUSY';
+                row.message =
+                    (row.message || '') +
+                    ' Ο στόχος ΣΚ δεν δεσμεύτηκε τελικά (πιθανή σύγκρουση slot).';
+            }
+        }
     }
 
     function dayKindLabel(date) {
@@ -231,13 +407,30 @@
     function endSlot(outcome) {
         if (!isEnabled() || !state.currentSlot) return;
         const slot = state.currentSlot;
-        slot.outcome = outcome || {};
+        const oc = outcome || {};
+        const skipped = oc.skippedPerson || slot.meta?.rotationPerson;
+        if (skipped) {
+            const plan = findPlanForPerson(slot.groupNum, skipped);
+            if (plan) {
+                oc.absentPersonPlan = {
+                    personName: plan.personName,
+                    targetDateKey: plan.targetDateKey,
+                    status: plan.status,
+                    reasonCode: plan.reasonCode,
+                    message: plan.message,
+                    isBackwardAssignment: plan.isBackwardAssignment
+                };
+            }
+        }
+        slot.outcome = oc;
         state.entries.push(slot);
         state.currentSlot = null;
     }
 
     function clear() {
         state.entries = [];
+        state.absentPlacements = [];
+        state.absentByKey = {};
         state.currentSlot = null;
     }
 
@@ -264,14 +457,78 @@
         return (codes || []).map((c) => REASON_LABELS[c] || c).join('; ');
     }
 
+    function renderAbsentPlacementsSection() {
+        const f = state.filter || {};
+        const rows = state.absentPlacements.filter((p) => {
+            if (f.groupNum != null && Number(p.groupNum) !== Number(f.groupNum)) return false;
+            if (f.personName && normPerson(p.personName) !== normPerson(f.personName)) return false;
+            if (f.dateKey) {
+                const dk = f.dateKey;
+                const hit =
+                    p.targetDateKey === dk ||
+                    (p.missedOnDateKeys || []).includes(dk) ||
+                    p.missedOnDateKey === dk;
+                if (!hit) return false;
+            }
+            return true;
+        });
+        if (!rows.length) {
+            return '<p class="text-muted small mb-3">Δεν υπάρχουν καταχωρήσεις απούντων (return-from-missing / απλή απουσία).</p>';
+        }
+        let html =
+            '<h6 class="mb-2"><i class="fas fa-user-clock me-1"></i>Απόντες — ανάθεση σε άλλο ΣΚ / δημόσια αργία</h6>';
+        html +=
+            '<p class="small text-muted">Εδώ φαίνεται <strong>πού προγραμματίστηκε</strong> να πάει ο απόντας (όχι μόνο ποιος τον αντικατέστησε την ημέρα της απουσίας).</p>';
+        html +=
+            '<div class="table-responsive mb-4"><table class="table table-sm table-bordered"><thead class="table-warning"><tr>';
+        html +=
+            '<th>Άτομο</th><th>Ομ.</th><th>Απουσία</th><th>Χάθηκε ΣΚ</th><th>Αντικ. εκεί</th><th>Στόχος ΣΚ</th><th>Κατάσταση</th><th>Λόγος</th></tr></thead><tbody>';
+        rows.forEach((p) => {
+            const missed = (p.missedOnDateKeys && p.missedOnDateKeys.length
+                ? p.missedOnDateKeys.join(', ')
+                : p.missedOnDateKey) || '—';
+            const stClass =
+                p.status === 'applied' || p.status === 'planned'
+                    ? 'table-success'
+                    : p.status === 'failed' || p.status === 'unresolved'
+                      ? 'table-danger'
+                      : '';
+            html += `<tr class="${stClass}">`;
+            html += `<td>${escapeHtml(p.personName)}</td><td>${p.groupNum}</td>`;
+            html += `<td>${escapeHtml(p.missingRangeStr || p.absenceEndKey || '—')}</td>`;
+            html += `<td><small>${escapeHtml(missed)}</small></td>`;
+            html += `<td>${escapeHtml(p.replacementOnMissedDate || '—')}</td>`;
+            html += `<td>${escapeHtml(p.targetDateKey || '—')}${p.isBackwardAssignment ? ' <span class="badge bg-secondary">πίσω</span>' : ''}</td>`;
+            html += `<td>${escapeHtml(p.status || '—')}</td>`;
+            html += `<td><small>${escapeHtml(reasonLabels([p.reasonCode]))}${p.message ? '<br>' + escapeHtml(p.message) : ''}</small></td>`;
+            html += '</tr>';
+            if (p.alternateDateScan && p.alternateDateScan.length) {
+                html += `<tr><td colspan="8" class="bg-light"><small><strong>Άλλες ημέρες ΣΚ στην περίοδο:</strong></small>`;
+                html +=
+                    '<table class="table table-sm mb-0 mt-1"><thead><tr><th>Ημερομηνία</th><th>Θα μπορούσε;</th></tr></thead><tbody>';
+                p.alternateDateScan.forEach((a) => {
+                    html += `<tr class="${a.accepted ? 'table-success' : ''}"><td>${escapeHtml(a.dateKey)}</td><td>${escapeHtml(reasonLabels(a.reasonCodes))}</td></tr>`;
+                });
+                html += '</tbody></table></td></tr>';
+            }
+        });
+        html += '</tbody></table></div>';
+        return html;
+    }
+
     function renderPanel() {
         readFilterFromDom();
         const entries = state.entries.filter((e) => matchesFilter(e.dateKey, e.groupNum, e.meta?.baseline));
-        let body = '';
-        if (!entries.length) {
-            body = '<p class="text-muted mb-0">Δεν υπάρχουν εγγραφές (ενεργοποιήστε debug, τρέξτε Βήμα 2 και πατήστε Επόμενο για skip logic).</p>';
-        } else {
-            body = '<div class="accordion" id="dutyWeekendDebugAccordion">';
+        let body = renderAbsentPlacementsSection();
+        if (!entries.length && !state.absentPlacements.length) {
+            body =
+                '<p class="text-muted mb-0">Δεν υπάρχουν εγγραφές (ενεργοποιήστε debug, τρέξτε Βήμα 2 και πατήστε Επόμενο για skip logic).</p>';
+        } else if (!entries.length) {
+            body += '<p class="text-muted small">Δεν υπάρχουν εγγραφές ανά ημέρα/ομάδα — δείτε πίνακα απούντων πάνω.</p>';
+        }
+        if (entries.length) {
+            body += '<hr class="my-3"><h6 class="mb-2">Ανά ημέρα και ομάδα</h6>';
+            body += '<div class="accordion" id="dutyWeekendDebugAccordion">';
             entries.forEach((entry, i) => {
                 const date = new Date(entry.dateKey + 'T00:00:00');
                 const dateStr = isNaN(date.getTime())
@@ -290,9 +547,27 @@
                     <div id="dutyWkdDbg${i}" class="accordion-collapse collapse ${i === 0 ? 'show' : ''}" data-bs-parent="#dutyWeekendDebugAccordion">
                         <div class="accordion-body small">`;
                 const m = entry.meta || {};
+                const oc = entry.outcome || {};
                 body += `<p><strong>Baseline σειράς:</strong> ${escapeHtml(m.rotationPerson || m.baseline || '—')}
-                    · <strong>Πριν:</strong> ${escapeHtml(m.currentPerson || '—')}
-                    · <strong>Μετά:</strong> ${escapeHtml(String(finalP))}</p>`;
+                    · <strong>Αντικαταστάτης εδώ:</strong> ${escapeHtml(oc.replacementOnDate || (finalP && finalP !== (m.rotationPerson || '') ? String(finalP) : '—'))}
+                    · <strong>Τελική ανάθεση:</strong> ${escapeHtml(String(finalP))}</p>`;
+                if (oc.absentPersonPlan) {
+                    const ap = oc.absentPersonPlan;
+                    body += `<div class="alert alert-info py-2 mb-2"><strong>Απόντας (${escapeHtml(ap.personName)}):</strong> `;
+                    if (ap.targetDateKey) {
+                        body += `προγραμματίστηκε για ΣΚ/αργία <code>${escapeHtml(ap.targetDateKey)}</code> `;
+                        body += `(<em>${escapeHtml(ap.status)}</em>) — ${escapeHtml(reasonLabels([ap.reasonCode]))}`;
+                        if (ap.message) body += `<br><small>${escapeHtml(ap.message)}</small>`;
+                    } else {
+                        body += `δεν προγραμματίστηκε αλλού — ${escapeHtml(reasonLabels([ap.reasonCode]))}`;
+                    }
+                    body += '</div>';
+                } else if (oc.skippedPerson && oc.emptyReason) {
+                    body += `<div class="alert alert-danger py-2 mb-2"><strong>Απόντας ${escapeHtml(oc.skippedPerson)}:</strong> δεν ανατέθηκε αλλού· ${escapeHtml(reasonLabels([oc.emptyReason]))}</div>`;
+                }
+                if (oc.swapAbsentToDateKey) {
+                    body += `<p class="mb-2"><strong>Ανταλλαγή:</strong> ο απόντας <code>${escapeHtml(oc.skippedPerson)}</code> μεταφέρεται στην <code>${escapeHtml(oc.swapAbsentToDateKey)}</code>.</p>`;
+                }
                 if (entry.steps.length) {
                     body += '<p class="mb-1"><strong>Βήματα</strong></p><ul class="mb-2">';
                     entry.steps.forEach((s) => {
@@ -345,7 +620,10 @@
             );
             el = document.getElementById(modalId);
             document.getElementById('dutyWeekendDebugExportBtn').addEventListener('click', () => {
-                const blob = new Blob([JSON.stringify(state.entries, null, 2)], { type: 'application/json' });
+                const blob = new Blob(
+                    [JSON.stringify({ absentPlacements: state.absentPlacements, slots: state.entries }, null, 2)],
+                    { type: 'application/json' }
+                );
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
                 a.download = `duty-weekend-debug-${Date.now()}.json`;
@@ -399,7 +677,7 @@
                     <button type="button" class="btn btn-outline-warning btn-sm" id="dutyWeekendDebugViewBtn">
                         <i class="fas fa-list me-1"></i>Προβολή log
                     </button>
-                    <span class="text-muted small">Καταγράφει γιατί δεν ανατίθεται αντικαταστάτης όταν κάποιος απουσιάζει. Δεν αφορά ειδικές αργίες.</span>
+                    <span class="text-muted small">Καταγράφει αντικαταστάτη την ημέρα της απουσίας <strong>και</strong> πού (αν) ανατίθεται ο απόντας σε άλλο ΣΚ/αργία. Δεν αφορά ειδικές αργίες.</span>
                 </div>
             </div>
         </div>`;
@@ -427,6 +705,11 @@
         recordCandidateScan,
         recordSwapScan,
         endSlot,
+        recordAbsentPlacement,
+        noteMissedWeekendForAbsent,
+        finalizeMissedWeekendAbsences,
+        findPlanForPerson,
+        scanAlternateWeekendDates,
         getCandidateRejectionReasons,
         scanRotationCandidates,
         scanSwapPartners,
@@ -437,6 +720,9 @@
         wireToolbar,
         get entries() {
             return state.entries;
+        },
+        get absentPlacements() {
+            return state.absentPlacements;
         }
     };
 })();

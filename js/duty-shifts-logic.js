@@ -4410,7 +4410,19 @@
                                 dutyWeekendDebug.endSlot({
                                     finalPerson: swapPartnerPerson,
                                     emptyReason: null,
-                                    skippedPerson: currentPerson
+                                    skippedPerson: currentPerson,
+                                    replacementOnDate: swapPartnerPerson,
+                                    swapAbsentToDateKey: swapPartnerDateKey
+                                });
+                                dutyWeekendDebug.recordAbsentPlacement({
+                                    groupNum,
+                                    personName: currentPerson,
+                                    missedOnDateKey: dateKey,
+                                    targetDateKey: swapPartnerDateKey,
+                                    replacementOnMissedDate: swapPartnerPerson,
+                                    status: 'applied',
+                                    reasonCode: 'SWAP_MOVES_ABSENT_TO',
+                                    message: `Ανταλλαγή: ο απόντας ${currentPerson} μεταφέρεται στην ${swapPartnerDateKey}.`
                                 });
                             }
                             continue;
@@ -8125,7 +8137,18 @@
                                 ? getSortedGroupListForRotation(groupNum, 'weekend')
                                 : (g?.weekend || []);
                         for (const personName of Object.keys(missingMap)) {
-                            if (!weekendList.some(p => normW(p) === normW(personName))) continue;
+                            if (!weekendList.some(p => normW(p) === normW(personName))) {
+                                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                    dutyWeekendDebug.recordAbsentPlacement({
+                                        groupNum,
+                                        personName,
+                                        status: 'skipped',
+                                        reasonCode: 'RETURN_NOT_ON_WEEKEND_LIST',
+                                        message: 'Δεν είναι στη λίστα weekend — δεν εξετάζεται return-from-missing.'
+                                    });
+                                }
+                                continue;
+                            }
                             const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                             for (const period of periods) {
                                 const pStartKey = inputValueToDateKey(period?.start);
@@ -8139,7 +8162,19 @@
                                 const prevMonthEndKey = prevMonthEnd ? formatDateKey(prevMonthEnd) : null;
                                 const periodEndsInRange = (pEndKey >= calcStartKeyW && pEndKey <= calcEndKeyW);
                                 const periodEndsInPrevMonth = (prevMonthStartKey && prevMonthEndKey && pEndKey >= prevMonthStartKey && pEndKey <= prevMonthEndKey);
-                                if (!periodEndsInRange && !periodEndsInPrevMonth) continue;
+                                if (!periodEndsInRange && !periodEndsInPrevMonth) {
+                                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                        dutyWeekendDebug.recordAbsentPlacement({
+                                            groupNum,
+                                            personName,
+                                            absenceEndKey: pEndKey,
+                                            status: 'skipped',
+                                            reasonCode: 'RETURN_PERIOD_OUT_OF_RANGE',
+                                            message: `Λήξη απουσίας ${pEndKey} εκτός περιόδου υπολογισμού.`
+                                        });
+                                    }
+                                    continue;
+                                }
                                 const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                 if (processedWeekendReturn.has(dedupeKey)) continue;
                                 processedWeekendReturn.add(dedupeKey);
@@ -8176,7 +8211,19 @@
                                         }
                                     }
                                 }
-                                if (!hadMissedWeekend) continue;
+                                if (!hadMissedWeekend) {
+                                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                        dutyWeekendDebug.recordAbsentPlacement({
+                                            groupNum,
+                                            personName,
+                                            absenceEndKey: pEndKey,
+                                            status: 'skipped',
+                                            reasonCode: 'RETURN_NO_MISSED_WEEKEND',
+                                            message: 'Δεν βρέθηκε ΣΚ/αργία που θα ήταν baseline του κατά την απουσία.'
+                                        });
+                                    }
+                                    continue;
+                                }
                                 const dayAfterEnd = addDaysW(pEndKey, 1);
                                 if (!dayAfterEnd) continue;
                                 const thirdDayAfterEnd = addDaysW(pEndKey, 3);
@@ -8204,7 +8251,30 @@
                                     targetWeekendKey = findLastWeekendBefore(sortedWeekends, pStartKey);
                                     isBackwardAssignment = true;
                                 }
-                                if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) continue;
+                                if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) {
+                                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                        const alt = dutyWeekendDebug.scanAlternateWeekendDates({
+                                            personName,
+                                            groupNum,
+                                            sortedWeekends,
+                                            calcStartKey: calcStartKeyW,
+                                            calcEndKey: calcEndKeyW,
+                                            assignedWeekendInMonth: null,
+                                            simulatedSpecialMonthSet: null
+                                        });
+                                        dutyWeekendDebug.recordAbsentPlacement({
+                                            groupNum,
+                                            personName,
+                                            absenceEndKey: pEndKey,
+                                            missingRangeStr: `${pStartKey} - ${pEndKey}`,
+                                            status: 'failed',
+                                            reasonCode: 'RETURN_TARGET_OUT_OF_CALC_RANGE',
+                                            message: `Στόχος ΣΚ ${targetWeekendKey || '—'} εκτός ${calcStartKeyW}…${calcEndKeyW}.`,
+                                            alternateDateScan: alt
+                                        });
+                                    }
+                                    continue;
+                                }
                                 // If this (date, group) is already taken by another return-from-missing, use next free weekend in range
                                 let weekendIdx = sortedWeekends.indexOf(targetWeekendKey);
                                 if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
@@ -8221,7 +8291,20 @@
                                         }
                                     }
                                 }
-                                if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) continue;
+                                if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
+                                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                        dutyWeekendDebug.recordAbsentPlacement({
+                                            groupNum,
+                                            personName,
+                                            absenceEndKey: pEndKey,
+                                            targetDateKey,
+                                            status: 'failed',
+                                            reasonCode: 'RETURN_TARGET_BUSY',
+                                            message: `Η ημέρα-στόχος ${targetWeekendKey} είναι ήδη δεσμευμένη για άλλον.`
+                                        });
+                                    }
+                                    continue;
+                                }
                                 const formatDDMMYYYYW = (dk) => {
                                     const d = new Date(dk + 'T00:00:00');
                                     return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
@@ -8230,9 +8313,34 @@
                                 const reasonOfMissingW = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                                 if (!returnFromMissingWeekendTargets[targetWeekendKey]) returnFromMissingWeekendTargets[targetWeekendKey] = {};
                                 returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = { personName, missingEnd: pEndKey, isBackwardAssignment, missingRangeStr: missingRangeStrW, reasonOfMissing: reasonOfMissingW };
+                                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                    dutyWeekendDebug.recordAbsentPlacement({
+                                        groupNum,
+                                        personName,
+                                        absenceEndKey: pEndKey,
+                                        missingRangeStr: missingRangeStrW,
+                                        targetDateKey,
+                                        isBackwardAssignment,
+                                        status: 'planned',
+                                        reasonCode: 'RETURN_PLANNED',
+                                        message: `Θα ανατεθεί στην ${targetWeekendKey}${isBackwardAssignment ? ' (ανάθεση προς τα πίσω)' : ''}.`
+                                    });
+                                }
                             }
                         }
                     }
+                }
+
+                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                    dutyWeekendDebug.finalizeMissedWeekendAbsences({
+                        sortedWeekends,
+                        baselineWeekendByDate,
+                        calcStartKey: calcStartKeyW,
+                        calcEndKey: calcEndKeyW,
+                        returnFromMissingWeekendTargets,
+                        assignedWeekendInMonthPreview,
+                        simulatedSpecialAssignments
+                    });
                 }
                 
                 sortedWeekends.forEach((dateKey, weekendIndex) => {
@@ -8321,6 +8429,28 @@
                             const designatedWeekend = returnFromMissingWeekendTargets[dateKey]?.[groupNum];
                             const normWeekend = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                             const matchingPerson = designatedWeekend && groupPeople.find(p => normWeekend(p) === normWeekend(designatedWeekend.personName));
+                            if (designatedWeekend && !matchingPerson && typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                dutyWeekendDebug.recordAbsentPlacement({
+                                    groupNum,
+                                    personName: designatedWeekend.personName,
+                                    absenceEndKey: designatedWeekend.missingEnd,
+                                    targetDateKey: dateKey,
+                                    status: 'failed',
+                                    reasonCode: 'RETURN_FAILED_NOT_IN_LIST',
+                                    message: `Προγραμματίστηκε για ${dateKey} αλλά δεν βρέθηκε στη λίστα weekend.`
+                                });
+                            }
+                            if (designatedWeekend && matchingPerson && isPersonMissingOnDate(matchingPerson, groupNum, date, 'weekend') && typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                dutyWeekendDebug.recordAbsentPlacement({
+                                    groupNum,
+                                    personName: designatedWeekend.personName,
+                                    absenceEndKey: designatedWeekend.missingEnd,
+                                    targetDateKey: dateKey,
+                                    status: 'failed',
+                                    reasonCode: 'RETURN_FAILED_STILL_MISSING_ON_TARGET',
+                                    message: `Προγραμματίστηκε για ${dateKey} αλλά απουσιάζει και εκεί.`
+                                });
+                            }
                             if (designatedWeekend && matchingPerson && !isPersonMissingOnDate(matchingPerson, groupNum, date, 'weekend')) {
                                 const assignedPerson = matchingPerson;
                                 if (!assignedByReturnFromMissingWeekend[groupNum]) assignedByReturnFromMissingWeekend[groupNum] = new Set();
@@ -8344,6 +8474,17 @@
                                 if (!assignedWeekendInMonthPreview[monthKey]) assignedWeekendInMonthPreview[monthKey] = {};
                                 if (!assignedWeekendInMonthPreview[monthKey][groupNum]) assignedWeekendInMonthPreview[monthKey][groupNum] = new Set();
                                 assignedWeekendInMonthPreview[monthKey][groupNum].add(assignedPerson);
+                                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                    dutyWeekendDebug.recordAbsentPlacement({
+                                        groupNum,
+                                        personName: designatedWeekend.personName,
+                                        absenceEndKey: designatedWeekend.missingEnd,
+                                        targetDateKey: dateKey,
+                                        status: 'applied',
+                                        reasonCode: 'RETURN_APPLIED',
+                                        message: `Τοποθετήθηκε στην ${dateKey} (return-from-missing).`
+                                    });
+                                }
                                 continue;
                             }
                             // Initialize skipped set for this group and month if needed
@@ -8641,10 +8782,34 @@
                                 ) {
                                     emptyReason = 'STILL_MISSING_AFTER_LOGIC';
                                 }
+                                const replacementOnDate =
+                                    wasReplaced &&
+                                    displayPerson &&
+                                    rotationPerson &&
+                                    (typeof normalizePersonKey === 'function'
+                                        ? normalizePersonKey(displayPerson) !== normalizePersonKey(rotationPerson)
+                                        : displayPerson !== rotationPerson)
+                                        ? displayPerson
+                                        : null;
+                                if (
+                                    rotationPerson &&
+                                    (isPersonMissingOnDate(rotationPerson, groupNum, date, 'weekend') ||
+                                        replacementOnDate)
+                                ) {
+                                    const plan = dutyWeekendDebug.findPlanForPerson(groupNum, rotationPerson);
+                                    dutyWeekendDebug.noteMissedWeekendForAbsent(
+                                        groupNum,
+                                        rotationPerson,
+                                        plan?.absenceEndKey,
+                                        dateKey,
+                                        replacementOnDate
+                                    );
+                                }
                                 dutyWeekendDebug.endSlot({
                                     finalPerson: displayPerson,
                                     emptyReason,
-                                    skippedPerson: rotationPerson
+                                    skippedPerson: rotationPerson,
+                                    replacementOnDate
                                 });
                             }
                             
