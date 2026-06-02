@@ -8070,46 +8070,165 @@
                 // Track persons assigned via return-from-missing (backward/forward) so we don't assign them again when their turn comes
                 const assignedByReturnFromMissingWeekend = {}; // groupNum -> Set of person names
                 
-                // Build baseline weekend (ίδια λογική σειράς με preview: reseed + manual alternate) για return-from-missing
+                // Baseline ΣΚ = rotationPerson πριν skip (ίδια προσομοίωση σειράς με preview, όχι απλός μετρητής)
                 const baselineWeekendByDate = {};
-                const baselineWeekendRotationPosition = {};
-                const deferManualAlternateBaselineWeekend = {};
-                let prevCalMonthKeyBaselineWeekend = null;
+                const returnSimGlobalWeekendPos = {};
+                const returnSimDeferManualAlternate = {};
+                const returnSimAssignedInMonth = {};
+                let returnSimPrevMonthKey = null;
+                const resolveWeekendBaselinePersonStored = (dateKey, groupNum) => {
+                    if (typeof getRotationBaselineAssignmentForType !== 'function') return null;
+                    const raw = getRotationBaselineAssignmentForType('weekend', dateKey);
+                    if (!raw || typeof parseAssignedPersonForGroupFromAssignment !== 'function') return null;
+                    return parseAssignedPersonForGroupFromAssignment(raw, groupNum);
+                };
                 for (const dk of sortedWeekends) {
-                    const dt = new Date(dk + 'T00:00:00');
-                    const monthKeyBaseline = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(dt) : `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-                    if (prevCalMonthKeyBaselineWeekend !== monthKeyBaseline) {
+                    const date = new Date(dk + 'T00:00:00');
+                    const monthKeySim =
+                        typeof getMonthKeyFromDate === 'function'
+                            ? getMonthKeyFromDate(date)
+                            : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    if (returnSimPrevMonthKey !== monthKeySim) {
+                        for (const k of Object.keys(returnSimDeferManualAlternate)) {
+                            delete returnSimDeferManualAlternate[k];
+                        }
+                        if (typeof seedManualAlternateDeferAllGroupsForMonthStart === 'function') {
+                            seedManualAlternateDeferAllGroupsForMonthStart(
+                                returnSimDeferManualAlternate,
+                                'weekend',
+                                date
+                            );
+                        }
                         for (let g = 1; g <= 4; g++) {
-                            const grp = (typeof groupsForDuty === 'function' ? groupsForDuty(g, dk) : groups[g]) || { weekend: [] };
-                            const people = grp.weekend || [];
+                            const gd =
+                                (typeof groupsForDuty === 'function'
+                                    ? groupsForDuty(g, dk)
+                                    : groups[g]) || {};
+                            const people = gd.weekend || [];
                             if (people.length) {
-                                reseedGlobalRotationPositionAtMonthStart('weekend', dt, g, people, baselineWeekendRotationPosition);
+                                reseedGlobalRotationPositionAtMonthStart(
+                                    'weekend',
+                                    date,
+                                    g,
+                                    people,
+                                    returnSimGlobalWeekendPos
+                                );
                             }
                         }
-                        prevCalMonthKeyBaselineWeekend = monthKeyBaseline;
+                        returnSimPrevMonthKey = monthKeySim;
                     }
-                    for (let g = 1; g <= 4; g++) {
-                        const grp = (typeof groupsForDuty === 'function' ? groupsForDuty(g, dk) : groups[g]) || { weekend: [] };
-                        const people = grp.weekend || [];
-                        if (people.length === 0) continue;
-                        const rotLen = people.length;
-                        if (baselineWeekendRotationPosition[g] === undefined) {
-                            reseedGlobalRotationPositionAtMonthStart('weekend', dt, g, people, baselineWeekendRotationPosition);
+                    if (!returnSimAssignedInMonth[monthKeySim]) returnSimAssignedInMonth[monthKeySim] = {};
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        if (
+                            typeof shouldRecalculateDutyGroup === 'function' &&
+                            !shouldRecalculateDutyGroup(groupNum)
+                        ) {
+                            const preserved = simulatedWeekendAssignments[dk]?.[groupNum];
+                            if (preserved) {
+                                if (!baselineWeekendByDate[dk]) baselineWeekendByDate[dk] = {};
+                                baselineWeekendByDate[dk][groupNum] = preserved;
+                            }
+                            continue;
                         }
-                        const manualAltBaseline = resolveRotationPositionWithManualAlternate(
-                            g,
-                            people,
-                            rotLen,
-                            baselineWeekendRotationPosition,
-                            deferManualAlternateBaselineWeekend,
+                        const groupData =
+                            (typeof groupsForDuty === 'function'
+                                ? groupsForDuty(groupNum, dk)
+                                : groups[groupNum]) || { weekend: [] };
+                        const groupPeople = groupData.weekend || [];
+                        if (groupPeople.length === 0) continue;
+                        const rotationDays = groupPeople.length;
+                        if (!returnSimAssignedInMonth[monthKeySim][groupNum]) {
+                            returnSimAssignedInMonth[monthKeySim][groupNum] = new Set();
+                        }
+                        const manualAltSim = resolveRotationPositionWithManualAlternate(
+                            groupNum,
+                            groupPeople,
+                            rotationDays,
+                            returnSimGlobalWeekendPos,
+                            returnSimDeferManualAlternate,
                             dk,
                             'weekend'
                         );
-                        const pos = manualAltBaseline.rotationPosition % rotLen;
-                        const rotationPersonBaseline = people[pos];
+                        const rotationPosition = manualAltSim.rotationPosition;
+                        const rotationPerson = groupPeople[rotationPosition % rotationDays];
                         if (!baselineWeekendByDate[dk]) baselineWeekendByDate[dk] = {};
-                        baselineWeekendByDate[dk][g] = rotationPersonBaseline;
-                        baselineWeekendRotationPosition[g] = (pos + 1) % rotLen;
+                        baselineWeekendByDate[dk][groupNum] = rotationPerson;
+                        let assignedPerson = rotationPerson;
+                        let wasReplaced = false;
+                        let replacementIndex = null;
+                        if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
+                            let currentIndex = groupPeople.indexOf(assignedPerson);
+                            if (currentIndex === -1) currentIndex = 0;
+                            for (let offset = 1; offset < rotationDays; offset++) {
+                                const nextIndex = (currentIndex + offset) % rotationDays;
+                                const candidate = groupPeople[nextIndex];
+                                if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
+                                    continue;
+                                }
+                                if (returnSimAssignedInMonth[monthKeySim][groupNum].has(candidate)) continue;
+                                assignedPerson = candidate;
+                                wasReplaced = true;
+                                replacementIndex = nextIndex;
+                                break;
+                            }
+                        }
+                        if (assignedPerson) {
+                            const hasSpecialHoliday =
+                                simulatedSpecialAssignments[monthKeySim]?.[groupNum]?.has(assignedPerson) ||
+                                false;
+                            const alreadyAssigned =
+                                returnSimAssignedInMonth[monthKeySim][groupNum].has(assignedPerson);
+                            if (hasSpecialHoliday || alreadyAssigned) {
+                                let currentIndex = groupPeople.indexOf(assignedPerson);
+                                if (currentIndex === -1) currentIndex = 0;
+                                for (let offset = 1; offset < rotationDays; offset++) {
+                                    const nextIndex = (currentIndex + offset) % rotationDays;
+                                    const candidate = groupPeople[nextIndex];
+                                    if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
+                                        continue;
+                                    }
+                                    if (
+                                        typeof isPersonDisabledForDuty === 'function' &&
+                                        isPersonDisabledForDuty(candidate, groupNum, 'weekend')
+                                    ) {
+                                        continue;
+                                    }
+                                    const candidateHasSpecial =
+                                        simulatedSpecialAssignments[monthKeySim]?.[groupNum]?.has(candidate) ||
+                                        false;
+                                    if (
+                                        !candidateHasSpecial &&
+                                        !returnSimAssignedInMonth[monthKeySim][groupNum].has(candidate)
+                                    ) {
+                                        assignedPerson = candidate;
+                                        wasReplaced = true;
+                                        replacementIndex = nextIndex;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (assignedPerson) {
+                            returnSimAssignedInMonth[monthKeySim][groupNum].add(assignedPerson);
+                            advanceGlobalRotationAfterDutyAssignment(
+                                groupNum,
+                                groupPeople,
+                                rotationDays,
+                                rotationPosition,
+                                assignedPerson,
+                                returnSimGlobalWeekendPos,
+                                returnSimDeferManualAlternate,
+                                {
+                                    wasReplaced,
+                                    replacementIndex,
+                                    isManualAlternateReplacement: false,
+                                    existingManualAlternate: manualAltSim.existingManualAlternate
+                                }
+                            );
+                        } else {
+                            returnSimGlobalWeekendPos[groupNum] =
+                                (rotationPosition + 1) % rotationDays;
+                        }
                     }
                 }
                 const findSameMonthReturnWeekendTarget = (
@@ -8226,6 +8345,11 @@
                     }
                     return normFn(a) === normFn(b);
                 };
+                const getWeekendBaselinePersonForReturn = (dateKey, groupNum) => {
+                    const fromSim = baselineWeekendByDate[dateKey]?.[groupNum];
+                    if (fromSim) return fromSim;
+                    return resolveWeekendBaselinePersonStored(dateKey, groupNum);
+                };
                 const collectMissedWeekendsInRange = (
                     sorted,
                     rangeStartKey,
@@ -8239,7 +8363,7 @@
                     for (const wk of sorted) {
                         if (wk < rangeStartKey) continue;
                         if (wk > rangeEndKey) break;
-                        const base = baselineWeekendByDate[wk]?.[groupNum];
+                        const base = getWeekendBaselinePersonForReturn(wk, groupNum);
                         if (!base || !personKeysMatch(base, rosterPersonName, normFn)) continue;
                         const dMiss = new Date(wk + 'T00:00:00');
                         const missingOnDuty =
@@ -8391,7 +8515,7 @@
                                             status: 'skipped',
                                             reasonCode: 'RETURN_NO_MISSED_WEEKEND',
                                             message:
-                                                `Δεν βρέθηκε ΣΚ/αργία (baseline) στην περίοδο ${missingRangeStrForDebug} — ελέγξτε διπλές/σύντομες εγγραφές απουσίας με ίδια λήξη.`
+                                                `Δεν βρέθηκε ΣΚ/αργία (baseline σειράς preview) στην περίοδο ${missingRangeStrForDebug}.`
                                         });
                                     }
                                     continue;
