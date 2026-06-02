@@ -8682,18 +8682,6 @@
                     }
                 }
 
-                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
-                    dutyWeekendDebug.finalizeMissedWeekendAbsences({
-                        sortedWeekends,
-                        baselineWeekendByDate,
-                        calcStartKey: calcStartKeyW,
-                        calcEndKey: calcEndKeyW,
-                        returnFromMissingWeekendTargets,
-                        assignedWeekendInMonthPreview,
-                        simulatedSpecialAssignments
-                    });
-                }
-                
                 sortedWeekends.forEach((dateKey, weekendIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -9139,34 +9127,11 @@
                                 ) {
                                     emptyReason = 'STILL_MISSING_AFTER_LOGIC';
                                 }
-                                const replacementOnDate =
-                                    wasReplaced &&
-                                    displayPerson &&
-                                    rotationPerson &&
-                                    (typeof normalizePersonKey === 'function'
-                                        ? normalizePersonKey(displayPerson) !== normalizePersonKey(rotationPerson)
-                                        : displayPerson !== rotationPerson)
-                                        ? displayPerson
-                                        : null;
-                                if (
-                                    rotationPerson &&
-                                    (isPersonMissingOnDate(rotationPerson, groupNum, date, 'weekend') ||
-                                        replacementOnDate)
-                                ) {
-                                    const plan = dutyWeekendDebug.findPlanForPerson(groupNum, rotationPerson);
-                                    dutyWeekendDebug.noteMissedWeekendForAbsent(
-                                        groupNum,
-                                        rotationPerson,
-                                        plan?.absenceEndKey,
-                                        dateKey,
-                                        replacementOnDate
-                                    );
-                                }
                                 dutyWeekendDebug.endSlot({
                                     finalPerson: displayPerson,
                                     emptyReason,
                                     skippedPerson: rotationPerson,
-                                    replacementOnDate
+                                    replacementOnDate: null
                                 });
                             }
                             
@@ -9176,6 +9141,36 @@
                                     simulatedWeekendAssignments[dateKey] = {};
                                 }
                                 simulatedWeekendAssignments[dateKey][groupNum] = assignedPerson;
+                                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                    const baselineMissed =
+                                        weekendRotationPersons[dateKey]?.[groupNum] || rotationPerson;
+                                    const normDbg = (s) =>
+                                        typeof normalizePersonKey === 'function'
+                                            ? normalizePersonKey(s)
+                                            : String(s || '').trim();
+                                    if (
+                                        baselineMissed &&
+                                        isPersonMissingOnDate(baselineMissed, groupNum, date, 'weekend')
+                                    ) {
+                                        const assignedNow = simulatedWeekendAssignments[dateKey]?.[groupNum];
+                                        const repl =
+                                            assignedNow &&
+                                            normDbg(assignedNow) !== normDbg(baselineMissed)
+                                                ? assignedNow
+                                                : null;
+                                        const plan = dutyWeekendDebug.findPlanForPerson(
+                                            groupNum,
+                                            baselineMissed
+                                        );
+                                        dutyWeekendDebug.noteMissedWeekendForAbsent(
+                                            groupNum,
+                                            baselineMissed,
+                                            plan?.absenceEndKey,
+                                            dateKey,
+                                            repl
+                                        );
+                                    }
+                                }
                                 
                                 // Track that this person has been assigned (to prevent nearby duplicate assignments)
                                 if (assignedPeoplePreviewWeekend[monthKey] && assignedPeoplePreviewWeekend[monthKey][groupNum]) {
@@ -9280,6 +9275,24 @@
                     }
                 }
                 calculationSteps.lastWeekendRotationPositionsByMonth = lastWeekendRotationPositionsByMonth;
+
+                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                    dutyWeekendDebug.refreshAbsentReplacementsFromPreview(
+                        simulatedWeekendAssignments,
+                        weekendRotationPersons
+                    );
+                    dutyWeekendDebug.finalizeMissedWeekendAbsences({
+                        sortedWeekends,
+                        baselineWeekendByDate,
+                        calcStartKey: calcStartKeyW,
+                        calcEndKey: calcEndKeyW,
+                        returnFromMissingWeekendTargets,
+                        assignedWeekendInMonthPreview,
+                        simulatedSpecialAssignments,
+                        simulatedWeekendAssignments,
+                        weekendRotationPersons
+                    });
+                }
                 
                 html += '</tbody>';
                 html += '</table>';

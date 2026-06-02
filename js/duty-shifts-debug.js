@@ -180,7 +180,9 @@
             if (missedDateKey && !row.missedOnDateKeys.includes(missedDateKey)) {
                 row.missedOnDateKeys.push(missedDateKey);
             }
-            if (replacementOnMissedDate != null) row.replacementOnMissedDate = replacementOnMissedDate;
+            if (replacementOnMissedDate != null) {
+                row.replacementOnMissedDate = replacementOnMissedDate;
+            }
         } else {
             recordAbsentPlacement({
                 groupNum,
@@ -195,6 +197,26 @@
         }
     }
 
+    function refreshAbsentReplacementsFromPreview(weekendAssignments, weekendRotationBaseline) {
+        if (!isEnabled()) return;
+        for (const row of state.absentPlacements) {
+            const missed =
+                row.missedOnDateKeys && row.missedOnDateKeys.length
+                    ? row.missedOnDateKeys
+                    : row.missedOnDateKey
+                      ? [row.missedOnDateKey]
+                      : [];
+            for (const dk of missed) {
+                const g = row.groupNum;
+                const baseline = weekendRotationBaseline?.[dk]?.[g];
+                if (!baseline || normPerson(baseline) !== normPerson(row.personName)) continue;
+                const assigned = weekendAssignments?.[dk]?.[g];
+                if (!assigned || normPerson(assigned) === normPerson(baseline)) continue;
+                row.replacementOnMissedDate = assigned;
+            }
+        }
+    }
+
     function finalizeMissedWeekendAbsences(ctx) {
         if (!isEnabled()) return;
         const {
@@ -204,7 +226,9 @@
             calcEndKey,
             returnFromMissingWeekendTargets,
             assignedWeekendInMonthPreview,
-            simulatedSpecialAssignments
+            simulatedSpecialAssignments,
+            simulatedWeekendAssignments,
+            weekendRotationPersons
         } = ctx;
         const unresolved = new Set();
         for (const dk of sortedWeekends || []) {
@@ -221,13 +245,23 @@
                 if (typeof isPersonMissingOnDate !== 'function' || !isPersonMissingOnDate(base, g, d, 'weekend')) {
                     continue;
                 }
+                const replFromPreview =
+                    simulatedWeekendAssignments?.[dk]?.[g] &&
+                    normPerson(simulatedWeekendAssignments[dk][g]) !== normPerson(base)
+                        ? simulatedWeekendAssignments[dk][g]
+                        : weekendRotationPersons?.[dk]?.[g] &&
+                            simulatedWeekendAssignments?.[dk]?.[g] &&
+                            normPerson(simulatedWeekendAssignments[dk][g]) !==
+                                normPerson(weekendRotationPersons[dk][g])
+                          ? simulatedWeekendAssignments[dk][g]
+                          : null;
                 const plan = findPlanForPerson(g, base);
                 if (plan && plan.targetDateKey) {
-                    noteMissedWeekendForAbsent(g, base, plan.absenceEndKey, dk, null);
+                    noteMissedWeekendForAbsent(g, base, plan.absenceEndKey, dk, replFromPreview);
                     continue;
                 }
                 if (plan && (plan.status === 'skipped' || plan.reasonCode === 'RETURN_NO_MISSED_WEEKEND')) {
-                    noteMissedWeekendForAbsent(g, base, plan.absenceEndKey, dk, null);
+                    noteMissedWeekendForAbsent(g, base, plan.absenceEndKey, dk, replFromPreview);
                     if (plan.status === 'skipped') {
                         plan.status = 'failed';
                         plan.reasonCode = 'RETURN_MISSED_BASELINE_NOT_PLANNED';
@@ -735,6 +769,7 @@
         endSlot,
         recordAbsentPlacement,
         noteMissedWeekendForAbsent,
+        refreshAbsentReplacementsFromPreview,
         finalizeMissedWeekendAbsences,
         findPlanForPerson,
         scanAlternateWeekendDates,
