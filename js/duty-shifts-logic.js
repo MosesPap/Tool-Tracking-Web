@@ -4192,14 +4192,38 @@
                         if (!skippedInMonth[monthKey][groupNum]) skippedInMonth[monthKey][groupNum] = new Set();
                         if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
-                        if (!currentPerson) continue;
+                        if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                            dutyWeekendDebug.startSlot('skip-phase1', dateKey, groupNum, {
+                                currentPerson: currentPerson || null,
+                                monthKey
+                            });
+                        }
+                        if (!currentPerson) {
+                            if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                dutyWeekendDebug.logStep('NO_CURRENT_PERSON', 'Κενή θέση στο tempWeekendAssignments — η φάση παραλείπεται.');
+                                dutyWeekendDebug.endSlot({ finalPerson: null, emptyReason: 'NO_CURRENT_PERSON' });
+                            }
+                            continue;
+                        }
                         const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(currentPerson) || false;
                         const alreadyAssignedThisMonth = assignedWeekendInMonth[monthKey][groupNum].has(currentPerson);
                         if (!hasSpecialHoliday && !alreadyAssignedThisMonth) {
                             assignedWeekendInMonth[monthKey][groupNum].add(currentPerson);
+                            if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                dutyWeekendDebug.logStep('phase1-ok', 'Χωρίς σύγκρουση ειδικής/διπλής ανάθεσης — διατήρηση.');
+                                dutyWeekendDebug.endSlot({ finalPerson: currentPerson, emptyReason: null });
+                            }
                             continue;
                         }
                         if (hasSpecialHoliday) skippedInMonth[monthKey][groupNum].add(currentPerson);
+                        if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                            dutyWeekendDebug.logStep(
+                                'phase1-trigger',
+                                hasSpecialHoliday
+                                    ? `${currentPerson}: ειδική αργία ίδιος μήνας.`
+                                    : `${currentPerson}: ήδη ανατεθειμένος ΣΚ/αργία τον μήνα.`
+                            );
+                        }
                         const rotationDays = groupPeople.length;
                         let currentIndex = groupPeople.indexOf(currentPerson);
                         if (currentIndex === -1) currentIndex = 0;
@@ -4252,9 +4276,36 @@
                                 currentPerson,
                                 null
                             );
+                        } else if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                            dutyWeekendDebug.logStep('phase1-no-replacement', 'Δεν βρέθηκε αντικαταστάτης στη φάση 1.');
+                        }
+                        if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                            dutyWeekendDebug.recordCandidateScan(
+                                'skip-phase1',
+                                {
+                                    groupPeople,
+                                    startIndex: currentIndex,
+                                    maxOffset: rotationDays,
+                                    groupNum,
+                                    date,
+                                    dateKey,
+                                    monthKey,
+                                    assignedWeekendInMonth: assignedWeekendInMonth[monthKey][groupNum],
+                                    simulatedSpecialMonthSet:
+                                        simulatedSpecialAssignments[monthKey]?.[groupNum] || null
+                                },
+                                replacementPerson
+                            );
                         }
                         const assignedPerson = updatedAssignments[dateKey]?.[groupNum];
                         if (assignedPerson) assignedWeekendInMonth[monthKey][groupNum].add(assignedPerson);
+                        if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                            dutyWeekendDebug.endSlot({
+                                finalPerson: assignedPerson || null,
+                                emptyReason: assignedPerson ? null : 'ALL_CANDIDATES_EXHAUSTED',
+                                skippedPerson: currentPerson
+                            });
+                        }
                     }
                 });
                 // Phase 2: Swaps because person is missing on this date.
@@ -4270,8 +4321,29 @@
                         if (groupPeople.length === 0) continue;
                         if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
                         const currentPerson = updatedAssignments[dateKey]?.[groupNum];
-                        if (!currentPerson) continue;
-                        if (!isPersonMissingOnDate(currentPerson, groupNum, date, 'weekend')) continue;
+                        if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                            dutyWeekendDebug.startSlot('skip-phase2', dateKey, groupNum, {
+                                currentPerson: currentPerson || null,
+                                monthKey
+                            });
+                        }
+                        if (!currentPerson) {
+                            if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                dutyWeekendDebug.logStep('NO_CURRENT_PERSON', 'Κενή θέση — φάση 2 παραλείπεται.');
+                                dutyWeekendDebug.endSlot({ finalPerson: null, emptyReason: 'NO_CURRENT_PERSON' });
+                            }
+                            continue;
+                        }
+                        if (!isPersonMissingOnDate(currentPerson, groupNum, date, 'weekend')) {
+                            if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                dutyWeekendDebug.logStep('phase2-skip', `${currentPerson} δεν απουσιάζει — φάση 2 όχι απαιτούμενη.`);
+                                dutyWeekendDebug.endSlot({ finalPerson: currentPerson, emptyReason: null });
+                            }
+                            continue;
+                        }
+                        if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                            dutyWeekendDebug.logStep('phase2-missing', `Απουσία ${currentPerson} — ανταλλαγή ημερομηνίας ή επόμενος στη σειρά.`);
+                        }
                         const rotationDays = groupPeople.length;
                         let currentIndex = groupPeople.indexOf(currentPerson);
                         if (currentIndex === -1) currentIndex = 0;
@@ -4321,6 +4393,26 @@
                                 swapPartnerPerson,
                                 null
                             );
+                            if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                dutyWeekendDebug.recordSwapScan(
+                                    'skip-phase2-swap',
+                                    {
+                                        dateKey,
+                                        monthKey,
+                                        groupNum,
+                                        date,
+                                        currentPerson,
+                                        sortedWeekends,
+                                        updatedAssignments
+                                    },
+                                    swapPartnerPerson
+                                );
+                                dutyWeekendDebug.endSlot({
+                                    finalPerson: swapPartnerPerson,
+                                    emptyReason: null,
+                                    skippedPerson: currentPerson
+                                });
+                            }
                             continue;
                         }
 
@@ -4353,6 +4445,48 @@
                                 'weekend'
                             );
                             assignedWeekendInMonth[monthKey][groupNum].add(swapPerson);
+                        }
+                        if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                            dutyWeekendDebug.recordSwapScan(
+                                'skip-phase2-swap',
+                                {
+                                    dateKey,
+                                    monthKey,
+                                    groupNum,
+                                    date,
+                                    currentPerson,
+                                    sortedWeekends,
+                                    updatedAssignments
+                                },
+                                swapPartnerPerson
+                            );
+                            dutyWeekendDebug.recordCandidateScan(
+                                'skip-phase2-rotation',
+                                {
+                                    groupPeople,
+                                    startIndex: currentIndex,
+                                    maxOffset: rotationDays,
+                                    groupNum,
+                                    date,
+                                    dateKey,
+                                    monthKey,
+                                    assignedWeekendInMonth: assignedWeekendInMonth[monthKey][groupNum],
+                                    simulatedSpecialMonthSet:
+                                        simulatedSpecialAssignments[monthKey]?.[groupNum] || null
+                                },
+                                swapPerson
+                            );
+                            const finalP = updatedAssignments[dateKey]?.[groupNum];
+                            let phase2Empty = null;
+                            if (!finalP) phase2Empty = 'ALL_CANDIDATES_EXHAUSTED';
+                            else if (isPersonMissingOnDate(finalP, groupNum, date, 'weekend')) {
+                                phase2Empty = 'STILL_MISSING_AFTER_LOGIC';
+                            }
+                            dutyWeekendDebug.endSlot({
+                                finalPerson: finalP || null,
+                                emptyReason: phase2Empty,
+                                skippedPerson: currentPerson
+                            });
                         }
                     }
                 });
@@ -7820,6 +7954,9 @@
             const startDate = calculationSteps.startDate;
             const endDate = calculationSteps.endDate;
             const dayTypeLists = calculationSteps.dayTypeLists || { weekend: [], special: [] };
+            if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                dutyWeekendDebug.clear();
+            }
             
             // Check for weekends/holidays
             const weekendHolidays = dayTypeLists.weekend || [];
@@ -7856,6 +7993,9 @@
             let html = '<div class="step-content">';
             html += `<h6 class="mb-3"><i class="fas fa-calendar-alt me-2"></i>Περίοδος: ${periodLabel}</h6>`;
             
+            if (typeof dutyWeekendDebug !== 'undefined') {
+                html += dutyWeekendDebug.getDebugToolbarHtml();
+            }
             if (weekendHolidays.length === 0) {
                 html += '<div class="alert alert-info">';
                 html += '<i class="fas fa-info-circle me-2"></i>';
@@ -8148,6 +8288,20 @@
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
                             const preserved = simulatedWeekendAssignments[dateKey]?.[groupNum];
+                            if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                dutyWeekendDebug.startSlot('preview', dateKey, groupNum, {
+                                    rotationPerson: preserved,
+                                    currentPerson: preserved
+                                });
+                                dutyWeekendDebug.logStep(
+                                    'GROUP_NOT_RECALCULATED',
+                                    'Η ομάδα δεν επανυπολογίστηκε — διατήρηση υπάρχουσας ανάθεσης.'
+                                );
+                                dutyWeekendDebug.endSlot({
+                                    finalPerson: preserved || null,
+                                    emptyReason: preserved ? null : 'GROUP_NOT_RECALCULATED'
+                                });
+                            }
                             if (preserved) {
                                 if (!weekendRotationPersons[dateKey]) weekendRotationPersons[dateKey] = {};
                                 weekendRotationPersons[dateKey][groupNum] = preserved;
@@ -8230,11 +8384,25 @@
                                 weekendRotationPersons[dateKey] = {};
                             }
                             weekendRotationPersons[dateKey][groupNum] = rotationPerson;
+
+                            if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                dutyWeekendDebug.startSlot('preview', dateKey, groupNum, {
+                                    rotationPerson,
+                                    baseline: rotationPerson,
+                                    currentPerson: rotationPerson,
+                                    monthKey
+                                });
+                                dutyWeekendDebug.logStep(
+                                    'rotation',
+                                    `Σειρά weekend: θέση ${rotationPosition} → ${rotationPerson || '—'}`
+                                );
+                            }
                             
                             let assignedPerson = rotationPerson;
                             let wasReplaced = false;
                             let replacementIndex = null;
                             let wasDisabledOnlySkippedWeekend = false;
+                            let previewMissingSwapPerson = null;
                             
                             // Already assigned via return-from-missing (backward/forward): skip when their turn comes – they already had their duty
                             const wasAssignedByReturnFromMissingWeekend = rotationPerson && assignedByReturnFromMissingWeekend[groupNum]?.has(rotationPerson);
@@ -8261,7 +8429,15 @@
                                     foundEligible = true;
                                     break;
                                 }
-                                if (!foundEligible) assignedPerson = null;
+                                if (!foundEligible) {
+                                    assignedPerson = null;
+                                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                        dutyWeekendDebug.logStep(
+                                            'return-from-missing-skip',
+                                            'Δεν βρέθηκε επιλέξιμος αντί για άτομο που ήδη τοποθετήθηκε via return-from-missing.'
+                                        );
+                                    }
+                                }
                             }
                             // DISABLED: When rotation person is disabled, whole baseline shifts – skip them, no replacement line.
                             const isRotationPersonDisabledWeekend = !wasAssignedByReturnFromMissingWeekend && rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'weekend');
@@ -8291,7 +8467,15 @@
                                     // Keep baseline as rotation person so we show Βασική Σειρά + Αντικατάσταση
                                     break;
                                 }
-                                if (!foundEligible) assignedPerson = null;
+                                if (!foundEligible) {
+                                    assignedPerson = null;
+                                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                        dutyWeekendDebug.logStep(
+                                            'disabled-baseline',
+                                            `Baseline ${rotationPerson} απενεργοποιημένος — κανένας επόμενος επιλέξιμος.`
+                                        );
+                                    }
+                                }
                             }
                             // Phase 1: Replacements only for special duty same month (and cascade: already assigned this month)
                             if (assignedPerson) {
@@ -8347,11 +8531,27 @@
                                         assignedPerson = replacementPerson;
                                         wasReplaced = true;
                                         replacementIndex = groupPeople.indexOf(replacementPerson);
+                                    } else if (
+                                        typeof dutyWeekendDebug !== 'undefined' &&
+                                        dutyWeekendDebug.isEnabled()
+                                    ) {
+                                        dutyWeekendDebug.logStep(
+                                            'phase1-special-or-duplicate',
+                                            hasSpecialHoliday
+                                                ? `${assignedPerson} έχει ειδική αργία τον ίδιο μήνα — δεν βρέθηκε αντικαταστάτης.`
+                                                : `${assignedPerson} ήδη ανατεθειμένος τον μήνα — δεν βρέθηκε αντικαταστάτης.`
+                                        );
                                     }
                                 }
                             }
                             // Phase 2: Swaps because person is missing on this date
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
+                                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                    dutyWeekendDebug.logStep(
+                                        'phase2-missing',
+                                        `Απουσία: ${assignedPerson} — αναζήτηση αντικαταστάτη στη σειρά weekend.`
+                                    );
+                                }
                                 let currentIndex = groupPeople.indexOf(assignedPerson);
                                 if (currentIndex === -1) currentIndex = 0;
                                 let swapPerson = null;
@@ -8365,6 +8565,7 @@
                                         break;
                                     }
                                 }
+                                previewMissingSwapPerson = swapPerson;
                                 if (swapPerson) {
                                     const unavailableExtra =
                                         manualAltResolved.deferFulfillment?.skippedReplacement
@@ -8383,6 +8584,33 @@
                                     assignedPerson = swapPerson;
                                     wasReplaced = true;
                                     replacementIndex = groupPeople.indexOf(swapPerson);
+                                } else if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                    dutyWeekendDebug.logStep(
+                                        'phase2-missing-fail',
+                                        'Preview: κανένας επιλέξιμος — η ανταλλαγή ημερομηνιών θα τρέξει στο Επόμενο (runWeekendSkipLogic).'
+                                    );
+                                }
+                                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                    const dbgCtx = {
+                                        groupPeople,
+                                        startIndex: currentIndex,
+                                        maxOffset: rotationDays,
+                                        groupNum,
+                                        date,
+                                        dateKey,
+                                        monthKey,
+                                        assignedWeekendInMonth:
+                                            assignedWeekendInMonthPreview[monthKey]?.[groupNum] || new Set(),
+                                        simulatedSpecialMonthSet:
+                                            simulatedSpecialAssignments[monthKey]?.[groupNum] || null,
+                                        assignedPeoplePreviewWeekend:
+                                            assignedPeoplePreviewWeekend[monthKey]?.[groupNum] || null
+                                    };
+                                    dutyWeekendDebug.recordCandidateScan(
+                                        'preview-phase2-missing',
+                                        dbgCtx,
+                                        previewMissingSwapPerson
+                                    );
                                 }
                                 // If no replacement found, keep assignedPerson (missing) so runWeekendSkipLogic can perform same-month swap when user clicks Next
                             }
@@ -8404,6 +8632,21 @@
                             }
 
                             const displayPerson = assignedPerson;
+
+                            if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                let emptyReason = null;
+                                if (!displayPerson) emptyReason = 'ALL_CANDIDATES_EXHAUSTED';
+                                else if (
+                                    isPersonMissingOnDate(displayPerson, groupNum, date, 'weekend')
+                                ) {
+                                    emptyReason = 'STILL_MISSING_AFTER_LOGIC';
+                                }
+                                dutyWeekendDebug.endSlot({
+                                    finalPerson: displayPerson,
+                                    emptyReason,
+                                    skippedPerson: rotationPerson
+                                });
+                            }
                             
                             // Store assignment for saving
                             if (assignedPerson) {
@@ -8523,6 +8766,9 @@
             
             html += '</div>';
             stepContent.innerHTML = html;
+            if (typeof dutyWeekendDebug !== 'undefined') {
+                dutyWeekendDebug.wireToolbar();
+            }
         }
         async function renderStep3_SemiNormal() {
             const stepContent = document.getElementById('stepContent');
