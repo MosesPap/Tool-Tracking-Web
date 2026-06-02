@@ -1142,6 +1142,62 @@
             return out;
         }
 
+        /** Baseline ημιαργίας ανά ημέρα = ίδια λογική με buildExpectedSemiPersonMapForCalendarMonth (σπορά μήνα, #11 κ.λπ.). */
+        function buildBaselineSemiByDateForSortedSemi(sortedSemi) {
+            const baselineSemiByDate = {};
+            if (!Array.isArray(sortedSemi) || sortedSemi.length === 0) return baselineSemiByDate;
+            const monthMapCache = new Map();
+            for (const dk of sortedSemi) {
+                const dt = new Date(dk + 'T00:00:00');
+                if (isNaN(dt.getTime())) continue;
+                const y = dt.getFullYear();
+                const m = dt.getMonth();
+                for (let g = 1; g <= 4; g++) {
+                    const cacheKey = `${y}-${m}-${g}`;
+                    if (!monthMapCache.has(cacheKey)) {
+                        const map =
+                            typeof buildExpectedSemiPersonMapForCalendarMonth === 'function'
+                                ? buildExpectedSemiPersonMapForCalendarMonth(y, m, g)
+                                : {};
+                        monthMapCache.set(cacheKey, map);
+                    }
+                    const person = monthMapCache.get(cacheKey)[dk];
+                    if (person) {
+                        if (!baselineSemiByDate[dk]) baselineSemiByDate[dk] = {};
+                        baselineSemiByDate[dk][g] = person;
+                    }
+                }
+            }
+            return baselineSemiByDate;
+        }
+
+        function collectMissedSemisInRange(
+            sortedSemi,
+            rangeStartKey,
+            rangeEndKey,
+            groupNum,
+            rosterPersonName,
+            baselineSemiByDate,
+            normFn
+        ) {
+            const missed = [];
+            if (!rangeStartKey || !rangeEndKey || rangeStartKey > rangeEndKey) return missed;
+            for (const dk of sortedSemi) {
+                if (dk < rangeStartKey) continue;
+                if (dk > rangeEndKey) break;
+                const base = baselineSemiByDate?.[dk]?.[groupNum];
+                if (!base || normFn(base) !== normFn(rosterPersonName)) continue;
+                const dMiss = new Date(dk + 'T00:00:00');
+                if (
+                    typeof isPersonMissingOnDate === 'function' &&
+                    isPersonMissingOnDate(base, groupNum, dMiss, 'semi')
+                ) {
+                    missed.push(dk);
+                }
+            }
+            return missed;
+        }
+
         /** First eligible semi on/after threshold: prefer same calendar month as threshold, then any later semi in range. */
         function pickSemiReturnFromMissingTargetKey(sortedSemi, thirdDayAfterEnd, calcStartKey, calcEndKey, occupiedMap, groupNum) {
             if (!thirdDayAfterEnd || !Array.isArray(sortedSemi) || sortedSemi.length === 0 || !calcStartKey || !calcEndKey) return null;
@@ -9552,33 +9608,8 @@
                 };
             }
 
-            // Rotation-only baseline (who would be assigned by rotation, no skip) – for return-from-missing displaced person
-            const baselineSemiByDate = {};
-            const baselineSemiRotationPosition = {};
-            for (const dk of sortedSemi) {
-                const dt = new Date(dk + 'T00:00:00');
-                if (isNaN(dt.getTime())) continue;
-                for (let g = 1; g <= 4; g++) {
-                    const grp = groups[g] || { semi: [] };
-                    const people = grp.semi || [];
-                    if (people.length === 0) continue;
-                    const rotLen = people.length;
-                    if (baselineSemiRotationPosition[g] === undefined) {
-                        const isFeb2026 = startDate && startDate.getFullYear() === 2026 && startDate.getMonth() === 1;
-                        const isAprilStart = startDate && startDate.getMonth() === 3; // April
-                        if (isFeb2026 || (isAprilStart && (g === 1 || g === 2))) baselineSemiRotationPosition[g] = 0;
-                        else {
-                            const last = getLastRotationPersonForDate('semi', dt, g);
-                            const idx = people.indexOf(last);
-                            baselineSemiRotationPosition[g] = (last && idx >= 0) ? (idx + 1) % rotLen : (getRotationPosition(dt, 'semi', g) % rotLen);
-                        }
-                    }
-                    const pos = baselineSemiRotationPosition[g] % rotLen;
-                    if (!baselineSemiByDate[dk]) baselineSemiByDate[dk] = {};
-                    baselineSemiByDate[dk][g] = people[pos];
-                    baselineSemiRotationPosition[g] = (pos + 1) % rotLen;
-                }
-            }
+            // Baseline ημιαργίας = καθαρή σειρά ανά μήνα (ίδιο seed με buildExpectedSemiPersonMapForCalendarMonth / #11 Ιούνιος κ.λπ.)
+            const baselineSemiByDate = buildBaselineSemiByDateForSortedSemi(sortedSemi);
 
             const calcStartKey = (startDate && !isNaN(new Date(startDate).getTime())) ? formatDateKey(new Date(startDate)) : null;
             const calcEndKey = (endDate && !isNaN(new Date(endDate).getTime())) ? formatDateKey(new Date(endDate)) : null;
@@ -9643,14 +9674,17 @@
                             const scanStartKey = periodEndsInPrevMonth ? maxDateKeyRun(monthStartKey, pStartKey) : maxDateKeyRun(maxDateKeyRun(monthStartKey, pStartKey), calcStartKey);
                             const scanEndKey = periodEndsInPrevMonth ? pEndKey : minDateKeyRun(pEndKey, calcEndKey);
                             if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
-                            let hadMissedSemi = false;
+                            let missedSemiKeys = [];
                             if (periodEndsInRange) {
-                                for (const dk of sortedSemi) {
-                                    if (dk < scanStartKey) continue;
-                                    if (dk > scanEndKey) break;
-                                    const baseSemi = baselineSemiByDate[dk]?.[groupNum];
-                                    if (baseSemi && normSemiRun(baseSemi) === normSemiRun(personName)) { hadMissedSemi = true; break; }
-                                }
+                                missedSemiKeys = collectMissedSemisInRange(
+                                    sortedSemi,
+                                    scanStartKey,
+                                    scanEndKey,
+                                    groupNum,
+                                    personName,
+                                    baselineSemiByDate,
+                                    normSemiRun
+                                );
                             } else {
                                 const periodStartDate = new Date(pStartKey + 'T00:00:00');
                                 const periodEndDate = new Date(pEndKey + 'T00:00:00');
@@ -9668,11 +9702,12 @@
                                     }
                                     const expectedPerson = semiExpectedMap[checkDateKey];
                                     if (expectedPerson && normSemiRun(expectedPerson) === normSemiRun(personName)) {
-                                        hadMissedSemi = true;
+                                        missedSemiKeys.push(checkDateKey);
                                         break;
                                     }
                                 }
                             }
+                            const hadMissedSemi = missedSemiKeys.length > 0;
                             if (!hadMissedSemi) {
                                 if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                                     dutySemiDebug.recordAbsentPlacement({
@@ -9753,25 +9788,19 @@
                                 missingEnd: pEndKey,
                                 missingRangeStr: missingRangeStrSemi,
                                 reasonOfMissing: reasonOfMissingSemi,
-                                missedWeekendKeys: []
+                                missedSemiKeys: missedSemiKeys.slice()
                             };
                             if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
-                                const missedKeys = [];
-                                for (const dk of sortedSemi) {
-                                    if (dk < scanStartKey || dk > scanEndKey) continue;
-                                    const baseSemi = baselineSemiByDate[dk]?.[groupNum];
-                                    if (baseSemi && normSemiRun(baseSemi) === normSemiRun(personName)) missedKeys.push(dk);
-                                }
                                 dutySemiDebug.recordAbsentPlacement({
                                     groupNum,
                                     personName,
                                     absenceEndKey: pEndKey,
                                     missingRangeStr: missingRangeStrSemi,
                                     targetDateKey: targetSemiKey,
-                                    missedOnDateKey: missedKeys.join(', '),
+                                    missedOnDateKey: missedSemiKeys.join(', '),
                                     status: 'planned',
                                     reasonCode: 'RETURN_PLANNED',
-                                    message: `Χάθηκε ημιαργία: ${missedKeys.join(', ') || '—'}. Στόχος ${targetSemiKey}.`
+                                    message: `Χάθηκε ημιαργία: ${missedSemiKeys.join(', ') || '—'}. Στόχος ${targetSemiKey}.`
                                 });
                             }
                         }
@@ -9785,6 +9814,7 @@
             const deferManualAlternateSkipSemiRun = {};
             const semiDeferFulfillmentPending = {}; // `${dateKey}:${groupNum}` -> defer context
             let prevCalMonthKeySemiDeferRun = null;
+            let prevCalMonthKeySemiRot = null;
             for (const dateKey of sortedSemi) {
                 const meta = semiMeta[dateKey];
                 if (!meta) continue;
@@ -9795,6 +9825,19 @@
                         seedManualAlternateDeferAllGroupsForMonthStart(deferManualAlternateSkipSemiRun, 'semi', date);
                     }
                     prevCalMonthKeySemiDeferRun = monthKey;
+                }
+                if (prevCalMonthKeySemiRot !== monthKey) {
+                    for (let g = 1; g <= 4; g++) {
+                        const gd =
+                            (typeof groupsForDuty === 'function'
+                                ? groupsForDuty(g, dateKey)
+                                : groups[g]) || {};
+                        const people = gd.semi || [];
+                        if (people.length) {
+                            reseedGlobalRotationPositionAtMonthStart('semi', date, g, people, globalSemiPos);
+                        }
+                    }
+                    prevCalMonthKeySemiRot = monthKey;
                 }
                 if (!baseline[dateKey]) baseline[dateKey] = {};
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -9834,18 +9877,7 @@
                         continue;
                     }
                     if (globalSemiPos[groupNum] === undefined) {
-                        const isFeb2026 = startDate && startDate.getFullYear() === 2026 && startDate.getMonth() === 1;
-                        const isAprilStart = startDate && startDate.getMonth() === 3; // April
-                        if (isFeb2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) globalSemiPos[groupNum] = 0;
-                        else {
-                            const lastPerson = typeof getRotationSeedPersonForMonthStart === 'function'
-                                ? getRotationSeedPersonForMonthStart('semi', date, groupNum)
-                                : getLastRotationPersonForDate('semi', date, groupNum);
-                            const idx = lastPerson
-                                ? groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(lastPerson))
-                                : -1;
-                            globalSemiPos[groupNum] = (lastPerson && idx >= 0) ? (idx + 1) % rotationDays : (getRotationPosition(date, 'semi', groupNum) % rotationDays);
-                        }
+                        reseedGlobalRotationPositionAtMonthStart('semi', date, groupNum, groupPeople, globalSemiPos);
                     }
                     let pos = globalSemiPos[groupNum] % rotationDays;
                     const existingManualAlternateSemiRun = findExistingManualAlternateOnDateGroup(dateKey, groupNum);
