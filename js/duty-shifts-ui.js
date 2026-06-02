@@ -4453,10 +4453,16 @@
                                         if (shiftCheck && shiftCheck.type === 'shift') {
                                             underline = false;
                                         } else {
-                                            const isBaselineDisabledOrMissing = dayTypeCategory === 'normal' &&
-                                                (isPersonDisabledForDuty(baselinePerson, g, dayTypeCategory) ||
-                                                 isPersonMissingOnDate(baselinePerson, g, dateObjCal, dayTypeCategory));
-                                            underline = !isBaselineDisabledOrMissing;
+                                            const isBaselineDisabledOrMissing =
+                                                (typeof isPersonDisabledForDuty === 'function' &&
+                                                    isPersonDisabledForDuty(baselinePerson, g, dayTypeCategory)) ||
+                                                (typeof isPersonMissingOnDate === 'function' &&
+                                                    isPersonMissingOnDate(baselinePerson, g, dateObjCal, dayTypeCategory));
+                                            if (dayTypeCategory === 'weekend') {
+                                                underline = !!isBaselineDisabledOrMissing;
+                                            } else {
+                                                underline = !isBaselineDisabledOrMissing;
+                                            }
                                         }
                                     }
                                 }
