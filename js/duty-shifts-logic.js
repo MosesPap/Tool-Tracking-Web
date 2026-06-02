@@ -8070,16 +8070,17 @@
                 // Track persons assigned via return-from-missing (backward/forward) so we don't assign them again when their turn comes
                 const assignedByReturnFromMissingWeekend = {}; // groupNum -> Set of person names
                 
-                // Build baseline weekend (rotation-only) for return-from-missing check
+                // Build baseline weekend (ίδια λογική σειράς με preview: reseed + manual alternate) για return-from-missing
                 const baselineWeekendByDate = {};
                 const baselineWeekendRotationPosition = {};
+                const deferManualAlternateBaselineWeekend = {};
                 let prevCalMonthKeyBaselineWeekend = null;
                 for (const dk of sortedWeekends) {
                     const dt = new Date(dk + 'T00:00:00');
                     const monthKeyBaseline = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(dt) : `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
                     if (prevCalMonthKeyBaselineWeekend !== monthKeyBaseline) {
                         for (let g = 1; g <= 4; g++) {
-                            const grp = (typeof groupsForDuty === 'function' ? groupsForDuty(g) : groups[g]) || { weekend: [] };
+                            const grp = (typeof groupsForDuty === 'function' ? groupsForDuty(g, dk) : groups[g]) || { weekend: [] };
                             const people = grp.weekend || [];
                             if (people.length) {
                                 reseedGlobalRotationPositionAtMonthStart('weekend', dt, g, people, baselineWeekendRotationPosition);
@@ -8088,19 +8089,82 @@
                         prevCalMonthKeyBaselineWeekend = monthKeyBaseline;
                     }
                     for (let g = 1; g <= 4; g++) {
-                        const grp = (typeof groupsForDuty === 'function' ? groupsForDuty(g) : groups[g]) || { weekend: [] };
+                        const grp = (typeof groupsForDuty === 'function' ? groupsForDuty(g, dk) : groups[g]) || { weekend: [] };
                         const people = grp.weekend || [];
                         if (people.length === 0) continue;
                         const rotLen = people.length;
                         if (baselineWeekendRotationPosition[g] === undefined) {
                             reseedGlobalRotationPositionAtMonthStart('weekend', dt, g, people, baselineWeekendRotationPosition);
                         }
-                        const pos = baselineWeekendRotationPosition[g] % rotLen;
+                        const manualAltBaseline = resolveRotationPositionWithManualAlternate(
+                            g,
+                            people,
+                            rotLen,
+                            baselineWeekendRotationPosition,
+                            deferManualAlternateBaselineWeekend,
+                            dk,
+                            'weekend'
+                        );
+                        const pos = manualAltBaseline.rotationPosition % rotLen;
+                        const rotationPersonBaseline = people[pos];
                         if (!baselineWeekendByDate[dk]) baselineWeekendByDate[dk] = {};
-                        baselineWeekendByDate[dk][g] = people[pos];
+                        baselineWeekendByDate[dk][g] = rotationPersonBaseline;
                         baselineWeekendRotationPosition[g] = (pos + 1) % rotLen;
                     }
                 }
+                const findSameMonthReturnWeekendTarget = (
+                    sorted,
+                    calcStartKey,
+                    calcEndKey,
+                    groupNum,
+                    personName,
+                    missedWeekendKeys,
+                    returnTargets
+                ) => {
+                    const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                    const missed = (missedWeekendKeys || []).slice().sort();
+                    if (!missed.length) return null;
+                    const anchorKey = missed[0];
+                    const anchorDate = new Date(anchorKey + 'T00:00:00');
+                    const monthKey =
+                        typeof getMonthKeyFromDate === 'function'
+                            ? getMonthKeyFromDate(anchorDate)
+                            : `${anchorDate.getFullYear()}-${String(anchorDate.getMonth() + 1).padStart(2, '0')}`;
+                    const missedSet = new Set(missed);
+                    const inMonth = sorted.filter((wk) => {
+                        if (wk < calcStartKey || wk > calcEndKey) return false;
+                        const d = new Date(wk + 'T00:00:00');
+                        const mk =
+                            typeof getMonthKeyFromDate === 'function'
+                                ? getMonthKeyFromDate(d)
+                                : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                        return mk === monthKey;
+                    });
+                    const tryPick = (wk, isBackward) => {
+                        if (missedSet.has(wk)) return null;
+                        if (returnTargets[wk]?.[groupNum]) return null;
+                        const d = new Date(wk + 'T00:00:00');
+                        if (
+                            typeof isPersonMissingOnDate === 'function' &&
+                            isPersonMissingOnDate(personName, groupNum, d, 'weekend')
+                        ) {
+                            return null;
+                        }
+                        return { targetWeekendKey: wk, isBackwardAssignment: !!isBackward };
+                    };
+                    for (const wk of inMonth) {
+                        if (wk <= anchorKey) continue;
+                        const pick = tryPick(wk, false);
+                        if (pick) return pick;
+                    }
+                    for (let i = inMonth.length - 1; i >= 0; i--) {
+                        const wk = inMonth[i];
+                        if (wk >= anchorKey) continue;
+                        const pick = tryPick(wk, true);
+                        if (pick) return pick;
+                    }
+                    return null;
+                };
                 
                 // Return-from-missing for weekend: first weekend on or after (period end + 3 calendar days), or backward to last weekend before period start
                 const returnFromMissingWeekendTargets = {}; // dateKey -> { groupNum -> { personName, missingEnd, isBackwardAssignment } }
@@ -8185,14 +8249,28 @@
                                 const scanEndKey = periodEndsInPrevMonth ? pEndKey : minKeyW(pEndKey, calcEndKeyW);
                                 if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
                                 let hadMissedWeekend = false;
+                                const missedWeekendKeysForReturn = [];
                                 if (periodEndsInRange) {
                                     for (const wk of sortedWeekends) {
                                         if (wk < scanStartKey) continue;
                                         if (wk > scanEndKey) break;
                                         const base = baselineWeekendByDate[wk]?.[groupNum];
-                                        if (base && normW(base) === normW(personName)) {
+                                        const dMiss = new Date(wk + 'T00:00:00');
+                                        const baseMatch = base && normW(base) === normW(personName);
+                                        const missingOnDuty =
+                                            typeof isPersonMissingOnDate === 'function' &&
+                                            isPersonMissingOnDate(personName, groupNum, dMiss, 'weekend');
+                                        let rotationMatch = false;
+                                        if (!baseMatch && missingOnDuty && weekendList.length > 0) {
+                                            const rotPos = getRotationPosition(dMiss, 'weekend', groupNum) % weekendList.length;
+                                            const exp = weekendList[rotPos];
+                                            rotationMatch = !!(exp && normW(exp) === normW(personName));
+                                        }
+                                        if (baseMatch || (missingOnDuty && rotationMatch)) {
                                             hadMissedWeekend = true;
-                                            break;
+                                            if (!missedWeekendKeysForReturn.includes(wk)) {
+                                                missedWeekendKeysForReturn.push(wk);
+                                            }
                                         }
                                     }
                                 } else {
@@ -8208,6 +8286,9 @@
                                                 const expectedPerson = groupPeopleForCheck[rotationPos % groupPeopleForCheck.length];
                                                 if (expectedPerson && normW(expectedPerson) === normW(personName)) {
                                                     hadMissedWeekend = true;
+                                                    if (!missedWeekendKeysForReturn.includes(checkDateKey)) {
+                                                        missedWeekendKeysForReturn.push(checkDateKey);
+                                                    }
                                                     break;
                                                 }
                                             }
@@ -8227,35 +8308,31 @@
                                     }
                                     continue;
                                 }
-                                const dayAfterEnd = addDaysW(pEndKey, 1);
-                                if (!dayAfterEnd) continue;
-                                const thirdDayAfterEnd = addDaysW(pEndKey, 3);
-                                if (!thirdDayAfterEnd) continue;
-                                const returnMonthStart = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 1, 1);
-                                const returnMonthStartKey = formatDateKey(returnMonthStart);
-                                const returnMonthEnd = new Date(pEndDate.getFullYear(), pEndDate.getMonth() + 2, 0);
-                                const returnMonthEndKey = formatDateKey(returnMonthEnd);
-                                let hasWeekendInReturnMonth = false;
-                                for (const wk of sortedWeekends) {
-                                    if (wk >= returnMonthStartKey && wk <= returnMonthEndKey) {
-                                        hasWeekendInReturnMonth = true;
-                                        break;
-                                    }
-                                }
                                 let targetWeekendKey = null;
                                 let isBackwardAssignment = false;
-                                if (hasWeekendInReturnMonth) {
-                                    targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, thirdDayAfterEnd);
-                                    if (targetWeekendKey && targetWeekendKey < returnMonthStartKey) {
-                                        targetWeekendKey = findFirstWeekendOnOrAfter(sortedWeekends, returnMonthStartKey);
-                                    }
-                                }
-                                if (!targetWeekendKey) {
-                                    targetWeekendKey = findLastWeekendBefore(sortedWeekends, pStartKey);
-                                    isBackwardAssignment = true;
+                                const sameMonthPick = findSameMonthReturnWeekendTarget(
+                                    sortedWeekends,
+                                    calcStartKeyW,
+                                    calcEndKeyW,
+                                    groupNum,
+                                    personName,
+                                    missedWeekendKeysForReturn,
+                                    returnFromMissingWeekendTargets
+                                );
+                                if (sameMonthPick) {
+                                    targetWeekendKey = sameMonthPick.targetWeekendKey;
+                                    isBackwardAssignment = sameMonthPick.isBackwardAssignment;
                                 }
                                 if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) {
                                     if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                        const anchorMk =
+                                            missedWeekendKeysForReturn.length > 0
+                                                ? (typeof getMonthKeyFromDate === 'function'
+                                                      ? getMonthKeyFromDate(
+                                                            new Date(missedWeekendKeysForReturn[0] + 'T00:00:00')
+                                                        )
+                                                      : null)
+                                                : null;
                                         const alt = dutyWeekendDebug.scanAlternateWeekendDates({
                                             personName,
                                             groupNum,
@@ -8270,40 +8347,57 @@
                                             personName,
                                             absenceEndKey: pEndKey,
                                             missingRangeStr: `${pStartKey} - ${pEndKey}`,
+                                            missedOnDateKey: missedWeekendKeysForReturn.join(', '),
                                             status: 'failed',
-                                            reasonCode: 'RETURN_TARGET_OUT_OF_CALC_RANGE',
-                                            message: `Στόχος ΣΚ ${targetWeekendKey || '—'} εκτός ${calcStartKeyW}…${calcEndKeyW}.`,
+                                            reasonCode: targetWeekendKey
+                                                ? 'RETURN_TARGET_OUT_OF_CALC_RANGE'
+                                                : 'RETURN_NO_SAME_MONTH_SLOT',
+                                            message: targetWeekendKey
+                                                ? `Στόχος ΣΚ ${targetWeekendKey} εκτός ${calcStartKeyW}…${calcEndKeyW}.`
+                                                : `Χάθηκε ΣΚ (${missedWeekendKeysForReturn.join(', ')}) αλλά δεν βρέθηκε ελεύθερο ΣΚ στον ίδιο μήνα${anchorMk ? ' (' + anchorMk + ')' : ''}.`,
                                             alternateDateScan: alt
                                         });
                                     }
                                     continue;
                                 }
-                                // If this (date, group) is already taken by another return-from-missing, use next free weekend in range
-                                let weekendIdx = sortedWeekends.indexOf(targetWeekendKey);
+                                // Αν η ημέρα-στόχος είναι δεσμευμένη, άλλο ελεύθερο ΣΚ στον ίδιο μήνα (όχι εκτός μήνα)
+                                const anchorKeyBusy = missedWeekendKeysForReturn[0];
+                                const anchorMonthKeyBusy =
+                                    anchorKeyBusy && typeof getMonthKeyFromDate === 'function'
+                                        ? getMonthKeyFromDate(new Date(anchorKeyBusy + 'T00:00:00'))
+                                        : null;
+                                const isSameMonthWk = (wk) => {
+                                    if (!anchorMonthKeyBusy || typeof getMonthKeyFromDate !== 'function') return true;
+                                    return getMonthKeyFromDate(new Date(wk + 'T00:00:00')) === anchorMonthKeyBusy;
+                                };
                                 if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
-                                    for (let i = weekendIdx + 1; i < sortedWeekends.length; i++) {
-                                        const wk = sortedWeekends[i];
-                                        if (wk < calcStartKeyW || wk > calcEndKeyW) break;
-                                        if (!returnFromMissingWeekendTargets[wk]?.[groupNum]) { targetWeekendKey = wk; break; }
-                                    }
-                                    if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
-                                        for (let i = weekendIdx - 1; i >= 0; i--) {
-                                            const wk = sortedWeekends[i];
-                                            if (wk < calcStartKeyW || wk > calcEndKeyW) continue;
-                                            if (!returnFromMissingWeekendTargets[wk]?.[groupNum]) { targetWeekendKey = wk; break; }
-                                        }
+                                    const busyPick = findSameMonthReturnWeekendTarget(
+                                        sortedWeekends,
+                                        calcStartKeyW,
+                                        calcEndKeyW,
+                                        groupNum,
+                                        personName,
+                                        missedWeekendKeysForReturn,
+                                        returnFromMissingWeekendTargets
+                                    );
+                                    if (busyPick && !returnFromMissingWeekendTargets[busyPick.targetWeekendKey]?.[groupNum]) {
+                                        targetWeekendKey = busyPick.targetWeekendKey;
+                                        isBackwardAssignment = busyPick.isBackwardAssignment;
                                     }
                                 }
-                                if (returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum]) {
+                                if (
+                                    returnFromMissingWeekendTargets[targetWeekendKey]?.[groupNum] ||
+                                    !isSameMonthWk(targetWeekendKey)
+                                ) {
                                     if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                         dutyWeekendDebug.recordAbsentPlacement({
                                             groupNum,
                                             personName,
                                             absenceEndKey: pEndKey,
-                                            targetDateKey,
+                                            targetDateKey: targetWeekendKey,
                                             status: 'failed',
                                             reasonCode: 'RETURN_TARGET_BUSY',
-                                            message: `Η ημέρα-στόχος ${targetWeekendKey} είναι ήδη δεσμευμένη για άλλον.`
+                                            message: `Δεν βρέθηκε ελεύθερο ΣΚ στον ίδιο μήνα (στόχος ${targetWeekendKey || '—'} δεσμευμένος).`
                                         });
                                     }
                                     continue;
@@ -8315,18 +8409,28 @@
                                 const missingRangeStrW = formatDDMMYYYYW(pStartKey) + ' - ' + formatDDMMYYYYW(pEndKey);
                                 const reasonOfMissingW = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                                 if (!returnFromMissingWeekendTargets[targetWeekendKey]) returnFromMissingWeekendTargets[targetWeekendKey] = {};
-                                returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = { personName, missingEnd: pEndKey, isBackwardAssignment, missingRangeStr: missingRangeStrW, reasonOfMissing: reasonOfMissingW };
+                                returnFromMissingWeekendTargets[targetWeekendKey][groupNum] = {
+                                    personName,
+                                    missingEnd: pEndKey,
+                                    isBackwardAssignment,
+                                    missingRangeStr: missingRangeStrW,
+                                    reasonOfMissing: reasonOfMissingW,
+                                    missedWeekendKeys: missedWeekendKeysForReturn.slice()
+                                };
                                 if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                     dutyWeekendDebug.recordAbsentPlacement({
                                         groupNum,
                                         personName,
                                         absenceEndKey: pEndKey,
                                         missingRangeStr: missingRangeStrW,
-                                        targetDateKey,
+                                        targetDateKey: targetWeekendKey,
                                         isBackwardAssignment,
                                         status: 'planned',
                                         reasonCode: 'RETURN_PLANNED',
-                                        message: `Θα ανατεθεί στην ${targetWeekendKey}${isBackwardAssignment ? ' (ανάθεση προς τα πίσω)' : ''}.`
+                                        message:
+                                            `Χάθηκε ΣΚ: ${missedWeekendKeysForReturn.join(', ')}. Θα ανατεθεί στον ίδιο μήνα στην ${targetWeekendKey}` +
+                                            (isBackwardAssignment ? ' (πριν την απουσία)' : ' (μετά την απουσία)') +
+                                            '.'
                                     });
                                 }
                             }
