@@ -8005,8 +8005,11 @@
             let html = '<div class="step-content">';
             html += `<h6 class="mb-3"><i class="fas fa-calendar-alt me-2"></i>Περίοδος: ${periodLabel}</h6>`;
             
-            if (typeof dutyWeekendDebug !== 'undefined') {
+            if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.getDebugToolbarHtml) {
                 html += dutyWeekendDebug.getDebugToolbarHtml();
+            } else {
+                html +=
+                    '<div class="alert alert-warning small mb-3"><i class="fas fa-exclamation-triangle me-1"></i>Δεν φορτώθηκε το <code>duty-shifts-debug.js</code> — κάντε hard refresh (Ctrl+F5).</div>';
             }
             if (weekendHolidays.length === 0) {
                 html += '<div class="alert alert-info">';

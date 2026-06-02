@@ -547,7 +547,6 @@
                     <div id="dutyWkdDbg${i}" class="accordion-collapse collapse ${i === 0 ? 'show' : ''}" data-bs-parent="#dutyWeekendDebugAccordion">
                         <div class="accordion-body small">`;
                 const m = entry.meta || {};
-                const oc = entry.outcome || {};
                 body += `<p><strong>Baseline σειράς:</strong> ${escapeHtml(m.rotationPerson || m.baseline || '—')}
                     · <strong>Αντικαταστάτης εδώ:</strong> ${escapeHtml(oc.replacementOnDate || (finalP && finalP !== (m.rotationPerson || '') ? String(finalP) : '—'))}
                     · <strong>Τελική ανάθεση:</strong> ${escapeHtml(String(finalP))}</p>`;
