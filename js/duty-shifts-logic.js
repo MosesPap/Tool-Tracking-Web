@@ -632,8 +632,8 @@
             }
             return !!m.unavailableReplacement;
         }
-        /** Καθαρίζει λάθος/παλιούς λόγους αντικατάστασης σε ένα κελί ΣΚ πριν τον τελικό συγχρονισμό. */
-        function purgeStaleWeekendReplacementReasons(dateKey, groupNum, assignedPerson, expectedSkippedBaseline) {
+        /** Καθαρίζει λάθος/παλιούς λόγους αντικατάστασης σε ένα κελί πριν τον τελικό συγχρονισμό. */
+        function purgeStaleReplacementReasons(dateKey, groupNum, assignedPerson, expectedSkippedBaseline) {
             if (!dateKey || !Number.isFinite(groupNum) || groupNum < 1 || !assignedPerson) return;
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
             const assignedNorm = norm(assignedPerson);
@@ -657,15 +657,16 @@
             }
         }
         /** Ένα κελί: baseline σειράς (απουσία/απενεργ.) vs τελική ανάθεση → assignmentReasons. */
-        function syncWeekendReplacementReason(dateKey, groupNum, baselinePerson, assignedPerson, dateObj) {
+        function syncDutyReplacementReason(dateKey, groupNum, baselinePerson, assignedPerson, dateObj, dutyCategory) {
             if (!dateKey || !Number.isFinite(groupNum) || groupNum < 1 || !assignedPerson) return;
+            const cat = dutyCategory || 'weekend';
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
             const date =
                 dateObj instanceof Date && !isNaN(dateObj.getTime())
                     ? dateObj
                     : new Date(String(dateKey || '') + 'T00:00:00');
             if (isNaN(date.getTime())) return;
-            purgeStaleWeekendReplacementReasons(dateKey, groupNum, assignedPerson, baselinePerson);
+            purgeStaleReplacementReasons(dateKey, groupNum, assignedPerson, baselinePerson);
             if (!baselinePerson || norm(baselinePerson) === norm(assignedPerson)) return;
             const existing = getAssignmentReason(dateKey, groupNum, assignedPerson);
             if (
@@ -678,9 +679,9 @@
             }
             const baselineUnavailable =
                 (typeof isPersonMissingOnDate === 'function' &&
-                    isPersonMissingOnDate(baselinePerson, groupNum, date, 'weekend')) ||
+                    isPersonMissingOnDate(baselinePerson, groupNum, date, cat)) ||
                 (typeof isPersonDisabledForDuty === 'function' &&
-                    isPersonDisabledForDuty(baselinePerson, groupNum, 'weekend'));
+                    isPersonDisabledForDuty(baselinePerson, groupNum, cat));
             if (!baselineUnavailable) return;
             if (
                 existing &&
@@ -690,10 +691,10 @@
             ) {
                 return;
             }
-            storeUnavailableReplacementReason(dateKey, groupNum, assignedPerson, baselinePerson, date, 'weekend');
+            storeUnavailableReplacementReason(dateKey, groupNum, assignedPerson, baselinePerson, date, cat);
         }
         /** Συγχώνευση baseline: καθαρή σειρά (πριν skip) κυριαρχεί έναντι preview slot. */
-        function mergeWeekendBaselineMaps(rotationBaseline, previewSlotBaseline) {
+        function mergeDutyBaselineMaps(rotationBaseline, previewSlotBaseline) {
             const merged = {};
             const keys = new Set([
                 ...Object.keys(rotationBaseline || {}),
@@ -705,36 +706,49 @@
             }
             return merged;
         }
-        function refreshWeekendReplacementReasons(weekendAssignments, weekendBaselineByDate) {
+        function refreshDutyReplacementReasons(assignmentsByDate, baselineByDate, dutyCategory) {
             const dateKeys = new Set([
-                ...Object.keys(weekendAssignments || {}),
-                ...Object.keys(weekendBaselineByDate || {}),
+                ...Object.keys(assignmentsByDate || {}),
+                ...Object.keys(baselineByDate || {}),
                 ...Object.keys(assignmentReasons || {})
             ]);
             for (const dateKey of [...dateKeys].sort()) {
                 const dateObj = new Date(dateKey + 'T00:00:00');
                 if (isNaN(dateObj.getTime())) continue;
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const baseline = weekendBaselineByDate?.[dateKey]?.[groupNum] || null;
-                    const assigned = weekendAssignments?.[dateKey]?.[groupNum] || null;
+                    const baseline = baselineByDate?.[dateKey]?.[groupNum] || null;
+                    const assigned = assignmentsByDate?.[dateKey]?.[groupNum] || null;
                     if (!assigned) continue;
-                    syncWeekendReplacementReason(dateKey, groupNum, baseline, assigned, dateObj);
+                    syncDutyReplacementReason(dateKey, groupNum, baseline, assigned, dateObj, dutyCategory);
                 }
             }
         }
-        /** Τέλος preview ΣΚ: baseline + λόγοι + ημερολόγιο στη μνήμη. */
-        function finalizeWeekendPreview(weekendAssignments, rotationBaseline, previewSlotBaseline) {
-            const mergedBaseline = mergeWeekendBaselineMaps(rotationBaseline, previewSlotBaseline);
-            refreshWeekendReplacementReasons(weekendAssignments, mergedBaseline);
-            calculationSteps.tempWeekendBaselineAssignments = mergedBaseline;
-            if (typeof formatGroupAssignmentsToStringMap === 'function') {
-                const formatted = formatGroupAssignmentsToStringMap(mergedBaseline);
-                if (typeof rotationBaselineWeekendAssignments !== 'undefined') {
-                    Object.assign(rotationBaselineWeekendAssignments, formatted);
-                }
+        /** Τέλος preview: baseline + λόγοι + ημερολόγιο στη μνήμη. */
+        function finalizeDutyTypePreview(assignmentsByDate, rotationBaseline, previewSlotBaseline, dutyCategory, storeOpts) {
+            const mergedBaseline = mergeDutyBaselineMaps(rotationBaseline, previewSlotBaseline);
+            refreshDutyReplacementReasons(assignmentsByDate, mergedBaseline, dutyCategory);
+            if (storeOpts?.tempBaselineKey) {
+                calculationSteps[storeOpts.tempBaselineKey] = mergedBaseline;
             }
-            if (typeof renderCalendar === 'function') renderCalendar();
+            if (typeof formatGroupAssignmentsToStringMap === 'function' && storeOpts?.rotationBaselineStore) {
+                Object.assign(storeOpts.rotationBaselineStore, formatGroupAssignmentsToStringMap(mergedBaseline));
+            }
+            if (storeOpts?.renderCalendar !== false && typeof renderCalendar === 'function') {
+                renderCalendar();
+            }
             return mergedBaseline;
+        }
+        function finalizeWeekendPreview(weekendAssignments, rotationBaseline, previewSlotBaseline) {
+            return finalizeDutyTypePreview(weekendAssignments, rotationBaseline, previewSlotBaseline, 'weekend', {
+                tempBaselineKey: 'tempWeekendBaselineAssignments',
+                rotationBaselineStore: typeof rotationBaselineWeekendAssignments !== 'undefined' ? rotationBaselineWeekendAssignments : null
+            });
+        }
+        function finalizeSemiPreview(semiAssignments, rotationBaseline, previewSlotBaseline) {
+            return finalizeDutyTypePreview(semiAssignments, rotationBaseline, previewSlotBaseline, 'semi', {
+                tempBaselineKey: 'tempSemiBaselineAssignments',
+                rotationBaselineStore: typeof rotationBaselineSemiAssignments !== 'undefined' ? rotationBaselineSemiAssignments : null
+            });
         }
         function normalizeSkipReasonText(reasonText) {
             const raw = String(reasonText || '').trim();
@@ -4619,9 +4633,10 @@
                 // Store final assignments (after skip logic) for saving when OK is pressed
                 calculationSteps.finalWeekendAssignments = updatedAssignments;
 
-                refreshWeekendReplacementReasons(
+                refreshDutyReplacementReasons(
                     updatedAssignments,
-                    calculationSteps.tempWeekendBaselineAssignments || {}
+                    calculationSteps.tempWeekendBaselineAssignments || {},
+                    'weekend'
                 );
                 if (typeof renderCalendar === 'function') renderCalendar();
                 
@@ -9442,6 +9457,10 @@
             const specialHolidays = dayTypeLists.special || [];
             const weekendHolidays = dayTypeLists.weekend || [];
 
+            if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                dutySemiDebug.clear();
+            }
+
             stepContent.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin me-2"></i>Υπολογισμός ημιαργιών...</div>';
 
             // Load weekend assignments (Step 2 result)
@@ -9585,6 +9604,10 @@
             const maxDateKeyRun = (a, b) => (!a ? b : (!b ? a : (a > b ? a : b)));
             const minDateKeyRun = (a, b) => (!a ? b : (!b ? a : (a < b ? a : b)));
             const normSemiRun = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const formatDDMMYYYYSemiRun = (dk) => {
+                const d = new Date(dk + 'T00:00:00');
+                return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
+            };
 
             const returnFromMissingSemiTargetsRun = {};
             if (calcStartKey && calcEndKey && sortedSemi.length > 0) {
@@ -9650,7 +9673,20 @@
                                     }
                                 }
                             }
-                            if (!hadMissedSemi) continue;
+                            if (!hadMissedSemi) {
+                                if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                                    dutySemiDebug.recordAbsentPlacement({
+                                        groupNum,
+                                        personName,
+                                        absenceEndKey: pEndKey,
+                                        missingRangeStr: formatDDMMYYYYSemiRun(pStartKey) + ' - ' + formatDDMMYYYYSemiRun(pEndKey),
+                                        status: 'skipped',
+                                        reasonCode: 'RETURN_NO_MISSED_SEMI',
+                                        message: `Δεν βρέθηκε ημιαργία (baseline σειράς) στην περίοδο ${pStartKey} - ${pEndKey}.`
+                                    });
+                                }
+                                continue;
+                            }
                             // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
                             const thirdDayAfterEnd = addDaysToDateKeyRun(pEndKey, 3);
                             if (!thirdDayAfterEnd) continue;
@@ -9666,7 +9702,21 @@
                                 }
                                 if (backwardCandidate && backwardCandidate >= calcStartKey && backwardCandidate <= calcEndKey) targetSemiKey = backwardCandidate;
                             }
-                            if (!targetSemiKey || targetSemiKey < calcStartKey || targetSemiKey > calcEndKey) continue;
+                            if (!targetSemiKey || targetSemiKey < calcStartKey || targetSemiKey > calcEndKey) {
+                                if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                                    dutySemiDebug.recordAbsentPlacement({
+                                        groupNum,
+                                        personName,
+                                        absenceEndKey: pEndKey,
+                                        status: 'failed',
+                                        reasonCode: targetSemiKey ? 'RETURN_TARGET_OUT_OF_CALC_RANGE' : 'RETURN_NO_SEMI_SLOT',
+                                        message: targetSemiKey
+                                            ? `Στόχος ημιαργία ${targetSemiKey} εκτός ${calcStartKey}…${calcEndKey}.`
+                                            : 'Δεν βρέθηκε ημιαργία για return-from-missing (μετά +3 ημέρες ή πίσω).'
+                                    });
+                                }
+                                continue;
+                            }
                             if (returnFromMissingSemiTargetsRun[targetSemiKey]?.[groupNum]) {
                                 const semiIdx = sortedSemi.indexOf(targetSemiKey);
                                 for (let i = semiIdx + 1; i < sortedSemi.length; i++) {
@@ -9682,15 +9732,48 @@
                                     }
                                 }
                             }
-                            if (returnFromMissingSemiTargetsRun[targetSemiKey]?.[groupNum]) continue;
-                            const formatDDMMYYYYSemiRun = (dk) => {
-                                const d = new Date(dk + 'T00:00:00');
-                                return (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear();
-                            };
+                            if (returnFromMissingSemiTargetsRun[targetSemiKey]?.[groupNum]) {
+                                if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                                    dutySemiDebug.recordAbsentPlacement({
+                                        groupNum,
+                                        personName,
+                                        absenceEndKey: pEndKey,
+                                        status: 'failed',
+                                        reasonCode: 'RETURN_TARGET_BUSY',
+                                        message: 'Δεν βρέθηκε ελεύθερη ημιαργία για return-from-missing.'
+                                    });
+                                }
+                                continue;
+                            }
                             const missingRangeStrSemi = formatDDMMYYYYSemiRun(pStartKey) + ' - ' + formatDDMMYYYYSemiRun(pEndKey);
                             const reasonOfMissingSemi = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
                             if (!returnFromMissingSemiTargetsRun[targetSemiKey]) returnFromMissingSemiTargetsRun[targetSemiKey] = {};
-                            returnFromMissingSemiTargetsRun[targetSemiKey][groupNum] = { personName, missingEnd: pEndKey, missingRangeStr: missingRangeStrSemi, reasonOfMissing: reasonOfMissingSemi };
+                            returnFromMissingSemiTargetsRun[targetSemiKey][groupNum] = {
+                                personName,
+                                missingEnd: pEndKey,
+                                missingRangeStr: missingRangeStrSemi,
+                                reasonOfMissing: reasonOfMissingSemi,
+                                missedWeekendKeys: []
+                            };
+                            if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                                const missedKeys = [];
+                                for (const dk of sortedSemi) {
+                                    if (dk < scanStartKey || dk > scanEndKey) continue;
+                                    const baseSemi = baselineSemiByDate[dk]?.[groupNum];
+                                    if (baseSemi && normSemiRun(baseSemi) === normSemiRun(personName)) missedKeys.push(dk);
+                                }
+                                dutySemiDebug.recordAbsentPlacement({
+                                    groupNum,
+                                    personName,
+                                    absenceEndKey: pEndKey,
+                                    missingRangeStr: missingRangeStrSemi,
+                                    targetDateKey: targetSemiKey,
+                                    missedOnDateKey: missedKeys.join(', '),
+                                    status: 'planned',
+                                    reasonCode: 'RETURN_PLANNED',
+                                    message: `Χάθηκε ημιαργία: ${missedKeys.join(', ') || '—'}. Στόχος ${targetSemiKey}.`
+                                });
+                            }
                         }
                     }
                 }
@@ -9737,6 +9820,17 @@
                         globalSemiPos[groupNum] = (originalIndex >= 0 ? originalIndex : (designatedIndex >= 0 ? designatedIndex + 1 : 0)) % rotationDays;
                         const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                         storeAssignmentReason(dateKey, groupNum, designated.personName, 'skip', semiReasonText, null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
+                        if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                            dutySemiDebug.recordAbsentPlacement({
+                                groupNum,
+                                personName: designated.personName,
+                                absenceEndKey: designated.missingEnd,
+                                targetDateKey: dateKey,
+                                status: 'applied',
+                                reasonCode: 'RETURN_APPLIED',
+                                message: `Τοποθετήθηκε στην ${dateKey} (return-from-missing ημιαργία).`
+                            });
+                        }
                         continue;
                     }
                     if (globalSemiPos[groupNum] === undefined) {
@@ -9798,9 +9892,19 @@
                         }
                     }
                     let person = groupPeople[pos];
+                    const rotationPersonAtSlot = person;
                     let nextPos = (pos + 1) % rotationDays; // default: next slot goes to person after current pos
+                    if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                        dutySemiDebug.startSlot('semi-build', dateKey, groupNum, {
+                            rotationPerson: rotationPersonAtSlot,
+                            baseline: baselineSemiByDate[dateKey]?.[groupNum] || rotationPersonAtSlot
+                        });
+                    }
                     // DISABLED: When rotation person is disabled, whole baseline shifts – store eligible person, no replacement line.
                     if (person && isPersonDisabledForDuty(person, groupNum, 'semi')) {
+                        if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                            dutySemiDebug.logStep('disabled-baseline', `${person} απενεργοποιημένος — αναζήτηση επόμενου.`);
+                        }
                         let eligiblePerson = null;
                         let eligibleIndex = -1;
                         const deferSkipPersonRun = deferManualAlternateSkipSemiRun[groupNum]?.person;
@@ -9815,9 +9919,22 @@
                             eligibleIndex = idx;
                             break;
                         }
+                        if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                            dutySemiDebug.recordCandidateScan(
+                                'semi-disabled',
+                                { groupPeople, startIndex: pos, maxOffset: rotationDays * 2, groupNum, date, dateKey },
+                                eligiblePerson
+                            );
+                        }
                         baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
+                        if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
+                            storeUnavailableReplacementReason(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date, 'semi');
+                        }
                         if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays; // next semi goes to person after the one we assigned
                     } else if (person && isPersonMissingOnDate(person, groupNum, date, 'semi')) {
+                        if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                            dutySemiDebug.logStep('phase-missing', `Απουσία ${person} — αναζήτηση αντικαταστάτη στη σειρά ημιαργίας.`);
+                        }
                         // MISSING: At the missing semi date assign the next person in rotation; next semi must go to person AFTER them (no double assignment)
                         let eligiblePerson = null;
                         let eligibleIndex = -1;
@@ -9833,10 +9950,36 @@
                             eligibleIndex = idx;
                             break;
                         }
+                        if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                            dutySemiDebug.recordCandidateScan(
+                                'semi-missing',
+                                { groupPeople, startIndex: pos, maxOffset: rotationDays * 2, groupNum, date, dateKey },
+                                eligiblePerson
+                            );
+                        }
                         baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
+                        if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
+                            storeUnavailableReplacementReason(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date, 'semi');
+                            if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                                dutySemiDebug.noteMissedSemiForAbsent(
+                                    groupNum,
+                                    rotationPersonAtSlot,
+                                    null,
+                                    dateKey,
+                                    eligiblePerson
+                                );
+                            }
+                        }
                         if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays; // next semi goes to person after the one we assigned
                     } else {
                         baseline[dateKey][groupNum] = person;
+                    }
+                    if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                        dutySemiDebug.endSlot({
+                            finalPerson: baseline[dateKey][groupNum] || null,
+                            skippedPerson: rotationPersonAtSlot,
+                            replacementOnDate: baseline[dateKey][groupNum]
+                        });
                     }
                     baseline[dateKey][groupNum] = applyManualAlternateToAssignedPerson(
                         baseline[dateKey][groupNum],
@@ -9994,11 +10137,26 @@
                 }
             }
 
+            const mergedSemiBaseline = finalizeSemiPreview(finalAssignments, baselineSemiByDate, baseline);
+
+            if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                dutySemiDebug.refreshAbsentReplacementsFromPreview(finalAssignments, mergedSemiBaseline);
+                dutySemiDebug.finalizeMissedSemiAbsences({
+                    sortedSemi,
+                    baselineSemiByDate,
+                    calcStartKey,
+                    calcEndKey,
+                    returnFromMissingSemiTargets: returnFromMissingSemiTargetsRun,
+                    simulatedSemiAssignments: finalAssignments
+                });
+            }
+
             try {
                 if (typeof window !== 'undefined' && window.db && window.auth?.currentUser) {
                     const db = window.db;
                     const user = window.auth.currentUser;
-                    const formattedBaseline = formatGroupAssignmentsToStringMap(baseline);
+                    const baselineForSave = calculationSteps.tempSemiBaselineAssignments || mergedSemiBaseline;
+                    const formattedBaseline = formatGroupAssignmentsToStringMap(baselineForSave);
                     const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
                     let formattedFinal = formatGroupAssignmentsToStringMap(finalAssignments);
                     if (typeof mergeFormattedAssignmentsWithExistingStore === 'function' && typeof getCalculationRecalcGroupSet === 'function') {
@@ -10045,13 +10203,15 @@
             } catch (e) { console.error('Save semi:', e); }
 
             calculationSteps.tempSemiAssignments = finalAssignments;
-            calculationSteps.tempSemiBaselineAssignments = baseline;
             calculationSteps.finalSemiAssignments = finalAssignments;
             calculationSteps.lastSemiRotationPositionsByMonth = lastSemiRotationPositionsByMonth;
 
             // 5) Build table: baseline vs final (use precomputed dateStr/dayName from semiMeta)
             const periodLabel = (startDate && endDate) ? `${startDate.toLocaleDateString('el-GR')} – ${endDate.toLocaleDateString('el-GR')}` : '';
             let html = '<div class="step-content"><h6 class="mb-3"><i class="fas fa-calendar-alt me-2"></i>Περίοδος: ' + periodLabel + '</h6>';
+            if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.getDebugToolbarHtml) {
+                html += dutySemiDebug.getDebugToolbarHtml();
+            }
             html += '<div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr><th>Ημερομηνία</th><th>Ημέρα</th>';
             for (let g = 1; g <= 4; g++) html += '<th>' + (getGroupName(g) || 'Ομάδα ' + g) + '</th>';
             html += '</tr></thead><tbody>';
@@ -10060,7 +10220,11 @@
                 if (!m) continue;
                 html += '<tr><td><strong>' + m.dateStr + '</strong></td><td>' + m.dayName + '</td>';
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    let basePerson = baseline[dateKey]?.[groupNum] || '-';
+                    let basePerson =
+                        mergedSemiBaseline[dateKey]?.[groupNum] ||
+                        baselineSemiByDate[dateKey]?.[groupNum] ||
+                        baseline[dateKey]?.[groupNum] ||
+                        '-';
                     const finalPerson = finalAssignments[dateKey]?.[groupNum] || '-';
                     if (finalPerson !== '-' && typeof getAssignmentReason === 'function') {
                         const deferR = getAssignmentReason(dateKey, groupNum, finalPerson);
@@ -10074,6 +10238,9 @@
             }
             html += '</tbody></table></div></div>';
             stepContent.innerHTML = html;
+            if (typeof dutySemiDebug !== 'undefined') {
+                dutySemiDebug.wireToolbar();
+            }
         }
         function _OLD_renderStep3_SemiNormal_REMOVED() {
             if (false) {

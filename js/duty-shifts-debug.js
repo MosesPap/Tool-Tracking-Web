@@ -1,5 +1,5 @@
 // ============================================================================
-// DUTY-SHIFTS-DEBUG.JS — Αναλυτικό debug μόνο για ΣΚ & δημόσιες αργίες (weekend)
+// DUTY-SHIFTS-DEBUG.JS — Debug ΣΚ/αργίες (weekend) & ημιαργίες (semi)
 // (όχι ειδικές αργίες — special-holiday / Step 1)
 // ============================================================================
 
@@ -787,5 +787,489 @@
         get absentPlacements() {
             return state.absentPlacements;
         }
+    };
+})();
+
+// ============================================================================
+// Ημιαργίες (semi) — ίδιο debug pattern με ΣΚ
+// ============================================================================
+(function () {
+    const STORAGE_KEY = 'dutySemiDebug';
+    const DUTY = 'semi';
+
+    const REASON_LABELS = {
+        ACCEPTED: 'Επιλέχθηκε',
+        MISSING_ON_DATE: 'Απουσία ή απενεργοποίηση την ημέρα της ημιαργίας',
+        DISABLED_FOR_DUTY: 'Απενεργοποιημένος για ημιαργία',
+        NOT_IN_SEMI_LIST: 'Δεν είναι στη λίστα ημιαργίας της ομάδας',
+        RETURN_FROM_MISSING_ALREADY: 'Ήδη τοποθετήθηκε via return-from-missing',
+        ALL_CANDIDATES_EXHAUSTED: 'Κανένας επιλέξιμος στη σειρά ημιαργίας',
+        STILL_MISSING_AFTER_LOGIC: 'Μένει ο απόντας — δεν βρέθηκε αντικαταστάτης',
+        RETURN_NO_MISSED_SEMI: 'Δεν βρέθηκε ημιαργία (baseline) στην περίοδο απουσίας',
+        RETURN_TARGET_OUT_OF_CALC_RANGE: 'Ο στόχος ημιαργίας είναι εκτός περιόδου υπολογισμού',
+        RETURN_TARGET_BUSY: 'Η ημέρα-στόχος ημιαργίας είναι ήδη δεσμευμένη',
+        RETURN_PLANNED: 'Προγραμματίστηκε ανάθεση σε άλλη ημιαργία (ίδιος μήνας)',
+        RETURN_NO_SEMI_SLOT: 'Δεν βρέθηκε ελεύθερη ημιαργία για return-from-missing',
+        RETURN_APPLIED: 'Τοποθετήθηκε στην προγραμματισμένη ημιαργία',
+        RETURN_NEVER_PLANNED: 'Απουσία σε ημιαργία χωρίς προγραμματισμένο return-from-missing'
+    };
+
+    const state = {
+        enabled: false,
+        entries: [],
+        absentPlacements: [],
+        absentByKey: {},
+        filter: { dateKey: null, groupNum: null, personName: null },
+        currentSlot: null
+    };
+
+    function normPerson(s) {
+        return typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
+    }
+
+    function isEnabled() {
+        try {
+            if (state.enabled) return true;
+            if (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY) === '1') return true;
+        } catch (_) {}
+        return false;
+    }
+
+    function absentKey(groupNum, personName, absenceEndKey) {
+        return `${groupNum}|${normPerson(personName)}|${absenceEndKey || ''}`;
+    }
+
+    function findPlanForPerson(groupNum, personName) {
+        const n = normPerson(personName);
+        if (!n) return null;
+        return state.absentPlacements.find((p) => Number(p.groupNum) === Number(groupNum) && normPerson(p.personName) === n) || null;
+    }
+
+    function matchesFilter(dateKey, groupNum, personName) {
+        const f = state.filter || {};
+        if (f.dateKey && f.dateKey !== dateKey) return false;
+        if (f.groupNum != null && Number(f.groupNum) !== Number(groupNum)) return false;
+        if (f.personName) {
+            const n = normPerson(f.personName);
+            if (personName && normPerson(personName) !== n) {
+                const slot = state.currentSlot;
+                if (!slot) return false;
+                const hay = [slot.meta?.baseline, slot.meta?.rotationPerson, slot.outcome?.finalPerson, slot.outcome?.skippedPerson]
+                    .filter(Boolean)
+                    .map(normPerson);
+                if (!hay.includes(n)) return false;
+            }
+        }
+        return true;
+    }
+
+    function scanAlternateSemiDates(ctx) {
+        const { personName, groupNum, sortedSemi, calcStartKey, calcEndKey, returnTargets } = ctx;
+        const rows = [];
+        if (!sortedSemi || !personName) return rows;
+        for (const dk of sortedSemi) {
+            if (calcStartKey && dk < calcStartKey) continue;
+            if (calcEndKey && dk > calcEndKey) continue;
+            const d = new Date(dk + 'T00:00:00');
+            const codes = [];
+            if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(personName, groupNum, d, DUTY)) {
+                codes.push('MISSING_ON_DATE');
+            }
+            if (returnTargets?.[dk]?.[groupNum]) codes.push('RETURN_TARGET_BUSY');
+            rows.push({ dateKey: dk, accepted: codes.length === 0, reasonCodes: codes.length ? codes : ['ACCEPTED'] });
+        }
+        return rows;
+    }
+
+    function recordAbsentPlacement(rec) {
+        if (!isEnabled()) return null;
+        const key = rec.id || absentKey(rec.groupNum, rec.personName, rec.absenceEndKey);
+        let row = state.absentByKey[key];
+        if (!row) {
+            row = { id: key, t: Date.now(), missedOnDateKeys: [] };
+            state.absentByKey[key] = row;
+            state.absentPlacements.push(row);
+        }
+        Object.assign(row, rec);
+        if (rec.missedOnDateKey) {
+            const mk = rec.missedOnDateKey;
+            if (String(mk).includes(',')) {
+                mk.split(',').map((s) => s.trim()).forEach((k) => {
+                    if (k && !row.missedOnDateKeys.includes(k)) row.missedOnDateKeys.push(k);
+                });
+            } else if (!row.missedOnDateKeys.includes(mk)) row.missedOnDateKeys.push(mk);
+        }
+        return row;
+    }
+
+    function noteMissedSemiForAbsent(groupNum, personName, absenceEndKey, missedDateKey, replacementOnMissedDate) {
+        if (!isEnabled()) return;
+        const row = state.absentByKey[absentKey(groupNum, personName, absenceEndKey)] || findPlanForPerson(groupNum, personName);
+        if (row) {
+            if (missedDateKey && !row.missedOnDateKeys.includes(missedDateKey)) row.missedOnDateKeys.push(missedDateKey);
+            if (replacementOnMissedDate != null) row.replacementOnMissedDate = replacementOnMissedDate;
+        } else {
+            recordAbsentPlacement({
+                groupNum,
+                personName,
+                absenceEndKey,
+                missedOnDateKey: missedDateKey,
+                replacementOnMissedDate,
+                status: 'unresolved',
+                reasonCode: 'RETURN_NEVER_PLANNED',
+                message: 'Απουσία σε ημιαργία χωρίς προγραμματισμένη μελλοντική ανάθεση.'
+            });
+        }
+    }
+
+    function refreshAbsentReplacementsFromPreview(semiAssignments, semiRotationBaseline) {
+        if (!isEnabled()) return;
+        for (const row of state.absentPlacements) {
+            const missed =
+                row.missedOnDateKeys?.length ? row.missedOnDateKeys : row.missedOnDateKey ? [row.missedOnDateKey] : [];
+            for (const dk of missed) {
+                const g = row.groupNum;
+                const baseline = semiRotationBaseline?.[dk]?.[g];
+                if (!baseline || normPerson(baseline) !== normPerson(row.personName)) continue;
+                const assigned = semiAssignments?.[dk]?.[g];
+                if (!assigned || normPerson(assigned) === normPerson(baseline)) continue;
+                row.replacementOnMissedDate = assigned;
+            }
+        }
+    }
+
+    function finalizeMissedSemiAbsences(ctx) {
+        if (!isEnabled()) return;
+        const {
+            sortedSemi,
+            baselineSemiByDate,
+            calcStartKey,
+            calcEndKey,
+            returnFromMissingSemiTargets,
+            simulatedSemiAssignments
+        } = ctx;
+        const unresolved = new Set();
+        for (const dk of sortedSemi || []) {
+            if (calcStartKey && dk < calcStartKey) continue;
+            if (calcEndKey && dk > calcEndKey) continue;
+            const d = new Date(dk + 'T00:00:00');
+            for (let g = 1; g <= 4; g++) {
+                const base = baselineSemiByDate?.[dk]?.[g];
+                if (!base) continue;
+                if (typeof isPersonMissingOnDate !== 'function' || !isPersonMissingOnDate(base, g, d, DUTY)) continue;
+                const replFromPreview =
+                    simulatedSemiAssignments?.[dk]?.[g] &&
+                    normPerson(simulatedSemiAssignments[dk][g]) !== normPerson(base)
+                        ? simulatedSemiAssignments[dk][g]
+                        : null;
+                const plan = findPlanForPerson(g, base);
+                if (plan?.targetDateKey) {
+                    noteMissedSemiForAbsent(g, base, plan.absenceEndKey, dk, replFromPreview);
+                    continue;
+                }
+                const uKey = `${g}|${normPerson(base)}|${dk}`;
+                if (unresolved.has(uKey)) continue;
+                unresolved.add(uKey);
+                recordAbsentPlacement({
+                    groupNum: g,
+                    personName: base,
+                    missedOnDateKey: dk,
+                    status: 'unresolved',
+                    reasonCode: 'RETURN_NEVER_PLANNED',
+                    message: 'Baseline (απουσία) χωρίς στόχο return-from-missing.',
+                    alternateDateScan: scanAlternateSemiDates({
+                        personName: base,
+                        groupNum: g,
+                        sortedSemi,
+                        calcStartKey,
+                        calcEndKey,
+                        returnTargets: returnFromMissingSemiTargets
+                    })
+                });
+            }
+        }
+        for (const row of state.absentPlacements) {
+            if (row.status !== 'planned' || !row.targetDateKey) continue;
+            const tgt = returnFromMissingSemiTargets?.[row.targetDateKey]?.[row.groupNum];
+            if (!tgt || normPerson(tgt.personName) !== normPerson(row.personName)) {
+                row.status = 'failed';
+                row.reasonCode = row.reasonCode || 'RETURN_TARGET_BUSY';
+                row.message = (row.message || '') + ' Ο στόχος ημιαργίας δεν δεσμεύτηκε τελικά.';
+            }
+        }
+    }
+
+    function getCandidateRejectionReasons(candidate, ctx) {
+        const reasons = [];
+        if (!candidate) {
+            reasons.push('NOT_IN_SEMI_LIST');
+            return reasons;
+        }
+        const { groupNum, date, groupPeople } = ctx;
+        if (Array.isArray(groupPeople) && groupPeople.length && !groupPeople.includes(candidate)) {
+            reasons.push('NOT_IN_SEMI_LIST');
+        }
+        if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(candidate, groupNum, date, DUTY)) {
+            reasons.push('MISSING_ON_DATE');
+        } else if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, DUTY)) {
+            reasons.push('DISABLED_FOR_DUTY');
+        }
+        return reasons;
+    }
+
+    function scanRotationCandidates(ctx) {
+        const { groupPeople, startIndex, maxOffset, includeStartOffset = 1 } = ctx;
+        const rows = [];
+        const len = groupPeople?.length || 0;
+        if (!len) return rows;
+        const start = startIndex >= 0 ? startIndex : 0;
+        const limit = maxOffset != null ? maxOffset : len;
+        for (let offset = includeStartOffset; offset < limit; offset++) {
+            const idx = (start + offset) % len;
+            const candidate = groupPeople[idx];
+            const rejections = getCandidateRejectionReasons(candidate, ctx);
+            rows.push({
+                candidate,
+                index: idx,
+                offset,
+                accepted: rejections.length === 0,
+                reasonCodes: rejections.length ? rejections : ['ACCEPTED']
+            });
+        }
+        return rows;
+    }
+
+    function startSlot(stage, dateKey, groupNum, meta) {
+        if (!isEnabled()) return;
+        if (!matchesFilter(dateKey, groupNum, meta?.baseline || meta?.rotationPerson)) return;
+        state.currentSlot = { stage, dateKey, groupNum, meta: meta || {}, steps: [], candidates: [] };
+    }
+
+    function logStep(step, message) {
+        if (!isEnabled() || !state.currentSlot) return;
+        state.currentSlot.steps.push({ step, message, t: Date.now() });
+    }
+
+    function recordCandidateScan(phase, ctx, picked) {
+        if (!isEnabled() || !state.currentSlot) return;
+        state.currentSlot.candidates.push({ phase, picked: picked || null, rows: scanRotationCandidates(ctx) });
+    }
+
+    function endSlot(outcome) {
+        if (!isEnabled() || !state.currentSlot) return;
+        const slot = state.currentSlot;
+        const oc = outcome || {};
+        const skipped = oc.skippedPerson || slot.meta?.rotationPerson;
+        if (skipped) {
+            const plan = findPlanForPerson(slot.groupNum, skipped);
+            if (plan) oc.absentPersonPlan = { personName: plan.personName, targetDateKey: plan.targetDateKey, status: plan.status, reasonCode: plan.reasonCode, message: plan.message };
+        }
+        slot.outcome = oc;
+        state.entries.push(slot);
+        state.currentSlot = null;
+    }
+
+    function clear() {
+        state.entries = [];
+        state.absentPlacements = [];
+        state.absentByKey = {};
+        state.currentSlot = null;
+    }
+
+    function setEnabled(on) {
+        state.enabled = !!on;
+        try {
+            if (on) localStorage.setItem(STORAGE_KEY, '1');
+            else localStorage.removeItem(STORAGE_KEY);
+        } catch (_) {}
+    }
+
+    function reasonLabels(codes) {
+        return (codes || []).map((c) => REASON_LABELS[c] || c).join('; ');
+    }
+
+    function escapeHtml(s) {
+        return String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function renderAbsentSection() {
+        const f = state.filter || {};
+        const rows = state.absentPlacements.filter((p) => {
+            if (f.groupNum != null && Number(p.groupNum) !== Number(f.groupNum)) return false;
+            if (f.personName && normPerson(p.personName) !== normPerson(f.personName)) return false;
+            if (f.dateKey) {
+                const hit = p.targetDateKey === f.dateKey || (p.missedOnDateKeys || []).includes(f.dateKey) || p.missedOnDateKey === f.dateKey;
+                if (!hit) return false;
+            }
+            return true;
+        });
+        if (!rows.length) return '<p class="text-muted small mb-3">Δεν υπάρχουν καταχωρήσεις απούντων (return-from-missing / απουσία).</p>';
+        let html =
+            '<h6 class="mb-2"><i class="fas fa-user-clock me-1"></i>Απόντες — ανάθεση σε άλλη ημιαργία</h6>';
+        html +=
+            '<div class="table-responsive mb-4"><table class="table table-sm table-bordered"><thead class="table-warning"><tr>';
+        html +=
+            '<th>Άτομο</th><th>Ομ.</th><th>Απουσία</th><th>Χάθηκε</th><th>Αντικ. εκεί</th><th>Στόχος</th><th>Κατάσταση</th><th>Λόγος</th></tr></thead><tbody>';
+        rows.forEach((p) => {
+            const missed = (p.missedOnDateKeys?.length ? p.missedOnDateKeys.join(', ') : p.missedOnDateKey) || '—';
+            html += `<tr><td>${escapeHtml(p.personName)}</td><td>${p.groupNum}</td>`;
+            html += `<td>${escapeHtml(p.missingRangeStr || p.absenceEndKey || '—')}</td>`;
+            html += `<td><small>${escapeHtml(missed)}</small></td>`;
+            html += `<td>${escapeHtml(p.replacementOnMissedDate || '—')}</td>`;
+            html += `<td>${escapeHtml(p.targetDateKey || '—')}</td>`;
+            html += `<td>${escapeHtml(p.status || '—')}</td>`;
+            html += `<td><small>${escapeHtml(reasonLabels([p.reasonCode]))}${p.message ? '<br>' + escapeHtml(p.message) : ''}</small></td></tr>`;
+        });
+        html += '</tbody></table></div>';
+        return html;
+    }
+
+    function renderPanel() {
+        const dkEl = document.getElementById('dutySemiDebugFilterDate');
+        const gnEl = document.getElementById('dutySemiDebugFilterGroup');
+        const pnEl = document.getElementById('dutySemiDebugFilterPerson');
+        state.filter = {
+            dateKey: dkEl?.value?.trim() || null,
+            groupNum: gnEl?.value ? parseInt(gnEl.value, 10) : null,
+            personName: pnEl?.value?.trim() || null
+        };
+        const entries = state.entries.filter((e) => matchesFilter(e.dateKey, e.groupNum, e.meta?.baseline));
+        let body = renderAbsentSection();
+        if (entries.length) {
+            body += '<hr class="my-3"><h6 class="mb-2">Ανά ημέρα και ομάδα</h6><div class="accordion" id="dutySemiDebugAccordion">';
+            entries.forEach((entry, i) => {
+                const date = new Date(entry.dateKey + 'T00:00:00');
+                const dateStr = isNaN(date.getTime())
+                    ? entry.dateKey
+                    : date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const oc = entry.outcome || {};
+                body += `<div class="accordion-item"><h2 class="accordion-header">
+                    <button class="accordion-button ${i > 0 ? 'collapsed' : ''}" type="button" data-bs-toggle="collapse" data-bs-target="#dutySemiDbg${i}">
+                    ${escapeHtml(dateStr)} · Ομάδα ${entry.groupNum} · ${escapeHtml(entry.stage)}
+                    </button></h2><div id="dutySemiDbg${i}" class="accordion-collapse collapse ${i === 0 ? 'show' : ''}" data-bs-parent="#dutySemiDebugAccordion">
+                    <div class="accordion-body small">`;
+                body += `<p><strong>Baseline:</strong> ${escapeHtml(entry.meta?.baseline || entry.meta?.rotationPerson || '—')}
+                    · <strong>Τελικό:</strong> ${escapeHtml(String(oc.finalPerson || '—'))}</p>`;
+                if (oc.absentPersonPlan) {
+                    body += `<div class="alert alert-info py-2">${escapeHtml(oc.absentPersonPlan.message || oc.absentPersonPlan.reasonCode || '')}</div>`;
+                }
+                if (entry.steps.length) {
+                    body += '<ul class="mb-2">';
+                    entry.steps.forEach((s) => {
+                        body += `<li><code>${escapeHtml(s.step)}</code> — ${escapeHtml(s.message)}</li>`;
+                    });
+                    body += '</ul>';
+                }
+                entry.candidates.forEach((cs) => {
+                    body += `<p class="mb-1"><strong>${escapeHtml(cs.phase)}</strong>${cs.picked ? ' → ' + escapeHtml(cs.picked) : ''}</p>`;
+                    body += '<table class="table table-sm table-bordered"><tbody>';
+                    cs.rows.forEach((r) => {
+                        body += `<tr class="${r.accepted ? 'table-success' : ''}"><td>${r.offset}</td><td>${escapeHtml(r.candidate || '—')}</td><td>${escapeHtml(reasonLabels(r.reasonCodes))}</td></tr>`;
+                    });
+                    body += '</tbody></table>';
+                });
+                body += '</div></div></div>';
+            });
+            body += '</div>';
+        }
+        const modalId = 'dutySemiDebugModal';
+        let el = document.getElementById(modalId);
+        if (!el) {
+            document.body.insertAdjacentHTML(
+                'beforeend',
+                `<div class="modal fade" id="${modalId}" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content"><div class="modal-header bg-info-subtle">
+                <h5 class="modal-title"><i class="fas fa-bug me-2"></i>Debug ημιαργιών</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body" id="dutySemiDebugModalBody"></div>
+                <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="dutySemiDebugExportBtn">Εξαγωγή JSON</button>
+                <button type="button" class="btn btn-outline-danger btn-sm" id="dutySemiDebugClearBtn">Καθαρισμός</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Κλείσιμο</button>
+                </div></div></div></div>`
+            );
+            el = document.getElementById(modalId);
+            document.getElementById('dutySemiDebugExportBtn').onclick = () => {
+                const blob = new Blob([JSON.stringify({ absentPlacements: state.absentPlacements, slots: state.entries }, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `duty-semi-debug-${Date.now()}.json`;
+                a.click();
+            };
+            document.getElementById('dutySemiDebugClearBtn').onclick = () => {
+                clear();
+                renderPanel();
+            };
+        }
+        document.getElementById('dutySemiDebugModalBody').innerHTML =
+            `<div class="row g-2 mb-3">
+            <div class="col-md-4"><label class="form-label small">Ημερομηνία</label>
+            <input type="text" class="form-control form-control-sm" id="dutySemiDebugFilterDate"></div>
+            <div class="col-md-2"><label class="form-label small">Ομάδα</label>
+            <input type="number" min="1" max="4" class="form-control form-control-sm" id="dutySemiDebugFilterGroup"></div>
+            <div class="col-md-4"><label class="form-label small">Όνομα</label>
+            <input type="text" class="form-control form-control-sm" id="dutySemiDebugFilterPerson"></div>
+            <div class="col-md-2 d-flex align-items-end"><button type="button" class="btn btn-primary btn-sm w-100" id="dutySemiDebugRefilterBtn">Φίλτρο</button></div>
+            </div>` + body;
+        document.getElementById('dutySemiDebugRefilterBtn').onclick = () => renderPanel();
+        bootstrap.Modal.getOrCreateInstance(el).show();
+    }
+
+    function getDebugToolbarHtml() {
+        const checked = isEnabled() ? ' checked' : '';
+        return `<div class="card border-info mb-3 duty-semi-debug-toolbar">
+            <div class="card-body py-2">
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" id="dutySemiDebugCheckbox"${checked}>
+                        <label class="form-check-label" for="dutySemiDebugCheckbox">
+                            <i class="fas fa-bug me-1"></i>Αναλυτικό debug (ημιαργίες)
+                        </label>
+                    </div>
+                    <button type="button" class="btn btn-outline-info btn-sm" id="dutySemiDebugViewBtn">
+                        <i class="fas fa-list me-1"></i>Προβολή log
+                    </button>
+                    <span class="text-muted small">Αντικαταστάτης την ημέρα απουσίας + πού ανατίθεται ο απόντας (return-from-missing). Βήμα 3.</span>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    function wireToolbar() {
+        const cb = document.getElementById('dutySemiDebugCheckbox');
+        const btn = document.getElementById('dutySemiDebugViewBtn');
+        if (cb) {
+            cb.checked = isEnabled();
+            cb.onchange = () => {
+                setEnabled(cb.checked);
+                if (cb.checked) clear();
+            };
+        }
+        if (btn) btn.onclick = () => renderPanel();
+    }
+
+    window.dutySemiDebug = {
+        isEnabled,
+        setEnabled,
+        clear,
+        startSlot,
+        logStep,
+        recordCandidateScan,
+        endSlot,
+        recordAbsentPlacement,
+        noteMissedSemiForAbsent,
+        refreshAbsentReplacementsFromPreview,
+        finalizeMissedSemiAbsences,
+        findPlanForPerson,
+        scanAlternateSemiDates,
+        reasonLabels,
+        REASON_LABELS,
+        renderPanel,
+        getDebugToolbarHtml,
+        wireToolbar
     };
 })();
