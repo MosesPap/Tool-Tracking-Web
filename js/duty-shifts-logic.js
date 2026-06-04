@@ -516,7 +516,7 @@
                 return typeof normalizeSkipReasonText === 'function' ? normalizeSkipReasonText(reason?.reason || '') : reason?.reason || '';
             }
             const m = reason.meta;
-            if (m?.returnFromMissing && (m.insertedByShift || m.fromDeferred)) {
+            if (m?.returnFromMissing) {
                 const rawReturn = String(reason.reason || '').trim();
                 if (rawReturn) {
                     return typeof normalizeSkipReasonText === 'function'
@@ -6283,8 +6283,9 @@
                         const prevMonthEndKey = formatDateKey(prevMonthEnd);
                         const periodEndsInPrevMonth = (pEnd) => pEnd >= prevMonthStartKey && pEnd <= prevMonthEndKey;
 
+                        const usedReturnFromMissingTargets = new Set(); // "dateKey:groupNum" already used by return-from-missing in this run
+
                         // Process deferred return-from-missing: assign 3 normal days after return in current calculated month.
-                        // If the person was already assigned (backward/forward) in a previous month for this same missing period, skip – don't re-assign in this month; they'll get their turn again in normal rotation.
                         const deferredList = calculationSteps.deferredReturnFromMissing || [];
                         calculationSteps.deferredReturnFromMissing = deferredList.filter((entry) => {
                             if (entry.returnKey < calcStartKey || entry.returnKey > calcEndKey) return true;
@@ -6321,11 +6322,11 @@
                             if (!thirdNormalKey) return true;
                             let targetKey = findFirstMatchingTrackOnOrAfter(sortedNormal, thirdNormalKey, track);
                             const tryDeferred = (candidateKey) => {
-                                if (!candidateKey) return false;
-                                if (!canAssignPersonToNormalDay(candidateKey, personName, groupNum, updatedAssignments, globalNormalRotationPosition, simulatedSpecialAssignments, simulatedWeekendAssignments, simulatedSemiAssignments, { allowConsecutiveConflicts: true })) return false;
-                                const groupPeople = ((typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.normal || []);
-                                const chainOk = canShiftInsertFromDate(sortedNormal, candidateKey, groupNum, personName, groupPeople, updatedAssignments, globalNormalRotationPosition, simulatedSpecialAssignments, simulatedWeekendAssignments, simulatedSemiAssignments);
-                                return chainOk.ok;
+                                if (!candidateKey || candidateKey > calcEndKey) return false;
+                                if (usedReturnFromMissingTargets.has(`${candidateKey}:${groupNum}`)) return false;
+                                const d = dateKeyToDate(candidateKey);
+                                if (isPersonMissingOnDate(personName, groupNum, d, 'normal')) return false;
+                                return true;
                             };
                             while (targetKey) {
                                 if (targetKey > calcEndKey) break;
@@ -6334,9 +6335,15 @@
                                 targetKey = nextThreshold ? findFirstMatchingTrackOnOrAfter(sortedNormal, nextThreshold, track) : null;
                             }
                             if (!targetKey) return true;
-                            const groupPeopleFinal = ((typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.normal || []);
-                            const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
+                            const ins = applyReturnFromMissingNormalAtTarget(
+                                targetKey,
+                                groupNum,
+                                personName,
+                                updatedAssignments,
+                                baselineNormalByDate
+                            );
                             if (!ins.ok) return true;
+                            usedReturnFromMissingTargets.add(`${targetKey}:${groupNum}`);
                             try {
                                 for (const dk of sortedNormal) {
                                     if (dk < returnKey) continue;
@@ -6344,6 +6351,7 @@
                                     const curAssigned = updatedAssignments?.[dk]?.[groupNum] || null;
                                     if (!curAssigned || normName(curAssigned) !== normName(personName)) continue;
                                     const dateObj = dateKeyToDate(dk);
+                                    const groupPeopleFinal = ((typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.normal || []);
                                     const idxP = indexOfPersonInList(groupPeopleFinal, personName);
                                     const replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleFinal, idxP, groupNum, dateObj) : null;
                                     if (!replacement) continue;
@@ -6351,20 +6359,19 @@
                                     storeAssignmentReason(dk, groupNum, replacement, 'shift', '', personName, null, { returnFromMissing: true, clearedEarlyReturnAssignment: true, targetKey, missingEnd: pEndKey });
                                 }
                             } catch (_) {}
-                            storeAssignmentReason(targetKey, groupNum, personName, 'skip', `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`, ins.originalAtTarget || null, null, { returnFromMissing: true, insertedByShift: true, missingEnd: pEndKey, fromDeferred: true });
-                            try {
-                                const chain = Array.isArray(ins.changes) ? ins.changes : [];
-                                for (const ch of chain) {
-                                    if (!ch || !ch.dateKey || ch.dateKey === targetKey) continue;
-                                    const newP = ch.newPerson;
-                                    if (!newP) continue;
-                                    storeAssignmentReason(ch.dateKey, groupNum, newP, 'shift', '', ch.prevPerson || null, null, { returnFromMissing: true, shiftedByReturnFromMissing: true, anchorDateKey: targetKey, missingEnd: pEndKey });
-                                }
-                            } catch (_) {}
+                            storeAssignmentReason(
+                                targetKey,
+                                groupNum,
+                                personName,
+                                'skip',
+                                `Επέστρεψε από απουσία και επανεντάχθηκε στις καθημερινές μετά από 3 καθημερινές ημέρες (λογική ${track === 1 ? 'Δευτέρα/Τετάρτη' : 'Τρίτη/Πέμπτη'}).`,
+                                ins.baselineDisplaced || null,
+                                null,
+                                { returnFromMissing: true, missingEnd: pEndKey, fromDeferred: true, removedBaselinePerson: ins.baselineDisplaced || null }
+                            );
                             return false; // remove from deferred
                         });
 
-                        const usedReturnFromMissingTargets = new Set(); // "dateKey:groupNum" already used by a previous return-from-missing in this run
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
                             const g = groups?.[groupNum];
                             const missingMap = g?.missingPeriods || {};
@@ -6597,9 +6604,14 @@
                                         continue;
                                     }
 
-                                    // Apply shift insertion (follow rotation): everyone moves to the next normal day.
-                                    const groupPeopleFinal = ((typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.normal || []);
-                                    const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
+                                    // Ημέρα-στόχος: μόνο ο επανερχόμενος — ο baseline της ημέρας αφαιρείται εντελώς (χωρίς αλυσίδα shift).
+                                    const ins = applyReturnFromMissingNormalAtTarget(
+                                        targetKey,
+                                        groupNum,
+                                        personName,
+                                        updatedAssignments,
+                                        baselineNormalByDate
+                                    );
                                     if (!ins.ok) {
                                         if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
                                             dutyNormalDebug.recordReturnFromMissingPlan({
@@ -6612,8 +6624,8 @@
                                                 track,
                                                 targetKey,
                                                 status: 'shift-failed',
-                                                reasonCode: 'RETURN_SHIFT_FAILED',
-                                                message: 'Η αλυσίδα shift δεν εφαρμόστηκε'
+                                                reasonCode: 'RETURN_PLACEMENT_FAILED',
+                                                message: 'Δεν εφαρμόστηκε η τοποθέτηση στην ημέρα-στόχο'
                                             });
                                         }
                                         continue;
@@ -6630,7 +6642,7 @@
                                             targetKey,
                                             status: 'applied',
                                             reasonCode: 'RETURN_APPLIED',
-                                            message: `Επανένταξη ${personName} → ${targetKey} (track ${track === 1 ? 'Δε/Τε' : 'Τρ/Πε'})`,
+                                            message: `Επανένταξη ${personName} → ${targetKey} (αφαιρέθηκε baseline ${ins.baselineDisplaced || '—'})`,
                                             replacementOnMissedDate: updatedAssignments[firstMissedKey]?.[groupNum] || null
                                         });
                                     }
@@ -6676,7 +6688,7 @@
                                         typeof buildReturnFromMissingPlacementUnifiedMessage === 'function'
                                             ? buildReturnFromMissingPlacementUnifiedMessage({
                                                   returningPersonName: personName,
-                                                  displacedPersonName: ins.originalAtTarget || null,
+                                                  displacedPersonName: ins.baselineDisplaced || null,
                                                   placementDateKey: targetKey,
                                                   baselineDateKey: firstMissedKey,
                                                   missingStartKey: pStartKey,
@@ -6690,41 +6702,21 @@
                                         personName,
                                         'skip',
                                         assignmentReasonText,
-                                        ins.originalAtTarget || null,
+                                        ins.baselineDisplaced || null,
                                         null,
                                         {
                                             returnFromMissing: true,
-                                            insertedByShift: true,
                                             missingEnd: pEndKey,
                                             missingStart: pStartKey,
                                             baselineDateKey: firstMissedKey,
                                             reasonOfMissing,
-                                            isBackwardAssignment
+                                            isBackwardAssignment,
+                                            removedBaselinePerson: ins.baselineDisplaced || null
                                         }
                                     );
-
-                                    // IMPORTANT: Do NOT underline / do NOT treat as swap the people that got pushed forward.
-                                    // We store a lightweight 'shift' marker so the calendar does NOT fall back to "baseline mismatch => underline".
-                                    // This stays silent in UI (see showDayDetails adjustments).
-                                    try {
-                                        const chain = Array.isArray(ins.changes) ? ins.changes : [];
-                                        for (const ch of chain) {
-                                            if (!ch || !ch.dateKey) continue;
-                                            if (ch.dateKey === targetKey) continue; // only underline the returning person
-                                            const newP = ch.newPerson;
-                                            if (!newP) continue;
-                                            storeAssignmentReason(
-                                                ch.dateKey,
-                                                groupNum,
-                                                newP,
-                                                'shift',
-                                                '',
-                                                ch.prevPerson || null,
-                                                null,
-                                                { returnFromMissing: true, shiftedByReturnFromMissing: true, anchorDateKey: targetKey, missingEnd: pEndKey }
-                                            );
-                                        }
-                                    } catch (_) {}
+                                    if (calculationSteps.tempNormalBaselineDisplay?.[targetKey]) {
+                                        calculationSteps.tempNormalBaselineDisplay[targetKey][groupNum] = personName;
+                                    }
                                 }
                             }
                         }
@@ -7579,7 +7571,7 @@
                             : 'Αλλαγή');
 
                     // When replacement is due to missing person (not disabled), show backward or forward assignment
-                    const isMissingReinsertion = reasonObj?.meta?.returnFromMissing && reasonObj?.meta?.insertedByShift;
+                    const isMissingReinsertion = reasonObj?.meta?.returnFromMissing;
                     if (isMissingReinsertion && reasonObj.meta && 'isBackwardAssignment' in reasonObj.meta) {
                         briefReason += reasonObj.meta.isBackwardAssignment === true
                             ? ' (Προσαρμογή: προς τα πίσω)'
@@ -11414,14 +11406,43 @@
             return { targetKey, isBackwardAssignment, track, returnKey, phase };
         }
         /**
+         * Ημέρα-στόχος return-from-missing: μόνο ο επανερχόμενος — αφαιρείται εντελώς ο baseline (και τυχόν προηγ. ανατεθειμένος) από το κελί.
+         */
+        function applyReturnFromMissingNormalAtTarget(dateKey, groupNum, returningPerson, assignmentsByDate, baselineByDate) {
+            if (!dateKey || !Number.isFinite(groupNum) || groupNum < 1 || !returningPerson) {
+                return { ok: false, baselineDisplaced: null, prevAssigned: null };
+            }
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const retNorm = norm(returningPerson);
+            let baselineDisplaced = baselineByDate?.[dateKey]?.[groupNum] || null;
+            if (!baselineDisplaced && typeof getRotationBaselineAssignmentForType === 'function') {
+                baselineDisplaced = parseAssignedPersonForGroupFromAssignment(
+                    getRotationBaselineAssignmentForType('normal', dateKey),
+                    groupNum
+                );
+            }
+            const prevAssigned = assignmentsByDate?.[dateKey]?.[groupNum] || null;
+            if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
+            assignmentsByDate[dateKey][groupNum] = returningPerson;
+            const clearOther = (pn) => {
+                if (!pn || norm(pn) === retNorm) return;
+                if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
+                    clearAssignmentReasonForPersonOnDate(dateKey, groupNum, pn);
+                }
+            };
+            clearOther(prevAssigned);
+            clearOther(baselineDisplaced);
+            return { ok: true, baselineDisplaced, prevAssigned };
+        }
+        /**
          * Preview Βήμα 4: τοποθετεί απόντα σε άλλη καθημερινή (return-from-missing), όπως ημιαργίες/ΣΚ.
-         * Πλήρης αλυσίδα shift τρέχει στο «Επόμενο» (runNormalSwapLogic).
          */
         function applyNormalReturnFromMissingPreview(ctx) {
             const {
                 sortedNormal,
                 pureBaselineByDate,
                 normalAssignments,
+                normalRotationPersons,
                 startDate,
                 endDate
             } = ctx || {};
@@ -11645,14 +11666,23 @@
                             : g?.normal || [];
                     const personInList = groupPeople.find((p) => norm(p) === norm(designated.personName));
                     if (!personInList || isPersonMissingOnDate(personInList, groupNum, date, 'normal')) continue;
-                    if (!normalAssignments[dateKey]) normalAssignments[dateKey] = {};
-                    const displaced = normalAssignments[dateKey][groupNum] || getBaselinePerson(dateKey, groupNum);
-                    normalAssignments[dateKey][groupNum] = personInList;
+                    const placed = applyReturnFromMissingNormalAtTarget(
+                        dateKey,
+                        groupNum,
+                        personInList,
+                        normalAssignments,
+                        pureBaselineByDate
+                    );
+                    const baselineDisplaced = placed.baselineDisplaced || getBaselinePerson(dateKey, groupNum);
+                    if (normalRotationPersons) {
+                        if (!normalRotationPersons[dateKey]) normalRotationPersons[dateKey] = {};
+                        normalRotationPersons[dateKey][groupNum] = personInList;
+                    }
                     const reasonText =
                         typeof buildReturnFromMissingPlacementUnifiedMessage === 'function'
                             ? buildReturnFromMissingPlacementUnifiedMessage({
                                   returningPersonName: designated.personName,
-                                  displacedPersonName: displaced,
+                                  displacedPersonName: baselineDisplaced,
                                   placementDateKey: dateKey,
                                   baselineDateKey: designated.firstMissedKey,
                                   missingStartKey: designated.pStartKey,
@@ -11660,12 +11690,13 @@
                                   reasonOfMissing: designated.reasonOfMissing
                               })
                             : `Επανένταξη καθημερινής (${designated.missingRangeStr})`;
-                    storeAssignmentReason(dateKey, groupNum, personInList, 'skip', reasonText, displaced, null, {
+                    storeAssignmentReason(dateKey, groupNum, personInList, 'skip', reasonText, baselineDisplaced, null, {
                         returnFromMissing: true,
                         missingEnd: designated.pEndKey,
                         missingStart: designated.pStartKey,
                         baselineDateKey: designated.firstMissedKey,
-                        previewOnly: true
+                        previewOnly: true,
+                        removedBaselinePerson: baselineDisplaced
                     });
                 }
             }
@@ -13203,6 +13234,7 @@
                     sortedNormal,
                     pureBaselineByDate: pureNormalRotationByDate,
                     normalAssignments,
+                    normalRotationPersons,
                     startDate,
                     endDate
                 });
