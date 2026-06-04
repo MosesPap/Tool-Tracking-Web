@@ -1285,7 +1285,8 @@
         RETURN_NO_MISSED_NORMAL: 'Δεν βρέθηκε καθημερινή (baseline) στην περίοδο απουσίας',
         RETURN_NO_SLOT: 'Δεν βρέθηκε ελεύθερη καθημερινή για επανένταξη',
         RETURN_DEFERRED: 'Αναβλήθηκε για επόμενο μήνα υπολογισμού',
-        RETURN_APPLIED: 'Επανένταξη μετά από 3 καθημερινές (track Δε/Τε ή Τρ/Πε)',
+        RETURN_APPLIED: 'Επανένταξη (forward ή backward)',
+        RETURN_BACKWARD: 'Επανένταξη πριν την έναρξη απουσίας (ίδιο track)',
         RETURN_NEVER_PLANNED: 'Απουσία σε καθημερινή χωρίς return-from-missing'
     };
 

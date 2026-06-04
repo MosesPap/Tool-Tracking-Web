@@ -6403,10 +6403,16 @@
                                                 baselineNormalByDate?.[dk]?.[groupNum] ||
                                                 parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
                                                 null;
-                                            if (baselinePerson && normName(baselinePerson) === normName(personName)) {
-                                                firstMissedKey = dk;
-                                                break;
+                                            if (!baselinePerson || normName(baselinePerson) !== normName(personName)) continue;
+                                            const dMiss = dateKeyToDate(dk);
+                                            if (
+                                                typeof isPersonMissingOnDate === 'function' &&
+                                                !isPersonMissingOnDate(personName, groupNum, dMiss, 'normal')
+                                            ) {
+                                                continue;
                                             }
+                                            firstMissedKey = dk;
+                                            break;
                                         }
                                     }
                                     // Return day is end+1
@@ -11293,6 +11299,121 @@
             }
         }
         /**
+         * Επιλογή ημέρας return-from-missing (καθημερινές): 1) μετά επιστροφή (+3 καθημ.), 2) πριν έναρξη απουσίας, 3) fallback track.
+         * Ίδια σειρά με runNormalSwapLogic.
+         */
+        function resolveNormalReturnFromMissingTargetKey(opts) {
+            const {
+                sortedNormal,
+                personName,
+                groupNum,
+                pStartKey,
+                pEndKey,
+                firstMissedKey,
+                calcStartKey,
+                calcEndKey,
+                isTargetSlotUsable
+            } = opts || {};
+            if (!firstMissedKey || !sortedNormal?.length) {
+                return { targetKey: null, isBackwardAssignment: false, track: null, returnKey: null, phase: null };
+            }
+            const track = (() => {
+                const dow = new Date(firstMissedKey + 'T00:00:00').getDay();
+                if (dow === 1 || dow === 3) return 1;
+                if (dow === 2 || dow === 4) return 2;
+                return null;
+            })();
+            if (!track) return { targetKey: null, isBackwardAssignment: false, track: null, returnKey: null, phase: null };
+            const addDays = (dk, days) => {
+                if (!dk || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
+                const d = new Date(dk + 'T00:00:00');
+                if (isNaN(d.getTime())) return null;
+                d.setDate(d.getDate() + (days || 0));
+                return formatDateKey(d);
+            };
+            const trackMatches = (dk, tr) => {
+                const dow = new Date(dk + 'T00:00:00').getDay();
+                return tr === 1 ? dow === 1 || dow === 3 : dow === 2 || dow === 4;
+            };
+            const findThirdNormalOnOrAfter = (thresholdKey) => {
+                let count = 0;
+                for (const dk of sortedNormal) {
+                    if (dk < thresholdKey) continue;
+                    count++;
+                    if (count === 3) return dk;
+                }
+                return null;
+            };
+            const findFirstMatchingTrackOnOrAfter = (thresholdKey, tr) => {
+                for (const dk of sortedNormal) {
+                    if (dk < thresholdKey) continue;
+                    if (trackMatches(dk, tr)) return dk;
+                }
+                return null;
+            };
+            const returnKey = addDays(pEndKey, 1);
+            const returnInCalcMonth = returnKey && returnKey >= calcStartKey && returnKey <= calcEndKey;
+            let targetKey = null;
+            let phase = null;
+            let isBackwardAssignment = false;
+
+            if (returnInCalcMonth) {
+                const thirdNormalKey = findThirdNormalOnOrAfter(returnKey);
+                if (thirdNormalKey) {
+                    let tk = findFirstMatchingTrackOnOrAfter(thirdNormalKey, track);
+                    while (tk) {
+                        if (tk > calcEndKey) {
+                            tk = null;
+                            break;
+                        }
+                        if (typeof isTargetSlotUsable === 'function' && isTargetSlotUsable(tk)) {
+                            targetKey = tk;
+                            phase = 'forward';
+                            break;
+                        }
+                        const next = addDays(tk, 1);
+                        tk = next ? findFirstMatchingTrackOnOrAfter(next, track) : null;
+                    }
+                }
+            }
+
+            if (!targetKey) {
+                const dayBeforeStartKey = addDays(pStartKey, -1);
+                const backwardCandidates = [];
+                for (const dk of sortedNormal) {
+                    if (dk < calcStartKey || dk > calcEndKey) continue;
+                    if (dk >= pStartKey) continue;
+                    if (dk === dayBeforeStartKey) continue;
+                    if (!trackMatches(dk, track)) continue;
+                    backwardCandidates.push(dk);
+                }
+                backwardCandidates.sort((a, b) => (b > a ? 1 : a > b ? -1 : 0));
+                for (const candidate of backwardCandidates) {
+                    if (typeof isTargetSlotUsable === 'function' && isTargetSlotUsable(candidate)) {
+                        targetKey = candidate;
+                        isBackwardAssignment = true;
+                        phase = 'backward';
+                        break;
+                    }
+                }
+            }
+
+            if (!targetKey) {
+                for (const dk of sortedNormal) {
+                    if (dk < calcStartKey || dk > calcEndKey) continue;
+                    if (!trackMatches(dk, track)) continue;
+                    if (typeof isTargetSlotUsable === 'function' && isTargetSlotUsable(dk)) {
+                        targetKey = dk;
+                        isBackwardAssignment = true;
+                        phase = 'backward-fallback';
+                        break;
+                    }
+                }
+            }
+
+            return { targetKey, isBackwardAssignment, track, returnKey, phase };
+        }
+        /**
          * Preview Βήμα 4: τοποθετεί απόντα σε άλλη καθημερινή (return-from-missing), όπως ημιαργίες/ΣΚ.
          * Πλήρης αλυσίδα shift τρέχει στο «Επόμενο» (runNormalSwapLogic).
          */
@@ -11317,31 +11438,6 @@
             };
             const maxKey = (a, b) => (!a ? b : !b ? a : a > b ? a : b);
             const minKey = (a, b) => (!a ? b : !b ? a : a < b ? a : b);
-            const getTrackFromDow = (dow) => {
-                if (dow === 1 || dow === 3) return 1;
-                if (dow === 2 || dow === 4) return 2;
-                return null;
-            };
-            const trackMatches = (dk, track) => {
-                const dow = new Date(dk + 'T00:00:00').getDay();
-                return track === 1 ? dow === 1 || dow === 3 : dow === 2 || dow === 4;
-            };
-            const findThirdNormalOnOrAfter = (thresholdKey) => {
-                let count = 0;
-                for (const dk of sortedNormal) {
-                    if (dk < thresholdKey) continue;
-                    count++;
-                    if (count === 3) return dk;
-                }
-                return null;
-            };
-            const findFirstMatchingTrackOnOrAfter = (thresholdKey, track) => {
-                for (const dk of sortedNormal) {
-                    if (dk < thresholdKey) continue;
-                    if (trackMatches(dk, track)) return dk;
-                }
-                return null;
-            };
             const getBaselinePerson = (dk, groupNum) => {
                 let base = pureBaselineByDate?.[dk]?.[groupNum] || null;
                 if (!base && typeof getRotationBaselineAssignmentForType === 'function') {
@@ -11388,7 +11484,12 @@
                         if (!pStartKey || !pEndKey) continue;
                         const endInRange = pEndKey >= calcStartKey && pEndKey <= calcEndKey;
                         const endInPrevMonth = periodEndsInPrevMonth(pEndKey);
-                        if (!endInRange && !endInPrevMonth) continue;
+                        const returnKeyForRange = addDays(pEndKey, 1);
+                        const returnInRange =
+                            returnKeyForRange && returnKeyForRange >= calcStartKey && returnKeyForRange <= calcEndKey;
+                        const periodOverlapsRange = pStartKey <= calcEndKey && pEndKey >= calcStartKey;
+                        const acceptPeriod = endInRange || endInPrevMonth || returnInRange || periodOverlapsRange;
+                        if (!acceptPeriod) continue;
                         const dedupeKey = `${groupNum}|${norm(personName)}|${pEndKey}`;
                         if (processed.has(dedupeKey)) continue;
                         processed.add(dedupeKey);
@@ -11401,13 +11502,19 @@
                                 if (dk < overlapStartKey) continue;
                                 if (dk > overlapEndKey) break;
                                 const base = getBaselinePerson(dk, groupNum);
-                                if (base && norm(base) === norm(personName)) {
-                                    firstMissedKey = dk;
-                                    break;
+                                if (!base || norm(base) !== norm(personName)) continue;
+                                const dMiss = new Date(dk + 'T00:00:00');
+                                if (
+                                    typeof isPersonMissingOnDate === 'function' &&
+                                    !isPersonMissingOnDate(personName, groupNum, dMiss, 'normal')
+                                ) {
+                                    continue;
                                 }
+                                firstMissedKey = dk;
+                                break;
                             }
                         }
-                        const returnKey = addDays(pEndKey, 1);
+                        const returnKey = returnKeyForRange;
                         if (!firstMissedKey) {
                             if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
                                 dutyNormalDebug.recordReturnFromMissingPlan({
@@ -11420,57 +11527,49 @@
                                     targetKey: null,
                                     status: returnKey > calcEndKey ? 'deferred' : 'no-missed',
                                     reasonCode: 'RETURN_NO_MISSED_NORMAL',
-                                    message: `Δεν βρέθηκε baseline καθημερινή ${overlapStartKey || '—'}–${overlapEndKey || '—'}`
+                                    message: `Δεν βρέθηκε καθημερινή (baseline+απουσία) ${overlapStartKey || '—'}–${overlapEndKey || '—'}`
                                 });
                             }
-                            continue;
-                        }
-                        const track = getTrackFromDow(new Date(firstMissedKey + 'T00:00:00').getDay());
-                        if (!track) continue;
-                        const thirdNormalKey = findThirdNormalOnOrAfter(returnKey);
-                        if (!thirdNormalKey) {
-                            if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
-                                dutyNormalDebug.recordReturnFromMissingPlan({
+                            if (returnKey > calcEndKey) {
+                                calculationSteps.deferredReturnFromMissing = calculationSteps.deferredReturnFromMissing || [];
+                                calculationSteps.deferredReturnFromMissing.push({
                                     personName,
                                     groupNum,
-                                    pStartKey,
                                     pEndKey,
-                                    returnKey,
-                                    firstMissedKey,
-                                    targetKey: null,
-                                    status: 'no-slot',
-                                    reasonCode: 'RETURN_NO_SLOT',
-                                    message: 'Δεν βρέθηκαν 3 καθημερινές μετά την επιστροφή'
+                                    returnKey
                                 });
                             }
                             continue;
                         }
-                        let targetKey = findFirstMatchingTrackOnOrAfter(thirdNormalKey, track);
-                        while (targetKey) {
-                            if (targetKey > calcEndKey) {
-                                targetKey = null;
-                                break;
-                            }
-                            if (targetKey < calcStartKey) {
-                                const next = addDays(targetKey, 1);
-                                targetKey = next ? findFirstMatchingTrackOnOrAfter(next, track) : null;
-                                continue;
-                            }
-                            if (targets[targetKey]?.[groupNum]) {
-                                const next = addDays(targetKey, 1);
-                                targetKey = next ? findFirstMatchingTrackOnOrAfter(next, track) : null;
-                                continue;
-                            }
-                            const dTarget = new Date(targetKey + 'T00:00:00');
-                            if (isPersonMissingOnDate(personName, groupNum, dTarget, 'normal')) {
-                                const next = addDays(targetKey, 1);
-                                targetKey = next ? findFirstMatchingTrackOnOrAfter(next, track) : null;
-                                continue;
-                            }
-                            break;
-                        }
+
+                        const isTargetSlotUsable = (candidateKey) => {
+                            if (!candidateKey || candidateKey < calcStartKey || candidateKey > calcEndKey) return false;
+                            if (targets[candidateKey]?.[groupNum]) return false;
+                            const d = new Date(candidateKey + 'T00:00:00');
+                            if (isPersonMissingOnDate(personName, groupNum, d, 'normal')) return false;
+                            return true;
+                        };
+
+                        const resolved = resolveNormalReturnFromMissingTargetKey({
+                            sortedNormal,
+                            personName,
+                            groupNum,
+                            pStartKey,
+                            pEndKey,
+                            firstMissedKey,
+                            calcStartKey,
+                            calcEndKey,
+                            isTargetSlotUsable
+                        });
+                        const targetKey = resolved.targetKey;
+                        const track = resolved.track;
+
                         if (!targetKey) {
                             if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                const phaseHint =
+                                    resolved.phase === 'forward'
+                                        ? 'Απέτυχε forward (μετά 3 καθημ.)'
+                                        : 'Απέτυχαν forward, backward και fallback στον μήνα';
                                 dutyNormalDebug.recordReturnFromMissingPlan({
                                     personName,
                                     groupNum,
@@ -11480,15 +11579,31 @@
                                     firstMissedKey,
                                     track,
                                     targetKey: null,
-                                    status: 'no-slot',
-                                    reasonCode: 'RETURN_NO_SLOT',
-                                    message: 'Δεν βρέθηκε ελεύθερη καθημερινή στο track'
+                                    status: returnKey > calcEndKey ? 'deferred' : 'no-slot',
+                                    reasonCode: returnKey > calcEndKey ? 'RETURN_DEFERRED' : 'RETURN_NO_SLOT',
+                                    message: phaseHint
+                                });
+                            }
+                            if (returnKey > calcEndKey) {
+                                calculationSteps.deferredReturnFromMissing = calculationSteps.deferredReturnFromMissing || [];
+                                calculationSteps.deferredReturnFromMissing.push({
+                                    personName,
+                                    groupNum,
+                                    pEndKey,
+                                    returnKey,
+                                    track
                                 });
                             }
                             continue;
                         }
                         if (!targets[targetKey]) targets[targetKey] = {};
                         const reasonOfMissing = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
+                        const phaseLabel =
+                            resolved.phase === 'forward'
+                                ? 'μετά επιστροφή'
+                                : resolved.phase === 'backward'
+                                  ? 'πριν έναρξη απουσίας'
+                                  : 'fallback track';
                         targets[targetKey][groupNum] = {
                             personName,
                             firstMissedKey,
@@ -11496,7 +11611,8 @@
                             pEndKey,
                             missingRangeStr: `${formatDDMMYYYY(pStartKey)} - ${formatDDMMYYYY(pEndKey)}`,
                             reasonOfMissing,
-                            track
+                            track,
+                            isBackwardAssignment: resolved.isBackwardAssignment
                         };
                         if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
                             dutyNormalDebug.recordReturnFromMissingPlan({
@@ -11510,7 +11626,7 @@
                                 targetKey,
                                 status: 'planned',
                                 reasonCode: 'RETURN_APPLIED',
-                                message: `Προγραμματίστηκε ${targetKey} (preview)`
+                                message: `Προγραμματίστηκε ${targetKey} (${phaseLabel}, preview)`
                             });
                         }
                     }
