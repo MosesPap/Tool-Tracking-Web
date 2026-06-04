@@ -1087,9 +1087,33 @@
          * Mirrors baseline semi seeding (first semi of month + getLastRotationPersonForDate; Feb-2026 / April groups 1–2 hacks).
          * Used when an absence window lies in a month before calculationSteps.startDate — getRotationPosition() is invalid there.
          */
+        /** Επόμενος στη σειρά ημιαργίας: απενεργοποιημένοι δεν καταλαμβάνουν ημέρα (ίδιο με build Step 3). */
+        function resolveSemiRotationAssigneeForDate(groupPeople, posState, groupNum, dateKey) {
+            const rotLen = groupPeople.length;
+            if (!rotLen) return { person: null, nextPos: 0 };
+            let pos = posState % rotLen;
+            const date = new Date(dateKey + 'T00:00:00');
+            let guard = 0;
+            while (
+                guard++ <= rotLen + 2 &&
+                groupPeople[pos] &&
+                typeof isPersonDisabledForDuty === 'function' &&
+                isPersonDisabledForDuty(groupPeople[pos], groupNum, 'semi', date)
+            ) {
+                pos = (pos + 1) % rotLen;
+            }
+            const person = groupPeople[pos] || null;
+            return { person, nextPos: person != null ? (pos + 1) % rotLen : (posState + 1) % rotLen };
+        }
+
         function buildExpectedSemiPersonMapForCalendarMonth(year, monthIndex0, groupNum) {
             const out = {};
-            const groupPeople = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum] || {}).semi || [];
+            const groupPeople =
+                (typeof getSortedGroupListForRotation === 'function'
+                    ? getSortedGroupListForRotation(groupNum, 'semi')
+                    : null) ||
+                (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum] || {}).semi ||
+                [];
             if (!Array.isArray(groupPeople) || groupPeople.length === 0) return out;
             const rotLen = groupPeople.length;
             const semiDays = [];
@@ -1127,17 +1151,21 @@
                     const manual = findManualAlternateReplacementForGroup(dk, groupNum);
                     if (manual) {
                         const bIdx = groupPeople.findIndex(p => normMap(p) === normMap(manual.baselinePerson));
+                        const base =
+                            manual.baselinePerson ||
+                            (bIdx >= 0 ? groupPeople[bIdx] : null);
+                        if (base) out[dk] = base;
                         if (bIdx >= 0) posState = (bIdx + 1) % rotLen;
                         continue;
                     }
                 }
-                let pos = posState % rotLen;
-                if (deferSkip && groupPeople[pos] && normMap(groupPeople[pos]) === normMap(deferSkip)) {
-                    pos = (pos + 1) % rotLen;
+                if (deferSkip && groupPeople[posState % rotLen] && normMap(groupPeople[posState % rotLen]) === normMap(deferSkip)) {
+                    posState = (posState + 1) % rotLen;
                     deferSkip = null;
                 }
-                out[dk] = groupPeople[pos];
-                posState = (pos + 1) % rotLen;
+                const pick = resolveSemiRotationAssigneeForDate(groupPeople, posState, groupNum, dk);
+                if (pick.person) out[dk] = pick.person;
+                posState = pick.nextPos;
             }
             return out;
         }
@@ -9710,6 +9738,12 @@
                             const hadMissedSemi = missedSemiKeys.length > 0;
                             if (!hadMissedSemi) {
                                 if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                                    const baselineHint = [];
+                                    for (const dk of sortedSemi) {
+                                        if (dk < scanStartKey || dk > scanEndKey) continue;
+                                        const b = baselineSemiByDate[dk]?.[groupNum];
+                                        if (b) baselineHint.push(`${dk}→${b}`);
+                                    }
                                     dutySemiDebug.recordAbsentPlacement({
                                         groupNum,
                                         personName,
@@ -9717,7 +9751,11 @@
                                         missingRangeStr: formatDDMMYYYYSemiRun(pStartKey) + ' - ' + formatDDMMYYYYSemiRun(pEndKey),
                                         status: 'skipped',
                                         reasonCode: 'RETURN_NO_MISSED_SEMI',
-                                        message: `Δεν βρέθηκε ημιαργία (baseline σειράς) στην περίοδο ${pStartKey} - ${pEndKey}.`
+                                        message:
+                                            `Δεν βρέθηκε ημιαργία (baseline σειράς) στην περίοδο ${pStartKey} - ${pEndKey}.` +
+                                            (baselineHint.length
+                                                ? ` Σειρά preview: ${baselineHint.join(', ')}.`
+                                                : ' (κανένα ημιαργία στο scan window).')
                                     });
                                 }
                                 continue;
