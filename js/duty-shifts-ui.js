@@ -4458,11 +4458,7 @@
                                                     isPersonDisabledForDuty(baselinePerson, g, dayTypeCategory)) ||
                                                 (typeof isPersonMissingOnDate === 'function' &&
                                                     isPersonMissingOnDate(baselinePerson, g, dateObjCal, dayTypeCategory));
-                                            if (dayTypeCategory === 'weekend' || dayTypeCategory === 'semi') {
-                                                underline = !!isBaselineDisabledOrMissing;
-                                            } else {
-                                                underline = !isBaselineDisabledOrMissing;
-                                            }
+                                            underline = !!isBaselineDisabledOrMissing;
                                         }
                                     }
                                 }

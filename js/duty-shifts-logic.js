@@ -707,12 +707,13 @@
             return merged;
         }
         function refreshDutyReplacementReasons(assignmentsByDate, baselineByDate, dutyCategory) {
+            const cat = dutyCategory || 'weekend';
             const dateKeys = new Set([
                 ...Object.keys(assignmentsByDate || {}),
-                ...Object.keys(baselineByDate || {}),
-                ...Object.keys(assignmentReasons || {})
+                ...Object.keys(baselineByDate || {})
             ]);
             for (const dateKey of [...dateKeys].sort()) {
+                if (!dateKeyMatchesDutyCategory(dateKey, cat)) continue;
                 const dateObj = new Date(dateKey + 'T00:00:00');
                 if (isNaN(dateObj.getTime())) continue;
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -748,6 +749,12 @@
             return finalizeDutyTypePreview(semiAssignments, rotationBaseline, previewSlotBaseline, 'semi', {
                 tempBaselineKey: 'tempSemiBaselineAssignments',
                 rotationBaselineStore: typeof rotationBaselineSemiAssignments !== 'undefined' ? rotationBaselineSemiAssignments : null
+            });
+        }
+        function finalizeNormalPreview(normalAssignments, rotationBaseline, previewSlotBaseline) {
+            return finalizeDutyTypePreview(normalAssignments, rotationBaseline, previewSlotBaseline, 'normal', {
+                tempBaselineKey: 'tempNormalBaselineAssignments',
+                rotationBaselineStore: typeof rotationBaselineNormalAssignments !== 'undefined' ? rotationBaselineNormalAssignments : null
             });
         }
         function normalizeSkipReasonText(reasonText) {
@@ -884,6 +891,12 @@
             if (dayType === 'weekend-holiday') return 'weekend';
             if (dayType === 'semi-normal-day') return 'semi';
             return 'normal';
+        }
+        /** Μόνο ημερομηνίες του ίδιου τύπου υπηρεσίας — αποφεύγει overwrite λόγων άλλων βημάτων. */
+        function dateKeyMatchesDutyCategory(dateKey, dutyCategory) {
+            const d = new Date(String(dateKey || '') + 'T00:00:00');
+            if (isNaN(d.getTime())) return false;
+            return getDayTypeCategoryFromDayType(getDayType(d)) === dutyCategory;
         }
         function findTransferMatchesBackwards(personA, fromGroup, toGroup, startYear, startMonth, maxMonthsBack = 24) {
             const matches = { special: [], weekend: [], semi: [], normal: [] };
@@ -6442,6 +6455,20 @@
 
                                     // If no baseline duty in calculated month during missing period, defer to next month if return is next month.
                                     if (!firstMissedKey) {
+                                        if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                            dutyNormalDebug.recordReturnFromMissingPlan({
+                                                personName,
+                                                groupNum,
+                                                pStartKey,
+                                                pEndKey,
+                                                returnKey,
+                                                firstMissedKey: null,
+                                                targetKey: null,
+                                                status: returnKey > calcEndKey ? 'deferred' : 'no-missed',
+                                                reasonCode: 'RETURN_NO_MISSED_NORMAL',
+                                                message: `Δεν βρέθηκε καθημερινή (baseline) για ${personName} στο ${overlapStartKey || '—'}–${overlapEndKey || '—'}`
+                                            });
+                                        }
                                         if (returnKey > calcEndKey) {
                                             calculationSteps.deferredReturnFromMissing = calculationSteps.deferredReturnFromMissing || [];
                                             calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pEndKey, returnKey });
@@ -6573,12 +6600,62 @@
                                         calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pEndKey, returnKey, track });
                                     }
 
-                                    if (!targetKey) continue;
+                                    if (!targetKey) {
+                                        if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                            dutyNormalDebug.recordReturnFromMissingPlan({
+                                                personName,
+                                                groupNum,
+                                                pStartKey,
+                                                pEndKey,
+                                                returnKey,
+                                                firstMissedKey,
+                                                track,
+                                                targetKey: null,
+                                                status: returnKey > calcEndKey ? 'deferred' : 'no-slot',
+                                                reasonCode: returnKey > calcEndKey ? 'RETURN_DEFERRED' : 'RETURN_NO_SLOT',
+                                                message: 'Δεν βρέθηκε ελεύθερη καθημερινή για επανένταξη'
+                                            });
+                                        }
+                                        continue;
+                                    }
 
                                     // Apply shift insertion (follow rotation): everyone moves to the next normal day.
                                     const groupPeopleFinal = ((typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.normal || []);
                                     const ins = applyShiftInsertFromDate(sortedNormal, targetKey, groupNum, personName, groupPeopleFinal, updatedAssignments);
-                                    if (!ins.ok) continue;
+                                    if (!ins.ok) {
+                                        if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                            dutyNormalDebug.recordReturnFromMissingPlan({
+                                                personName,
+                                                groupNum,
+                                                pStartKey,
+                                                pEndKey,
+                                                returnKey,
+                                                firstMissedKey,
+                                                track,
+                                                targetKey,
+                                                status: 'shift-failed',
+                                                reasonCode: 'RETURN_SHIFT_FAILED',
+                                                message: 'Η αλυσίδα shift δεν εφαρμόστηκε'
+                                            });
+                                        }
+                                        continue;
+                                    }
+                                    if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                        dutyNormalDebug.recordReturnFromMissingPlan({
+                                            personName,
+                                            groupNum,
+                                            pStartKey,
+                                            pEndKey,
+                                            returnKey,
+                                            firstMissedKey,
+                                            track,
+                                            targetKey,
+                                            status: 'applied',
+                                            reasonCode: 'RETURN_APPLIED',
+                                            message: `Επανένταξη ${personName} → ${targetKey} (track ${track === 1 ? 'Δε/Τε' : 'Τρ/Πε'})`,
+                                            replacementOnMissedDate: updatedAssignments[firstMissedKey]?.[groupNum] || null
+                                        });
+                                    }
                                     usedReturnFromMissingTargets.add(`${targetKey}:${groupNum}`);
 
                                     // IMPORTANT: Enforce "after 3 normal days" by preventing any earlier normal-day assignment
@@ -7383,6 +7460,13 @@
                 });
                 
                 console.log('[STEP 4] Swap logic completed. Swapped people:', allSwappedPeople.length, '(Preview:', previewSwaps.length, ', Actual:', swappedPeople.length, ')');
+                refreshDutyReplacementReasons(
+                    calculationSteps.finalNormalAssignments || updatedAssignments,
+                    calculationSteps.tempNormalBaselineAssignments || {},
+                    'normal'
+                );
+                if (typeof renderCalendar === 'function') renderCalendar();
+
                 console.log('[STEP 4] Calling showNormalSwapResults()');
                 
                 // Show popup with results (will save when OK is pressed). Pass finalNormalAssignments so table and save use same frozen data.
@@ -7400,7 +7484,7 @@
             const normalDays = dayTypeLists.normal || [];
             const sortedNormal = [...normalDays].sort();
             if (sortedNormal.length === 0) return;
-            const baseline = calculationSteps.tempNormalBaselineAssignments || {};
+            const baseline = calculationSteps.tempNormalBaselineDisplay || calculationSteps.tempNormalBaselineAssignments || {};
             const startDate = calculationSteps.startDate;
             for (let normalIndex = 0; normalIndex < sortedNormal.length; normalIndex++) {
                 const dateKey = sortedNormal[normalIndex];
@@ -7437,7 +7521,7 @@
             console.log('[STEP 4] showNormalSwapResults() called with', swappedPeople.length, 'swapped people');
             let message = '';
             
-            const baselineByDate = calculationSteps.tempNormalBaselineAssignments || {};
+            const baselineByDate = calculationSteps.tempNormalBaselineDisplay || calculationSteps.tempNormalBaselineAssignments || {};
             const computedByDate = updatedAssignments || {};
             const rows = [];
             const dateKeys = Object.keys(computedByDate).sort();
@@ -11387,14 +11471,14 @@
                             // This ensures disabled people are ALWAYS skipped, even when rotation cycles back to them.
                             let wasReplaced = false;
                             let replacementIndex = null;
-                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
+                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
                                 // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
                                 let foundReplacement = false;
                                 for (let offset = 1; offset <= rotationDays; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
-                                    if (!isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
+                                    if (!isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
                                         assignedPerson = candidate;
                                         replacementIndex = idx;
                                         wasReplaced = true;
@@ -11470,8 +11554,17 @@
             });
             
             const periodLabel = buildPeriodLabel(startDate, endDate);
+            if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                dutyNormalDebug.clear();
+            }
             let html = '<div class="step-content">';
             html += `<h6 class="mb-3"><i class="fas fa-calendar-alt me-2"></i>Περίοδος: ${periodLabel}</h6>`;
+            if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.getDebugToolbarHtml) {
+                html += dutyNormalDebug.getDebugToolbarHtml();
+            } else {
+                html +=
+                    '<div class="alert alert-warning small mb-3"><i class="fas fa-exclamation-triangle me-1"></i>Δεν φορτώθηκε το <code>duty-shifts-debug.js</code> — κάντε hard refresh (Ctrl+F5).</div>';
+            }
             
             // Sort normal days by date (define at function scope so it's accessible for swap logic)
             const sortedNormal = [...normalDays].sort();
@@ -11483,6 +11576,8 @@
             // This is separate from assigned persons (who may have been swapped)
             // Declare at function level so it's accessible throughout the function
             const normalRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
+            /** Καθαρή σειρά πριν αντικαταστάσεις/skip — για return-from-missing και sync λόγων. */
+            const pureNormalRotationByDate = {}; // dateKey -> { groupNum -> originalRotationPerson }
             
             if (normalDays.length === 0) {
                 html += '<div class="alert alert-info">';
@@ -11587,8 +11682,7 @@
                                         if (dk < checkStartKey) continue;
                                         if (dk > checkEndKey) break;
                                         
-                                        const baselinePerson = 
-                                            baselineNormalByDate?.[dk]?.[groupNum] ||
+                                        const baselinePerson =
                                             parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
                                             null;
                                         
@@ -11889,6 +11983,10 @@
                             // IMPORTANT: Track the rotation person (who SHOULD be assigned according to rotation)
                             // This is the person BEFORE any swap/cross-month/missing logic
                             const originalRotationPerson = groupPeople[rotationPosition];
+                            if (originalRotationPerson) {
+                                if (!pureNormalRotationByDate[dateKey]) pureNormalRotationByDate[dateKey] = {};
+                                pureNormalRotationByDate[dateKey][groupNum] = originalRotationPerson;
+                            }
                             
                             // Check if this person was already replaced in baselineNormalByDate (due to missing/disabled pre-processing)
                             let rotationPerson = originalRotationPerson;
@@ -11989,12 +12087,21 @@
                                         dateKey,
                                         groupNum,
                                         assignedPerson,
-                                        rotationPerson,
+                                        wasReplacedFromBaseline ? originalRotationPerson : rotationPerson,
                                         date,
                                         'normal',
                                         null,
                                         unavailableExtraNormal
                                     );
+                                    if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                        dutyNormalDebug.recordUnavailableReplacement({
+                                            dateKey,
+                                            groupNum,
+                                            replacement: assignedPerson,
+                                            skippedPerson: wasReplacedFromBaseline ? originalRotationPerson : rotationPerson,
+                                            rotationPerson: originalRotationPerson
+                                        });
+                                    }
                                     break;
                                 }
                                 if (!foundReplacement) assignedPerson = null;
@@ -12095,12 +12202,21 @@
                                         dateKey,
                                         groupNum,
                                         assignedPerson,
-                                        rotationPerson,
+                                        wasReplacedFromBaseline ? originalRotationPerson : rotationPerson,
                                         date,
                                         'normal',
                                         null,
                                         unavailableExtraNormal2
                                     );
+                                    if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                        dutyNormalDebug.recordUnavailableReplacement({
+                                            dateKey,
+                                            groupNum,
+                                            replacement: assignedPerson,
+                                            skippedPerson: wasReplacedFromBaseline ? originalRotationPerson : rotationPerson,
+                                            rotationPerson: originalRotationPerson
+                                        });
+                                    }
                                     break;
                                 }
                                 // If no replacement found after checking everyone twice (everyone disabled or already assigned), leave unassigned
@@ -12810,9 +12926,18 @@
             
             // Store normal assignments and rotation positions for saving when Next is pressed
             calculationSteps.tempNormalAssignments = normalAssignments;
-            // Store baseline assignments for comparison in results window
-            // Use normalRotationPersons (rotation person before any skips) as baseline
-            calculationSteps.tempNormalBaselineAssignments = normalRotationPersons;
+            calculationSteps.tempNormalBaselineDisplay = normalRotationPersons;
+            finalizeNormalPreview(normalAssignments, pureNormalRotationByDate, normalRotationPersons);
+            if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                dutyNormalDebug.finalizeMissedNormalAbsences({
+                    sortedNormal,
+                    pureBaselineByDate: pureNormalRotationByDate,
+                    assignmentsByDate: normalAssignments,
+                    calcStartKey: startDate ? formatDateKey(startDate) : null,
+                    calcEndKey: endDate ? formatDateKey(endDate) : null
+                });
+                dutyNormalDebug.wireToolbar();
+            }
             calculationSteps.lastNormalRotationPositions = {};
             // Use rotation continuity (manual alternate → baseline slot; swap → swapped-out) for cross-month seeding
             for (let g = 1; g <= 4; g++) {
