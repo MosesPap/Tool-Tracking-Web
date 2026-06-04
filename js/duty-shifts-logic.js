@@ -5794,83 +5794,55 @@
         }
         async function saveStep4_Normal() {
             console.log('[STEP 4] saveStep4_Normal() called');
+            let saveError = null;
             try {
-                if (!window.db) {
-                    console.log('[STEP 4] Firebase not ready, skipping Step 4 save');
-                    return;
-                }
-                
-                const db = window.db || firebase.firestore();
+                const db = window.db || (typeof firebase !== 'undefined' ? firebase.firestore() : null);
                 const user = window.auth?.currentUser;
-                
-                if (!user) {
-                    console.log('[STEP 4] User not authenticated, skipping Step 4 save');
-                    return;
-                }
-                
-                const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
-                const tempNormalBaselineAssignments = calculationSteps.tempNormalBaselineAssignments || {};
-                const lastNormalRotationPositionsByMonth = calculationSteps.lastNormalRotationPositionsByMonth || {};
-                
-                console.log('[STEP 4] tempNormalAssignments keys:', Object.keys(tempNormalAssignments).length);
-                console.log('[STEP 4] lastNormalRotationPositionsByMonth:', lastNormalRotationPositionsByMonth);
-                
-                // Save normal rotation baseline (pure rotation order) to Firestore
-                if (Object.keys(tempNormalBaselineAssignments).length > 0) {
-                    const formattedBaseline = formatGroupAssignmentsToStringMap(tempNormalBaselineAssignments);
-                    const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
-                    await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineNormalAssignments', organizedBaseline);
-                    Object.assign(rotationBaselineNormalAssignments, formattedBaseline);
-                }
-                
-                // NOTE: legacy dutyShifts/assignments is deprecated; we no longer save pre-logic snapshots there.
-                if (Object.keys(tempNormalAssignments).length > 0) {
-                    // Convert to format: dateKey -> "Person (Ομάδα 1), Person (Ομάδα 2), ..."
-                    const formattedAssignments = {};
-                    for (const dateKey in tempNormalAssignments) {
-                        const groups = tempNormalAssignments[dateKey];
-                        const parts = [];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            if (groups[groupNum]) {
-                                parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
+                if (!db || !user) {
+                    console.log('[STEP 4] Firebase/auth unavailable — skip Firestore save only');
+                } else {
+                    const tempNormalAssignments = calculationSteps.tempNormalAssignments || {};
+                    const tempNormalBaselineAssignments = calculationSteps.tempNormalBaselineAssignments || {};
+                    const lastNormalRotationPositionsByMonth = calculationSteps.lastNormalRotationPositionsByMonth || {};
+
+                    console.log('[STEP 4] tempNormalAssignments keys:', Object.keys(tempNormalAssignments).length);
+
+                    if (Object.keys(tempNormalBaselineAssignments).length > 0) {
+                        const formattedBaseline = formatGroupAssignmentsToStringMap(tempNormalBaselineAssignments);
+                        const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
+                        await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineNormalAssignments', organizedBaseline);
+                        Object.assign(rotationBaselineNormalAssignments, formattedBaseline);
+                    }
+
+                    if (Object.keys(lastNormalRotationPositionsByMonth).length > 0) {
+                        for (const monthKey in lastNormalRotationPositionsByMonth) {
+                            const groupsForMonth = lastNormalRotationPositionsByMonth[monthKey] || {};
+                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                                if (groupsForMonth[groupNum] !== undefined) {
+                                    setLastRotationPersonForMonth('normal', monthKey, groupNum, groupsForMonth[groupNum]);
+                                }
                             }
                         }
-                        if (parts.length > 0) {
-                            formattedAssignments[dateKey] = parts.join(', ');
-                        }
+                        const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                        await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                            ...sanitizedPositions,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedBy: user.uid
+                        });
                     }
-                    
-                    // No Firestore write here (legacy assignments doc deprecated).
                 }
-                
-                // Save last rotation positions for normal days (per month)
-                if (Object.keys(lastNormalRotationPositionsByMonth).length > 0) {
-                    for (const monthKey in lastNormalRotationPositionsByMonth) {
-                        const groupsForMonth = lastNormalRotationPositionsByMonth[monthKey] || {};
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            if (groupsForMonth[groupNum] !== undefined) {
-                                setLastRotationPersonForMonth('normal', monthKey, groupNum, groupsForMonth[groupNum]);
-                            }
-                        }
-                    }
-                    
-                    // Save to Firestore
-                    const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
-                    await db.collection('dutyShifts').doc('lastRotationPositions').set({
-                        ...sanitizedPositions,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
-                    console.log('Saved Step 4 last rotation positions for normal days (per month) to Firestore:', lastNormalRotationPositionsByMonth);
-                }
-                
-                // Now run swap logic and show popup
+            } catch (error) {
+                saveError = error;
+                console.error('[STEP 4] Error saving Step 4 (Normal) to Firestore:', error);
+            }
+            try {
                 console.log('[STEP 4] Calling runNormalSwapLogic()');
                 await runNormalSwapLogic();
                 console.log('[STEP 4] runNormalSwapLogic() completed');
             } catch (error) {
-                console.error('[STEP 4] Error saving Step 4 (Normal) to Firestore:', error);
+                console.error('[STEP 4] Error in runNormalSwapLogic():', error);
             }
+            if (saveError) throw saveError;
         }
         async function runNormalSwapLogic() {
             console.log('[STEP 4] runNormalSwapLogic() called');
@@ -11320,6 +11292,268 @@
             } catch (e) {}
             }
         }
+        /**
+         * Preview Βήμα 4: τοποθετεί απόντα σε άλλη καθημερινή (return-from-missing), όπως ημιαργίες/ΣΚ.
+         * Πλήρης αλυσίδα shift τρέχει στο «Επόμενο» (runNormalSwapLogic).
+         */
+        function applyNormalReturnFromMissingPreview(ctx) {
+            const {
+                sortedNormal,
+                pureBaselineByDate,
+                normalAssignments,
+                startDate,
+                endDate
+            } = ctx || {};
+            if (!Array.isArray(sortedNormal) || sortedNormal.length === 0 || !startDate || !endDate) return;
+            const calcStartKey = formatDateKey(startDate);
+            const calcEndKey = formatDateKey(endDate);
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const addDays = (dk, days) => {
+                if (!dk || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
+                const d = new Date(dk + 'T00:00:00');
+                if (isNaN(d.getTime())) return null;
+                d.setDate(d.getDate() + (days || 0));
+                return formatDateKey(d);
+            };
+            const maxKey = (a, b) => (!a ? b : !b ? a : a > b ? a : b);
+            const minKey = (a, b) => (!a ? b : !b ? a : a < b ? a : b);
+            const getTrackFromDow = (dow) => {
+                if (dow === 1 || dow === 3) return 1;
+                if (dow === 2 || dow === 4) return 2;
+                return null;
+            };
+            const trackMatches = (dk, track) => {
+                const dow = new Date(dk + 'T00:00:00').getDay();
+                return track === 1 ? dow === 1 || dow === 3 : dow === 2 || dow === 4;
+            };
+            const findThirdNormalOnOrAfter = (thresholdKey) => {
+                let count = 0;
+                for (const dk of sortedNormal) {
+                    if (dk < thresholdKey) continue;
+                    count++;
+                    if (count === 3) return dk;
+                }
+                return null;
+            };
+            const findFirstMatchingTrackOnOrAfter = (thresholdKey, track) => {
+                for (const dk of sortedNormal) {
+                    if (dk < thresholdKey) continue;
+                    if (trackMatches(dk, track)) return dk;
+                }
+                return null;
+            };
+            const getBaselinePerson = (dk, groupNum) => {
+                let base = pureBaselineByDate?.[dk]?.[groupNum] || null;
+                if (!base && typeof getRotationBaselineAssignmentForType === 'function') {
+                    base = parseAssignedPersonForGroupFromAssignment(
+                        getRotationBaselineAssignmentForType('normal', dk),
+                        groupNum
+                    );
+                }
+                return base;
+            };
+            const formatDDMMYYYY = (dk) => {
+                const d = new Date(dk + 'T00:00:00');
+                return (
+                    (d.getDate() < 10 ? '0' : '') +
+                    d.getDate() +
+                    '/' +
+                    ((d.getMonth() + 1) < 10 ? '0' : '') +
+                    (d.getMonth() + 1) +
+                    '/' +
+                    d.getFullYear()
+                );
+            };
+            const prevMonthStart = new Date(startDate.getFullYear(), startDate.getMonth() - 1, 1);
+            const prevMonthEnd = new Date(startDate.getFullYear(), startDate.getMonth(), 0);
+            const prevMonthStartKey = formatDateKey(prevMonthStart);
+            const prevMonthEndKey = formatDateKey(prevMonthEnd);
+            const periodEndsInPrevMonth = (pEnd) => pEnd >= prevMonthStartKey && pEnd <= prevMonthEndKey;
+            const targets = {};
+            const processed = new Set();
+
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const g = typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum];
+                const missingMap = g?.missingPeriods || {};
+                const groupPeople =
+                    typeof getSortedGroupListForRotation === 'function'
+                        ? getSortedGroupListForRotation(groupNum, 'normal')
+                        : g?.normal || [];
+                for (const personName of Object.keys(missingMap || {})) {
+                    if (!groupPeople.some((p) => norm(p) === norm(personName))) continue;
+                    const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
+                    for (const period of periods) {
+                        const pStartKey = inputValueToDateKey(period?.start);
+                        const pEndKey = inputValueToDateKey(period?.end);
+                        if (!pStartKey || !pEndKey) continue;
+                        const endInRange = pEndKey >= calcStartKey && pEndKey <= calcEndKey;
+                        const endInPrevMonth = periodEndsInPrevMonth(pEndKey);
+                        if (!endInRange && !endInPrevMonth) continue;
+                        const dedupeKey = `${groupNum}|${norm(personName)}|${pEndKey}`;
+                        if (processed.has(dedupeKey)) continue;
+                        processed.add(dedupeKey);
+
+                        const overlapStartKey = maxKey(pStartKey, calcStartKey);
+                        const overlapEndKey = minKey(pEndKey, calcEndKey);
+                        let firstMissedKey = null;
+                        if (overlapStartKey && overlapEndKey && overlapStartKey <= overlapEndKey) {
+                            for (const dk of sortedNormal) {
+                                if (dk < overlapStartKey) continue;
+                                if (dk > overlapEndKey) break;
+                                const base = getBaselinePerson(dk, groupNum);
+                                if (base && norm(base) === norm(personName)) {
+                                    firstMissedKey = dk;
+                                    break;
+                                }
+                            }
+                        }
+                        const returnKey = addDays(pEndKey, 1);
+                        if (!firstMissedKey) {
+                            if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                dutyNormalDebug.recordReturnFromMissingPlan({
+                                    personName,
+                                    groupNum,
+                                    pStartKey,
+                                    pEndKey,
+                                    returnKey,
+                                    firstMissedKey: null,
+                                    targetKey: null,
+                                    status: returnKey > calcEndKey ? 'deferred' : 'no-missed',
+                                    reasonCode: 'RETURN_NO_MISSED_NORMAL',
+                                    message: `Δεν βρέθηκε baseline καθημερινή ${overlapStartKey || '—'}–${overlapEndKey || '—'}`
+                                });
+                            }
+                            continue;
+                        }
+                        const track = getTrackFromDow(new Date(firstMissedKey + 'T00:00:00').getDay());
+                        if (!track) continue;
+                        const thirdNormalKey = findThirdNormalOnOrAfter(returnKey);
+                        if (!thirdNormalKey) {
+                            if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                dutyNormalDebug.recordReturnFromMissingPlan({
+                                    personName,
+                                    groupNum,
+                                    pStartKey,
+                                    pEndKey,
+                                    returnKey,
+                                    firstMissedKey,
+                                    targetKey: null,
+                                    status: 'no-slot',
+                                    reasonCode: 'RETURN_NO_SLOT',
+                                    message: 'Δεν βρέθηκαν 3 καθημερινές μετά την επιστροφή'
+                                });
+                            }
+                            continue;
+                        }
+                        let targetKey = findFirstMatchingTrackOnOrAfter(thirdNormalKey, track);
+                        while (targetKey) {
+                            if (targetKey > calcEndKey) {
+                                targetKey = null;
+                                break;
+                            }
+                            if (targetKey < calcStartKey) {
+                                const next = addDays(targetKey, 1);
+                                targetKey = next ? findFirstMatchingTrackOnOrAfter(next, track) : null;
+                                continue;
+                            }
+                            if (targets[targetKey]?.[groupNum]) {
+                                const next = addDays(targetKey, 1);
+                                targetKey = next ? findFirstMatchingTrackOnOrAfter(next, track) : null;
+                                continue;
+                            }
+                            const dTarget = new Date(targetKey + 'T00:00:00');
+                            if (isPersonMissingOnDate(personName, groupNum, dTarget, 'normal')) {
+                                const next = addDays(targetKey, 1);
+                                targetKey = next ? findFirstMatchingTrackOnOrAfter(next, track) : null;
+                                continue;
+                            }
+                            break;
+                        }
+                        if (!targetKey) {
+                            if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                dutyNormalDebug.recordReturnFromMissingPlan({
+                                    personName,
+                                    groupNum,
+                                    pStartKey,
+                                    pEndKey,
+                                    returnKey,
+                                    firstMissedKey,
+                                    track,
+                                    targetKey: null,
+                                    status: 'no-slot',
+                                    reasonCode: 'RETURN_NO_SLOT',
+                                    message: 'Δεν βρέθηκε ελεύθερη καθημερινή στο track'
+                                });
+                            }
+                            continue;
+                        }
+                        if (!targets[targetKey]) targets[targetKey] = {};
+                        const reasonOfMissing = (period?.reason || '').trim() || '(δεν αναφέρεται λόγος)';
+                        targets[targetKey][groupNum] = {
+                            personName,
+                            firstMissedKey,
+                            pStartKey,
+                            pEndKey,
+                            missingRangeStr: `${formatDDMMYYYY(pStartKey)} - ${formatDDMMYYYY(pEndKey)}`,
+                            reasonOfMissing,
+                            track
+                        };
+                        if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                            dutyNormalDebug.recordReturnFromMissingPlan({
+                                personName,
+                                groupNum,
+                                pStartKey,
+                                pEndKey,
+                                returnKey,
+                                firstMissedKey,
+                                track,
+                                targetKey,
+                                status: 'planned',
+                                reasonCode: 'RETURN_APPLIED',
+                                message: `Προγραμματίστηκε ${targetKey} (preview)`
+                            });
+                        }
+                    }
+                }
+            }
+
+            for (const dateKey of sortedNormal) {
+                const date = new Date(dateKey + 'T00:00:00');
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const designated = targets[dateKey]?.[groupNum];
+                    if (!designated) continue;
+                    const g = typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum];
+                    const groupPeople =
+                        typeof getSortedGroupListForRotation === 'function'
+                            ? getSortedGroupListForRotation(groupNum, 'normal')
+                            : g?.normal || [];
+                    const personInList = groupPeople.find((p) => norm(p) === norm(designated.personName));
+                    if (!personInList || isPersonMissingOnDate(personInList, groupNum, date, 'normal')) continue;
+                    if (!normalAssignments[dateKey]) normalAssignments[dateKey] = {};
+                    const displaced = normalAssignments[dateKey][groupNum] || getBaselinePerson(dateKey, groupNum);
+                    normalAssignments[dateKey][groupNum] = personInList;
+                    const reasonText =
+                        typeof buildReturnFromMissingPlacementUnifiedMessage === 'function'
+                            ? buildReturnFromMissingPlacementUnifiedMessage({
+                                  returningPersonName: designated.personName,
+                                  displacedPersonName: displaced,
+                                  placementDateKey: dateKey,
+                                  baselineDateKey: designated.firstMissedKey,
+                                  missingStartKey: designated.pStartKey,
+                                  missingEndKey: designated.pEndKey,
+                                  reasonOfMissing: designated.reasonOfMissing
+                              })
+                            : `Επανένταξη καθημερινής (${designated.missingRangeStr})`;
+                    storeAssignmentReason(dateKey, groupNum, personInList, 'skip', reasonText, displaced, null, {
+                        returnFromMissing: true,
+                        missingEnd: designated.pEndKey,
+                        missingStart: designated.pStartKey,
+                        baselineDateKey: designated.firstMissedKey,
+                        previewOnly: true
+                    });
+                }
+            }
+        }
         function renderStep4_Normal() {
             const stepContent = document.getElementById('stepContent');
             const startDate = calculationSteps.startDate;
@@ -11739,6 +11973,15 @@
                                                     dateObj,
                                                     'normal'
                                                 );
+                                                if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                                    dutyNormalDebug.recordUnavailableReplacement({
+                                                        dateKey: dk,
+                                                        groupNum,
+                                                        replacement: replacementPerson,
+                                                        skippedPerson: personName,
+                                                        rotationPerson: personName
+                                                    });
+                                                }
                                                 
                                                 console.log(`[MISSING REPLACEMENT] Replaced ${personName} with ${replacementPerson} on ${dk} (Group ${groupNum}) - missing period`);
                                             }
@@ -12838,8 +13081,21 @@
                 }
                 });
             }
+
+            if (normalDays.length > 0 && sortedNormal.length > 0) {
+                applyNormalReturnFromMissingPreview({
+                    sortedNormal,
+                    pureBaselineByDate: pureNormalRotationByDate,
+                    normalAssignments,
+                    startDate,
+                    endDate
+                });
+            }
             
             stepContent.innerHTML = html;
+            if (typeof dutyNormalDebug !== 'undefined') {
+                dutyNormalDebug.wireToolbar();
+            }
             
             // Now regenerate HTML with swapped assignments (only if there are normal days)
             if (normalDays.length > 0 && sortedNormal) {
@@ -12936,7 +13192,6 @@
                     calcStartKey: startDate ? formatDateKey(startDate) : null,
                     calcEndKey: endDate ? formatDateKey(endDate) : null
                 });
-                dutyNormalDebug.wireToolbar();
             }
             calculationSteps.lastNormalRotationPositions = {};
             // Use rotation continuity (manual alternate → baseline slot; swap → swapped-out) for cross-month seeding
