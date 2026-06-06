@@ -1457,19 +1457,6 @@
             font-weight: 600;
         }
 
-        #dayDetailsModal .duty-change-reason-input {
-            border-radius: 10px;
-            border: 2px solid #dee2e6;
-            font-size: 0.95rem;
-            resize: vertical;
-            min-height: 4.5rem;
-        }
-
-        #dayDetailsModal .duty-change-reason-input:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.2);
-        }
-
         /* Keep swap detail border colors (set inline per swap pair) */
         #dayDetailsModal .swap-detail-card {
             border: 2px solid rgba(0, 0, 0, 0.15);
@@ -2915,6 +2902,25 @@
                         <i class="fas fa-save me-1"></i>Αποθήκευση
                     </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual assignment confirmation (above day details modal) -->
+    <div class="modal fade" id="manualAssignConfirmModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" style="z-index: 1075;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-user-edit me-2"></i>Χειροκίνητη Ανάθεση</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="manualAssignConfirmBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="manualAssignConfirmOkBtn">
+                        <i class="fas fa-check me-1"></i>Επιβεβαίωση
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
                 </div>
             </div>
         </div>

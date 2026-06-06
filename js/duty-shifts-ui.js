@@ -1963,10 +1963,8 @@
             dutyAssignments[dateKey] = newAssignmentStr;
 
             const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            const reason =
-                options.customReason != null && String(options.customReason).trim()
-                    ? String(options.customReason).trim()
-                    : `Αντικατάσταση Επιλαχών: Παραλείφθηκε ο/η ${skippedPerson} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${replacement}.`;
+            const defaultReason = `Αντικατάσταση Επιλαχών: Παραλείφθηκε ο/η ${skippedPerson} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${replacement}.`;
+            const reason = String(options.customReason || '').trim() || defaultReason;
             if (typeof storeAssignmentReason === 'function') {
                 storeAssignmentReason(dateKey, groupNum, replacement, 'skip', reason, skippedPerson, null, { manualAlternateReplacement: true });
             }
@@ -6699,18 +6697,9 @@
                 } else {
                     reasonDisplayText = derivedReasonText;
                 }
-                const initialReasonText = String(reasonDisplayText || '').trim();
-                const reasonFieldBlock = editBlocked
-                    ? (initialReasonText
-                        ? `<div class="mt-1 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${escapeHtml(initialReasonText)}</div>`
-                        : '')
-                    : `<div class="mt-2 duty-reason-edit-block">
-                        <label class="form-label small mb-1"><i class="fas fa-comment-alt me-1"></i><strong>Λόγος αλλαγής</strong></label>
-                        <textarea class="form-control duty-change-reason-input" rows="3"
-                            data-group="${person.group}"
-                            data-day-category="${dayTypeCategory}"
-                            placeholder="Προσθέστε ή τροποποιήστε τον λόγο (αμοιβαία αλλαγή, αντικατάσταση επιλαχών, χειροκίνητη ανάθεση)...">${escapeHtml(initialReasonText)}</textarea>
-                    </div>`;
+                const reasonDisplay = (reason || derivedReasonText)
+                    ? `<div class="mt-1 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${escapeHtml(reasonDisplayText)}</div>`
+                    : '';
                 
                 const curNameNorm = person.name ? normPick(person.name) : '';
                 const escapeOpt = (s) => String(s || '')
@@ -6798,7 +6787,7 @@
                             ${peopleOptions}
                         </select>
                         ${changeTypeBlock}
-                        ${reasonFieldBlock}
+                        ${reasonDisplay}
                         ${isCritical ? '<small class="text-muted d-block mt-2"><i class="fas fa-info-circle me-1"></i>Αυτή η ανάθεση προέρχεται από τις ημερομηνίες τελευταίας υπηρεσίας και δεν μπορεί να αλλάξει.</small>' : ''}
                     </div>
                 `;
@@ -6962,6 +6951,85 @@
             return `Ο/η «${conflict.person}» στην ${atLabel}${near}`;
         }
 
+        function getExistingAssignmentReasonText(dayKey, groupNum, personName) {
+            if (typeof getAssignmentReason !== 'function' || !dayKey || !personName) return '';
+            const r = getAssignmentReason(dayKey, groupNum, personName);
+            return r?.reason ? String(r.reason).trim() : '';
+        }
+
+        function buildDutyChangeReasonSectionHtml(defaultReason, inputId) {
+            const val = escapeHtml(String(defaultReason || '').trim());
+            const id = escapeHtml(inputId || 'dutyChangeReasonInput');
+            return `
+                <div class="mt-3 pt-3 border-top">
+                    <label class="form-label mb-1" for="${id}"><strong>Λόγος</strong></label>
+                    <textarea class="form-control duty-change-reason-input" id="${id}" rows="4" placeholder="Προσθέστε ή τροποποιήστε τον λόγο της αλλαγής…">${val}</textarea>
+                    <small class="text-muted d-block mt-1">Ο λόγος εμφανίζεται στο ημερολόγιο και στις αναφορές.</small>
+                </div>
+            `;
+        }
+
+        function readDutyChangeReasonFromModal(inputId, fallbackReason) {
+            const el = document.getElementById(inputId);
+            const text = el ? String(el.value || '').trim() : '';
+            return text || String(fallbackReason || '').trim();
+        }
+
+        function buildDefaultMutualSwapReasonHere(plan) {
+            if (!plan?.dayKey || !plan?.otherKey) return '';
+            const dateObjA = new Date(plan.dayKey + 'T00:00:00');
+            const dateObjB = new Date(plan.otherKey + 'T00:00:00');
+            const strA = dateObjA.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const strB = dateObjB.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            return `Αμοιβαία αλλαγή: ο/η ${plan.newPerson} ανατέθηκε εδώ (${getGreekDayName(dateObjA)} ${strA}) αντί του/της ${plan.prevPerson}· ο/η ${plan.prevPerson} μεταφέρθηκε στην ${getGreekDayName(dateObjB)} ${strB}.`;
+        }
+
+        function buildDefaultMutualSwapReasonThere(plan) {
+            if (!plan?.dayKey || !plan?.otherKey) return '';
+            const dateObjA = new Date(plan.dayKey + 'T00:00:00');
+            const dateObjB = new Date(plan.otherKey + 'T00:00:00');
+            const strA = dateObjA.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const strB = dateObjB.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            return `Αμοιβαία αλλαγή: ο/η ${plan.prevPerson} ανατέθηκε εδώ (${getGreekDayName(dateObjB)} ${strB}) αντί του/της ${plan.newPerson}· ο/η ${plan.newPerson} μεταφέρθηκε στην ${getGreekDayName(dateObjA)} ${strA}.`;
+        }
+
+        function buildDefaultAlternateReplacementReason(dayKey, groupNum, skippedPerson, replacement, dateObj) {
+            const existing = getExistingAssignmentReasonText(dayKey, groupNum, replacement);
+            if (existing) return existing;
+            if (!dateObj || isNaN(dateObj.getTime())) return '';
+            if (
+                typeof buildUnavailableReplacementUnifiedMessage === 'function' &&
+                typeof isPersonMissingOnDate === 'function' &&
+                isPersonMissingOnDate(skippedPerson, groupNum, dateObj, typeof getDutyCategoryForDateKey === 'function' ? getDutyCategoryForDateKey(dayKey) : 'normal')
+            ) {
+                const cat = typeof getDutyCategoryForDateKey === 'function' ? getDutyCategoryForDateKey(dayKey) : 'normal';
+                const unified = buildUnavailableReplacementUnifiedMessage({
+                    replacementPersonName: replacement,
+                    skippedPersonName: skippedPerson,
+                    dateObj,
+                    groupNum,
+                    dutyCategory: cat
+                });
+                if (unified) return unified;
+            }
+            const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            return `Αντικατάσταση Επιλαχών: Παραλείφθηκε ο/η ${skippedPerson} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${replacement}.`;
+        }
+
+        function buildDefaultManualAssignReason(plan) {
+            const existing = getExistingAssignmentReasonText(plan.dayKey, plan.groupNum, plan.newPerson);
+            if (existing) return existing;
+            if (typeof buildManualDutyAssignmentPreserveBaselineMessage === 'function') {
+                return buildManualDutyAssignmentPreserveBaselineMessage({
+                    assignedPersonName: plan.newPerson,
+                    displacedPersonName: plan.prevPerson,
+                    baselinePersonName: plan.baselinePerson,
+                    dateObj: plan.dateObj
+                });
+            }
+            return `Ο/Η ${plan.newPerson} ανατέθηκε χειροκίνητα στη θέση του/την ${plan.prevPerson}. Η βασική σειρά δεν αλλάζει.`;
+        }
+
         function buildMutualSwapConfirmHtml(plan, evaluation) {
             const dateHere = formatDutyDateLabel(plan.dayKey);
             const dateThere = plan.otherKey ? formatDutyDateLabel(plan.otherKey) : '—';
@@ -6991,16 +7059,22 @@
             return html;
         }
 
-        function showMutualSwapConfirmModal(plan, evaluation) {
+        function showMutualSwapConfirmModal(plan, evaluation, options = {}) {
             return new Promise((resolve) => {
                 const modalEl = document.getElementById('mutualSwapConfirmModal');
                 const bodyEl = document.getElementById('mutualSwapConfirmBody');
                 const okBtn = document.getElementById('mutualSwapConfirmOkBtn');
+                const defaultReason =
+                    options.defaultReason ||
+                    getExistingAssignmentReasonText(plan.dayKey, plan.groupNum, plan.newPerson) ||
+                    buildDefaultMutualSwapReasonHere(plan);
                 if (!modalEl || !bodyEl || !okBtn || typeof bootstrap === 'undefined') {
-                    resolve(true);
+                    resolve({ ok: true, reason: defaultReason, reasonThere: buildDefaultMutualSwapReasonThere(plan) });
                     return;
                 }
-                bodyEl.innerHTML = buildMutualSwapConfirmHtml(plan, evaluation);
+                bodyEl.innerHTML =
+                    buildMutualSwapConfirmHtml(plan, evaluation) +
+                    buildDutyChangeReasonSectionHtml(defaultReason, 'mutualSwapReasonInput');
                 okBtn.style.display = '';
                 okBtn.disabled = false;
                 okBtn.className = evaluation.ok ? 'btn btn-primary' : 'btn btn-warning';
@@ -7009,17 +7083,18 @@
                 const finish = (val) => {
                     if (settled) return;
                     settled = true;
-                    resolve(!!val);
+                    resolve(val);
                 };
                 const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
                 const onOk = () => {
+                    const reason = readDutyChangeReasonFromModal('mutualSwapReasonInput', defaultReason);
                     modal.hide();
-                    finish(true);
+                    finish({ ok: true, reason, reasonThere: buildDefaultMutualSwapReasonThere(plan) });
                 };
                 const onHidden = () => {
                     modalEl.removeEventListener('hidden.bs.modal', onHidden);
                     okBtn.removeEventListener('click', onOk);
-                    if (!settled) finish(false);
+                    if (!settled) finish({ ok: false, reason: '', reasonThere: '' });
                 };
                 okBtn.addEventListener('click', onOk);
                 modalEl.addEventListener('hidden.bs.modal', onHidden);
@@ -7065,8 +7140,8 @@
                 return false;
             }
             const evaluation = evaluateMutualSwapAfterPlacementConflicts(plan);
-            const confirmed = await showMutualSwapConfirmModal(plan, evaluation);
-            if (!confirmed) {
+            const confirmResult = await showMutualSwapConfirmModal(plan, evaluation);
+            if (!confirmResult?.ok) {
                 select.value = select.dataset.lastValidValue || prevPerson;
                 refreshDutyPersonSelectConflictStyle(select);
                 return false;
@@ -7074,8 +7149,9 @@
             select.dataset.mutualSwapConfirmed = '1';
             select.dataset.mutualSwapPerson = newVal;
             select.dataset.mutualSwapOtherKey = plan.otherKey;
+            select.dataset.mutualSwapReason = confirmResult.reason || '';
+            select.dataset.mutualSwapReasonThere = confirmResult.reasonThere || '';
             select.dataset.lastValidValue = newVal;
-            updateDayDetailsReasonDraft(group);
             return true;
         }
 
@@ -7132,33 +7208,99 @@
             return html;
         }
 
-        function showReplacementConfirmModal(plan) {
+        function buildManualAssignConfirmHtml(plan) {
+            const dateLabel = formatDutyDateLabel(plan.dayKey);
+            const groupLabel =
+                typeof getGroupName === 'function' ? getGroupName(plan.groupNum) : `Ομάδα ${plan.groupNum}`;
+            return `
+                <p class="mb-3">Θα πραγματοποιηθεί <strong>χειροκίνητη ανάθεση</strong> στην <strong>${escapeHtml(groupLabel)}</strong>:</p>
+                <ul class="list-group mb-3">
+                    <li class="list-group-item">
+                        <strong>${escapeHtml(dateLabel)}</strong><br>
+                        <span class="text-muted">Από:</span> ${escapeHtml(plan.prevPerson)}<br>
+                        <span class="text-muted">Σε:</span> <span class="text-primary"><strong>${escapeHtml(plan.newPerson)}</strong></span>
+                    </li>
+                </ul>
+                <div class="alert alert-info mb-0"><i class="fas fa-info-circle me-1"></i>Η βασική σειρά περιστροφής <strong>δεν αλλάζει</strong> — αλλάζει μόνο ποιος εμφανίζεται αυτή την ημέρα.</div>
+            `;
+        }
+
+        function showReplacementConfirmModal(plan, options = {}) {
             return new Promise((resolve) => {
                 const modalEl = document.getElementById('replacementConfirmModal');
                 const bodyEl = document.getElementById('replacementConfirmBody');
                 const okBtn = document.getElementById('replacementConfirmOkBtn');
+                const defaultReason =
+                    options.defaultReason ||
+                    buildDefaultAlternateReplacementReason(
+                        plan.dayKey,
+                        plan.groupNum,
+                        plan.prevPerson,
+                        plan.newPerson,
+                        plan.dateObj
+                    );
                 if (!modalEl || !bodyEl || !okBtn || typeof bootstrap === 'undefined') {
-                    resolve(true);
+                    resolve({ ok: true, reason: defaultReason });
                     return;
                 }
-                bodyEl.innerHTML = buildReplacementConfirmHtml(plan);
+                bodyEl.innerHTML =
+                    buildReplacementConfirmHtml(plan) +
+                    buildDutyChangeReasonSectionHtml(defaultReason, 'replacementReasonInput');
                 okBtn.className = plan.hasConflict ? 'btn btn-warning' : 'btn btn-primary';
                 okBtn.innerHTML = '<i class="fas fa-check me-1"></i>Επιβεβαίωση';
                 let settled = false;
                 const finish = (val) => {
                     if (settled) return;
                     settled = true;
-                    resolve(!!val);
+                    resolve(val);
                 };
                 const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
                 const onOk = () => {
+                    const reason = readDutyChangeReasonFromModal('replacementReasonInput', defaultReason);
                     modal.hide();
-                    finish(true);
+                    finish({ ok: true, reason });
                 };
                 const onHidden = () => {
                     modalEl.removeEventListener('hidden.bs.modal', onHidden);
                     okBtn.removeEventListener('click', onOk);
-                    if (!settled) finish(false);
+                    if (!settled) finish({ ok: false, reason: '' });
+                };
+                okBtn.addEventListener('click', onOk);
+                modalEl.addEventListener('hidden.bs.modal', onHidden);
+                modal.show();
+            });
+        }
+
+        function showManualAssignConfirmModal(plan, options = {}) {
+            return new Promise((resolve) => {
+                const modalEl = document.getElementById('manualAssignConfirmModal');
+                const bodyEl = document.getElementById('manualAssignConfirmBody');
+                const okBtn = document.getElementById('manualAssignConfirmOkBtn');
+                const defaultReason = options.defaultReason || buildDefaultManualAssignReason(plan);
+                if (!modalEl || !bodyEl || !okBtn || typeof bootstrap === 'undefined') {
+                    resolve({ ok: true, reason: defaultReason });
+                    return;
+                }
+                bodyEl.innerHTML =
+                    buildManualAssignConfirmHtml(plan) +
+                    buildDutyChangeReasonSectionHtml(defaultReason, 'manualAssignReasonInput');
+                okBtn.innerHTML = '<i class="fas fa-check me-1"></i>Επιβεβαίωση';
+                let settled = false;
+                const finish = (val) => {
+                    if (settled) return;
+                    settled = true;
+                    resolve(val);
+                };
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
+                const onOk = () => {
+                    const reason = readDutyChangeReasonFromModal('manualAssignReasonInput', defaultReason);
+                    modal.hide();
+                    finish({ ok: true, reason });
+                };
+                const onHidden = () => {
+                    modalEl.removeEventListener('hidden.bs.modal', onHidden);
+                    okBtn.removeEventListener('click', onOk);
+                    if (!settled) finish({ ok: false, reason: '' });
                 };
                 okBtn.addEventListener('click', onOk);
                 modalEl.addEventListener('hidden.bs.modal', onHidden);
@@ -7194,94 +7336,6 @@
                 ` Μήνας: ${monthLabel}.${neighborDetail} ` +
                 'Επιλέξτε άλλο άτομο.'
             );
-        }
-
-        function getDayModalReasonInputValue(container, groupNum) {
-            const ta = container?.querySelector(`.duty-change-reason-input[data-group="${groupNum}"]`);
-            return (ta?.value || '').trim();
-        }
-
-        function buildDefaultDayModalChangeReason({
-            mode,
-            dayKey,
-            groupNum,
-            prevPerson,
-            newPerson,
-            editDate,
-            editCat
-        }) {
-            if (!dayKey || !newPerson) return '';
-            const dateObj =
-                editDate instanceof Date && !isNaN(editDate.getTime())
-                    ? editDate
-                    : new Date(dayKey + 'T00:00:00');
-            if (isNaN(dateObj.getTime())) return '';
-            const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            const prev = String(prevPerson || '').trim();
-            const next = String(newPerson || '').trim();
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            if (norm(prev) === norm(next)) return '';
-
-            if (mode === 'mutual_swap' && prev) {
-                const dutyCat = editCat || (typeof getDutyCategoryForDateKey === 'function' ? getDutyCategoryForDateKey(dayKey) : 'normal');
-                const otherKey =
-                    typeof findOtherDateKeyForPersonInGroupDutyCategory === 'function'
-                        ? findOtherDateKeyForPersonInGroupDutyCategory(next, groupNum, dayKey, dutyCat)
-                        : null;
-                if (otherKey) {
-                    const dateObjB = new Date(otherKey + 'T00:00:00');
-                    const strB = !isNaN(dateObjB.getTime())
-                        ? dateObjB.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                        : otherKey;
-                    return `Αμοιβαία αλλαγή: ο/η ${next} ανατέθηκε εδώ (${getGreekDayName(dateObj)} ${dateStr}) αντί του/της ${prev}· ο/η ${prev} μεταφέρθηκε στην ${getGreekDayName(dateObjB)} ${strB}.`;
-                }
-            }
-            if (mode === 'manual_assign' && prev) {
-                const baselineStr =
-                    typeof getRotationBaselineAssignmentForType === 'function'
-                        ? getRotationBaselineAssignmentForType(editCat || 'normal', dayKey)
-                        : '';
-                const baselinePerson =
-                    typeof parseAssignedPersonForGroupFromAssignment === 'function'
-                        ? (parseAssignedPersonForGroupFromAssignment(baselineStr, groupNum) || '').trim()
-                        : '';
-                if (typeof buildManualDutyAssignmentPreserveBaselineMessage === 'function') {
-                    return buildManualDutyAssignmentPreserveBaselineMessage({
-                        assignedPersonName: next,
-                        displacedPersonName: prev,
-                        baselinePersonName: baselinePerson,
-                        dateObj
-                    });
-                }
-                return `Ο/Η ${next} ανατέθηκε χειροκίνητα στη θέση του/την ${prev}. Η βασική σειρά δεν αλλάζει.`;
-            }
-            if (mode === 'replacement' && prev) {
-                return `Αντικατάσταση Επιλαχών: Παραλείφθηκε ο/η ${prev} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${next}.`;
-            }
-            return '';
-        }
-
-        function updateDayDetailsReasonDraft(groupNum) {
-            const container = document.getElementById('dutyPersonsContainer');
-            const textarea = container?.querySelector(`.duty-change-reason-input[data-group="${groupNum}"]`);
-            const select = container?.querySelector(`.duty-person-select[data-group="${groupNum}"]`);
-            if (!textarea || !select || textarea.dataset.userTouched === '1') return;
-            const mode = container.querySelector(`input[name="duty-change-mode-${groupNum}"]:checked`)?.value || 'replacement';
-            const prevPerson = (select.dataset.originalName || '').trim();
-            const newPerson = (select.value || '').trim();
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            if (!newPerson || norm(prevPerson) === norm(newPerson)) return;
-            const editCat = textarea.dataset.dayCategory || 'normal';
-            const draft = buildDefaultDayModalChangeReason({
-                mode,
-                dayKey: currentEditingDayKey,
-                groupNum,
-                prevPerson,
-                newPerson,
-                editDate: currentEditingDayDate,
-                editCat
-            });
-            if (draft) textarea.value = draft;
         }
 
         function refreshDutyPersonSelectConflictStyle(select) {
@@ -7339,7 +7393,6 @@
             }
             select.dataset.lastValidValue = newVal;
             refreshDutyPersonSelectConflictStyle(select);
-            updateDayDetailsReasonDraft(group);
             return true;
         }
 
@@ -7352,11 +7405,6 @@
                 refreshDutyPersonSelectConflictStyle(select);
                 select.addEventListener('change', () => validateDutyPersonSelectOnChange(select));
             });
-            container.querySelectorAll('.duty-change-reason-input').forEach((textarea) => {
-                textarea.addEventListener('input', () => {
-                    textarea.dataset.userTouched = '1';
-                });
-            });
             container.querySelectorAll('input[name^="duty-change-mode-"]').forEach((radio) => {
                 radio.addEventListener('change', () => {
                     const m = String(radio.name || '').match(/^duty-change-mode-(\d+)$/);
@@ -7364,20 +7412,15 @@
                     const sel = container.querySelector(`.duty-person-select[data-group="${m[1]}"]`);
                     if (!sel) return;
                     sel.dataset.mutualSwapConfirmed = '0';
-                    const reasonTa = container.querySelector(`.duty-change-reason-input[data-group="${m[1]}"]`);
-                    if (reasonTa) reasonTa.dataset.userTouched = '0';
                     if (radio.value === 'mutual_swap') {
                         const newVal = sel.value.trim();
                         const prev = (sel.dataset.originalName || '').trim();
                         const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                         if (newVal && norm(newVal) !== norm(prev)) {
                             void handleMutualSwapPersonSelect(sel);
-                        } else {
-                            updateDayDetailsReasonDraft(parseInt(m[1], 10));
                         }
                     } else {
                         validateDutyPersonSelectOnChange(sel);
-                        updateDayDetailsReasonDraft(parseInt(m[1], 10));
                     }
                 });
             });
@@ -7561,6 +7604,8 @@
 
             const mutualGroupsDone = new Set(mutualSwapPlans.map((p) => p.group));
 
+            const mutualSwapReasons = new Map();
+            const mutualSwapReasonsThere = new Map();
             // Αμοιβαία αλλαγή: έλεγχος μετά την τοποθέτηση (±2 ημ.) + επιβεβαίωση popup
             for (const p of mutualSwapPlans) {
                 const plan = {
@@ -7577,39 +7622,78 @@
                     swapSelect.dataset.mutualSwapConfirmed === '1' &&
                     normPerson(swapSelect.dataset.mutualSwapPerson || '') === normPerson(p.newPerson) &&
                     String(swapSelect.dataset.mutualSwapOtherKey || '') === String(p.otherKey);
+                let reasonHere = swapSelect?.dataset.mutualSwapReason || '';
+                let reasonThere = swapSelect?.dataset.mutualSwapReasonThere || '';
                 if (!confirmed) {
-                    const ok = await showMutualSwapConfirmModal(plan, evaluation);
-                    if (!ok) return;
+                    const confirmResult = await showMutualSwapConfirmModal(plan, evaluation, {
+                        defaultReason: reasonHere || undefined
+                    });
+                    if (!confirmResult?.ok) return;
+                    reasonHere = confirmResult.reason || buildDefaultMutualSwapReasonHere(plan);
+                    reasonThere = confirmResult.reasonThere || buildDefaultMutualSwapReasonThere(plan);
                     if (swapSelect) {
                         swapSelect.dataset.mutualSwapConfirmed = '1';
                         swapSelect.dataset.mutualSwapPerson = p.newPerson;
                         swapSelect.dataset.mutualSwapOtherKey = p.otherKey;
+                        swapSelect.dataset.mutualSwapReason = reasonHere;
+                        swapSelect.dataset.mutualSwapReasonThere = reasonThere;
                     }
+                } else if (!reasonHere) {
+                    reasonHere = buildDefaultMutualSwapReasonHere(plan);
+                    reasonThere = buildDefaultMutualSwapReasonThere(plan);
                 }
+                mutualSwapReasons.set(p.group, reasonHere);
+                mutualSwapReasonsThere.set(p.group, reasonThere);
             }
 
+            const replacementReasons = new Map();
             for (const p of manualReplacementPlans) {
                 const conflict = getReplacementConsecutiveConflictInfo(dayKey, p.newVal, p.group, p.prevPerson);
-                const ok = await showReplacementConfirmModal({
+                const confirmResult = await showReplacementConfirmModal(
+                    {
+                        dayKey,
+                        groupNum: p.group,
+                        prevPerson: p.prevPerson,
+                        newPerson: p.newVal,
+                        hasConflict: conflict.hasConflict,
+                        conflictInfo: conflict.info,
+                        dateObj: editDate
+                    }
+                );
+                if (!confirmResult?.ok) return;
+                replacementReasons.set(p.group, confirmResult.reason || '');
+            }
+
+            const manualAssignReasons = new Map();
+            for (const p of manualAssignPlans) {
+                const baselineStr =
+                    typeof getRotationBaselineAssignmentForType === 'function'
+                        ? getRotationBaselineAssignmentForType(editCat, dayKey)
+                        : '';
+                const baselinePerson =
+                    typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                        ? (parseAssignedPersonForGroupFromAssignment(baselineStr, p.group) || '').trim()
+                        : '';
+                const confirmResult = await showManualAssignConfirmModal({
                     dayKey,
                     groupNum: p.group,
                     prevPerson: p.prevPerson,
                     newPerson: p.newVal,
-                    hasConflict: conflict.hasConflict,
-                    conflictInfo: conflict.info
+                    baselinePerson,
+                    dateObj: editDate
                 });
-                if (!ok) return;
+                if (!confirmResult?.ok) return;
+                manualAssignReasons.set(p.group, confirmResult.reason || '');
             }
 
             // Ίδια λογική με «Αντικατάσταση επιλαχών» (Ενέργειες ατόμου): baseline, reason, reflow
             for (const p of manualReplacementPlans) {
-                const customReason = getDayModalReasonInputValue(container, p.group);
                 const ok = await applyManualAlternateReplacementForDate(p.group, p.prevPerson, dayKey, {
                     replacement: p.newVal,
                     skipFinalSave: true,
                     skipCalendarReload: true,
-                    customReason: customReason || undefined,
-                    skipConsecutiveConflictCheck: true
+                    skipConsecutiveConflictCheck: true,
+                    customReason: replacementReasons.get(p.group) || undefined
                 });
                 if (!ok) return;
             }
@@ -7641,17 +7725,19 @@
                     const pairId = typeof getNextSwapPairIdForAssignmentReasons === 'function'
                         ? getNextSwapPairIdForAssignmentReasons()
                         : Date.now();
-                    const dateObjA = new Date(dayKey + 'T00:00:00');
-                    const dateObjB = new Date(p.otherKey + 'T00:00:00');
-                    const strA = dateObjA.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    const strB = dateObjB.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    const customReason = getDayModalReasonInputValue(container, p.group);
+                    const plan = {
+                        dayKey,
+                        otherKey: p.otherKey,
+                        prevPerson: p.prevPerson,
+                        newPerson: p.newPerson,
+                        groupNum: p.group
+                    };
                     const reasonHere =
-                        customReason ||
-                        `Αμοιβαία αλλαγή: ο/η ${p.newPerson} ανατέθηκε εδώ (${getGreekDayName(dateObjA)} ${strA}) αντί του/της ${p.prevPerson}· ο/η ${p.prevPerson} μεταφέρθηκε στην ${getGreekDayName(dateObjB)} ${strB}.`;
+                        mutualSwapReasons.get(p.group) ||
+                        buildDefaultMutualSwapReasonHere(plan);
                     const reasonThere =
-                        customReason ||
-                        `Αμοιβαία αλλαγή: ο/η ${p.prevPerson} ανατέθηκε εδώ (${getGreekDayName(dateObjB)} ${strB}) αντί του/της ${p.newPerson}· ο/η ${p.newPerson} μεταφέρθηκε στην ${getGreekDayName(dateObjA)} ${strA}.`;
+                        mutualSwapReasonsThere.get(p.group) ||
+                        buildDefaultMutualSwapReasonThere(plan);
                     if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
                         clearAssignmentReasonForPersonOnDate(dayKey, p.group, p.prevPerson);
                     }
@@ -7670,17 +7756,16 @@
                     if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
                         clearAssignmentReasonForPersonOnDate(dayKey, p.group, p.prevPerson);
                     }
-                    const customReason = getDayModalReasonInputValue(container, p.group);
                     const reason =
-                        customReason ||
-                        (typeof buildManualDutyAssignmentPreserveBaselineMessage === 'function'
-                            ? buildManualDutyAssignmentPreserveBaselineMessage({
-                                  assignedPersonName: p.newVal,
-                                  displacedPersonName: p.prevPerson,
-                                  baselinePersonName: baselinePerson,
-                                  dateObj: editDate
-                              })
-                            : `Ο/Η ${p.newVal} ανατέθηκε χειροκίνητα στη θέση του/την ${p.prevPerson}. Η βασική σειρά δεν αλλάζει.`);
+                        manualAssignReasons.get(p.group) ||
+                        buildDefaultManualAssignReason({
+                            dayKey,
+                            groupNum: p.group,
+                            prevPerson: p.prevPerson,
+                            newPerson: p.newVal,
+                            baselinePerson,
+                            dateObj: editDate
+                        });
                     storeAssignmentReason(dayKey, p.group, p.newVal, 'skip', reason, p.prevPerson, null, {
                         manualDayModal: true,
                         preserveBaseline: true,
@@ -7736,37 +7821,6 @@
                 delete criticalAssignments[currentEditingDayKey];
             }
             
-            // Ενημέρωση λόγου χωρίς αλλαγή ατόμου (ή συμπλήρωση κενού λόγου)
-            if (typeof storeAssignmentReason === 'function') {
-                for (const select of selects) {
-                    if (select.dataset.isCritical === 'true') continue;
-                    const group = parseInt(select.dataset.group, 10);
-                    if (!Number.isFinite(group)) continue;
-                    const personName = select.value.trim();
-                    if (!personName) continue;
-                    const customReason = getDayModalReasonInputValue(container, group);
-                    if (!customReason) continue;
-                    const prevPerson = typeof parseAssignedPersonForGroupFromAssignment === 'function'
-                        ? (parseAssignedPersonForGroupFromAssignment(prevStr, group) || '').trim()
-                        : '';
-                    if (mutualGroupsDone.has(group) || manualReplacementPlans.some((p) => p.group === group) || manualAssignPlans.some((p) => p.group === group)) {
-                        continue;
-                    }
-                    if (normPerson(prevPerson) !== normPerson(personName)) continue;
-                    const existing = typeof getAssignmentReason === 'function' ? getAssignmentReason(dayKey, group, personName) : null;
-                    if (existing && String(existing.reason || '').trim() === customReason) continue;
-                    const modeEl = container.querySelector(`input[name="duty-change-mode-${group}"]:checked`);
-                    const mode = modeEl ? modeEl.value : 'replacement';
-                    const reasonType = existing?.type || (mode === 'mutual_swap' ? 'swap' : 'skip');
-                    const swappedWith = existing?.swappedWith ?? (prevPerson || null);
-                    const swapPairId = existing?.swapPairId ?? null;
-                    const meta = { ...(existing?.meta || {}), manualDayModal: true };
-                    if (mode === 'manual_assign') meta.preserveBaseline = true;
-                    if (mode === 'replacement') meta.manualAlternateReplacement = true;
-                    storeAssignmentReason(dayKey, group, personName, reasonType, customReason, swappedWith, swapPairId, meta);
-                }
-            }
-
             saveData();
             renderCalendar();
             
