@@ -6762,7 +6762,7 @@
                         </div>
                         <div class="form-check form-check-inline">
                             <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-repl-${person.group}" value="replacement" ${defaultChangeMode === 'replacement' ? 'checked' : ''}>
-                            <label class="form-check-label" for="duty-mode-repl-${person.group}">Αντικατάσταση</label>
+                            <label class="form-check-label" for="duty-mode-repl-${person.group}">Αντικατάσταση επιλαχών</label>
                         </div>
                         <div class="form-check form-check-inline">
                             <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-manual-${person.group}" value="manual_assign" ${defaultChangeMode === 'manual_assign' ? 'checked' : ''}>
@@ -6989,9 +6989,7 @@
                 okBtn.style.display = '';
                 okBtn.disabled = false;
                 okBtn.className = evaluation.ok ? 'btn btn-primary' : 'btn btn-warning';
-                okBtn.innerHTML = evaluation.ok
-                    ? '<i class="fas fa-check me-1"></i>Επιβεβαίωση'
-                    : '<i class="fas fa-check me-1"></i>Επιβεβαίωση παρ\' όλα αυτά';
+                okBtn.innerHTML = '<i class="fas fa-check me-1"></i>Επιβεβαίωση';
                 let settled = false;
                 const finish = (val) => {
                     if (settled) return;
@@ -7041,7 +7039,7 @@
             if (!plan.otherKey) {
                 alert(
                     `Δεν βρέθηκε άλλη ημέρα (ίδιος τύπος υπηρεσίας) όπου ο/η «${newVal}» είναι ανατεθειμένος/η στην Ομάδα ${group}.\n` +
-                    'Επιλέξτε «Αντικατάσταση» για αλλαγή μόνο αυτής της ημέρας.'
+                    'Επιλέξτε «Αντικατάσταση επιλαχών» για αλλαγή μόνο αυτής της ημέρας.'
                 );
                 select.value = select.dataset.lastValidValue || prevPerson;
                 return false;
@@ -7129,9 +7127,7 @@
                 }
                 bodyEl.innerHTML = buildReplacementConfirmHtml(plan);
                 okBtn.className = plan.hasConflict ? 'btn btn-warning' : 'btn btn-primary';
-                okBtn.innerHTML = plan.hasConflict
-                    ? '<i class="fas fa-check me-1"></i>Επιβεβαίωση παρ\' όλα αυτά'
-                    : '<i class="fas fa-check me-1"></i>Επιβεβαίωση Αντικατάστασης';
+                okBtn.innerHTML = '<i class="fas fa-check me-1"></i>Επιβεβαίωση';
                 let settled = false;
                 const finish = (val) => {
                     if (settled) return;
@@ -7388,7 +7384,7 @@
                 const mode = modeEl ? modeEl.value : 'replacement';
                 if (mode !== 'mutual_swap' || normPerson(prevPerson) === normPerson(newVal) || !newVal) continue;
                 if (!prevPerson) {
-                    alert('Για αμοιβαία αλλαγή πρέπει να υπάρχει ήδη ανατεθειμένο άτομο σε αυτή την ημέρα (ώστε να αντιμετατεθεί με το νέο). Επιλέξτε Αντικατάσταση ή επιλέξτε πρώτα το προηγούμενο άτομο.');
+                    alert('Για αμοιβαία αλλαγή πρέπει να υπάρχει ήδη ανατεθειμένο άτομο σε αυτή την ημέρα (ώστε να αντιμετατεθεί με το νέο). Επιλέξτε Αντικατάσταση επιλαχών ή επιλέξτε πρώτα το προηγούμενο άτομο.');
                     return;
                 }
                 const dutyCat = typeof getDutyCategoryForDateKey === 'function'
@@ -7398,7 +7394,7 @@
                     ? findOtherDateKeyForPersonInGroupDutyCategory(newVal, group, dayKey, dutyCat)
                     : null;
                 if (!otherKey) {
-                    alert(`Δεν βρέθηκε άλλη ημέρα (ίδιος τύπος υπηρεσίας) όπου ο/η «${newVal}» είναι ανατεθειμένος/η στην Ομάδα ${group}.\nΓια απλή αλλαγή χωρίς αντιμετάθεση δύο ημερών, επιλέξτε «Αντικατάσταση».`);
+                    alert(`Δεν βρέθηκε άλλη ημέρα (ίδιος τύπος υπηρεσίας) όπου ο/η «${newVal}» είναι ανατεθειμένος/η στην Ομάδα ${group}.\nΓια απλή αλλαγή χωρίς αντιμετάθεση δύο ημερών, επιλέξτε «Αντικατάσταση επιλαχών».`);
                     return;
                 }
                 if (typeof isPersonGroupCriticalAssignment === 'function' && isPersonGroupCriticalAssignment(otherKey, newVal, group)) {
