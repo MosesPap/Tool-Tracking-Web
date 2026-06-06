@@ -6441,23 +6441,6 @@
                     <div id="dutyPersonsContainer" class="mt-2">
             `;
             
-            const allPeopleByGroup = [];
-            for (let g = 1; g <= 4; g++) {
-                const gData = groups[g] || {};
-                const set = new Set();
-                ['special', 'weekend', 'semi', 'normal'].forEach((listType) => {
-                    const arr = Array.isArray(gData[listType]) ? gData[listType] : [];
-                    arr.forEach((p) => {
-                        const name = String(p || '').trim();
-                        if (name) set.add(name);
-                    });
-                });
-                allPeopleByGroup.push({
-                    groupNum: g,
-                    people: Array.from(set).sort((a, b) => a.localeCompare(b, 'el'))
-                });
-            }
-            
             personGroups.forEach((person, index) => {
                 const normPick = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                 const isCritical = person.name && criticalPeople.some(cp => {
@@ -6721,50 +6704,52 @@
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;');
                 const knownNames = new Set();
-                
-                // Build dropdown: show all people grouped by team; unavailable options disabled (except current assignee).
+                const groupPeopleForDay =
+                    typeof getSortedGroupListForRotation === 'function'
+                        ? getSortedGroupListForRotation(person.group, dayTypeCategory)
+                        : (groups[person.group] || {})[dayTypeCategory] || [];
+                const peopleList = Array.isArray(groupPeopleForDay)
+                    ? groupPeopleForDay.map((p) => String(p || '').trim()).filter(Boolean)
+                    : [];
+
+                // Build dropdown: μόνο άτομα της συγκεκριμένης ομάδας για τον τύπο ημέρας.
                 let peopleOptions = '<option value="">-- Επιλέξτε Άτομο --</option>';
-                allPeopleByGroup.forEach((groupEntry) => {
-                    if (!groupEntry.people || groupEntry.people.length === 0) return;
-                    peopleOptions += `<optgroup label="Ομάδα ${groupEntry.groupNum}">`;
-                    groupEntry.people.forEach((p) => {
-                        knownNames.add(normPick(p));
-                        const unavailable = isPersonUnavailableForManualDutyOnDate(p, person.group, date, dayTypeCategory);
-                        const prevForConflict = (person.name || '').trim();
-                        let consecutiveConflict = false;
-                        if (
-                            !isCritical &&
-                            defaultChangeMode !== 'mutual_swap' &&
-                            defaultChangeMode !== 'manual_assign' &&
-                            p &&
-                            normPick(p) !== normPick(prevForConflict)
-                        ) {
-                            consecutiveConflict = wouldManualDutySelectionCauseConsecutiveConflict(
-                                key, p, person.group, prevForConflict, 'replacement'
-                            );
+                peopleList.forEach((p) => {
+                    knownNames.add(normPick(p));
+                    const unavailable = isPersonUnavailableForManualDutyOnDate(p, person.group, date, dayTypeCategory);
+                    const prevForConflict = (person.name || '').trim();
+                    let consecutiveConflict = false;
+                    if (
+                        !isCritical &&
+                        defaultChangeMode !== 'mutual_swap' &&
+                        defaultChangeMode !== 'manual_assign' &&
+                        p &&
+                        normPick(p) !== normPick(prevForConflict)
+                    ) {
+                        consecutiveConflict = wouldManualDutySelectionCauseConsecutiveConflict(
+                            key, p, person.group, prevForConflict, 'replacement'
+                        );
+                    }
+                    const isCurrent = !!(curNameNorm && normPick(p) === curNameNorm);
+                    const reasonShort = unavailable && typeof getUnavailableReasonShort === 'function'
+                        ? getUnavailableReasonShort(p, person.group, date, dayTypeCategory)
+                        : (unavailable ? 'Μη διαθέσιμος/η' : '');
+                    let label = escapeOpt(p);
+                    if (reasonShort) label += ' · ' + escapeOpt(reasonShort);
+                    else if (consecutiveConflict) {
+                        const nearInfo = typeof getConsecutiveConflictNeighborInfoSavedOnly === 'function'
+                            ? getConsecutiveConflictNeighborInfoSavedOnly(key, p, person.group)
+                            : null;
+                        if (nearInfo?.dayOffset != null) {
+                            const d = Math.abs(nearInfo.dayOffset);
+                            label += ` · Υπηρεσία ${d} ${d === 1 ? 'ημέρα' : 'ημέρες'} ${nearInfo.dayOffset < 0 ? 'πριν' : 'μετά'}`;
+                        } else {
+                            label += ' · Υπηρεσία ±2 ημέρες κοντά';
                         }
-                        const isCurrent = !!(curNameNorm && normPick(p) === curNameNorm);
-                        const reasonShort = unavailable && typeof getUnavailableReasonShort === 'function'
-                            ? getUnavailableReasonShort(p, person.group, date, dayTypeCategory)
-                            : (unavailable ? 'Μη διαθέσιμος/η' : '');
-                        let label = escapeOpt(p);
-                        if (reasonShort) label += ' · ' + escapeOpt(reasonShort);
-                        else if (consecutiveConflict) {
-                            const nearInfo = typeof getConsecutiveConflictNeighborInfoSavedOnly === 'function'
-                                ? getConsecutiveConflictNeighborInfoSavedOnly(key, p, person.group)
-                                : null;
-                            if (nearInfo?.dayOffset != null) {
-                                const d = Math.abs(nearInfo.dayOffset);
-                                label += ` · Υπηρεσία ${d} ${d === 1 ? 'ημέρα' : 'ημέρες'} ${nearInfo.dayOffset < 0 ? 'πριν' : 'μετά'}`;
-                            } else {
-                                label += ' · Υπηρεσία ±2 ημέρες κοντά';
-                            }
-                        }
-                        const dis = (unavailable || consecutiveConflict) && !isCurrent ? ' disabled' : '';
-                        const sel = isCurrent ? ' selected' : '';
-                        peopleOptions += `<option value="${escapeOpt(p)}"${dis}${sel}>${label}</option>`;
-                    });
-                    peopleOptions += '</optgroup>';
+                    }
+                    const dis = (unavailable || consecutiveConflict) && !isCurrent ? ' disabled' : '';
+                    const sel = isCurrent ? ' selected' : '';
+                    peopleOptions += `<option value="${escapeOpt(p)}"${dis}${sel}>${label}</option>`;
                 });
 
                 // Keep current value selectable even if no longer present in group lists.
