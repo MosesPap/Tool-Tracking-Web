@@ -6719,13 +6719,7 @@
                     const unavailable = isPersonUnavailableForManualDutyOnDate(p, person.group, date, dayTypeCategory);
                     const prevForConflict = (person.name || '').trim();
                     let consecutiveConflict = false;
-                    if (
-                        !isCritical &&
-                        defaultChangeMode !== 'mutual_swap' &&
-                        defaultChangeMode !== 'manual_assign' &&
-                        p &&
-                        normPick(p) !== normPick(prevForConflict)
-                    ) {
+                    if (!isCritical && p && normPick(p) !== normPick(prevForConflict)) {
                         consecutiveConflict = wouldManualDutySelectionCauseConsecutiveConflict(
                             key, p, person.group, prevForConflict, 'replacement'
                         );
@@ -6747,9 +6741,10 @@
                             label += ' · Υπηρεσία ±2 ημέρες κοντά';
                         }
                     }
-                    const dis = (unavailable || consecutiveConflict) && !isCurrent ? ' disabled' : '';
+                    const dis = unavailable && !isCurrent ? ' disabled' : '';
                     const sel = isCurrent ? ' selected' : '';
-                    peopleOptions += `<option value="${escapeOpt(p)}"${dis}${sel}>${label}</option>`;
+                    const conflictClass = consecutiveConflict ? ' class="duty-near-conflict-option"' : '';
+                    peopleOptions += `<option value="${escapeOpt(p)}"${conflictClass}${dis}${sel}>${label}</option>`;
                 });
 
                 // Keep current value selectable even if no longer present in group lists.
@@ -6773,7 +6768,7 @@
                             <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-manual-${person.group}" value="manual_assign" ${defaultChangeMode === 'manual_assign' ? 'checked' : ''}>
                             <label class="form-check-label" for="duty-mode-manual-${person.group}">Χειροκίνητη ανάθεση</label>
                         </div>
-                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση (επιλαχών):</strong> αλλάζει και τη βασική σειρά· αποκλείονται άτομα με υπηρεσία ±2 ημέρες κοντά. <strong>Χειροκίνητη ανάθεση:</strong> αλλάζει μόνο ποιος εμφανίζεται αυτή την ημέρα· η βασική σειρά δεν αλλάζει. <strong>Αμοιβαία Αλλαγή:</strong> αντιμετάθεση δύο ημερομηνιών με έλεγχο σύγκρουσης (±2 ημέρες).</small>
+                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση (επιλαχών):</strong> αλλάζει και τη βασική σειρά· άτομα με υπηρεσία ±2 ημέρες κοντά εμφανίζονται <span class="text-danger">με κόκκινο</span> αλλά μπορούν να επιλεγούν. <strong>Χειροκίνητη ανάθεση:</strong> αλλάζει μόνο ποιος εμφανίζεται αυτή την ημέρα· η βασική σειρά δεν αλλάζει. <strong>Αμοιβαία Αλλαγή:</strong> αντιμετάθεση δύο ημερομηνιών με έλεγχο σύγκρουσης (±2 ημέρες).</small>
                     </div>`;
                 
                 content += `
@@ -7096,6 +7091,16 @@
             );
         }
 
+        function refreshDutyPersonSelectConflictStyle(select) {
+            if (!select) return;
+            const opt = select.options[select.selectedIndex];
+            if (opt && opt.classList.contains('duty-near-conflict-option')) {
+                select.classList.add('duty-person-select-near-conflict');
+            } else {
+                select.classList.remove('duty-person-select-near-conflict');
+            }
+        }
+
         function validateDutyPersonSelectOnChange(select) {
             if (!select || select.dataset.isCritical === 'true' || !currentEditingDayKey) return true;
             if (typeof currentEditingDayDate !== 'undefined' && isDayDetailsMonthLocked(currentEditingDayDate)) return true;
@@ -7136,15 +7141,11 @@
                     }
                 }
                 select.dataset.lastValidValue = newVal;
+                refreshDutyPersonSelectConflictStyle(select);
                 return true;
             }
-            if (wouldManualDutySelectionCauseConsecutiveConflict(dayKey, newVal, group, prevPerson, 'replacement')) {
-                alert(formatConsecutiveConflictBlockMessage(newVal, dayKey, group, 'replacement'));
-                const revert = select.dataset.lastValidValue != null ? select.dataset.lastValidValue : prevPerson;
-                select.value = revert;
-                return false;
-            }
             select.dataset.lastValidValue = newVal;
+            refreshDutyPersonSelectConflictStyle(select);
             return true;
         }
 
@@ -7154,6 +7155,7 @@
             container.querySelectorAll('.duty-person-select').forEach((select) => {
                 select.dataset.lastValidValue = (select.value || select.dataset.originalName || '').trim();
                 select.dataset.mutualSwapConfirmed = '0';
+                refreshDutyPersonSelectConflictStyle(select);
                 select.addEventListener('change', () => validateDutyPersonSelectOnChange(select));
             });
             container.querySelectorAll('input[name^="duty-change-mode-"]').forEach((radio) => {
@@ -7383,26 +7385,6 @@
                         swapSelect.dataset.mutualSwapPerson = p.newPerson;
                         swapSelect.dataset.mutualSwapOtherKey = p.otherKey;
                     }
-                }
-            }
-
-            // Αντικατάσταση: αποκλεισμός ±2 ημ. (υπάρχουσες αναθέσεις κοντά) — όχι για χειροκίνητη ανάθεση
-            for (const select of selects) {
-                if (select.dataset.isCritical === 'true') continue;
-                const g = parseInt(select.dataset.group, 10);
-                if (!Number.isFinite(g)) continue;
-                if (mutualGroupsDone.has(g)) continue;
-                const modeEl = container.querySelector(`input[name="duty-change-mode-${g}"]:checked`);
-                const mode = modeEl ? modeEl.value : 'replacement';
-                if (mode === 'manual_assign') continue;
-                const prevPerson = typeof parseAssignedPersonForGroupFromAssignment === 'function'
-                    ? (parseAssignedPersonForGroupFromAssignment(prevStr, g) || '').trim()
-                    : '';
-                const newVal = select.value.trim();
-                if (!newVal || normPerson(prevPerson) === normPerson(newVal)) continue;
-                if (wouldManualDutySelectionCauseConsecutiveConflict(dayKey, newVal, g, prevPerson, 'replacement')) {
-                    alert(formatConsecutiveConflictBlockMessage(newVal, dayKey, g, 'replacement'));
-                    return;
                 }
             }
 
