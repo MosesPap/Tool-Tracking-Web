@@ -6768,7 +6768,7 @@
                             <input class="form-check-input" type="radio" name="duty-change-mode-${person.group}" id="duty-mode-manual-${person.group}" value="manual_assign" ${defaultChangeMode === 'manual_assign' ? 'checked' : ''}>
                             <label class="form-check-label" for="duty-mode-manual-${person.group}">Χειροκίνητη ανάθεση</label>
                         </div>
-                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση (επιλαχών):</strong> αλλάζει και τη βασική σειρά· άτομα με υπηρεσία ±2 ημέρες κοντά εμφανίζονται <span class="text-danger">με κόκκινο</span> αλλά μπορούν να επιλεγούν. <strong>Χειροκίνητη ανάθεση:</strong> αλλάζει μόνο ποιος εμφανίζεται αυτή την ημέρα· η βασική σειρά δεν αλλάζει. <strong>Αμοιβαία Αλλαγή:</strong> αντιμετάθεση δύο ημερομηνιών με έλεγχο σύγκρουσης (±2 ημέρες).</small>
+                        <small class="text-muted d-block mt-1"><i class="fas fa-info-circle me-1"></i><strong>Αντικατάσταση (επιλαχών):</strong> αλλάζει και τη βασική σειρά· άτομα με υπηρεσία ±2 ημέρες κοντά εμφανίζονται <span class="text-danger">με κόκκινο</span>· κατά την αποθήκευση ζητείται επιβεβαίωση. <strong>Χειροκίνητη ανάθεση:</strong> αλλάζει μόνο ποιος εμφανίζεται αυτή την ημέρα· η βασική σειρά δεν αλλάζει. <strong>Αμοιβαία Αλλαγή:</strong> αντιμετάθεση δύο ημερομηνιών· σε σύγκρουση ±2 ημερών εμφανίζεται προειδοποίηση πριν την επιβεβαίωση.</small>
                     </div>`;
                 
                 content += `
@@ -6965,11 +6965,11 @@
                 <p class="small text-muted mb-2">Έλεγχος σύγκρουσης: μετά την τοποθέτηση, ±2 ημέρες πριν/μετά από κάθε ημέρα (μόνο υπάρχουσες αναθέσεις).</p>
             `;
             if (!evaluation.ok) {
-                html += `<div class="alert alert-danger mb-0"><strong>Σύγκρουση — δεν επιτρέπεται η αλλαγή:</strong><ul class="mb-0 mt-2">`;
+                html += `<div class="alert alert-warning mb-0"><strong><i class="fas fa-exclamation-triangle me-1"></i>Προειδοποίηση — σύγκρουση ±2 ημερών:</strong><ul class="mb-0 mt-2">`;
                 evaluation.conflicts.forEach((c) => {
                     html += `<li>${escapeHtml(formatMutualSwapConflictLine(c))}</li>`;
                 });
-                html += `</ul><p class="mb-0 mt-2 small">Παρακαλώ επιλέξτε <strong>άλλο άτομο</strong>.</p></div>`;
+                html += `</ul><p class="mb-0 mt-2 small">Μπορείτε να επιβεβαιώσετε την αλλαγή <strong>παρ' όλα αυτά</strong> ή να ακυρώσετε και να επιλέξετε άλλο άτομο.</p></div>`;
             } else {
                 html += `<div class="alert alert-success mb-0"><i class="fas fa-check-circle me-1"></i>Δεν εντοπίστηκε σύγκρουση. Μπορείτε να επιβεβαιώσετε.</div>`;
             }
@@ -6982,12 +6982,16 @@
                 const bodyEl = document.getElementById('mutualSwapConfirmBody');
                 const okBtn = document.getElementById('mutualSwapConfirmOkBtn');
                 if (!modalEl || !bodyEl || !okBtn || typeof bootstrap === 'undefined') {
-                    resolve(!!evaluation?.ok);
+                    resolve(true);
                     return;
                 }
                 bodyEl.innerHTML = buildMutualSwapConfirmHtml(plan, evaluation);
-                okBtn.style.display = evaluation.ok ? '' : 'none';
-                okBtn.disabled = !evaluation.ok;
+                okBtn.style.display = '';
+                okBtn.disabled = false;
+                okBtn.className = evaluation.ok ? 'btn btn-primary' : 'btn btn-warning';
+                okBtn.innerHTML = evaluation.ok
+                    ? '<i class="fas fa-check me-1"></i>Επιβεβαίωση'
+                    : '<i class="fas fa-check me-1"></i>Επιβεβαίωση παρ\' όλα αυτά';
                 let settled = false;
                 const finish = (val) => {
                     if (settled) return;
@@ -6996,7 +7000,6 @@
                 };
                 const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
                 const onOk = () => {
-                    if (!evaluation.ok) return;
                     modal.hide();
                     finish(true);
                 };
@@ -7050,8 +7053,9 @@
             }
             const evaluation = evaluateMutualSwapAfterPlacementConflicts(plan);
             const confirmed = await showMutualSwapConfirmModal(plan, evaluation);
-            if (!evaluation.ok || !confirmed) {
+            if (!confirmed) {
                 select.value = select.dataset.lastValidValue || prevPerson;
+                refreshDutyPersonSelectConflictStyle(select);
                 return false;
             }
             select.dataset.mutualSwapConfirmed = '1';
@@ -7059,6 +7063,95 @@
             select.dataset.mutualSwapOtherKey = plan.otherKey;
             select.dataset.lastValidValue = newVal;
             return true;
+        }
+
+        function getReplacementConsecutiveConflictInfo(dayKey, newPerson, groupNum, prevPerson) {
+            const hasConflict =
+                typeof wouldManualDutySelectionCauseConsecutiveConflict === 'function' &&
+                wouldManualDutySelectionCauseConsecutiveConflict(dayKey, newPerson, groupNum, prevPerson, 'replacement');
+            let info = null;
+            if (hasConflict) {
+                const neighborInfoFn =
+                    typeof getConsecutiveConflictNeighborInfoSavedOnly === 'function'
+                        ? getConsecutiveConflictNeighborInfoSavedOnly
+                        : typeof getConsecutiveConflictNeighborInfo === 'function'
+                          ? getConsecutiveConflictNeighborInfo
+                          : null;
+                if (neighborInfoFn) {
+                    info = neighborInfoFn(dayKey, newPerson, groupNum);
+                }
+            }
+            return { hasConflict, info };
+        }
+
+        function buildReplacementConfirmHtml(plan) {
+            const dateLabel = formatDutyDateLabel(plan.dayKey);
+            const groupLabel =
+                typeof getGroupName === 'function' ? getGroupName(plan.groupNum) : `Ομάδα ${plan.groupNum}`;
+            let html = `
+                <p class="mb-3">Θα πραγματοποιηθεί <strong>αντικατάσταση (επιλαχών)</strong> στην <strong>${escapeHtml(groupLabel)}</strong>:</p>
+                <ul class="list-group mb-3">
+                    <li class="list-group-item">
+                        <strong>${escapeHtml(dateLabel)}</strong><br>
+                        <span class="text-muted">Από:</span> ${escapeHtml(plan.prevPerson)}<br>
+                        <span class="text-muted">Σε:</span> <span class="text-primary"><strong>${escapeHtml(plan.newPerson)}</strong></span>
+                    </li>
+                </ul>
+                <p class="small text-muted mb-2">Η αντικατάσταση επιλαχών ενημερώνει και τη βασική σειρά περιστροφής.</p>
+            `;
+            if (plan.hasConflict) {
+                let near = '';
+                if (plan.conflictInfo?.neighborKey) {
+                    const d = Math.abs(plan.conflictInfo.dayOffset || 1);
+                    const word = d === 1 ? 'ημέρα' : 'ημέρες';
+                    const dir = (plan.conflictInfo.dayOffset || 0) < 0 ? 'πριν' : 'μετά';
+                    near = ` (${d} ${word} ${dir}: ${formatDutyDateLabel(plan.conflictInfo.neighborKey)})`;
+                }
+                html += `<div class="alert alert-warning mb-0">
+                    <strong><i class="fas fa-exclamation-triangle me-1"></i>Προειδοποίηση:</strong>
+                    Ο/η «${escapeHtml(plan.newPerson)}» έχει ήδη υπήρεσία στην ίδια ομάδα έως 2 ημέρες πριν ή μετά από αυτή την ημέρα${escapeHtml(near)}.
+                    <p class="mb-0 mt-2 small">Επιβεβαιώνετε την αντικατάσταση παρ' όλα αυτά;</p>
+                </div>`;
+            } else {
+                html += `<div class="alert alert-info mb-0"><i class="fas fa-info-circle me-1"></i>Δεν εντοπίστηκε σύγκρουση ±2 ημερών. Επιβεβαιώστε την αντικατάσταση.</div>`;
+            }
+            return html;
+        }
+
+        function showReplacementConfirmModal(plan) {
+            return new Promise((resolve) => {
+                const modalEl = document.getElementById('replacementConfirmModal');
+                const bodyEl = document.getElementById('replacementConfirmBody');
+                const okBtn = document.getElementById('replacementConfirmOkBtn');
+                if (!modalEl || !bodyEl || !okBtn || typeof bootstrap === 'undefined') {
+                    resolve(true);
+                    return;
+                }
+                bodyEl.innerHTML = buildReplacementConfirmHtml(plan);
+                okBtn.className = plan.hasConflict ? 'btn btn-warning' : 'btn btn-primary';
+                okBtn.innerHTML = plan.hasConflict
+                    ? '<i class="fas fa-check me-1"></i>Επιβεβαίωση παρ\' όλα αυτά'
+                    : '<i class="fas fa-check me-1"></i>Επιβεβαίωση Αντικατάστασης';
+                let settled = false;
+                const finish = (val) => {
+                    if (settled) return;
+                    settled = true;
+                    resolve(!!val);
+                };
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
+                const onOk = () => {
+                    modal.hide();
+                    finish(true);
+                };
+                const onHidden = () => {
+                    modalEl.removeEventListener('hidden.bs.modal', onHidden);
+                    okBtn.removeEventListener('click', onOk);
+                    if (!settled) finish(false);
+                };
+                okBtn.addEventListener('click', onOk);
+                modalEl.addEventListener('hidden.bs.modal', onHidden);
+                modal.show();
+            });
         }
 
         function formatConsecutiveConflictBlockMessage(personLabel, dayKey, groupNum, mode) {
@@ -7367,10 +7460,6 @@
                     groupNum: p.group
                 };
                 const evaluation = evaluateMutualSwapAfterPlacementConflicts(plan);
-                if (!evaluation.ok) {
-                    await showMutualSwapConfirmModal(plan, evaluation);
-                    return;
-                }
                 const swapSelect = container.querySelector(`.duty-person-select[data-group="${p.group}"]`);
                 const confirmed =
                     swapSelect &&
@@ -7386,6 +7475,19 @@
                         swapSelect.dataset.mutualSwapOtherKey = p.otherKey;
                     }
                 }
+            }
+
+            for (const p of manualReplacementPlans) {
+                const conflict = getReplacementConsecutiveConflictInfo(dayKey, p.newVal, p.group, p.prevPerson);
+                const ok = await showReplacementConfirmModal({
+                    dayKey,
+                    groupNum: p.group,
+                    prevPerson: p.prevPerson,
+                    newPerson: p.newVal,
+                    hasConflict: conflict.hasConflict,
+                    conflictInfo: conflict.info
+                });
+                if (!ok) return;
             }
 
             // Ίδια λογική με «Αντικατάσταση επιλαχών» (Ενέργειες ατόμου): baseline, reason, reflow
