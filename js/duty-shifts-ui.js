@@ -1940,7 +1940,10 @@
                 return false;
             }
 
-            if (wouldManualDutySelectionCauseConsecutiveConflict(dateKey, replacement, groupNum, skippedPerson, 'replacement')) {
+            if (
+                !options.skipConsecutiveConflictCheck &&
+                wouldManualDutySelectionCauseConsecutiveConflict(dateKey, replacement, groupNum, skippedPerson, 'replacement')
+            ) {
                 alert(formatConsecutiveConflictBlockMessage(replacement, dateKey, groupNum, 'replacement'));
                 return false;
             }
@@ -1960,7 +1963,10 @@
             dutyAssignments[dateKey] = newAssignmentStr;
 
             const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            const reason = `Αντικατάσταση Επιλαχών: Παραλείφθηκε ο/η ${skippedPerson} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${replacement}.`;
+            const reason =
+                options.customReason != null && String(options.customReason).trim()
+                    ? String(options.customReason).trim()
+                    : `Αντικατάσταση Επιλαχών: Παραλείφθηκε ο/η ${skippedPerson} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${replacement}.`;
             if (typeof storeAssignmentReason === 'function') {
                 storeAssignmentReason(dateKey, groupNum, replacement, 'skip', reason, skippedPerson, null, { manualAlternateReplacement: true });
             }
@@ -6693,9 +6699,18 @@
                 } else {
                     reasonDisplayText = derivedReasonText;
                 }
-                const reasonDisplay = (reason || derivedReasonText)
-                    ? `<div class="mt-1 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${escapeHtml(reasonDisplayText)}</div>`
-                    : '';
+                const initialReasonText = String(reasonDisplayText || '').trim();
+                const reasonFieldBlock = editBlocked
+                    ? (initialReasonText
+                        ? `<div class="mt-1 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${escapeHtml(initialReasonText)}</div>`
+                        : '')
+                    : `<div class="mt-2 duty-reason-edit-block">
+                        <label class="form-label small mb-1"><i class="fas fa-comment-alt me-1"></i><strong>Λόγος αλλαγής</strong></label>
+                        <textarea class="form-control duty-change-reason-input" rows="3"
+                            data-group="${person.group}"
+                            data-day-category="${dayTypeCategory}"
+                            placeholder="Προσθέστε ή τροποποιήστε τον λόγο (αμοιβαία αλλαγή, αντικατάσταση επιλαχών, χειροκίνητη ανάθεση)...">${escapeHtml(initialReasonText)}</textarea>
+                    </div>`;
                 
                 const curNameNorm = person.name ? normPick(person.name) : '';
                 const escapeOpt = (s) => String(s || '')
@@ -6783,7 +6798,7 @@
                             ${peopleOptions}
                         </select>
                         ${changeTypeBlock}
-                        ${reasonDisplay}
+                        ${reasonFieldBlock}
                         ${isCritical ? '<small class="text-muted d-block mt-2"><i class="fas fa-info-circle me-1"></i>Αυτή η ανάθεση προέρχεται από τις ημερομηνίες τελευταίας υπηρεσίας και δεν μπορεί να αλλάξει.</small>' : ''}
                     </div>
                 `;
@@ -7060,6 +7075,7 @@
             select.dataset.mutualSwapPerson = newVal;
             select.dataset.mutualSwapOtherKey = plan.otherKey;
             select.dataset.lastValidValue = newVal;
+            updateDayDetailsReasonDraft(group);
             return true;
         }
 
@@ -7180,6 +7196,94 @@
             );
         }
 
+        function getDayModalReasonInputValue(container, groupNum) {
+            const ta = container?.querySelector(`.duty-change-reason-input[data-group="${groupNum}"]`);
+            return (ta?.value || '').trim();
+        }
+
+        function buildDefaultDayModalChangeReason({
+            mode,
+            dayKey,
+            groupNum,
+            prevPerson,
+            newPerson,
+            editDate,
+            editCat
+        }) {
+            if (!dayKey || !newPerson) return '';
+            const dateObj =
+                editDate instanceof Date && !isNaN(editDate.getTime())
+                    ? editDate
+                    : new Date(dayKey + 'T00:00:00');
+            if (isNaN(dateObj.getTime())) return '';
+            const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const prev = String(prevPerson || '').trim();
+            const next = String(newPerson || '').trim();
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            if (norm(prev) === norm(next)) return '';
+
+            if (mode === 'mutual_swap' && prev) {
+                const dutyCat = editCat || (typeof getDutyCategoryForDateKey === 'function' ? getDutyCategoryForDateKey(dayKey) : 'normal');
+                const otherKey =
+                    typeof findOtherDateKeyForPersonInGroupDutyCategory === 'function'
+                        ? findOtherDateKeyForPersonInGroupDutyCategory(next, groupNum, dayKey, dutyCat)
+                        : null;
+                if (otherKey) {
+                    const dateObjB = new Date(otherKey + 'T00:00:00');
+                    const strB = !isNaN(dateObjB.getTime())
+                        ? dateObjB.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                        : otherKey;
+                    return `Αμοιβαία αλλαγή: ο/η ${next} ανατέθηκε εδώ (${getGreekDayName(dateObj)} ${dateStr}) αντί του/της ${prev}· ο/η ${prev} μεταφέρθηκε στην ${getGreekDayName(dateObjB)} ${strB}.`;
+                }
+            }
+            if (mode === 'manual_assign' && prev) {
+                const baselineStr =
+                    typeof getRotationBaselineAssignmentForType === 'function'
+                        ? getRotationBaselineAssignmentForType(editCat || 'normal', dayKey)
+                        : '';
+                const baselinePerson =
+                    typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                        ? (parseAssignedPersonForGroupFromAssignment(baselineStr, groupNum) || '').trim()
+                        : '';
+                if (typeof buildManualDutyAssignmentPreserveBaselineMessage === 'function') {
+                    return buildManualDutyAssignmentPreserveBaselineMessage({
+                        assignedPersonName: next,
+                        displacedPersonName: prev,
+                        baselinePersonName: baselinePerson,
+                        dateObj
+                    });
+                }
+                return `Ο/Η ${next} ανατέθηκε χειροκίνητα στη θέση του/την ${prev}. Η βασική σειρά δεν αλλάζει.`;
+            }
+            if (mode === 'replacement' && prev) {
+                return `Αντικατάσταση Επιλαχών: Παραλείφθηκε ο/η ${prev} ${getGreekDayAccusativeArticle(dateObj)} ${getGreekDayName(dateObj)} ${dateStr}. Ανατέθηκε ο/η ${next}.`;
+            }
+            return '';
+        }
+
+        function updateDayDetailsReasonDraft(groupNum) {
+            const container = document.getElementById('dutyPersonsContainer');
+            const textarea = container?.querySelector(`.duty-change-reason-input[data-group="${groupNum}"]`);
+            const select = container?.querySelector(`.duty-person-select[data-group="${groupNum}"]`);
+            if (!textarea || !select || textarea.dataset.userTouched === '1') return;
+            const mode = container.querySelector(`input[name="duty-change-mode-${groupNum}"]:checked`)?.value || 'replacement';
+            const prevPerson = (select.dataset.originalName || '').trim();
+            const newPerson = (select.value || '').trim();
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            if (!newPerson || norm(prevPerson) === norm(newPerson)) return;
+            const editCat = textarea.dataset.dayCategory || 'normal';
+            const draft = buildDefaultDayModalChangeReason({
+                mode,
+                dayKey: currentEditingDayKey,
+                groupNum,
+                prevPerson,
+                newPerson,
+                editDate: currentEditingDayDate,
+                editCat
+            });
+            if (draft) textarea.value = draft;
+        }
+
         function refreshDutyPersonSelectConflictStyle(select) {
             if (!select) return;
             const opt = select.options[select.selectedIndex];
@@ -7235,6 +7339,7 @@
             }
             select.dataset.lastValidValue = newVal;
             refreshDutyPersonSelectConflictStyle(select);
+            updateDayDetailsReasonDraft(group);
             return true;
         }
 
@@ -7247,6 +7352,11 @@
                 refreshDutyPersonSelectConflictStyle(select);
                 select.addEventListener('change', () => validateDutyPersonSelectOnChange(select));
             });
+            container.querySelectorAll('.duty-change-reason-input').forEach((textarea) => {
+                textarea.addEventListener('input', () => {
+                    textarea.dataset.userTouched = '1';
+                });
+            });
             container.querySelectorAll('input[name^="duty-change-mode-"]').forEach((radio) => {
                 radio.addEventListener('change', () => {
                     const m = String(radio.name || '').match(/^duty-change-mode-(\d+)$/);
@@ -7254,15 +7364,20 @@
                     const sel = container.querySelector(`.duty-person-select[data-group="${m[1]}"]`);
                     if (!sel) return;
                     sel.dataset.mutualSwapConfirmed = '0';
+                    const reasonTa = container.querySelector(`.duty-change-reason-input[data-group="${m[1]}"]`);
+                    if (reasonTa) reasonTa.dataset.userTouched = '0';
                     if (radio.value === 'mutual_swap') {
                         const newVal = sel.value.trim();
                         const prev = (sel.dataset.originalName || '').trim();
                         const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                         if (newVal && norm(newVal) !== norm(prev)) {
                             void handleMutualSwapPersonSelect(sel);
+                        } else {
+                            updateDayDetailsReasonDraft(parseInt(m[1], 10));
                         }
                     } else {
                         validateDutyPersonSelectOnChange(sel);
+                        updateDayDetailsReasonDraft(parseInt(m[1], 10));
                     }
                 });
             });
@@ -7488,10 +7603,13 @@
 
             // Ίδια λογική με «Αντικατάσταση επιλαχών» (Ενέργειες ατόμου): baseline, reason, reflow
             for (const p of manualReplacementPlans) {
+                const customReason = getDayModalReasonInputValue(container, p.group);
                 const ok = await applyManualAlternateReplacementForDate(p.group, p.prevPerson, dayKey, {
                     replacement: p.newVal,
                     skipFinalSave: true,
-                    skipCalendarReload: true
+                    skipCalendarReload: true,
+                    customReason: customReason || undefined,
+                    skipConsecutiveConflictCheck: true
                 });
                 if (!ok) return;
             }
@@ -7527,8 +7645,13 @@
                     const dateObjB = new Date(p.otherKey + 'T00:00:00');
                     const strA = dateObjA.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                     const strB = dateObjB.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    const reasonHere = `Αμοιβαία αλλαγή: ο/η ${p.newPerson} ανατέθηκε εδώ (${getGreekDayName(dateObjA)} ${strA}) αντί του/της ${p.prevPerson}· ο/η ${p.prevPerson} μεταφέρθηκε στην ${getGreekDayName(dateObjB)} ${strB}.`;
-                    const reasonThere = `Αμοιβαία αλλαγή: ο/η ${p.prevPerson} ανατέθηκε εδώ (${getGreekDayName(dateObjB)} ${strB}) αντί του/της ${p.newPerson}· ο/η ${p.newPerson} μεταφέρθηκε στην ${getGreekDayName(dateObjA)} ${strA}.`;
+                    const customReason = getDayModalReasonInputValue(container, p.group);
+                    const reasonHere =
+                        customReason ||
+                        `Αμοιβαία αλλαγή: ο/η ${p.newPerson} ανατέθηκε εδώ (${getGreekDayName(dateObjA)} ${strA}) αντί του/της ${p.prevPerson}· ο/η ${p.prevPerson} μεταφέρθηκε στην ${getGreekDayName(dateObjB)} ${strB}.`;
+                    const reasonThere =
+                        customReason ||
+                        `Αμοιβαία αλλαγή: ο/η ${p.prevPerson} ανατέθηκε εδώ (${getGreekDayName(dateObjB)} ${strB}) αντί του/της ${p.newPerson}· ο/η ${p.newPerson} μεταφέρθηκε στην ${getGreekDayName(dateObjA)} ${strA}.`;
                     if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
                         clearAssignmentReasonForPersonOnDate(dayKey, p.group, p.prevPerson);
                     }
@@ -7547,15 +7670,17 @@
                     if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
                         clearAssignmentReasonForPersonOnDate(dayKey, p.group, p.prevPerson);
                     }
+                    const customReason = getDayModalReasonInputValue(container, p.group);
                     const reason =
-                        typeof buildManualDutyAssignmentPreserveBaselineMessage === 'function'
+                        customReason ||
+                        (typeof buildManualDutyAssignmentPreserveBaselineMessage === 'function'
                             ? buildManualDutyAssignmentPreserveBaselineMessage({
                                   assignedPersonName: p.newVal,
                                   displacedPersonName: p.prevPerson,
                                   baselinePersonName: baselinePerson,
                                   dateObj: editDate
                               })
-                            : `Ο/Η ${p.newVal} ανατέθηκε χειροκίνητα στη θέση του/την ${p.prevPerson}. Η βασική σειρά δεν αλλάζει.`;
+                            : `Ο/Η ${p.newVal} ανατέθηκε χειροκίνητα στη θέση του/την ${p.prevPerson}. Η βασική σειρά δεν αλλάζει.`);
                     storeAssignmentReason(dayKey, p.group, p.newVal, 'skip', reason, p.prevPerson, null, {
                         manualDayModal: true,
                         preserveBaseline: true,
@@ -7611,6 +7736,37 @@
                 delete criticalAssignments[currentEditingDayKey];
             }
             
+            // Ενημέρωση λόγου χωρίς αλλαγή ατόμου (ή συμπλήρωση κενού λόγου)
+            if (typeof storeAssignmentReason === 'function') {
+                for (const select of selects) {
+                    if (select.dataset.isCritical === 'true') continue;
+                    const group = parseInt(select.dataset.group, 10);
+                    if (!Number.isFinite(group)) continue;
+                    const personName = select.value.trim();
+                    if (!personName) continue;
+                    const customReason = getDayModalReasonInputValue(container, group);
+                    if (!customReason) continue;
+                    const prevPerson = typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                        ? (parseAssignedPersonForGroupFromAssignment(prevStr, group) || '').trim()
+                        : '';
+                    if (mutualGroupsDone.has(group) || manualReplacementPlans.some((p) => p.group === group) || manualAssignPlans.some((p) => p.group === group)) {
+                        continue;
+                    }
+                    if (normPerson(prevPerson) !== normPerson(personName)) continue;
+                    const existing = typeof getAssignmentReason === 'function' ? getAssignmentReason(dayKey, group, personName) : null;
+                    if (existing && String(existing.reason || '').trim() === customReason) continue;
+                    const modeEl = container.querySelector(`input[name="duty-change-mode-${group}"]:checked`);
+                    const mode = modeEl ? modeEl.value : 'replacement';
+                    const reasonType = existing?.type || (mode === 'mutual_swap' ? 'swap' : 'skip');
+                    const swappedWith = existing?.swappedWith ?? (prevPerson || null);
+                    const swapPairId = existing?.swapPairId ?? null;
+                    const meta = { ...(existing?.meta || {}), manualDayModal: true };
+                    if (mode === 'manual_assign') meta.preserveBaseline = true;
+                    if (mode === 'replacement') meta.manualAlternateReplacement = true;
+                    storeAssignmentReason(dayKey, group, personName, reasonType, customReason, swappedWith, swapPairId, meta);
+                }
+            }
+
             saveData();
             renderCalendar();
             
