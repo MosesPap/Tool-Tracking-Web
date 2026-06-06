@@ -6957,14 +6957,26 @@
             return r?.reason ? String(r.reason).trim() : '';
         }
 
-        function buildDutyChangeReasonSectionHtml(defaultReason, inputId) {
+        function buildDutyChangeReasonSectionHtml(defaultReason, inputId, labelText) {
             const val = escapeHtml(String(defaultReason || '').trim());
             const id = escapeHtml(inputId || 'dutyChangeReasonInput');
+            const label = escapeHtml(labelText || 'Λόγος');
+            return `
+                <div class="mt-3${labelText === 'Λόγος' ? ' pt-3 border-top' : ''}">
+                    <label class="form-label mb-1" for="${id}"><strong>${label}</strong></label>
+                    <textarea class="form-control duty-change-reason-input" id="${id}" rows="3" placeholder="Προσθέστε ή τροποποιήστε τον λόγο της αλλαγής…">${val}</textarea>
+                </div>
+            `;
+        }
+
+        function buildMutualSwapReasonSectionsHtml(plan, defaultReasonHere, defaultReasonThere) {
+            const dateHere = formatDutyDateLabel(plan.dayKey);
+            const dateThere = plan.otherKey ? formatDutyDateLabel(plan.otherKey) : '—';
             return `
                 <div class="mt-3 pt-3 border-top">
-                    <label class="form-label mb-1" for="${id}"><strong>Λόγος</strong></label>
-                    <textarea class="form-control duty-change-reason-input" id="${id}" rows="4" placeholder="Προσθέστε ή τροποποιήστε τον λόγο της αλλαγής…">${val}</textarea>
-                    <small class="text-muted d-block mt-1">Ο λόγος εμφανίζεται στο ημερολόγιο και στις αναφορές.</small>
+                    <p class="small text-muted mb-2">Ο λόγος κάθε ημέρας εμφανίζεται ξεχωριστά στο ημερολόγιο και στις αναφορές.</p>
+                    ${buildDutyChangeReasonSectionHtml(defaultReasonHere, 'mutualSwapReasonHereInput', `Λόγος — ${dateHere}`)}
+                    ${buildDutyChangeReasonSectionHtml(defaultReasonThere, 'mutualSwapReasonThereInput', `Λόγος — ${dateThere}`)}
                 </div>
             `;
         }
@@ -7064,17 +7076,21 @@
                 const modalEl = document.getElementById('mutualSwapConfirmModal');
                 const bodyEl = document.getElementById('mutualSwapConfirmBody');
                 const okBtn = document.getElementById('mutualSwapConfirmOkBtn');
-                const defaultReason =
+                const defaultReasonHere =
                     options.defaultReason ||
                     getExistingAssignmentReasonText(plan.dayKey, plan.groupNum, plan.newPerson) ||
                     buildDefaultMutualSwapReasonHere(plan);
+                const defaultReasonThere =
+                    options.defaultReasonThere ||
+                    getExistingAssignmentReasonText(plan.otherKey, plan.groupNum, plan.prevPerson) ||
+                    buildDefaultMutualSwapReasonThere(plan);
                 if (!modalEl || !bodyEl || !okBtn || typeof bootstrap === 'undefined') {
-                    resolve({ ok: true, reason: defaultReason, reasonThere: buildDefaultMutualSwapReasonThere(plan) });
+                    resolve({ ok: true, reason: defaultReasonHere, reasonThere: defaultReasonThere });
                     return;
                 }
                 bodyEl.innerHTML =
                     buildMutualSwapConfirmHtml(plan, evaluation) +
-                    buildDutyChangeReasonSectionHtml(defaultReason, 'mutualSwapReasonInput');
+                    buildMutualSwapReasonSectionsHtml(plan, defaultReasonHere, defaultReasonThere);
                 okBtn.style.display = '';
                 okBtn.disabled = false;
                 okBtn.className = evaluation.ok ? 'btn btn-primary' : 'btn btn-warning';
@@ -7087,9 +7103,10 @@
                 };
                 const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
                 const onOk = () => {
-                    const reason = readDutyChangeReasonFromModal('mutualSwapReasonInput', defaultReason);
+                    const reason = readDutyChangeReasonFromModal('mutualSwapReasonHereInput', defaultReasonHere);
+                    const reasonThere = readDutyChangeReasonFromModal('mutualSwapReasonThereInput', defaultReasonThere);
                     modal.hide();
-                    finish({ ok: true, reason, reasonThere: buildDefaultMutualSwapReasonThere(plan) });
+                    finish({ ok: true, reason, reasonThere });
                 };
                 const onHidden = () => {
                     modalEl.removeEventListener('hidden.bs.modal', onHidden);
@@ -7626,7 +7643,8 @@
                 let reasonThere = swapSelect?.dataset.mutualSwapReasonThere || '';
                 if (!confirmed) {
                     const confirmResult = await showMutualSwapConfirmModal(plan, evaluation, {
-                        defaultReason: reasonHere || undefined
+                        defaultReason: reasonHere || undefined,
+                        defaultReasonThere: reasonThere || undefined
                     });
                     if (!confirmResult?.ok) return;
                     reasonHere = confirmResult.reason || buildDefaultMutualSwapReasonHere(plan);
