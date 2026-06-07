@@ -2,10 +2,10 @@
 <html lang="el">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.504 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.505 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -1586,88 +1586,302 @@
         .group-3 { background: #E8F5E9; color: #388E3C; }
         .group-4 { background: #FFF3E0; color: #F57C00; }
 
+        /* Layout helpers — tablet / mobile */
+        .title-bar-row {
+            gap: 0.75rem;
+        }
+
+        .title-bar-left {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .title-bar-stats {
+            flex: 0 1 auto;
+            max-width: 100%;
+        }
+
+        .calendar-toolbar-row {
+            width: 100%;
+        }
+
+        .calendar-toolbar-primary {
+            flex: 1 1 320px;
+            min-width: 0;
+        }
+
+        .calendar-search-wrap {
+            flex: 1 1 220px;
+            min-width: 0;
+            max-width: 360px;
+        }
+
+        .calendar-toolbar-controls {
+            flex: 0 1 auto;
+        }
+
+        .calendar-actions-row .btn {
+            white-space: nowrap;
+        }
+
+        .calendar-scroll-hint {
+            display: none;
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-bottom: 0.5rem;
+        }
+
         /* Responsive Design */
         @media (min-width: 1200px) {
             .container-fluid {
                 padding: 1.5rem 2rem;
             }
-            
+
             .group-card {
                 min-height: 400px;
             }
         }
-        
+
         @media (max-width: 1199px) and (min-width: 992px) {
             .container-fluid {
                 padding: 1.25rem 1.5rem;
             }
         }
-        
-        @media (max-width: 991px) and (min-width: 768px) {
+
+        @media (max-width: 991px) {
             .container-fluid {
                 padding: 1rem;
             }
-            
+
+            .title-bar-row {
+                flex-direction: column !important;
+                align-items: stretch !important;
+            }
+
+            .title-bar-stats {
+                align-items: flex-start !important;
+                width: 100%;
+            }
+
+            .title-bar-stats-row {
+                font-size: 1.05rem !important;
+                gap: 0.5rem 1rem !important;
+            }
+
+            .title-bar-stats-row--in-service {
+                font-size: 0.92em !important;
+            }
+
+            .calendar-toolbar-row {
+                flex-direction: column;
+                align-items: stretch !important;
+            }
+
+            .calendar-toolbar-primary,
+            .calendar-toolbar-controls {
+                width: 100%;
+            }
+
+            .calendar-search-wrap {
+                max-width: none;
+                width: 100%;
+                flex: 1 1 100%;
+            }
+
             .group-card {
-                min-height: 350px;
+                min-height: auto;
             }
         }
-        
+
         @media (max-width: 767px) {
             .container-fluid {
                 padding: 0.75rem;
             }
-            
-            .calendar-grid {
-                gap: 0.25rem;
+
+            .full-width-title-bar .title-bar-row {
+                padding: 0.75rem !important;
             }
-            
+
+            .full-width-title-bar h4 {
+                font-size: 1.05rem;
+                line-height: 1.3;
+            }
+
+            .title-bar-stats-row {
+                font-size: 0.9rem !important;
+            }
+
+            .title-bar-stats-row--in-service {
+                font-size: 0.82rem !important;
+            }
+
+            .calendar-top-bar {
+                padding: 0.75rem !important;
+            }
+
+            .calendar-toolbar-primary h5 {
+                font-size: 1rem;
+                width: 100%;
+            }
+
+            .calendar-toolbar-controls {
+                justify-content: flex-start !important;
+            }
+
+            .calendar-toolbar-controls .form-check-label {
+                font-size: 0.75rem;
+            }
+
+            .calendar-scroll-hint {
+                display: block;
+            }
+
+            .calendar-section {
+                padding: 0.65rem;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .calendar-grid {
+                min-width: 36rem;
+                gap: 0.2rem;
+            }
+
             .calendar-day {
                 padding: 0.2rem 0.25rem;
-                font-size: 0.8rem;
+                font-size: 0.75rem;
                 height: var(--calendar-cell-height, 2.6rem);
                 min-height: calc(var(--calendar-cell-height, 2.6rem) - 0.4rem);
             }
-            
+
+            .calendar-day:hover {
+                transform: none;
+            }
+
+            .calendar-day-header {
+                font-size: 0.7rem;
+                padding: 0.15rem 0.2rem;
+            }
+
             .day-number {
-                font-size: 0.85rem;
-                top: 0.15rem;
-                left: 0.25rem;
+                font-size: 0.8rem;
+                top: 0.12rem;
+                left: 0.2rem;
             }
-            
+
             .day-type, .duty-person, .duty-person-critical, .orthodox-holiday-name {
-                font-size: 0.6rem;
+                font-size: 0.58rem;
             }
-            
+
             .group-card {
                 margin-bottom: 1rem;
+                padding: 1rem;
             }
-            
+
+            .group-title {
+                font-size: 1rem;
+            }
+
+            .group-badge {
+                font-size: 0.8rem;
+            }
+
+            .group-header {
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+
+            .person-item {
+                flex-wrap: wrap;
+                gap: 0.35rem;
+            }
+
             .stats-card {
                 padding: 1rem;
             }
-            
+
             .stats-grid {
                 flex-direction: column;
                 gap: 1rem;
             }
-            
-            .group-title {
-                font-size: 1.2rem;
+
+            #dayDetailsModal .modal-dialog {
+                max-width: calc(100vw - 0.75rem);
+                margin: 0.5rem auto;
+            }
+
+            #dayDetailsModal .modal-body {
+                padding: 1rem;
+                max-height: calc(100vh - 8rem);
+            }
+
+            #dayDetailsModal .modal-footer {
+                padding: 0.75rem 1rem;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+
+            #dayDetailsModal .modal-footer .btn {
+                flex: 1 1 auto;
+            }
+
+            .modal-dialog.modal-superwide {
+                max-width: 100vw !important;
+                margin: 0.25rem auto;
+            }
+
+            .modal-dialog.modal-superwide .modal-content {
+                width: 100% !important;
+                max-height: 96vh;
+                height: auto;
+            }
+
+            .modal .table-responsive {
+                max-height: 50vh;
             }
         }
-        
+
         @media (max-width: 576px) {
             .container-fluid {
                 padding: 0.5rem;
             }
-            
-            .group-card {
-                padding: 1rem;
+
+            .calendar-actions-row {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.45rem;
+                width: 100%;
             }
-            
-            .calendar-section {
-                padding: 1rem;
+
+            .calendar-actions-row .btn {
+                width: 100%;
+                white-space: normal;
+                line-height: 1.25;
+                padding: 0.4rem 0.45rem;
+                font-size: 0.78rem;
+            }
+
+            .calendar-toolbar-primary .btn {
+                width: 100%;
+            }
+
+            .row > [class*="col-"] {
+                padding-left: 0.5rem;
+                padding-right: 0.5rem;
+            }
+
+            .modal-dialog:not(.modal-dialog-centered) {
+                margin: 0.35rem;
+            }
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            .calendar-day:hover,
+            #dayDetailsModal .duty-person-card:hover,
+            #dayDetailsModal .modal-content:hover,
+            .person-item:hover,
+            .person-name-card:hover {
+                transform: none;
             }
         }
         
@@ -1707,22 +1921,22 @@
 <body>
     <!-- Title Bar -->
     <div class="full-width-title-bar">
-        <div class="d-flex justify-content-between align-items-center p-3" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); color: white;">
-            <div class="d-flex align-items-center">
+        <div class="d-flex justify-content-between align-items-center p-3 title-bar-row flex-column flex-lg-row align-items-lg-center" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); color: white;">
+            <div class="d-flex align-items-center title-bar-left">
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.504</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.505</span></h4>
             </div>
-            <div class="title-bar-stats d-flex flex-column align-items-end gap-1" style="font-weight: 500; opacity: 0.98;">
-                <div class="d-flex align-items-center flex-wrap gap-3" style="font-size: 1.25em;">
+            <div class="title-bar-stats d-flex flex-column align-items-end align-items-lg-end gap-1" style="font-weight: 500; opacity: 0.98;">
+                <div class="title-bar-stats-row d-flex align-items-center flex-wrap gap-3" style="font-size: 1.25em;">
                     <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
                     <span>ΑΥΜ: <strong id="statAym">0</strong></span>
                     <span>ΔΤΑ: <strong id="statDta">0</strong></span>
                     <span>AW139: <strong id="statAw139">0</strong></span>
                     <span>Επίγεια: <strong id="statEpigeia">0</strong></span>
                 </div>
-                <div class="d-flex align-items-center flex-wrap gap-3" style="font-size: 1.05em; opacity: 0.92;">
+                <div class="title-bar-stats-row title-bar-stats-row--in-service d-flex align-items-center flex-wrap gap-3" style="font-size: 1.05em; opacity: 0.92;">
                     <span>Στην Υπηρεσία: <strong id="totalPeopleInService">0</strong></span>
                     <span>ΑΥΜ: <strong id="statAymInService">0</strong></span>
                     <span>ΔΤΑ: <strong id="statDtaInService">0</strong></span>
@@ -1737,10 +1951,10 @@
         <!-- Calendar / Ημερολόγιο bar at top: title + nav + cell size, then action buttons -->
         <div class="calendar-top-bar mb-3 p-3 rounded" style="background: #f8f9fa; border: 1px solid #dee2e6;">
             <div class="d-flex flex-column gap-3">
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 calendar-toolbar-row">
+                    <div class="d-flex align-items-center gap-2 flex-wrap calendar-toolbar-primary">
                         <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Ημερολόγιο Υπηρεσιών</h5>
-                        <div class="position-relative" style="min-width: 320px; width: 360px;">
+                        <div class="position-relative calendar-search-wrap">
                             <input type="text" 
                                    id="personSearchInput" 
                                    class="form-control form-control-sm" 
@@ -1753,7 +1967,7 @@
                             <div id="peopleSearchDropdown" class="dropdown-menu position-absolute w-100" style="max-height: 400px; overflow-y: auto; display: none; z-index: 1050; margin-top: 2px;">
                             </div>
                         </div>
-                        <div class="position-relative" style="min-width: 320px; width: 360px;">
+                        <div class="position-relative calendar-search-wrap">
                             <input type="text"
                                    id="dutyPersonSearchInput"
                                    class="form-control form-control-sm"
@@ -1770,7 +1984,7 @@
                             <i class="fas fa-ban me-1"></i>Ακύρωση επιλογής
                         </button>
                     </div>
-                    <div class="d-flex flex-wrap align-items-center gap-2">
+                    <div class="d-flex flex-wrap align-items-center gap-2 calendar-toolbar-controls">
                         <label class="mb-0 d-flex align-items-center gap-1" title="Ύψος κελιών ημερολογίου (2–16 rem)">
                             <span class="text-nowrap" style="font-size: 0.9rem;">Ύψος κελιών:</span>
                             <input type="number" id="calendarCellHeight" min="2" max="16" step="0.2" value="3.2"
@@ -1799,7 +2013,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="d-flex flex-wrap align-items-center gap-2 border-top pt-2" style="border-color: #dee2e6 !important;">
+                <div class="d-flex flex-wrap align-items-center gap-2 border-top pt-2 calendar-actions-row" style="border-color: #dee2e6 !important;">
                     <button class="btn btn-sm btn-info" onclick="openRankingsModal()" title="Διαχείριση Ιεραρχίας">
                         <i class="fas fa-sort-numeric-down me-1"></i>Ιεραρχία
                     </button>
@@ -1916,6 +2130,7 @@
 
         <!-- Calendar grid directly below Ημερολόγιο Υπηρεσιών -->
         <div class="calendar-section mb-4">
+            <p class="calendar-scroll-hint mb-0"><i class="fas fa-arrows-alt-h me-1"></i>Σύρετε οριζόντια για να δείτε όλο το ημερολόγιο.</p>
             <div class="calendar-grid" id="calendarGrid"></div>
         </div>
 
