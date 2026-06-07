@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.503 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.504 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -1712,14 +1712,23 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.503</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.504</span></h4>
             </div>
-            <div class="d-flex align-items-center flex-wrap gap-3 title-bar-stats" style="font-size: 1.25em; font-weight: 500; opacity: 0.98;">
-                <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
-                <span>ΑΥΜ: <strong id="statAym">0</strong></span>
-                <span>ΔΤΑ: <strong id="statDta">0</strong></span>
-                <span>AW139: <strong id="statAw139">0</strong></span>
-                <span>Επίγεια: <strong id="statEpigeia">0</strong></span>
+            <div class="title-bar-stats d-flex flex-column align-items-end gap-1" style="font-weight: 500; opacity: 0.98;">
+                <div class="d-flex align-items-center flex-wrap gap-3" style="font-size: 1.25em;">
+                    <span>Σύνολο Ατόμων: <strong id="totalPeople">0</strong></span>
+                    <span>ΑΥΜ: <strong id="statAym">0</strong></span>
+                    <span>ΔΤΑ: <strong id="statDta">0</strong></span>
+                    <span>AW139: <strong id="statAw139">0</strong></span>
+                    <span>Επίγεια: <strong id="statEpigeia">0</strong></span>
+                </div>
+                <div class="d-flex align-items-center flex-wrap gap-3" style="font-size: 1.05em; opacity: 0.92;">
+                    <span>Στην Υπηρεσία: <strong id="totalPeopleInService">0</strong></span>
+                    <span>ΑΥΜ: <strong id="statAymInService">0</strong></span>
+                    <span>ΔΤΑ: <strong id="statDtaInService">0</strong></span>
+                    <span>AW139: <strong id="statAw139InService">0</strong></span>
+                    <span>Επίγεια: <strong id="statEpigeiaInService">0</strong></span>
+                </div>
             </div>
         </div>
     </div>

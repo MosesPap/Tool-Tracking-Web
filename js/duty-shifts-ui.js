@@ -8107,7 +8107,14 @@
         }
         function updateStatistics() {
             let totalPeople = 0;
+            let totalInService = 0;
             const statIds = { 1: 'statAym', 2: 'statDta', 3: 'statAw139', 4: 'statEpigeia' };
+            const statInServiceIds = {
+                1: 'statAymInService',
+                2: 'statDtaInService',
+                3: 'statAw139InService',
+                4: 'statEpigeiaInService'
+            };
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
@@ -8152,6 +8159,10 @@
 
                 const cur = calcStatsForDate(today);
                 const nxt = calcStatsForDate(nextMonthDate);
+                totalInService += cur.inServiceCount;
+
+                const inServiceEl = document.getElementById(statInServiceIds[i]);
+                if (inServiceEl) inServiceEl.textContent = String(cur.inServiceCount);
 
                 const groupTotalEl = document.getElementById(`group${i}TotalPeople`);
                 const groupInServiceEl = document.getElementById(`group${i}InServicePeople`);
@@ -8174,6 +8185,8 @@
             
             const totalEl = document.getElementById('totalPeople');
             if (totalEl) totalEl.textContent = totalPeople;
+            const totalInServiceEl = document.getElementById('totalPeopleInService');
+            if (totalInServiceEl) totalInServiceEl.textContent = String(totalInService);
         }
         function getSpecialHolidayBeforeDate(dayKey, person, groupNum) {
             const date = new Date(dayKey + 'T00:00:00');
