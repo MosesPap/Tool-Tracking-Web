@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.507 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.508 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -1664,6 +1664,154 @@
             margin-bottom: 0.5rem;
         }
 
+        .calendar-landscape-only-bar {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1060;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            padding: 0.45rem 0.65rem;
+            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+        }
+
+        .calendar-landscape-only-bar .calendar-landscape-only-month {
+            flex: 1 1 auto;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .calendar-landscape-only-bar .btn {
+            flex-shrink: 0;
+        }
+
+        .calendar-landscape-rotate-hint {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1055;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            background: rgba(0, 0, 0, 0.55);
+            color: #fff;
+            text-align: center;
+            font-size: 1rem;
+            pointer-events: none;
+        }
+
+        body.calendar-landscape-only-mode {
+            overflow: hidden;
+        }
+
+        body.calendar-landscape-only-mode .full-width-title-bar,
+        body.calendar-landscape-only-mode .calendar-top-bar,
+        body.calendar-landscape-only-mode .container-fluid > .row {
+            display: none !important;
+        }
+
+        body.calendar-landscape-only-mode .container-fluid {
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: 100% !important;
+        }
+
+        body.calendar-landscape-only-mode .calendar-landscape-only-bar {
+            display: flex;
+        }
+
+        body.calendar-landscape-only-mode .calendar-section {
+            position: fixed;
+            top: 2.65rem;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            margin: 0 !important;
+            padding: 0.35rem 0.45rem 0.5rem !important;
+            border-radius: 0;
+            box-shadow: none;
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
+            z-index: 1040;
+        }
+
+        body.calendar-landscape-only-mode .calendar-scroll-hint {
+            display: none !important;
+        }
+
+        body.calendar-landscape-only-mode .calendar-grid {
+            --calendar-mobile-col-min: auto;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            min-width: 0;
+            width: 100%;
+            gap: 0.2rem;
+        }
+
+        body.calendar-landscape-only-mode .calendar-day-header,
+        body.calendar-landscape-only-mode .calendar-day {
+            min-width: 0;
+        }
+
+        @media (max-width: 991px) and (orientation: portrait) {
+            body.calendar-landscape-only-mode .calendar-landscape-rotate-hint {
+                display: flex;
+            }
+        }
+
+        @media (max-width: 991px) and (orientation: landscape) {
+            body.calendar-landscape-only-mode .calendar-section {
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            body.calendar-landscape-only-mode .calendar-grid {
+                flex: 1 1 auto;
+                height: 100%;
+                align-content: stretch;
+            }
+
+            body.calendar-landscape-only-mode .calendar-day {
+                height: auto;
+                min-height: 0;
+                flex: 1 1 auto;
+                font-size: 0.62rem;
+                padding-top: 1.1rem;
+            }
+
+            body.calendar-landscape-only-mode .calendar-day-header {
+                font-size: 0.68rem;
+                padding: 0.15rem 0.2rem;
+            }
+
+            body.calendar-landscape-only-mode .day-number {
+                font-size: 0.72rem;
+            }
+
+            body.calendar-landscape-only-mode .duty-person,
+            body.calendar-landscape-only-mode .duty-person-critical,
+            body.calendar-landscape-only-mode .duty-person-swapped,
+            body.calendar-landscape-only-mode .duty-missing-disabled-cell {
+                font-size: 0.56rem;
+                line-height: 1.15;
+            }
+
+            body.calendar-landscape-only-mode .orthodox-holiday-name {
+                font-size: 0.52rem;
+            }
+        }
+
         /* Responsive Design */
         @media (min-width: 1200px) {
             .container-fluid {
@@ -1997,7 +2145,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.507</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.508</span></h4>
             </div>
             <div class="title-bar-stats d-flex flex-column align-items-end align-items-lg-end gap-1" style="font-weight: 500; opacity: 0.98;">
                 <div class="title-bar-stats-row d-flex align-items-center flex-wrap gap-3" style="font-size: 1.25em;">
@@ -2081,6 +2229,11 @@
                              title="Εμφανίζει μόνο όσους είναι απόντες ή απενεργοποιημένοι για τον τύπο υπηρεσίας της ημέρας (ανά ομάδα).">
                             <input class="form-check-input flex-shrink-0" type="checkbox" role="switch" id="calendarMissingDisabledToggle" style="cursor: pointer;">
                             <label class="form-check-label small text-nowrap ms-2 mb-0 user-select-none" for="calendarMissingDisabledToggle" style="cursor: pointer;"><i class="fas fa-user-slash me-1 text-secondary"></i>Μόνο απόντες/απενεργ.</label>
+                        </div>
+                        <div class="form-check form-switch mb-0 ms-sm-2 d-flex align-items-center flex-shrink-0 d-lg-none"
+                             title="Εμφανίζει μόνο το ημερολόγιο του τρέχοντος μήνα σε πλήρη οθόνη — ιδανικό σε οριζόντια (landscape) προσανατολισμό.">
+                            <input class="form-check-input flex-shrink-0" type="checkbox" role="switch" id="calendarLandscapeOnlyToggle" style="cursor: pointer;">
+                            <label class="form-check-label small text-nowrap ms-2 mb-0 user-select-none" for="calendarLandscapeOnlyToggle" style="cursor: pointer;"><i class="fas fa-mobile-alt me-1 text-secondary"></i>Landscape μόνο</label>
                         </div>
                     </div>
                 </div>
@@ -2196,6 +2349,26 @@
                         <button type="button" class="btn btn-sm btn-primary" onclick="saveNormalSwapLogicSettingsFromModal()">Αποθήκευση</button>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Compact bar for mobile landscape-only calendar view -->
+        <div id="calendarLandscapeOnlyBar" class="calendar-landscape-only-bar" aria-hidden="true">
+            <button type="button" class="btn btn-sm btn-light" id="calendarLandscapeOnlyExitBtn" title="Έξοδος από προβολή landscape">
+                <i class="fas fa-times"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-light" onclick="previousMonth()" aria-label="Προηγούμενος μήνας">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <span class="calendar-landscape-only-month" id="calendarLandscapeOnlyMonthLabel" role="button" tabindex="0" title="Επιλογή μήνα"></span>
+            <button type="button" class="btn btn-sm btn-outline-light" onclick="nextMonth()" aria-label="Επόμενος μήνας">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+        <div id="calendarLandscapeRotateHint" class="calendar-landscape-rotate-hint" aria-hidden="true">
+            <div>
+                <i class="fas fa-mobile-alt fa-2x mb-2" style="transform: rotate(90deg);"></i>
+                <div>Γυρίστε τη συσκευή οριζόντια (landscape) για προβολή μόνο του ημερολογίου.</div>
             </div>
         </div>
 

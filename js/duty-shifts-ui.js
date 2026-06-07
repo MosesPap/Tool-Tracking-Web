@@ -25,6 +25,7 @@
                 dutyPersonSearchInput: 'Εντοπίζει και επισημαίνει στο ημερολόγιο όλες τις αναθέσεις του συγκεκριμένου ατόμου στον τρέχοντα μήνα.',
                 monthCalculationLockToggle: 'Κλειδώνει ή ξεκλειδώνει τον τρέχοντα μήνα ώστε να αποτρέπεται ή να επιτρέπεται νέος υπολογισμός υπηρεσιών.',
                 calendarMissingDisabledToggle: 'Μετατρέπει την προβολή ώστε να εμφανίζονται μόνο απόντες και απενεργοποιημένοι ανά ημέρα/ομάδα.',
+                calendarLandscapeOnlyToggle: 'Εμφανίζει μόνο το ημερολόγιο του τρέχοντος μήνα σε πλήρη οθόνη — ιδανικό σε landscape σε κινητό/tablet.',
                 calendarCellHeight: 'Ρυθμίζει το ύψος των κελιών ημερολογίου για καλύτερη αναγνωσιμότητα όταν υπάρχουν πολλές εγγραφές.',
                 currentMonthYear: 'Ανοίγει επιλογέα μήνα/έτους για άμεση μετάβαση χωρίς διαδοχικά κλικ πλοήγησης.',
                 dutyShiftsAIQuestionInput: 'Δέχεται ερώτηση φυσικής γλώσσας και επιστρέφει σχετική απάντηση από το επίσημο εγχειρίδιο χρήσης.',
@@ -4144,6 +4145,95 @@
                 if (typeof renderCalendar === 'function') renderCalendar();
             });
         }
+
+        let _calendarLandscapeOnlyToggleAttached = false;
+        let _calendarLandscapeOnlyResizeBound = false;
+
+        function isCalendarLandscapeOnlyEligible() {
+            try {
+                if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 991px)').matches) {
+                    return true;
+                }
+            } catch (_) { /* ignore */ }
+            return false;
+        }
+
+        function syncCalendarLandscapeOnlyMonthLabel() {
+            const label = document.getElementById('calendarLandscapeOnlyMonthLabel');
+            const main = document.getElementById('currentMonthYear');
+            if (!label) return;
+            label.textContent = main?.textContent || '';
+        }
+
+        function setCalendarLandscapeOnlyMode(enabled) {
+            const toggle = document.getElementById('calendarLandscapeOnlyToggle');
+            const bar = document.getElementById('calendarLandscapeOnlyBar');
+            const hint = document.getElementById('calendarLandscapeRotateHint');
+            const on = !!enabled && isCalendarLandscapeOnlyEligible();
+
+            if (toggle) toggle.checked = on;
+            document.body.classList.toggle('calendar-landscape-only-mode', on);
+            if (bar) bar.setAttribute('aria-hidden', on ? 'false' : 'true');
+            if (hint) hint.setAttribute('aria-hidden', on ? 'false' : 'true');
+
+            try {
+                localStorage.setItem('dutyShiftsCalendarLandscapeOnly', on ? '1' : '0');
+            } catch (_) { /* ignore */ }
+
+            if (on) {
+                syncCalendarLandscapeOnlyMonthLabel();
+            }
+        }
+
+        function exitCalendarLandscapeOnlyMode() {
+            setCalendarLandscapeOnlyMode(false);
+        }
+
+        function attachCalendarLandscapeOnlyToggleOnce() {
+            if (_calendarLandscapeOnlyToggleAttached) return;
+            const el = document.getElementById('calendarLandscapeOnlyToggle');
+            if (!el) return;
+            _calendarLandscapeOnlyToggleAttached = true;
+
+            try {
+                const v = localStorage.getItem('dutyShiftsCalendarLandscapeOnly');
+                el.checked = (v === '1' || v === 'true') && isCalendarLandscapeOnlyEligible();
+            } catch (_) {
+                el.checked = false;
+            }
+            setCalendarLandscapeOnlyMode(el.checked);
+
+            el.addEventListener('change', () => {
+                setCalendarLandscapeOnlyMode(el.checked);
+            });
+
+            const exitBtn = document.getElementById('calendarLandscapeOnlyExitBtn');
+            if (exitBtn) {
+                exitBtn.addEventListener('click', exitCalendarLandscapeOnlyMode);
+            }
+
+            const monthLabel = document.getElementById('calendarLandscapeOnlyMonthLabel');
+            if (monthLabel) {
+                monthLabel.addEventListener('click', openCalendarMonthPicker);
+                monthLabel.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openCalendarMonthPicker();
+                    }
+                });
+            }
+
+            if (!_calendarLandscapeOnlyResizeBound) {
+                _calendarLandscapeOnlyResizeBound = true;
+                window.addEventListener('resize', () => {
+                    if (!document.body.classList.contains('calendar-landscape-only-mode')) return;
+                    if (!isCalendarLandscapeOnlyEligible()) {
+                        exitCalendarLandscapeOnlyMode();
+                    }
+                });
+            }
+        }
+
         function openNormalSwapLogicSettingsModal() {
             const flexCb = document.getElementById('dutyShiftsFlexibleStatusEffectiveDates');
             if (flexCb) flexCb.checked = isFlexibleStatusEffectiveDatesEnabled();
@@ -4202,6 +4292,7 @@
             attachMonthCalculationLockToggleOnce();
             syncMonthCalculationLockToggle();
             attachCalendarMissingDisabledToggleOnce();
+            attachCalendarLandscapeOnlyToggleOnce();
             
             // NOTE: criticalAssignments are treated as history only and must not be injected into the calendar.
             
@@ -4210,6 +4301,7 @@
             
             currentMonthYear.textContent = 
                 currentDate.toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
+            syncCalendarLandscapeOnlyMonthLabel();
             
             const firstDay = new Date(year, month, 1);
             const lastDay = new Date(year, month + 1, 0);
