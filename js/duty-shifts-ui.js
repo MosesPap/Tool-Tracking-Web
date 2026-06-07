@@ -25,7 +25,7 @@
                 dutyPersonSearchInput: 'Εντοπίζει και επισημαίνει στο ημερολόγιο όλες τις αναθέσεις του συγκεκριμένου ατόμου στον τρέχοντα μήνα.',
                 monthCalculationLockToggle: 'Κλειδώνει ή ξεκλειδώνει τον τρέχοντα μήνα ώστε να αποτρέπεται ή να επιτρέπεται νέος υπολογισμός υπηρεσιών.',
                 calendarMissingDisabledToggle: 'Μετατρέπει την προβολή ώστε να εμφανίζονται μόνο απόντες και απενεργοποιημένοι ανά ημέρα/ομάδα.',
-                calendarLandscapeOnlyToggle: 'Εμφανίζει μόνο το ημερολόγιο του τρέχοντος μήνα σε πλήρη οθόνη — ιδανικό σε landscape σε κινητό/tablet.',
+                calendarLandscapeOnlyToggle: 'Εμφανίζει μόνο το ημερολόγιο του τρέχοντος μήνα σε οριζόντια προβολή πλήρους οθόνης (κινητό/tablet).',
                 calendarCellHeight: 'Ρυθμίζει το ύψος των κελιών ημερολογίου για καλύτερη αναγνωσιμότητα όταν υπάρχουν πολλές εγγραφές.',
                 currentMonthYear: 'Ανοίγει επιλογέα μήνα/έτους για άμεση μετάβαση χωρίς διαδοχικά κλικ πλοήγησης.',
                 dutyShiftsAIQuestionInput: 'Δέχεται ερώτηση φυσικής γλώσσας και επιστρέφει σχετική απάντηση από το επίσημο εγχειρίδιο χρήσης.',
@@ -4168,13 +4168,11 @@
         function setCalendarLandscapeOnlyMode(enabled) {
             const toggle = document.getElementById('calendarLandscapeOnlyToggle');
             const bar = document.getElementById('calendarLandscapeOnlyBar');
-            const hint = document.getElementById('calendarLandscapeRotateHint');
             const on = !!enabled && isCalendarLandscapeOnlyEligible();
 
             if (toggle) toggle.checked = on;
             document.body.classList.toggle('calendar-landscape-only-mode', on);
             if (bar) bar.setAttribute('aria-hidden', on ? 'false' : 'true');
-            if (hint) hint.setAttribute('aria-hidden', on ? 'false' : 'true');
 
             try {
                 localStorage.setItem('dutyShiftsCalendarLandscapeOnly', on ? '1' : '0');
