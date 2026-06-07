@@ -5,6 +5,7 @@
         /** Calendar cell hover popups (hierarchy vs missing/disabled list — only one at a time) */
         let hierarchyPopup = null;
         let missingDisabledCalendarPopup = null;
+        const CALENDAR_DOUBLE_TAP_MS = 320;
         let _controlTooltipsInitialized = false;
         let _controlTooltipsObserver = null;
         let _controlTooltipsTimer = null;
@@ -4520,53 +4521,7 @@
                     }
                 }
                 
-                // Add click handler AFTER setting innerHTML to ensure it's not removed
-                dayDiv.style.cursor = 'pointer';
-                dayDiv.setAttribute('data-date', key); // Store date key for debugging
-                dayDiv.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    try {
-                        showDayDetails(date);
-                    } catch (error) {
-                        console.error('Error showing day details:', error);
-                        alert('Σφάλμα κατά το άνοιγμα των λεπτομερειών ημέρας: ' + error.message);
-                    }
-                });
-                
-                // Add hover handler with 1 second delay for popup
-                let hoverTimeout = null;
-                const container = dayDiv.querySelector('.duty-person-container');
-                if (container && container.getAttribute('data-hierarchy-order')) {
-                    dayDiv.addEventListener('mouseenter', (e) => {
-                        hoverTimeout = setTimeout(() => {
-                            showHierarchyPopup(dayDiv, container);
-                        }, 1000);
-                    });
-                    dayDiv.addEventListener('mouseleave', (e) => {
-                        if (hoverTimeout) {
-                            clearTimeout(hoverTimeout);
-                            hoverTimeout = null;
-                        }
-                        hideHierarchyPopup();
-                    });
-                }
-
-                let mdHoverTimeout = null;
-                if (container && container.getAttribute('data-missing-disabled-list')) {
-                    dayDiv.addEventListener('mouseenter', () => {
-                        mdHoverTimeout = setTimeout(() => {
-                            showMissingDisabledCalendarPopup(dayDiv, container);
-                        }, 400);
-                    });
-                    dayDiv.addEventListener('mouseleave', () => {
-                        if (mdHoverTimeout) {
-                            clearTimeout(mdHoverTimeout);
-                            mdHoverTimeout = null;
-                        }
-                        hideMissingDisabledCalendarPopup();
-                    });
-                }
+                attachCalendarDayInteractionHandlers(dayDiv, date, key);
                 
                 frag.appendChild(dayDiv);
             }
@@ -4751,6 +4706,191 @@
                 }
             }, 10);
         }
+
+        /** True on phones/tablets or coarse-pointer devices (single vs double tap on calendar). */
+        function isCalendarTouchTapMode() {
+            try {
+                if (typeof window.matchMedia === 'function') {
+                    if (window.matchMedia('(max-width: 991px)').matches) return true;
+                    if (window.matchMedia('(hover: none) and (pointer: coarse)').matches) return true;
+                }
+            } catch (e) { /* ignore */ }
+            return false;
+        }
+
+        function openCalendarDayDetails(date) {
+            try {
+                showDayDetails(date);
+            } catch (error) {
+                console.error('Error showing day details:', error);
+                alert('Σφάλμα κατά το άνοιγμα των λεπτομερειών ημέρας: ' + error.message);
+            }
+        }
+
+        function showDayServiceSeniorityModal(date, dayDiv) {
+            hideHierarchyPopup();
+            hideMissingDisabledCalendarPopup(true);
+
+            const container = dayDiv?.querySelector?.('.duty-person-container');
+            if (!container) return;
+
+            const showMdOnly = document.getElementById('calendarMissingDisabledToggle')?.checked === true;
+            const dateLabel = typeof formatDate === 'function' ? formatDate(date) : String(date);
+            let modalTitle = '';
+            let bodyHtml = '';
+
+            if (showMdOnly && container.getAttribute('data-missing-disabled-list')) {
+                const raw = container.getAttribute('data-missing-disabled-list');
+                let entries;
+                try {
+                    entries = JSON.parse(decodeURIComponent(raw));
+                } catch (e) {
+                    console.error('showDayServiceSeniorityModal: bad missing/disabled data', e);
+                    return;
+                }
+                if (!Array.isArray(entries) || entries.length === 0) return;
+                modalTitle = dateLabel + ' — Απόντες / απενεργοποιημένοι';
+                bodyHtml =
+                    '<ul class="day-service-seniority-list">' +
+                    entries
+                        .map((row) => {
+                            const tag = String(row.tag || '');
+                            let reasonClass = 'md-popup-reason--missing';
+                            if (tag === 'Απενεργοπ.') reasonClass = 'md-popup-reason--disabled';
+                            else if (tag === 'Απ.+Απεν.') reasonClass = 'md-popup-reason--both';
+                            return (
+                                '<li>' +
+                                '<span class="md-popup-group">' +
+                                escapeHtml(String(row.groupNum)) +
+                                '.</span> ' +
+                                '<span class="md-popup-name">' +
+                                escapeHtml(String(row.personName || '')) +
+                                '</span> ' +
+                                '<span class="md-popup-reason ' +
+                                reasonClass +
+                                '">' +
+                                escapeHtml(tag) +
+                                '</span></li>'
+                            );
+                        })
+                        .join('') +
+                    '</ul>';
+            } else {
+                const hierarchyData = container.getAttribute('data-hierarchy-order');
+                if (!hierarchyData) return;
+                let entries;
+                try {
+                    entries = JSON.parse(hierarchyData);
+                } catch (e) {
+                    console.error('showDayServiceSeniorityModal: bad hierarchy data', e);
+                    return;
+                }
+                if (!Array.isArray(entries) || entries.length === 0) return;
+                modalTitle = dateLabel + ' — Αρχαιότητα Υπηρεσίας';
+                const missingBufferTitlePopup =
+                    'Προειδοποίηση: Η ημέρα είναι αμέσως πριν την έναρξη ή αμέσως μετά το τέλος περιόδου απουσίας.';
+                bodyHtml =
+                    '<ul class="day-service-seniority-list">' +
+                    entries
+                        .map((e, idx) => {
+                            const buf = e.bufferWarning
+                                ? ` <i class="fas fa-exclamation-triangle duty-missing-buffer-warn" title="${escapeHtml(missingBufferTitlePopup)}" aria-label="${escapeHtml(missingBufferTitlePopup)}"></i>`
+                                : '';
+                            return `<li>${idx + 1}. ${escapeHtml(e.name)}${buf}</li>`;
+                        })
+                        .join('') +
+                    '</ul>';
+            }
+
+            const modalEl = document.getElementById('dayServiceSeniorityModal');
+            if (!modalEl) {
+                console.error('dayServiceSeniorityModal element not found');
+                return;
+            }
+            const titleEl = document.getElementById('dayServiceSeniorityModalTitle');
+            const bodyEl = document.getElementById('dayServiceSeniorityModalBody');
+            if (titleEl) titleEl.textContent = modalTitle;
+            if (bodyEl) bodyEl.innerHTML = bodyHtml;
+
+            const existing = bootstrap.Modal.getInstance(modalEl);
+            if (existing) existing.hide();
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        }
+
+        function attachCalendarDayInteractionHandlers(dayDiv, date, key) {
+            dayDiv.style.cursor = 'pointer';
+            dayDiv.setAttribute('data-date', key);
+
+            let singleTapTimer = null;
+            let lastTapTime = 0;
+
+            dayDiv.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (isCalendarTouchTapMode()) {
+                    const now = Date.now();
+                    if (now - lastTapTime < CALENDAR_DOUBLE_TAP_MS) {
+                        if (singleTapTimer) {
+                            clearTimeout(singleTapTimer);
+                            singleTapTimer = null;
+                        }
+                        lastTapTime = 0;
+                        const seniorityModal = document.getElementById('dayServiceSeniorityModal');
+                        if (seniorityModal) {
+                            const inst = bootstrap.Modal.getInstance(seniorityModal);
+                            if (inst) inst.hide();
+                        }
+                        openCalendarDayDetails(date);
+                        return;
+                    }
+                    lastTapTime = now;
+                    if (singleTapTimer) clearTimeout(singleTapTimer);
+                    singleTapTimer = setTimeout(() => {
+                        singleTapTimer = null;
+                        showDayServiceSeniorityModal(date, dayDiv);
+                    }, CALENDAR_DOUBLE_TAP_MS);
+                    return;
+                }
+
+                openCalendarDayDetails(date);
+            });
+
+            const container = dayDiv.querySelector('.duty-person-container');
+            if (!isCalendarTouchTapMode() && container && container.getAttribute('data-hierarchy-order')) {
+                let hoverTimeout = null;
+                dayDiv.addEventListener('mouseenter', () => {
+                    hoverTimeout = setTimeout(() => {
+                        showHierarchyPopup(dayDiv, container);
+                    }, 1000);
+                });
+                dayDiv.addEventListener('mouseleave', () => {
+                    if (hoverTimeout) {
+                        clearTimeout(hoverTimeout);
+                        hoverTimeout = null;
+                    }
+                    hideHierarchyPopup();
+                });
+            }
+
+            if (!isCalendarTouchTapMode() && container && container.getAttribute('data-missing-disabled-list')) {
+                let mdHoverTimeout = null;
+                dayDiv.addEventListener('mouseenter', () => {
+                    mdHoverTimeout = setTimeout(() => {
+                        showMissingDisabledCalendarPopup(dayDiv, container);
+                    }, 400);
+                });
+                dayDiv.addEventListener('mouseleave', () => {
+                    if (mdHoverTimeout) {
+                        clearTimeout(mdHoverTimeout);
+                        mdHoverTimeout = null;
+                    }
+                    hideMissingDisabledCalendarPopup();
+                });
+            }
+        }
+
         function getDayTypeLabel(dayType) {
             switch(dayType) {
                 case 'special-holiday': return 'Ειδική';
