@@ -4853,6 +4853,103 @@
             }
         }
 
+        /** Sorted duty date keys of a given category inside a calendar month. */
+        function getDutyDateKeysInCalendarMonth(year, month, dayTypeCategory) {
+            const keys = [];
+            const cur = new Date(year, month, 1);
+            const endM = new Date(year, month + 1, 0);
+            while (cur <= endM) {
+                const dk = formatDateKey(cur);
+                const isSpecial = Array.isArray(specialHolidays) && specialHolidays.some((h) => h && h.date === dk);
+                const dtType = isSpecial ? 'special-holiday' : getDayType(cur);
+                let cat = 'normal';
+                if (dtType === 'special-holiday') cat = 'special';
+                else if (dtType === 'weekend-holiday') cat = 'weekend';
+                else if (dtType === 'semi-normal-day') cat = 'semi';
+                if (cat === dayTypeCategory) keys.push(dk);
+                cur.setDate(cur.getDate() + 1);
+            }
+            return keys.sort();
+        }
+
+        function getRotationPeopleListForGroup(groupNum, dayTypeCategory, groupData) {
+            const raw = groupData?.[dayTypeCategory] || groups[groupNum]?.[dayTypeCategory] || [];
+            if (!Array.isArray(raw)) return [];
+            return raw
+                .filter(Boolean)
+                .map((p) => resolvePersonInGroupRotationList(p, groupNum, dayTypeCategory) || p);
+        }
+
+        /**
+         * Simulate pure rotation through all duty days in the export month (same rules as computeExpectedRotationPersonForDate).
+         * Returns cursor index for the first alternate and the last rotation-slot holder.
+         */
+        function simulateRotationCursorAfterMonth(year, month, groupNum, dayTypeCategory, groupPeople) {
+            const len = groupPeople.length;
+            if (!len) return { cursor: 0, lastSlotPerson: '' };
+
+            const monthStartDate = new Date(year, month, 1);
+            const keys = getDutyDateKeysInCalendarMonth(year, month, dayTypeCategory);
+            const norm = normRotPersonName;
+            const findIdx = (name) => {
+                if (!name) return -1;
+                const resolved = resolvePersonInGroupRotationList(name, groupNum, dayTypeCategory);
+                const target = norm(resolved || name);
+                return groupPeople.findIndex((p) => norm(p) === target);
+            };
+
+            let cursor =
+                typeof computeRotationPositionAtMonthStart === 'function'
+                    ? computeRotationPositionAtMonthStart(dayTypeCategory, monthStartDate, groupNum, groupPeople)
+                    : 0;
+            if (!Number.isFinite(cursor)) cursor = 0;
+            cursor = ((cursor % len) + len) % len;
+
+            const deferState = {};
+            seedManualAlternateDeferFromPreviousMonth(deferState, dayTypeCategory, monthStartDate, groupNum);
+
+            let lastSlotPerson = '';
+
+            const applyDeferSkip = () => {
+                const st = deferState[groupNum];
+                if (!st?.person) return;
+                const dn = norm(st.person);
+                let guard = 0;
+                while (guard++ <= len + 2 && groupPeople[cursor] && norm(groupPeople[cursor]) === dn) {
+                    cursor = (cursor + 1) % len;
+                    delete deferState[groupNum];
+                }
+            };
+
+            for (const dk of keys) {
+                const manual = findManualAlternateReplacementForGroup(dk, groupNum);
+                if (manual?.baselinePerson) {
+                    const bi = findIdx(manual.baselinePerson);
+                    if (bi >= 0) {
+                        lastSlotPerson = groupPeople[bi];
+                        cursor = (bi + 1) % len;
+                        if (manual.replacementPerson) {
+                            deferState[groupNum] = {
+                                person: resolvePersonInGroupRotationList(manual.replacementPerson, groupNum, dayTypeCategory),
+                                skipOnCursorMatch: true
+                            };
+                        }
+                        continue;
+                    }
+                }
+                applyDeferSkip();
+                lastSlotPerson = groupPeople[cursor] || '';
+                cursor = (cursor + 1) % len;
+            }
+
+            applyDeferSkip();
+
+            return {
+                cursor,
+                lastSlotPerson: lastSlotPerson ? norm(lastSlotPerson) : ''
+            };
+        }
+
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
             const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
@@ -4881,50 +4978,6 @@
                 return false;
             };
 
-            const firstDayOfExportMonth = new Date(year, month, 1);
-
-            // Seed from previous baseline month(s) only, so Excel alternates follow initial rotation order
-            // and ignore swaps/conflict replacements.
-            for (const t of ['normal', 'semi', 'weekend', 'special']) {
-                const fromChain = typeof getLastBaselineRotationPersonForDate === 'function'
-                    ? getLastBaselineRotationPersonForDate(t, firstDayOfExportMonth, groupNum)
-                    : null;
-                if (fromChain) lastAssigned[t] = normName(fromChain);
-            }
-
-            for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(year, month, day);
-                const dayKey = formatDateKey(date);
-                const dayType = getDayType(date);
-                const rotationType = mapDayTypeToRotationType(dayType);
-
-                // Prefer baseline (rotation) assignment when available, so replacements (e.g. manual skip)
-                // do not shift the computed "next on rotation" list.
-                const baseline = (typeof getRotationBaselineAssignmentForDate === 'function')
-                    ? getRotationBaselineAssignmentForDate(dayKey)
-                    : null;
-                const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
-                const baselinePerson = baselineMap?.[groupNum] || '';
-                const actualAssignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
-                const actualPerson = getAssignedPersonNameForGroupFromAssignment(actualAssignment, groupNum) || '';
-
-                let personName = normName(baselinePerson);
-                // For non-special duty types: if baseline holder is unavailable for the whole next month
-                // and this date was actually served by a replacement, continue from the replacement.
-                // This prevents showing the replacement again as immediate alternate (A,B -> should be B,C).
-                if (
-                    rotationType !== 'special' &&
-                    baselinePerson &&
-                    actualPerson &&
-                    normName(actualPerson) !== normName(baselinePerson) &&
-                    (isDisabledForType(baselinePerson, rotationType) || isMissingWholeNextMonth(baselinePerson))
-                ) {
-                    personName = normName(actualPerson);
-                }
-                // Last chronological duty in this month wins (do not keep only the first day of the month).
-                if (personName) lastAssigned[rotationType] = personName;
-            }
-
             const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
                 const periods = groupData?.missingPeriods?.[personName];
                 if (!Array.isArray(periods) || periods.length === 0) return '';
@@ -4944,26 +4997,24 @@
             const getMissingReasonOverNextMonth = (personName) => getMissingReasonOverRange(personName, nextMonthStartKey, nextMonthEndKey);
 
             const nextTwoForType = (type) => {
-                const rawList = (groupData?.[type] || []).filter(Boolean);
+                const rawList = getRotationPeopleListForGroup(groupNum, type, groupData);
                 if (rawList.length === 0) return ['', ''];
 
                 const eligible = (p) => !isDisabledForType(p, type) && !isMissingWholeNextMonth(p);
                 const eligibleCount = rawList.filter(eligible).length;
                 if (eligibleCount === 0) return ['', ''];
 
-                const last = lastAssigned[type];
-                let startIdx = 0;
-                const lastIdx = last ? rawList.findIndex(p => normName(p) === normName(last)) : -1;
-                if (lastIdx >= 0) startIdx = (lastIdx + 1) % rawList.length;
+                const simulated = simulateRotationCursorAfterMonth(year, month, groupNum, type, rawList);
+                lastAssigned[type] = simulated.lastSlotPerson || lastAssigned[type] || '';
 
                 const picks = [];
-                let cursor = startIdx;
+                let cursor = simulated.cursor;
                 let checked = 0;
-                const maxChecks = rawList.length * 2; // enough to wrap and still pick 2 (or same when single eligible)
+                const maxChecks = rawList.length * 2;
                 while (checked < maxChecks && picks.length < 2) {
                     const candidate = rawList[cursor];
                     if (eligible(candidate)) {
-                        if (picks.length === 0 || candidate !== picks[0] || eligibleCount === 1) {
+                        if (picks.length === 0 || normName(candidate) !== normName(picks[0]) || eligibleCount === 1) {
                             picks.push(candidate);
                         }
                     }
@@ -4977,14 +5028,11 @@
             // Special: show next 3 even if disabled/missing; annotate only if unavailable during the actual month
             // of the next upcoming special-holiday duty dates (which can be far later than next month).
             const nextThreeForSpecial = () => {
-                const rawList = (groupData?.special || []).filter(Boolean);
+                const rawList = getRotationPeopleListForGroup(groupNum, 'special', groupData);
                 if (rawList.length === 0) return { names: ['', '', ''], notes: ['', '', ''] };
-                const last = lastAssigned.special;
-                let startIdx = 0;
-                if (last) {
-                    const idx = rawList.findIndex(p => normName(p) === normName(last));
-                    if (idx >= 0) startIdx = idx + 1;
-                }
+                const simulated = simulateRotationCursorAfterMonth(year, month, groupNum, 'special', rawList);
+                lastAssigned.special = simulated.lastSlotPerson || '';
+                let startIdx = simulated.cursor;
                 const findNextSpecialDates = (count = 3, maxDays = 3650) => {
                     const out = [];
                     const start = new Date(year, month + 1, 1); // start scanning after current month
