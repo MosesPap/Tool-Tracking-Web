@@ -4834,6 +4834,87 @@
             return 'normal';
         }
 
+        /** Sorted YYYY-MM-DD keys in month for a duty rotation type (normal/semi/weekend/special). */
+        function collectDayKeysForRotationTypeInMonth(year, month, rotationType) {
+            const keys = [];
+            const lastDay = new Date(year, month + 1, 0);
+            const d = new Date(year, month, 1);
+            while (d <= lastDay) {
+                const dk = formatDateKey(d);
+                if (mapDayTypeToRotationType(getDayType(d)) === rotationType) keys.push(dk);
+                d.setDate(d.getDate() + 1);
+            }
+            return keys.sort();
+        }
+
+        /**
+         * Simulate pure rotation slots through the month (ignores swaps & return-from-missing shifts).
+         * Matches pureNormalRotationByDate / Excel «αρχική σειρά» semantics.
+         */
+        function simulatePureRotationLastSlotForMonth(rotationType, year, month, groupNum, groupData) {
+            const rawList = (groupData?.[rotationType] || []).filter(Boolean);
+            if (!rawList.length) return '';
+
+            const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
+            const dayKeys = collectDayKeysForRotationTypeInMonth(year, month, rotationType);
+            if (!dayKeys.length) return '';
+
+            const firstDay = new Date(year, month, 1);
+            const seed =
+                typeof getLastBaselineRotationPersonForDate === 'function'
+                    ? getLastBaselineRotationPersonForDate(rotationType, firstDay, groupNum)
+                    : null;
+            let cursor = 0;
+            if (seed) {
+                const si = rawList.findIndex((p) => normName(p) === normName(seed));
+                if (si >= 0) cursor = (si + 1) % rawList.length;
+            }
+
+            let deferSkip = null;
+            let deferSkipOnCursor = false;
+            if (typeof findLatestManualAlternateInPreviousMonth === 'function') {
+                const prevManual = findLatestManualAlternateInPreviousMonth(rotationType, firstDay, groupNum);
+                if (prevManual?.replacementPerson) {
+                    deferSkip =
+                        typeof resolvePersonInGroupRotationList === 'function'
+                            ? resolvePersonInGroupRotationList(prevManual.replacementPerson, groupNum, rotationType)
+                            : prevManual.replacementPerson;
+                    deferSkipOnCursor = true;
+                }
+            }
+
+            let lastSlot = seed ? normName(seed) : '';
+
+            for (const dk of dayKeys) {
+                if (typeof findManualAlternateReplacementForGroup === 'function') {
+                    const manual = findManualAlternateReplacementForGroup(dk, groupNum);
+                    if (manual?.baselinePerson) {
+                        lastSlot = normName(manual.baselinePerson);
+                        const bIdx = rawList.findIndex((p) => normName(p) === normName(manual.baselinePerson));
+                        if (bIdx >= 0) cursor = (bIdx + 1) % rawList.length;
+                        continue;
+                    }
+                }
+
+                while (
+                    deferSkip &&
+                    deferSkipOnCursor &&
+                    rawList[cursor] &&
+                    normName(rawList[cursor]) === normName(deferSkip)
+                ) {
+                    cursor = (cursor + 1) % rawList.length;
+                    deferSkip = null;
+                    deferSkipOnCursor = false;
+                }
+
+                const slotPerson = rawList[cursor];
+                if (slotPerson) lastSlot = normName(slotPerson);
+                cursor = (cursor + 1) % rawList.length;
+            }
+
+            return lastSlot;
+        }
+
         function getAssignedPersonNameForGroupFromAssignment(assignment, groupNum) {
             try {
                 // Support object format: { "1": "Name", "2": "Name", ... }
@@ -4881,57 +4962,53 @@
                 return false;
             };
 
-            const firstDayOfExportMonth = new Date(year, month, 1);
-
-            // Seed from previous baseline month(s) only, so Excel alternates follow initial rotation order
-            // and ignore swaps/conflict replacements.
+            // Pure rotation simulation (αρχική σειρά): αγνοεί ανταλλαγές σύγκρουσης και μετατοπίσεις
+            // return-from-missing που αλλάζουν τις τελικές αναθέσεις αλλά όχι τη θέση slot περιστροφής.
             for (const t of ['normal', 'semi', 'weekend', 'special']) {
-                const fromChain = typeof getLastBaselineRotationPersonForDate === 'function'
-                    ? getLastBaselineRotationPersonForDate(t, firstDayOfExportMonth, groupNum)
-                    : null;
-                if (fromChain) lastAssigned[t] = normName(fromChain);
-            }
+                const simulated = simulatePureRotationLastSlotForMonth(t, year, month, groupNum, groupData);
+                if (simulated) lastAssigned[t] = simulated;
 
-            for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(year, month, day);
-                const dayKey = formatDateKey(date);
-                const dayType = getDayType(date);
-                const rotationType = mapDayTypeToRotationType(dayType);
-
-                // Prefer baseline (rotation) assignment when available, so replacements (e.g. manual skip)
-                // do not shift the computed "next on rotation" list.
-                const baseline = (typeof getRotationBaselineAssignmentForDate === 'function')
-                    ? getRotationBaselineAssignmentForDate(dayKey)
-                    : null;
-                const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
-                const baselinePerson = baselineMap?.[groupNum] || '';
-                const actualAssignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
-                const actualPerson = getAssignedPersonNameForGroupFromAssignment(actualAssignment, groupNum) || '';
-
-                let personName = normName(baselinePerson);
-                if (
-                    rotationType !== 'special' &&
-                    baselinePerson &&
-                    actualPerson &&
-                    normName(actualPerson) !== normName(baselinePerson)
-                ) {
-                    const manualAlt = findManualAlternateReplacementForGroup(dayKey, groupNum);
-                    const isManualAlternateDay =
-                        manualAlt?.replacementPerson &&
-                        manualAlt?.baselinePerson &&
-                        normName(manualAlt.replacementPerson) === normName(actualPerson) &&
-                        normName(manualAlt.baselinePerson) === normName(baselinePerson);
-                    if (isManualAlternateDay) {
-                        // Αντικατάσταση επιλαχών: ο αντικαταστάτης «κλείνει» τη σειρά για επιλαχόντες,
-                        // όχι ο παραλειφθείς baseline (π.χ. τελευταίος Β → Δ,Ε και όχι πρώτος επιλαχών ο Γ).
-                        personName = normName(manualAlt.replacementPerson);
-                    } else if (isDisabledForType(baselinePerson, rotationType) || isMissingWholeNextMonth(baselinePerson)) {
-                        // Απουσία/απενεργοποίηση ολόκληρου επόμενου μήνα: συνέχιση από τον αντικαταστάτη.
-                        personName = normName(actualPerson);
+                // Αντικατάσταση επιλαχών στην τελευταία ημέρα τύπου: ο αντικαταστάτης κλείνει τη σειρά.
+                if (t !== 'special') {
+                    const typeDayKeys = collectDayKeysForRotationTypeInMonth(year, month, t);
+                    if (typeDayKeys.length) {
+                        const lastTypeKey = typeDayKeys[typeDayKeys.length - 1];
+                        const manualAlt = findManualAlternateReplacementForGroup(lastTypeKey, groupNum);
+                        if (manualAlt?.replacementPerson && manualAlt?.baselinePerson) {
+                            const actualAssignment =
+                                (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(lastTypeKey) : null) ??
+                                (dutyAssignments?.[lastTypeKey] || '');
+                            const actualPerson = getAssignedPersonNameForGroupFromAssignment(actualAssignment, groupNum);
+                            if (
+                                actualPerson &&
+                                normName(actualPerson) === normName(manualAlt.replacementPerson) &&
+                                normName(manualAlt.baselinePerson) !== normName(manualAlt.replacementPerson)
+                            ) {
+                                lastAssigned[t] = normName(manualAlt.replacementPerson);
+                            }
+                        } else {
+                            // Απουσία/απενεργοποίηση ολόκληρου επόμενου μήνα στην τελευταία ημέρα τύπου.
+                            const baseline =
+                                typeof getRotationBaselineAssignmentForDate === 'function'
+                                    ? getRotationBaselineAssignmentForDate(lastTypeKey)
+                                    : null;
+                            const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
+                            const baselinePerson = baselineMap?.[groupNum] || '';
+                            const actualAssignment =
+                                (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(lastTypeKey) : null) ??
+                                (dutyAssignments?.[lastTypeKey] || '');
+                            const actualPerson = getAssignedPersonNameForGroupFromAssignment(actualAssignment, groupNum);
+                            if (
+                                baselinePerson &&
+                                actualPerson &&
+                                normName(actualPerson) !== normName(baselinePerson) &&
+                                (isDisabledForType(baselinePerson, t) || isMissingWholeNextMonth(baselinePerson))
+                            ) {
+                                lastAssigned[t] = normName(actualPerson);
+                            }
+                        }
                     }
                 }
-                // Last chronological duty in this month wins (do not keep only the first day of the month).
-                if (personName) lastAssigned[rotationType] = personName;
             }
 
             const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
