@@ -3486,6 +3486,118 @@
             html += '</div>';
             stepContent.innerHTML = html;
         }
+        /** Λόγος αλλαγής ειδικής στο modal αποτελεσμάτων — όχι generic «σύγκρουση» όταν υπάρχει engine reason. */
+        function resolveSpecialHolidayChangeReason(dateKey, groupNum, baseline, computed, date) {
+            const compReason =
+                typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, computed) : null;
+            const meta = compReason?.meta || {};
+            const raw = String(compReason?.reason || '').trim();
+
+            if (meta.debtRepayment) {
+                const owed = meta.owedFromDateKey || '';
+                const displaced = meta.displacedSlotPerson || compReason?.swappedWith || baseline;
+                return (
+                    raw ||
+                    `Εξόφληση οφειλής ειδικής${owed ? ` (από ${owed})` : ''}. Το slot ${displaced || baseline} μετακινήθηκε σε επόμενη ειδική.`
+                ).split('.').filter(Boolean)[0];
+            }
+            if (meta.displacedCascade) {
+                return (raw || 'Τοποθετήθηκε λόγω μετακίνησης από προηγούμενη ειδική (cascade).').split('.').filter(Boolean)[0];
+            }
+            if (meta.returnFromMissing) {
+                return (raw || 'Επέστρεψε από απουσία.').split('.').filter(Boolean)[0];
+            }
+            if (meta.replacementType === 'already-on-special') {
+                return (
+                    raw ||
+                    `Ο/η ${baseline} είχε ήδη ειδική στην περίοδο — αντικαταστάτης ο/η ${computed}.`
+                ).split('.').filter(Boolean)[0];
+            }
+            if (
+                meta.unavailableReplacement ||
+                meta.replacementType === 'next-in-baseline' ||
+                (compReason?.swappedWith && computed)
+            ) {
+                if (typeof resolveUnavailableReplacementDisplayText === 'function' && compReason) {
+                    const rebuilt = resolveUnavailableReplacementDisplayText(
+                        compReason,
+                        dateKey,
+                        groupNum,
+                        computed,
+                        'special'
+                    );
+                    if (rebuilt) return rebuilt.split('.').filter(Boolean)[0];
+                }
+                if (
+                    typeof isPersonDisabledForDuty === 'function' &&
+                    isPersonDisabledForDuty(baseline, groupNum, 'special')
+                ) {
+                    return (
+                        buildUnavailableReplacementReason({
+                            skippedPersonName: baseline,
+                            replacementPersonName: computed,
+                            dateObj: date,
+                            groupNum,
+                            dutyCategory: 'special'
+                        }) || ''
+                    )
+                        .split('.')
+                        .filter(Boolean)[0];
+                }
+                if (
+                    typeof isPersonMissingOnDate === 'function' &&
+                    isPersonMissingOnDate(baseline, groupNum, date, 'special')
+                ) {
+                    return (
+                        buildUnavailableReplacementReason({
+                            skippedPersonName: baseline,
+                            replacementPersonName: computed,
+                            dateObj: date,
+                            groupNum,
+                            dutyCategory: 'special'
+                        }) || ''
+                    )
+                        .split('.')
+                        .filter(Boolean)[0];
+                }
+                if (raw) return raw.split('.').filter(Boolean)[0];
+            }
+            if (raw) return raw.split('.').filter(Boolean)[0];
+            if (
+                typeof isPersonDisabledForDuty === 'function' &&
+                isPersonDisabledForDuty(baseline, groupNum, 'special')
+            ) {
+                return (
+                    buildUnavailableReplacementReason({
+                        skippedPersonName: baseline,
+                        replacementPersonName: computed,
+                        dateObj: date,
+                        groupNum,
+                        dutyCategory: 'special'
+                    }) || ''
+                )
+                    .split('.')
+                    .filter(Boolean)[0];
+            }
+            if (
+                typeof isPersonMissingOnDate === 'function' &&
+                isPersonMissingOnDate(baseline, groupNum, date, 'special')
+            ) {
+                return (
+                    buildUnavailableReplacementReason({
+                        skippedPersonName: baseline,
+                        replacementPersonName: computed,
+                        dateObj: date,
+                        groupNum,
+                        dutyCategory: 'special'
+                    }) || ''
+                )
+                    .split('.')
+                    .filter(Boolean)[0];
+            }
+            return 'Αλλαγή (κανόνας/σύγκρουση)';
+        }
+
         function showSpecialHolidayResultsAndProceed() {
             try {
                 const dayTypeLists = calculationSteps.dayTypeLists || { special: [] };
@@ -3526,22 +3638,7 @@
                         if (!base || !comp) continue;
                         if (base === comp) continue;
 
-                        let reason = '';
-                        const compReason = getAssignmentReason(dateKey, groupNum, comp);
-                        if (compReason && compReason.meta && compReason.meta.returnFromMissing) {
-                            reason = (compReason.reason || 'Επέστρεψε από απουσία.').split('.').filter(Boolean)[0] || 'Επέστρεψε από απουσία';
-                        } else if (isPersonDisabledForDuty(base, groupNum, 'special') || isPersonMissingOnDate(base, groupNum, date, 'special')) {
-                            // Keep the same style as other steps: show the first sentence (without "Ανατέθηκε...")
-                            reason = buildUnavailableReplacementReason({
-                                skippedPersonName: base,
-                                replacementPersonName: comp,
-                                dateObj: date,
-                                groupNum,
-                                dutyCategory: 'special'
-                            }) || '';
-                        } else {
-                            reason = 'Αλλαγή (κανόνας/σύγκρουση)';
-                        }
+                        const reason = resolveSpecialHolidayChangeReason(dateKey, groupNum, base, comp, date);
 
                         changes.push({
                             dateKey,

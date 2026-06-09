@@ -5711,19 +5711,21 @@
                         if (!base || !comp) continue;
                         if (base === comp) continue;
 
-                        let reason = '';
-                        if (isPersonDisabledForDuty(base, groupNum, 'special') || isPersonMissingOnDate(base, groupNum, date, 'special')) {
-                            // Keep the same style as other steps: show the first sentence (without "Ανατέθηκε...")
-                            reason = buildUnavailableReplacementReason({
-                                skippedPersonName: base,
-                                replacementPersonName: comp,
-                                dateObj: date,
-                                groupNum,
-                                dutyCategory: 'special'
-                            }) || '';
-                        } else {
-                            reason = 'Αλλαγή (κανόνας/σύγκρουση)';
-                        }
+                        const reason =
+                            typeof resolveSpecialHolidayChangeReason === 'function'
+                                ? resolveSpecialHolidayChangeReason(dateKey, groupNum, base, comp, date)
+                                : isPersonDisabledForDuty(base, groupNum, 'special') ||
+                                    isPersonMissingOnDate(base, groupNum, date, 'special')
+                                  ? (
+                                        buildUnavailableReplacementReason({
+                                            skippedPersonName: base,
+                                            replacementPersonName: comp,
+                                            dateObj: date,
+                                            groupNum,
+                                            dutyCategory: 'special'
+                                        }) || ''
+                                    ).split('.').filter(Boolean)[0]
+                                  : 'Αλλαγή (κανόνας/σύγκρουση)';
 
                         changes.push({
                             dateKey,

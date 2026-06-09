@@ -111,7 +111,52 @@
         return 0;
     }
 
-    /** Debts from special holidays missed before the calculation range. */
+    /** Baseline slot holder for a past special holiday (saved baseline or computed rotation). */
+    function getExpectedSpecialSlotHolder(groupNum, dateKey) {
+        const fromBaseline = getBaselinePersonForGroup(dateKey, groupNum);
+        if (fromBaseline) return fromBaseline;
+        if (typeof computeExpectedRotationPersonForDate === 'function') {
+            return computeExpectedRotationPersonForDate(DUTY_TYPE_SPECIAL, dateKey, groupNum);
+        }
+        const order = getSpecialOrderForDate(groupNum, dateKey);
+        if (!order.length || typeof getRotationPosition !== 'function') return null;
+        const dateObj = new Date(dateKey + 'T00:00:00');
+        if (isNaN(dateObj.getTime())) return null;
+        const pos = getRotationPosition(dateObj, DUTY_TYPE_SPECIAL, groupNum) % order.length;
+        return order[pos] || null;
+    }
+
+    function getFinalSpecialAssignee(groupNum, dateKey) {
+        if (typeof specialHolidayAssignments === 'undefined') return null;
+        const raw = specialHolidayAssignments[dateKey];
+        if (!raw) return null;
+        if (typeof parseAssignedPersonForGroupFromAssignment === 'function') {
+            return parseAssignedPersonForGroupFromAssignment(raw, groupNum);
+        }
+        return null;
+    }
+
+    /** True if person already served a special between missedDateKey and range start (debt repaid). */
+    function wasSpecialDebtAlreadyRepaid(groupNum, personName, missedDateKey, beforeDateKey) {
+        if (typeof specialHolidayAssignments === 'undefined') return false;
+        const nk = normName(personName);
+        const keys = Object.keys(specialHolidayAssignments)
+            .filter((dk) => dk > missedDateKey && (!beforeDateKey || dk < beforeDateKey))
+            .sort();
+        for (const dk of keys) {
+            const d = new Date(dk + 'T00:00:00');
+            if (isNaN(d.getTime())) continue;
+            if (typeof isSpecialHoliday === 'function' && !isSpecialHoliday(d)) continue;
+            const assigned = getFinalSpecialAssignee(groupNum, dk);
+            if (assigned && normName(assigned) === nk) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Debts from special holidays missed before the calculation range.
+     * Οφειλή μόνο αν ήταν το slot περιστροφής του ΚΑΙ ήταν απών/απενεργ. εκείνη την ημέρα.
+     */
     function collectPriorMonthSpecialDebts(sortedSpecialDays, firstDateKeyInRange) {
         const debts = [];
         const sortedSpecialSet = new Set(sortedSpecialDays || []);
@@ -155,6 +200,14 @@
                     }
                     if (!missedDateKey) continue;
                     if (firstDateKeyInRange && missedDateKey >= firstDateKeyInRange) continue;
+
+                    const slotHolder = getExpectedSpecialSlotHolder(groupNum, missedDateKey);
+                    if (!slotHolder || normName(slotHolder) !== normName(personName)) continue;
+                    if (canServeSpecial(personName, groupNum, missedDateKey)) continue;
+
+                    const finalOnMissed = getFinalSpecialAssignee(groupNum, missedDateKey);
+                    if (finalOnMissed && normName(finalOnMissed) === normName(personName)) continue;
+                    if (wasSpecialDebtAlreadyRepaid(groupNum, personName, missedDateKey, firstDateKeyInRange)) continue;
 
                     added.add(dedupeKey);
                     debts.push({
@@ -328,7 +381,7 @@
                         st.displaced.push(slotPerson);
                         assignmentKind = 'debt-repayment';
 
-                        const reasonText = `Εξόφληση οφειλής ειδικής (χρωστούσε από ${debt.owedFromDateKey}). Βασική σειρά slot: ${slotPerson}.`;
+                        const reasonText = `Εξόφληση οφειλής ειδικής: ο/η ${assigned} (χρωστούσε από ${debt.owedFromDateKey}). Το slot περιστροφής ${slotPerson} μετακινήθηκε σε επόμενη ειδική.`;
                         pushReason(out, {
                             dateKey,
                             groupNum,
@@ -389,6 +442,16 @@
                             const reasonText = slotAlreadyAssigned
                                 ? `Βασική σειρά: ${slotPerson} (ήδη είχε ειδική). Αντικατάσταση: ${replacement}.`
                                 : `Βασική σειρά: ${slotPerson} (${!slotCanServe ? unavailableReason(slotPerson, groupNum, dateKey) : 'απουσία'}). Αντικατάσταση: ${replacement}.`;
+                            const unavailMeta =
+                                !slotCanServe && !slotAlreadyAssigned
+                                    ? {
+                                          unavailableReplacement: true,
+                                          replacementPersonName: replacement,
+                                          skippedPersonName: slotPerson,
+                                          dateKey,
+                                          dutyCategory: DUTY_TYPE_SPECIAL
+                                      }
+                                    : {};
                             pushReason(out, {
                                 dateKey,
                                 groupNum,
@@ -400,7 +463,8 @@
                                     baselinePerson: slotPerson,
                                     replacementType: slotAlreadyAssigned ? 'already-on-special' : 'next-in-baseline',
                                     missedDateKey: dateKey,
-                                    dutyType: DUTY_TYPE_SPECIAL
+                                    dutyType: DUTY_TYPE_SPECIAL,
+                                    ...unavailMeta
                                 }
                             });
                             if (!slotCanServe && !slotAlreadyAssigned) {
