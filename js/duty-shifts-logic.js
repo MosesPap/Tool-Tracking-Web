@@ -3296,8 +3296,15 @@
                 sortedSpecialDays: sortedSpecial,
                 startDate,
                 preservedAssignments: tempSpecialAssignments,
-                shouldRecalculateGroup: (g) =>
-                    typeof shouldRecalculateDutyGroup !== 'function' || shouldRecalculateDutyGroup(g)
+                shouldRecalculateGroup: (g) => {
+                    if (typeof shouldRecalculateDutyGroup !== 'function') return true;
+                    const recalcSet =
+                        typeof getCalculationRecalcGroupSet === 'function'
+                            ? getCalculationRecalcGroupSet()
+                            : null;
+                    if (!recalcSet) return true;
+                    return shouldRecalculateDutyGroup(g);
+                }
             });
 
             for (const entry of engineOut.reasonEntries || []) {
