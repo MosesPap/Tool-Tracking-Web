@@ -3325,6 +3325,23 @@
                 console.log('[STEP 1] Special debts remaining after period:', engineOut.debtsRemaining);
             }
 
+            for (let g = 1; g <= 4; g++) {
+                const seen = new Map();
+                for (const dk of sortedSpecial) {
+                    const p = engineOut.assignments?.[dk]?.[g];
+                    if (!p) continue;
+                    const pk =
+                        typeof personScheduleKey === 'function' ? personScheduleKey(p) : normalizePersonKey(p);
+                    if (seen.has(pk)) {
+                        console.error(
+                            `[STEP 1] Διπλή ανάθεση ειδικής ομάδα ${g}: ${p} (${dk} και ${seen.get(pk)})`
+                        );
+                    } else {
+                        seen.set(pk, dk);
+                    }
+                }
+            }
+
             return {
                 tempSpecialAssignments: engineOut.assignments || {},
                 specialRotationPersons: engineOut.slots || {},

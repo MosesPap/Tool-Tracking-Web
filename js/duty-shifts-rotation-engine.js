@@ -13,6 +13,33 @@
         return String(s || '').trim();
     }
 
+    function personKey(name) {
+        if (typeof personScheduleKey === 'function') return personScheduleKey(name);
+        return normName(name);
+    }
+
+    /** Ίδιο άτομο ανεξάρτητα από μικρές διαφορές ονόματος / θέσης στη σειρά. */
+    function namesReferToSamePerson(a, b, groupNum) {
+        if (!a || !b) return false;
+        if (personKey(a) === personKey(b)) return true;
+        if (normName(a) === normName(b)) return true;
+        const canon = getCanonicalSpecialOrder(groupNum);
+        const ia = findPersonIndex(canon, a, groupNum);
+        const ib = findPersonIndex(canon, b, groupNum);
+        return ia >= 0 && ia === ib;
+    }
+
+    /** Έχει ήδη ανατεθεί ειδική σε προηγούμενη ημέρα της ίδιας περιόδου υπολογισμού. */
+    function hasServedSpecialEarlier(out, sortedSpecial, groupNum, personName, currentDateKey) {
+        if (!personName || !out?.assignments) return false;
+        for (const dk of sortedSpecial) {
+            if (dk >= currentDateKey) break;
+            const prev = out.assignments[dk]?.[groupNum];
+            if (prev && namesReferToSamePerson(prev, personName, groupNum)) return true;
+        }
+        return false;
+    }
+
     function resolveInSpecialList(personName, groupNum) {
         if (!personName) return personName;
         if (typeof resolvePersonInGroupRotationList === 'function' && groupNum) {
@@ -83,12 +110,23 @@
         return 'unavailable';
     }
 
-    /** Έχει ήδη ανατεθεί ειδική στην περίοδο (ονομα + θέση στη βασική σειρά priorities). */
-    function isPersonAssignedThisPeriod(order, assignedThisPeriod, personName, groupNum) {
+    function isPersonAssignedThisPeriod(ctx, order, personName, groupNum) {
         if (!personName) return false;
+        if (
+            hasServedSpecialEarlier(
+                ctx.out,
+                ctx.sortedSpecial,
+                groupNum,
+                personName,
+                ctx.currentDateKey
+            )
+        ) {
+            return true;
+        }
+        const assignedThisPeriod = ctx.assignedThisPeriod;
         const canonIdx = groupNum ? getCanonicalIndex(groupNum, personName) : -1;
-        if (canonIdx >= 0 && assignedThisPeriod.canonicalIndices?.has(canonIdx)) return true;
-        const names = assignedThisPeriod.names;
+        if (canonIdx >= 0 && assignedThisPeriod?.canonicalIndices?.has(canonIdx)) return true;
+        const names = assignedThisPeriod?.names;
         if (!names || names.size === 0) return false;
         const targetIdx = findPersonIndex(order, personName, groupNum);
         for (const assignedNk of names) {
@@ -118,12 +156,19 @@
         return { names: new Set(), canonicalIndices: new Set() };
     }
 
-    function isPersonAssignedSpecial(groupNum, assignedTracker, order, personName) {
-        return isPersonAssignedThisPeriod(order, assignedTracker, personName, groupNum);
+    function isPersonAssignedSpecial(ctx, groupNum, order, personName) {
+        return isPersonAssignedThisPeriod(ctx, order, personName, groupNum);
     }
 
-    function markPersonAssignedSpecial(groupNum, assignedTracker, order, personName) {
-        markPersonAssignedThisPeriod(assignedTracker, order, personName, groupNum);
+    function markPersonAssignedSpecial(ctx, groupNum, order, personName) {
+        markPersonAssignedThisPeriod(ctx.assignedThisPeriod, order, personName, groupNum);
+    }
+
+    function commitSpecialAssignment(out, dateKey, groupNum, personName, ctx, order) {
+        if (!personName) return;
+        if (!out.assignments[dateKey]) out.assignments[dateKey] = {};
+        out.assignments[dateKey][groupNum] = personName;
+        markPersonAssignedSpecial(ctx, groupNum, order, personName);
     }
 
     function getBaselinePersonForGroup(dateKey, groupNum) {
@@ -293,7 +338,7 @@
         return debts;
     }
 
-    function nextEligibleSpecial(order, startIdx, groupNum, dateKey, assignedThisPeriod, debtPersonKeys) {
+    function nextEligibleSpecial(ctx, order, startIdx, groupNum, dateKey, debtPersonKeys) {
         const len = order.length;
         if (!len) return null;
         for (let offset = 1; offset <= len * 2; offset++) {
@@ -302,7 +347,7 @@
             if (!candidate) continue;
             const nk = normName(candidate);
             if (debtPersonKeys.has(nk)) continue;
-            if (isPersonAssignedThisPeriod(order, assignedThisPeriod, candidate, groupNum)) continue;
+            if (isPersonAssignedThisPeriod(ctx, order, candidate, groupNum)) continue;
             if (!canServeSpecial(candidate, groupNum, dateKey)) continue;
             return candidate;
         }
@@ -322,7 +367,7 @@
      * Παραλείπει άτομα που έχουν ήδη ανατεθεί στην περίοδο (π.χ. Δ ως αντικαταστάτης στην #3
      * δεν ξαναμπαίνει displaced όταν εξοφλείται ο Β στην #4 — προχωρά στο slot του Ε).
      */
-    function consumeNextRotationSlot(order, cursor, assignedThisPeriod, groupNum) {
+    function consumeNextRotationSlot(ctx, order, cursor, groupNum) {
         const len = order.length;
         if (!len) return { slotPerson: null, cursor };
         let nextCursor = cursor;
@@ -330,7 +375,7 @@
         while (skipped < len) {
             const slotPerson = order[nextCursor % len];
             nextCursor++;
-            if (!isPersonAssignedThisPeriod(order, assignedThisPeriod, slotPerson, groupNum)) {
+            if (!isPersonAssignedThisPeriod(ctx, order, slotPerson, groupNum)) {
                 return { slotPerson, cursor: nextCursor };
             }
             skipped++;
@@ -370,6 +415,16 @@
         const firstDateKey = sortedSpecial[0];
         const priorDebts = collectPriorMonthSpecialDebts(sortedSpecial, firstDateKey);
 
+        for (const dateKey of sortedSpecial) {
+            for (let g = 1; g <= 4; g++) {
+                if (shouldRecalculateGroup(g)) continue;
+                const preserved = preservedAssignments[dateKey]?.[g];
+                if (!preserved) continue;
+                if (!out.assignments[dateKey]) out.assignments[dateKey] = {};
+                out.assignments[dateKey][g] = preserved;
+            }
+        }
+
         const groupState = {};
         for (let groupNum = 1; groupNum <= 4; groupNum++) {
             const order0 = getSpecialOrderForDate(groupNum, firstDateKey);
@@ -389,7 +444,17 @@
                 if (!preserved || !groupState[g]) continue;
                 const orderP = getSpecialOrderForDate(g, dateKey);
                 if (!orderP.length) continue;
-                markPersonAssignedSpecial(g, groupState[g].assignedThisPeriod, orderP, preserved);
+                markPersonAssignedSpecial(
+                    {
+                        out,
+                        sortedSpecial,
+                        currentDateKey: dateKey,
+                        assignedThisPeriod: groupState[g].assignedThisPeriod
+                    },
+                    g,
+                    orderP,
+                    preserved
+                );
             }
         }
 
@@ -408,10 +473,16 @@
                     if (!out.slots[dateKey]) out.slots[dateKey] = {};
                     out.assignments[dateKey][groupNum] = preserved;
                     out.slots[dateKey][groupNum] = preserved;
+                    const orderPres = getSpecialOrderForDate(groupNum, dateKey);
                     markPersonAssignedSpecial(
+                        {
+                            out,
+                            sortedSpecial,
+                            currentDateKey: dateKey,
+                            assignedThisPeriod: groupState[groupNum].assignedThisPeriod
+                        },
                         groupNum,
-                        groupState[groupNum].assignedThisPeriod,
-                        getSpecialOrderForDate(groupNum, dateKey),
+                        orderPres,
                         preserved
                     );
                     if (monthKey) {
@@ -428,6 +499,12 @@
                 const st = groupState[groupNum];
                 const len = order.length;
                 const debtKeys = new Set(st.debts.map((d) => normName(d.personName)));
+                const ctx = {
+                    out,
+                    sortedSpecial,
+                    currentDateKey: dateKey,
+                    assignedThisPeriod: st.assignedThisPeriod
+                };
 
                 let assigned = null;
                 let slotPerson = null;
@@ -439,7 +516,7 @@
                     if (canServeSpecial(displacedPerson, groupNum, dateKey)) {
                         assigned = st.displaced.shift();
                         slotPerson = assigned;
-                        markPersonAssignedSpecial(groupNum, st.assignedThisPeriod, order, assigned);
+                        commitSpecialAssignment(out, dateKey, groupNum, assigned, ctx, order);
                         assignmentKind = 'displaced-cascade';
                         pushReason(out, {
                             dateKey,
@@ -460,12 +537,12 @@
                         const debt = sortedDebts[di];
                         if (!canServeSpecial(debt.personName, groupNum, dateKey)) continue;
 
-                        const consumed = consumeNextRotationSlot(order, st.cursor, st.assignedThisPeriod, groupNum);
+                        const consumed = consumeNextRotationSlot(ctx, order, st.cursor, groupNum);
                         slotPerson = consumed.slotPerson;
                         st.cursor = consumed.cursor;
                         if (!slotPerson) continue;
                         assigned = debt.personName;
-                        markPersonAssignedSpecial(groupNum, st.assignedThisPeriod, order, assigned);
+                        commitSpecialAssignment(out, dateKey, groupNum, assigned, ctx, order);
                         st.debts = st.debts.filter(
                             (d) => normName(d.personName) !== normName(debt.personName) || d.owedFromDateKey !== debt.owedFromDateKey
                         );
@@ -501,12 +578,7 @@
 
                     const slotNk = normName(slotPerson);
                     const slotCanServe = canServeSpecial(slotPerson, groupNum, dateKey);
-                    const slotAlreadyAssigned = isPersonAssignedThisPeriod(
-                        order,
-                        st.assignedThisPeriod,
-                        slotPerson,
-                        groupNum
-                    );
+                    const slotAlreadyAssigned = isPersonAssignedThisPeriod(ctx, order, slotPerson, groupNum);
 
                     if (slotCanServe && !slotAlreadyAssigned) {
                         assigned = slotPerson;
@@ -526,16 +598,16 @@
                         }
 
                         const replacement = nextEligibleSpecial(
+                            ctx,
                             order,
                             slotIdx,
                             groupNum,
                             dateKey,
-                            st.assignedThisPeriod,
                             debtKeys
                         );
                         if (replacement) {
                             assigned = replacement;
-                            markPersonAssignedSpecial(groupNum, st.assignedThisPeriod, order, replacement);
+                            commitSpecialAssignment(out, dateKey, groupNum, replacement, ctx, order);
                             assignmentKind = slotAlreadyAssigned ? 'already-served-replacement' : 'unavailable-replacement';
                             const reasonText = slotAlreadyAssigned
                                 ? `Βασική σειρά: ${slotPerson} (ήδη είχε ειδική). Αντικατάσταση: ${replacement}.`
@@ -576,9 +648,9 @@
                 out.slots[dateKey][groupNum] = slotPerson || assigned || null;
 
                 if (assigned) {
-                    if (!out.assignments[dateKey]) out.assignments[dateKey] = {};
-                    out.assignments[dateKey][groupNum] = assigned;
-                    markPersonAssignedSpecial(groupNum, st.assignedThisPeriod, order, assigned);
+                    if (!out.assignments[dateKey]?.[groupNum]) {
+                        commitSpecialAssignment(out, dateKey, groupNum, assigned, ctx, order);
+                    }
                     if (monthKey) {
                         if (!out.simulatedByMonth[monthKey]) out.simulatedByMonth[monthKey] = {};
                         if (!out.simulatedByMonth[monthKey][groupNum]) out.simulatedByMonth[monthKey][groupNum] = new Set();
