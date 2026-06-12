@@ -3325,20 +3325,29 @@
                 console.log('[STEP 1] Special debts remaining after period:', engineOut.debtsRemaining);
             }
 
+            const samePerson =
+                typeof DutyRotationEngine?.namesReferToSamePerson === 'function'
+                    ? DutyRotationEngine.namesReferToSamePerson.bind(DutyRotationEngine)
+                    : null;
             for (let g = 1; g <= 4; g++) {
-                const seen = new Map();
+                const prior = [];
                 for (const dk of sortedSpecial) {
                     const p = engineOut.assignments?.[dk]?.[g];
                     if (!p) continue;
-                    const pk =
-                        typeof personScheduleKey === 'function' ? personScheduleKey(p) : normalizePersonKey(p);
-                    if (seen.has(pk)) {
-                        console.error(
-                            `[STEP 1] Διπλή ανάθεση ειδικής ομάδα ${g}: ${p} (${dk} και ${seen.get(pk)})`
-                        );
-                    } else {
-                        seen.set(pk, dk);
+                    let dupDate = null;
+                    for (const prev of prior) {
+                        const isDup = samePerson ? samePerson(p, prev.person, g) : normalizePersonKey(p) === normalizePersonKey(prev.person);
+                        if (isDup) {
+                            dupDate = prev.dateKey;
+                            break;
+                        }
                     }
+                    if (dupDate) {
+                        console.warn(
+                            `[STEP 1] ⚠ Διπλή ανάθεση ειδικής ομάδα ${g}: «${p}» στις ${dk} και ${dupDate}`
+                        );
+                    }
+                    prior.push({ person: p, dateKey: dk });
                 }
             }
 

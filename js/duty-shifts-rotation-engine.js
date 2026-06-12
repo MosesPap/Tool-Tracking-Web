@@ -18,14 +18,25 @@
         return normName(name);
     }
 
+    function stripGreekAccents(s) {
+        if (typeof greekUpperNoTones === 'function') return greekUpperNoTones(s);
+        return String(s || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase();
+    }
+
     /** Ίδιο άτομο ανεξάρτητα από μικρές διαφορές ονόματος / θέσης στη σειρά. */
     function namesReferToSamePerson(a, b, groupNum) {
         if (!a || !b) return false;
-        if (personKey(a) === personKey(b)) return true;
-        if (normName(a) === normName(b)) return true;
+        const ra = groupNum ? resolveInSpecialList(a, groupNum) : a;
+        const rb = groupNum ? resolveInSpecialList(b, groupNum) : b;
+        if (personKey(ra) === personKey(rb)) return true;
+        if (normName(ra) === normName(rb)) return true;
+        if (stripGreekAccents(ra) === stripGreekAccents(rb)) return true;
         const canon = getCanonicalSpecialOrder(groupNum);
-        const ia = findPersonIndex(canon, a, groupNum);
-        const ib = findPersonIndex(canon, b, groupNum);
+        const ia = findPersonIndex(canon, ra, groupNum);
+        const ib = findPersonIndex(canon, rb, groupNum);
         return ia >= 0 && ia === ib;
     }
 
@@ -164,11 +175,39 @@
         markPersonAssignedThisPeriod(ctx.assignedThisPeriod, order, personName, groupNum);
     }
 
-    function commitSpecialAssignment(out, dateKey, groupNum, personName, ctx, order) {
-        if (!personName) return;
+    function alreadyServedSpecialThisPeriod(ctx, groupNum, personName) {
+        return hasServedSpecialEarlier(
+            ctx.out,
+            ctx.sortedSpecial,
+            groupNum,
+            personName,
+            ctx.currentDateKey
+        );
+    }
+
+    function commitSpecialAssignment(out, dateKey, groupNum, personName, ctx, order, pickOpts) {
+        if (!personName) return null;
+        let finalPerson = personName;
+        if (alreadyServedSpecialThisPeriod(ctx, groupNum, finalPerson)) {
+            const slotIdx = pickOpts?.slotIdx ?? 0;
+            const debtKeys = pickOpts?.debtKeys || new Set();
+            const alt = nextEligibleSpecial(ctx, order, slotIdx, groupNum, dateKey, debtKeys);
+            if (alt) {
+                console.warn(
+                    `[SPECIAL ENGINE] Αποφυγή διπλής ανάθεσης ομάδα ${groupNum} στις ${dateKey}: ` +
+                        `${finalPerson} → ${alt}`
+                );
+                finalPerson = alt;
+            } else {
+                console.error(
+                    `[SPECIAL ENGINE] Διπλή ανάθεση ομάδα ${groupNum} στις ${dateKey}: ${finalPerson} (χωρίς εναλλακτικό)`
+                );
+            }
+        }
         if (!out.assignments[dateKey]) out.assignments[dateKey] = {};
-        out.assignments[dateKey][groupNum] = personName;
-        markPersonAssignedSpecial(ctx, groupNum, order, personName);
+        out.assignments[dateKey][groupNum] = finalPerson;
+        markPersonAssignedSpecial(ctx, groupNum, order, finalPerson);
+        return finalPerson;
     }
 
     function getBaselinePersonForGroup(dateKey, groupNum) {
@@ -511,23 +550,28 @@
                 let assignmentKind = null;
 
                 // 1) Displaced cascade (slot already consumed when they were bumped)
-                if (st.displaced.length > 0) {
+                while (!assigned && st.displaced.length > 0) {
                     const displacedPerson = st.displaced[0];
-                    if (canServeSpecial(displacedPerson, groupNum, dateKey)) {
-                        assigned = st.displaced.shift();
-                        slotPerson = assigned;
-                        commitSpecialAssignment(out, dateKey, groupNum, assigned, ctx, order);
-                        assignmentKind = 'displaced-cascade';
-                        pushReason(out, {
-                            dateKey,
-                            groupNum,
-                            personName: assigned,
-                            type: 'skip',
-                            reason: `Τοποθετήθηκε (cascade) — είχε μετακινηθεί από προηγούμενη ειδική.`,
-                            swappedWith: null,
-                            meta: { displacedCascade: true, dutyType: DUTY_TYPE_SPECIAL }
-                        });
+                    if (
+                        !canServeSpecial(displacedPerson, groupNum, dateKey) ||
+                        alreadyServedSpecialThisPeriod(ctx, groupNum, displacedPerson)
+                    ) {
+                        st.displaced.shift();
+                        continue;
                     }
+                    assigned = st.displaced.shift();
+                    slotPerson = assigned;
+                    assigned = commitSpecialAssignment(out, dateKey, groupNum, assigned, ctx, order);
+                    assignmentKind = 'displaced-cascade';
+                    pushReason(out, {
+                        dateKey,
+                        groupNum,
+                        personName: assigned,
+                        type: 'skip',
+                        reason: `Τοποθετήθηκε (cascade) — είχε μετακινηθεί από προηγούμενη ειδική.`,
+                        swappedWith: null,
+                        meta: { displacedCascade: true, dutyType: DUTY_TYPE_SPECIAL }
+                    });
                 }
 
                 // 2) Debt repayment FIRST — consumes one rotation slot; slot holder → displaced
@@ -536,13 +580,25 @@
                     for (let di = 0; di < sortedDebts.length; di++) {
                         const debt = sortedDebts[di];
                         if (!canServeSpecial(debt.personName, groupNum, dateKey)) continue;
+                        if (alreadyServedSpecialThisPeriod(ctx, groupNum, debt.personName)) {
+                            st.debts = st.debts.filter(
+                                (d) =>
+                                    normName(d.personName) !== normName(debt.personName) ||
+                                    d.owedFromDateKey !== debt.owedFromDateKey
+                            );
+                            debtKeys.delete(normName(debt.personName));
+                            continue;
+                        }
 
                         const consumed = consumeNextRotationSlot(ctx, order, st.cursor, groupNum);
                         slotPerson = consumed.slotPerson;
                         st.cursor = consumed.cursor;
                         if (!slotPerson) continue;
                         assigned = debt.personName;
-                        commitSpecialAssignment(out, dateKey, groupNum, assigned, ctx, order);
+                        assigned = commitSpecialAssignment(out, dateKey, groupNum, assigned, ctx, order, {
+                            slotIdx: st.cursor % len,
+                            debtKeys
+                        });
                         st.debts = st.debts.filter(
                             (d) => normName(d.personName) !== normName(debt.personName) || d.owedFromDateKey !== debt.owedFromDateKey
                         );
@@ -607,7 +663,10 @@
                         );
                         if (replacement) {
                             assigned = replacement;
-                            commitSpecialAssignment(out, dateKey, groupNum, replacement, ctx, order);
+                            assigned = commitSpecialAssignment(out, dateKey, groupNum, replacement, ctx, order, {
+                                slotIdx,
+                                debtKeys
+                            });
                             assignmentKind = slotAlreadyAssigned ? 'already-served-replacement' : 'unavailable-replacement';
                             const reasonText = slotAlreadyAssigned
                                 ? `Βασική σειρά: ${slotPerson} (ήδη είχε ειδική). Αντικατάσταση: ${replacement}.`
@@ -649,7 +708,10 @@
 
                 if (assigned) {
                     if (!out.assignments[dateKey]?.[groupNum]) {
-                        commitSpecialAssignment(out, dateKey, groupNum, assigned, ctx, order);
+                        assigned = commitSpecialAssignment(out, dateKey, groupNum, assigned, ctx, order, {
+                            slotIdx: (st.cursor - 1 + len) % len,
+                            debtKeys
+                        });
                     }
                     if (monthKey) {
                         if (!out.simulatedByMonth[monthKey]) out.simulatedByMonth[monthKey] = {};
@@ -677,7 +739,8 @@
         resolveInitialSpecialCursor,
         collectPriorMonthSpecialDebts,
         normName,
-        canServeSpecial
+        canServeSpecial,
+        namesReferToSamePerson
     };
 
     if (typeof module !== 'undefined' && module.exports) {
