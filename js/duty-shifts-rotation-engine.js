@@ -370,13 +370,12 @@
     }
 
     /**
-     * Όσοι υπηρέτησαν ειδική τον προηγούμενο ημερολογιακό μήνα — δεν ξαναμπαίνουν.
-     * Διαβάζει specialHolidayAssignments + πρόσθετα stores (π.χ. temp από ίδια συνεδρία).
+     * Όσοι υπηρέτησαν ειδική πριν την περίοδο υπολογισμού — δεν ξαναμπαίνουν στο τρέχον lap.
+     * Lap = οι τελευταίες N αναθέσεις (N = μήκος λίστας περιστροφής) πριν την πρώτη ημέρα.
+     * Διαβάζει specialHolidayAssignments + πρόσθετα stores (temp κ.λπ.).
      */
-    function seedAssignedThisPeriodFromPriorMonthSpecials(groupNum, firstDateKey, assignedSet, extraStores) {
+    function seedAssignedThisPeriodFromPriorSpecials(groupNum, firstDateKey, assignedSet, extraStores, rotationLen) {
         if (!firstDateKey) return;
-        const prevMonthKey = getPreviousMonthKeyFromDateKey(firstDateKey);
-        if (!prevMonthKey) return;
 
         const stores = [];
         if (typeof specialHolidayAssignments !== 'undefined') stores.push(specialHolidayAssignments);
@@ -386,15 +385,26 @@
             }
         }
 
+        const entries = [];
+        const seenDatePerson = new Set();
         for (const store of stores) {
             for (const dk of Object.keys(store).sort()) {
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
                 if (dk >= firstDateKey) continue;
-                if (dk.substring(0, 7) !== prevMonthKey) continue;
-
                 const assigned = getFinalSpecialAssignee(groupNum, dk, store);
-                if (assigned) assignedSet.add(normName(assigned));
+                if (!assigned) continue;
+                const dedupe = `${dk}|${normName(assigned)}`;
+                if (seenDatePerson.has(dedupe)) continue;
+                seenDatePerson.add(dedupe);
+                entries.push({ dateKey: dk, person: assigned });
             }
+        }
+        entries.sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+
+        const lapSize = Math.max(1, rotationLen || entries.length);
+        const lapEntries = entries.slice(-lapSize);
+        for (const { person } of lapEntries) {
+            assignedSet.add(normName(person));
         }
     }
 
@@ -440,11 +450,12 @@
                 displaced: [],
                 assignedThisPeriod: new Set()
             };
-            seedAssignedThisPeriodFromPriorMonthSpecials(
+            seedAssignedThisPeriodFromPriorSpecials(
                 groupNum,
                 firstDateKey,
                 groupState[groupNum].assignedThisPeriod,
-                priorAssignmentStores
+                priorAssignmentStores,
+                order0.length
             );
         }
 
@@ -626,7 +637,7 @@
                             if (replacement) {
                                 assigned = replacement;
                                 assignmentKind = 'already-served-replacement';
-                                const reasonText = `Βασική σειρά: ${slotPerson} (ήδη είχε ειδική). Αντικατάσταση: ${replacement}.`;
+                                const reasonText = `Βασική σειρά: ${slotPerson} (ήδη είχε ειδική στην περίοδο/προηγούμενες αναθέσεις). Αντικατάσταση: ${replacement}.`;
                                 pushReason(out, {
                                     dateKey,
                                     groupNum,
