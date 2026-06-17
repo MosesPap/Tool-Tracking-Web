@@ -83,14 +83,22 @@
             return 0;
         }
 
-        if (firstDateKey && typeof getRotationSeedPersonForMonthStart === 'function') {
-            const seedPerson = getRotationSeedPersonForMonthStart(
-                DUTY_TYPE_SPECIAL,
-                new Date(firstDateKey + 'T00:00:00'),
-                groupNum
-            );
-            const seedIdx = findPersonIndex(order, seedPerson);
-            if (seedIdx >= 0) return (seedIdx + 1) % len;
+        if (firstDateKey) {
+            const continuitySlot = getLastSpecialContinuitySlotBefore(groupNum, firstDateKey);
+            if (continuitySlot) {
+                const contIdx = findPersonIndex(order, continuitySlot);
+                if (contIdx >= 0) return (contIdx + 1) % len;
+            }
+
+            if (typeof getRotationSeedPersonForMonthStart === 'function') {
+                const seedPerson = getRotationSeedPersonForMonthStart(
+                    DUTY_TYPE_SPECIAL,
+                    new Date(firstDateKey + 'T00:00:00'),
+                    groupNum
+                );
+                const seedIdx = findPersonIndex(order, seedPerson);
+                if (seedIdx >= 0) return (seedIdx + 1) % len;
+            }
         }
 
         const baselineDateKeysBeforePeriod = firstDateKey
@@ -99,12 +107,17 @@
                       ? rotationBaselineSpecialAssignments
                       : {}) || {}
               )
-                  .filter((dk) => dk < firstDateKey)
+                  .filter((dk) => /^\d{4}-\d{2}-\d{2}$/.test(dk) && dk < firstDateKey)
                   .sort()
                   .reverse()
             : [];
         if (baselineDateKeysBeforePeriod.length > 0) {
-            const lastBaselinePerson = getBaselinePersonForGroup(baselineDateKeysBeforePeriod[0], groupNum);
+            const prevMonthKey = getPreviousMonthKeyFromDateKey(firstDateKey);
+            const prevMonthKeys = baselineDateKeysBeforePeriod.filter(
+                (dk) => !prevMonthKey || dk.substring(0, 7) === prevMonthKey
+            );
+            const lastBaselineKey = prevMonthKeys.length ? prevMonthKeys[0] : baselineDateKeysBeforePeriod[0];
+            const lastBaselinePerson = getBaselinePersonForGroup(lastBaselineKey, groupNum);
             const idx = findPersonIndex(order, lastBaselinePerson);
             if (idx >= 0) return (idx + 1) % len;
         }
@@ -126,14 +139,45 @@
         return order[pos] || null;
     }
 
-    function getFinalSpecialAssignee(groupNum, dateKey) {
-        if (typeof specialHolidayAssignments === 'undefined') return null;
-        const raw = specialHolidayAssignments[dateKey];
+    function getAssigneeFromStoreRaw(raw, groupNum) {
         if (!raw) return null;
+        if (typeof raw === 'object' && !Array.isArray(raw)) {
+            const direct = raw[groupNum] || raw[String(groupNum)];
+            if (direct) return direct;
+        }
+        if (typeof extractGroupAssignmentsMap === 'function') {
+            const map = extractGroupAssignmentsMap(raw);
+            const fromMap = map?.[groupNum] || map?.[String(groupNum)];
+            if (fromMap) return fromMap;
+        }
         if (typeof parseAssignedPersonForGroupFromAssignment === 'function') {
             return parseAssignedPersonForGroupFromAssignment(raw, groupNum);
         }
         return null;
+    }
+
+    function getFinalSpecialAssignee(groupNum, dateKey, store) {
+        const src =
+            store ||
+            (typeof specialHolidayAssignments !== 'undefined' ? specialHolidayAssignments : null);
+        if (!src) return null;
+        return getAssigneeFromStoreRaw(src[dateKey], groupNum);
+    }
+
+    /** Τελευταίο baseline/continuity slot πριν την περίοδο (τελευταία ειδική προηγ. μήνα). */
+    function getLastSpecialContinuitySlotBefore(groupNum, firstDateKey) {
+        const prevMonthKey = getPreviousMonthKeyFromDateKey(firstDateKey);
+        const baselineStore =
+            typeof rotationBaselineSpecialAssignments !== 'undefined'
+                ? rotationBaselineSpecialAssignments
+                : {};
+        const keys = Object.keys(baselineStore || {})
+            .filter((dk) => /^\d{4}-\d{2}-\d{2}$/.test(dk) && dk < firstDateKey)
+            .filter((dk) => !prevMonthKey || dk.substring(0, 7) === prevMonthKey)
+            .sort();
+        if (!keys.length) return null;
+        const lastKey = keys[keys.length - 1];
+        return getBaselinePersonForGroup(lastKey, groupNum);
     }
 
     /** True if person already served a special between missedDateKey and range start (debt repaid). */
@@ -329,25 +373,31 @@
     }
 
     /**
-     * Όσοι υπηρέτησαν ειδική τον προηγούμενο ημερολογιακό μήνα — δεν ξαναμπαίνουν στο slot τους
-     * όταν ο υπολογισμός ξεκινά νέο μήνα (π.χ. Αντρέας αντικαταστάτης Δεκ → όχι ξανά Ιαν).
+     * Όσοι υπηρέτησαν ειδική τον προηγούμενο ημερολογιακό μήνα — δεν ξαναμπαίνουν.
+     * Διαβάζει specialHolidayAssignments + πρόσθετα stores (π.χ. temp από ίδια συνεδρία).
      */
-    function seedAssignedThisPeriodFromPriorMonthSpecials(groupNum, firstDateKey, assignedSet) {
-        if (!firstDateKey || typeof specialHolidayAssignments === 'undefined') return;
+    function seedAssignedThisPeriodFromPriorMonthSpecials(groupNum, firstDateKey, assignedSet, extraStores) {
+        if (!firstDateKey) return;
         const prevMonthKey = getPreviousMonthKeyFromDateKey(firstDateKey);
         if (!prevMonthKey) return;
 
-        for (const dk of Object.keys(specialHolidayAssignments).sort()) {
-            if (dk >= firstDateKey) continue;
-            const dateObj = new Date(dk + 'T00:00:00');
-            if (isNaN(dateObj.getTime())) continue;
-            const monthKey =
-                typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(dateObj) : dk.substring(0, 7);
-            if (monthKey !== prevMonthKey) continue;
-            if (typeof isSpecialHoliday === 'function' && !isSpecialHoliday(dateObj)) continue;
+        const stores = [];
+        if (typeof specialHolidayAssignments !== 'undefined') stores.push(specialHolidayAssignments);
+        if (Array.isArray(extraStores)) {
+            for (const s of extraStores) {
+                if (s && typeof s === 'object') stores.push(s);
+            }
+        }
 
-            const assigned = getFinalSpecialAssignee(groupNum, dk);
-            if (assigned) assignedSet.add(normName(assigned));
+        for (const store of stores) {
+            for (const dk of Object.keys(store).sort()) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+                if (dk >= firstDateKey) continue;
+                if (dk.substring(0, 7) !== prevMonthKey) continue;
+
+                const assigned = getFinalSpecialAssignee(groupNum, dk, store);
+                if (assigned) assignedSet.add(normName(assigned));
+            }
         }
     }
 
@@ -365,6 +415,7 @@
         const sortedSpecial = (opts.sortedSpecialDays || []).slice().sort();
         const startDate = opts.startDate || null;
         const preservedAssignments = opts.preservedAssignments || {};
+        const priorAssignmentStores = opts.priorAssignmentStores || [];
         const shouldRecalculateGroup =
             typeof opts.shouldRecalculateGroup === 'function' ? opts.shouldRecalculateGroup : () => true;
 
@@ -395,7 +446,8 @@
             seedAssignedThisPeriodFromPriorMonthSpecials(
                 groupNum,
                 firstDateKey,
-                groupState[groupNum].assignedThisPeriod
+                groupState[groupNum].assignedThisPeriod,
+                priorAssignmentStores
             );
         }
 

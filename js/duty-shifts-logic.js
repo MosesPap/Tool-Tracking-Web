@@ -3302,6 +3302,10 @@
                 sortedSpecialDays: sortedSpecial,
                 startDate,
                 preservedAssignments: tempSpecialAssignments,
+                priorAssignmentStores: [
+                    calculationSteps.tempSpecialAssignments || {},
+                    specialHolidayAssignments || {}
+                ],
                 shouldRecalculateGroup: (g) =>
                     typeof shouldRecalculateDutyGroup !== 'function' || shouldRecalculateDutyGroup(g)
             });
@@ -3839,6 +3843,9 @@
                     const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
                     await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineSpecialAssignments', organizedBaseline);
                     Object.assign(rotationBaselineSpecialAssignments, formattedBaseline);
+                    if (typeof rebuildRotationBaselineLastByType === 'function') {
+                        rebuildRotationBaselineLastByType();
+                    }
                 }
                 
                 // Save last rotation positions for special holidays (per month)
@@ -3861,6 +3868,25 @@
                         updatedBy: user.uid
                     });
                     console.log('Saved Step 1 last rotation positions for special holidays (per month) to Firestore:', lastSpecialRotationPositionsByMonth);
+                }
+
+                // Αποθήκευση assignmentReasons (ειδικές) — χρειάζονται για continuity επόμενου μήνα
+                try {
+                    if (Object.keys(assignmentReasons).length > 0) {
+                        const payload =
+                            typeof buildAssignmentReasonsSavePayload === 'function'
+                                ? buildAssignmentReasonsSavePayload()
+                                : assignmentReasons;
+                        const sanitizedReasons = sanitizeForFirestore(payload);
+                        await db.collection('dutyShifts').doc('assignmentReasons').set({
+                            ...sanitizedReasons,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedBy: user.uid
+                        });
+                        console.log('Saved assignmentReasons to Firestore after Step 1 (special holidays)');
+                    }
+                } catch (reasonErr) {
+                    console.error('Error saving assignmentReasons after Step 1:', reasonErr);
                 }
             } catch (error) {
                 console.error('Error saving Step 1 (Special Holidays) to Firestore:', error);
