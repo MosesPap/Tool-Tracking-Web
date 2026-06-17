@@ -264,6 +264,39 @@
         return debts;
     }
 
+    function mergeSpecialDebts(debtArrays) {
+        const map = new Map();
+        for (const arr of debtArrays) {
+            if (!Array.isArray(arr)) continue;
+            for (const d of arr) {
+                if (!d || !d.personName || !d.groupNum || !d.owedFromDateKey) continue;
+                const k = `${d.groupNum}|${normName(d.personName)}|${d.owedFromDateKey}`;
+                if (!map.has(k)) map.set(k, d);
+            }
+        }
+        return [...map.values()];
+    }
+
+    /** Φόρτωση αποθηκευμένων οφειλών από assignmentReasons.pendingSpecialDebts (Firestore). */
+    function collectStoredPendingSpecialDebts(firstDateKeyInRange) {
+        const pending =
+            typeof getPendingSpecialDebts === 'function' ? getPendingSpecialDebts() : [];
+        const debts = [];
+        for (const d of pending) {
+            if (!d || !d.personName || !d.groupNum || !d.owedFromDateKey) continue;
+            if (wasSpecialDebtAlreadyRepaid(d.groupNum, d.personName, d.owedFromDateKey, firstDateKeyInRange)) {
+                continue;
+            }
+            debts.push({
+                personName: d.personName,
+                groupNum: d.groupNum,
+                owedFromDateKey: d.owedFromDateKey,
+                reason: d.reason || 'stored-pending'
+            });
+        }
+        return debts;
+    }
+
     function registerSpecialDebt(st, debtKeys, personName, groupNum, dateKey) {
         const nk = normName(personName);
         if (!nk) return;
@@ -433,13 +466,17 @@
             reasonEntries: [],
             cursorByGroup: {},
             simulatedByMonth: {},
-            debtsRemaining: []
+            debtsRemaining: [],
+            debtsRepaid: []
         };
 
         if (!sortedSpecial.length) return out;
 
         const firstDateKey = sortedSpecial[0];
-        const priorDebts = collectPriorMonthSpecialDebts(sortedSpecial, firstDateKey);
+        const priorDebts = mergeSpecialDebts([
+            collectPriorMonthSpecialDebts(sortedSpecial, firstDateKey),
+            collectStoredPendingSpecialDebts(firstDateKey)
+        ]);
 
         const groupState = {};
         for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -533,6 +570,12 @@
                         debtKeys.delete(normName(debt.personName));
                         st.displaced.push(slotPerson);
                         assignmentKind = 'debt-repayment';
+                        out.debtsRepaid.push({
+                            personName: debt.personName,
+                            groupNum: debt.groupNum,
+                            owedFromDateKey: debt.owedFromDateKey,
+                            repaidOnDateKey: dateKey
+                        });
 
                         const reasonText = `Εξόφληση οφειλής ειδικής: ο/η ${assigned} (χρωστούσε από ${debt.owedFromDateKey}). Το slot περιστροφής ${slotPerson} μετακινήθηκε σε επόμενη ειδική.`;
                         pushReason(out, {
@@ -692,6 +735,9 @@
         runSpecialPhase,
         resolveInitialSpecialCursor,
         collectPriorMonthSpecialDebts,
+        collectStoredPendingSpecialDebts,
+        mergeSpecialDebts,
+        wasSpecialDebtAlreadyRepaid,
         normName,
         canServeSpecial
     };

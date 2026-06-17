@@ -35,6 +35,8 @@
         // Track skip/swap reasons for each assignment
         // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap'|'shift', reason: '...', swappedWith: '...', swapPairId, meta? }
         let assignmentReasons = {};
+        /** Ανοιχτές οφειλές ειδικής (απενεργ./απουσία) — αποθηκεύονται στο assignmentReasons doc. */
+        let pendingSpecialDebts = [];
         /** Carry-over: replacement skipped once in month after manual alternate (per duty category). */
         let manualAlternateDeferCarry = { normal: {}, semi: {}, weekend: {}, special: {} };
         // Track critical assignments from last duties - these must NEVER be deleted
@@ -1147,9 +1149,52 @@
             }
         }
 
+        function specialDebtEntryKey(d) {
+            if (!d || !d.personName || !d.groupNum || !d.owedFromDateKey) return '';
+            const nk =
+                typeof normalizePersonKey === 'function' ? normalizePersonKey(d.personName) : String(d.personName || '').trim();
+            return `${d.groupNum}|${nk}|${d.owedFromDateKey}`;
+        }
+
+        function parseAssignmentReasonsDocData(data) {
+            const raw = data && typeof data === 'object' ? { ...data } : {};
+            delete raw.lastUpdated;
+            delete raw.updatedBy;
+            let pending = [];
+            if (Array.isArray(raw.pendingSpecialDebts)) {
+                pending = raw.pendingSpecialDebts.filter((d) => specialDebtEntryKey(d));
+            }
+            delete raw.pendingSpecialDebts;
+            if (raw._manualAlternateDeferCarry && typeof raw._manualAlternateDeferCarry === 'object') {
+                manualAlternateDeferCarry = raw._manualAlternateDeferCarry;
+                delete raw._manualAlternateDeferCarry;
+            }
+            return { reasons: raw, pendingSpecialDebts: pending };
+        }
+
+        function getPendingSpecialDebts() {
+            return Array.isArray(pendingSpecialDebts) ? pendingSpecialDebts.slice() : [];
+        }
+
+        /** Μετά από runSpecialPhase: αφαίρεση εξοφλημένων, πρόσθεση νέων ανοιχτών. */
+        function updatePendingSpecialDebtsAfterSpecialPhase(engineOut) {
+            if (!engineOut) return;
+            const repaid = new Set((engineOut.debtsRepaid || []).map((d) => specialDebtEntryKey(d)).filter(Boolean));
+            const next = (pendingSpecialDebts || []).filter((d) => !repaid.has(specialDebtEntryKey(d)));
+            const existing = new Set(next.map((d) => specialDebtEntryKey(d)).filter(Boolean));
+            for (const d of engineOut.debtsRemaining || []) {
+                const k = specialDebtEntryKey(d);
+                if (!k || existing.has(k)) continue;
+                next.push(d);
+                existing.add(k);
+            }
+            pendingSpecialDebts = next;
+        }
+
         function buildAssignmentReasonsSavePayload() {
             return {
                 ...assignmentReasons,
+                pendingSpecialDebts: pendingSpecialDebts || [],
                 _manualAlternateDeferCarry: manualAlternateDeferCarry
             };
         }
@@ -2347,18 +2392,14 @@
                     criticalAssignments = {};
                 }
                 
-                // Load assignment reasons
+                // Load assignment reasons (+ pending special debts)
                 if (assignmentReasonsDoc.exists) {
-                    const data = assignmentReasonsDoc.data() || {};
-                    delete data.lastUpdated;
-                    delete data.updatedBy;
-                    if (data._manualAlternateDeferCarry && typeof data._manualAlternateDeferCarry === 'object') {
-                        manualAlternateDeferCarry = data._manualAlternateDeferCarry;
-                        delete data._manualAlternateDeferCarry;
-                    }
-                    assignmentReasons = data;
+                    const parsed = parseAssignmentReasonsDocData(assignmentReasonsDoc.data() || {});
+                    assignmentReasons = parsed.reasons;
+                    pendingSpecialDebts = parsed.pendingSpecialDebts;
                 } else {
                     assignmentReasons = {};
+                    pendingSpecialDebts = [];
                 }
                 if (typeof rebuildManualAlternateDeferCarryFromReasons === 'function') {
                     rebuildManualAlternateDeferCarryFromReasons();
@@ -2691,21 +2732,22 @@
             const savedAssignmentReasons = localStorage.getItem('dutyShiftsAssignmentReasons');
             if (savedAssignmentReasons) {
                 try {
-                    const parsed = JSON.parse(savedAssignmentReasons);
-                    if (parsed && typeof parsed === 'object') {
-                        if (parsed._manualAlternateDeferCarry && typeof parsed._manualAlternateDeferCarry === 'object') {
-                            manualAlternateDeferCarry = parsed._manualAlternateDeferCarry;
-                            delete parsed._manualAlternateDeferCarry;
-                        }
-                        assignmentReasons = parsed;
+                    const parsedRaw = JSON.parse(savedAssignmentReasons);
+                    if (parsedRaw && typeof parsedRaw === 'object') {
+                        const parsed = parseAssignmentReasonsDocData(parsedRaw);
+                        assignmentReasons = parsed.reasons;
+                        pendingSpecialDebts = parsed.pendingSpecialDebts;
                     } else {
                         assignmentReasons = {};
+                        pendingSpecialDebts = [];
                     }
                 } catch (_) {
                     assignmentReasons = {};
+                    pendingSpecialDebts = [];
                 }
             } else {
                 assignmentReasons = {};
+                pendingSpecialDebts = [];
             }
             const savedDeferCarry = localStorage.getItem('dutyShiftsManualAlternateDeferCarry');
             if (savedDeferCarry) {
@@ -3082,10 +3124,7 @@
                     if (Object.keys(assignmentReasons).length > 0) {
                         console.log('Sample assignmentReasons being saved:', Object.entries(assignmentReasons).slice(0, 3));
                     }
-                    const reasonsPayload = {
-                        ...assignmentReasons,
-                        _manualAlternateDeferCarry: manualAlternateDeferCarry
-                    };
+                    const reasonsPayload = buildAssignmentReasonsSavePayload();
                     const sanitizedReasons = sanitizeForFirestore(reasonsPayload);
                     await db.collection('dutyShifts').doc('assignmentReasons').set({
                         ...sanitizedReasons,
@@ -3191,10 +3230,14 @@
             localStorage.setItem('dutyShiftsSpecialHolidayAssignments', JSON.stringify(specialHolidayAssignments));
             // Deprecated: do not persist dutyAssignments
             localStorage.setItem('dutyShiftsCriticalAssignments', JSON.stringify(criticalAssignments));
-            localStorage.setItem('dutyShiftsAssignmentReasons', JSON.stringify({
-                ...assignmentReasons,
-                _manualAlternateDeferCarry: manualAlternateDeferCarry
-            }));
+            localStorage.setItem(
+                'dutyShiftsAssignmentReasons',
+                JSON.stringify(
+                    typeof buildAssignmentReasonsSavePayload === 'function'
+                        ? buildAssignmentReasonsSavePayload()
+                        : { ...assignmentReasons, _manualAlternateDeferCarry: manualAlternateDeferCarry }
+                )
+            );
             localStorage.setItem('dutyShiftsManualAlternateDeferCarry', JSON.stringify(manualAlternateDeferCarry));
             localStorage.setItem('dutyShiftsLastRotationPositions', JSON.stringify(lastRotationPositions));
             localStorage.setItem('dutyShiftsRankings', JSON.stringify(rankings));

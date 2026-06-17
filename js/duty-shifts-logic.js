@@ -3327,6 +3327,12 @@
             if (engineOut.debtsRemaining?.length) {
                 console.log('[STEP 1] Special debts remaining after period:', engineOut.debtsRemaining);
             }
+            if (engineOut.debtsRepaid?.length) {
+                console.log('[STEP 1] Special debts repaid in period:', engineOut.debtsRepaid);
+            }
+            if (typeof updatePendingSpecialDebtsAfterSpecialPhase === 'function') {
+                updatePendingSpecialDebtsAfterSpecialPhase(engineOut);
+            }
 
             return {
                 tempSpecialAssignments: engineOut.assignments || {},
@@ -3866,20 +3872,25 @@
                     console.log('Saved Step 1 last rotation positions for special holidays (per month) to Firestore:', lastSpecialRotationPositionsByMonth);
                 }
 
-                // Αποθήκευση assignmentReasons (ειδικές) — χρειάζονται για continuity επόμενου μήνα
+                // Αποθήκευση assignmentReasons + pendingSpecialDebts — continuity επόμενου μήνα
                 try {
-                    if (Object.keys(assignmentReasons).length > 0) {
-                        const payload =
-                            typeof buildAssignmentReasonsSavePayload === 'function'
-                                ? buildAssignmentReasonsSavePayload()
-                                : assignmentReasons;
+                    const payload =
+                        typeof buildAssignmentReasonsSavePayload === 'function'
+                            ? buildAssignmentReasonsSavePayload()
+                            : assignmentReasons;
+                    const hasReasonDates = Object.keys(assignmentReasons).some((k) => /^\d{4}-\d{2}-\d{2}$/.test(k));
+                    const hasPendingDebts = Array.isArray(pendingSpecialDebts) && pendingSpecialDebts.length > 0;
+                    if (hasReasonDates || hasPendingDebts) {
                         const sanitizedReasons = sanitizeForFirestore(payload);
                         await db.collection('dutyShifts').doc('assignmentReasons').set({
                             ...sanitizedReasons,
                             lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                             updatedBy: user.uid
                         });
-                        console.log('Saved assignmentReasons to Firestore after Step 1 (special holidays)');
+                        console.log(
+                            'Saved assignmentReasons to Firestore after Step 1 (special holidays)',
+                            hasPendingDebts ? `pendingSpecialDebts: ${pendingSpecialDebts.length}` : ''
+                        );
                     }
                 } catch (reasonErr) {
                     console.error('Error saving assignmentReasons after Step 1:', reasonErr);
