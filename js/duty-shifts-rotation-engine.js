@@ -317,6 +317,40 @@
         return { slotPerson: order[fallbackIdx] || null, cursor: nextCursor };
     }
 
+    /** Προηγούμενος μήνας (YYYY-MM) από dateKey. */
+    function getPreviousMonthKeyFromDateKey(dateKey) {
+        const d = new Date(dateKey + 'T00:00:00');
+        if (isNaN(d.getTime())) return null;
+        if (typeof getPreviousMonthKeyFromDate === 'function') {
+            return getPreviousMonthKeyFromDate(d);
+        }
+        const prev = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+        return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    /**
+     * Όσοι υπηρέτησαν ειδική τον προηγούμενο ημερολογιακό μήνα — δεν ξαναμπαίνουν στο slot τους
+     * όταν ο υπολογισμός ξεκινά νέο μήνα (π.χ. Αντρέας αντικαταστάτης Δεκ → όχι ξανά Ιαν).
+     */
+    function seedAssignedThisPeriodFromPriorMonthSpecials(groupNum, firstDateKey, assignedSet) {
+        if (!firstDateKey || typeof specialHolidayAssignments === 'undefined') return;
+        const prevMonthKey = getPreviousMonthKeyFromDateKey(firstDateKey);
+        if (!prevMonthKey) return;
+
+        for (const dk of Object.keys(specialHolidayAssignments).sort()) {
+            if (dk >= firstDateKey) continue;
+            const dateObj = new Date(dk + 'T00:00:00');
+            if (isNaN(dateObj.getTime())) continue;
+            const monthKey =
+                typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(dateObj) : dk.substring(0, 7);
+            if (monthKey !== prevMonthKey) continue;
+            if (typeof isSpecialHoliday === 'function' && !isSpecialHoliday(dateObj)) continue;
+
+            const assigned = getFinalSpecialAssignee(groupNum, dk);
+            if (assigned) assignedSet.add(normName(assigned));
+        }
+    }
+
     function pushReason(out, entry) {
         if (!out.reasonEntries) out.reasonEntries = [];
         out.reasonEntries.push(entry);
@@ -358,6 +392,11 @@
                 displaced: [],
                 assignedThisPeriod: new Set()
             };
+            seedAssignedThisPeriodFromPriorMonthSpecials(
+                groupNum,
+                firstDateKey,
+                groupState[groupNum].assignedThisPeriod
+            );
         }
 
         for (const dateKey of sortedSpecial) {
