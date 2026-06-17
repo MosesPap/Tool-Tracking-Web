@@ -898,75 +898,7 @@
             return personName;
         }
 
-        /**
-         * Όλες οι ημερομηνίες ειδικών αργιών πριν από beforeDateKey (αποθηκευμένες + temp υπολογισμού).
-         */
-        function getSpecialHolidayDateKeysBefore(beforeDateKey) {
-            if (!beforeDateKey || !/^\d{4}-\d{2}-\d{2}$/.test(beforeDateKey)) return [];
-            const keySet = new Set();
-            const ingest = (store) => {
-                if (!store || typeof store !== 'object') return;
-                for (const dk of Object.keys(store)) {
-                    if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || dk >= beforeDateKey) continue;
-                    const d = new Date(dk + 'T00:00:00');
-                    if (isNaN(d.getTime())) continue;
-                    if (typeof isSpecialHoliday === 'function' && !isSpecialHoliday(d)) continue;
-                    keySet.add(dk);
-                }
-            };
-            ingest(typeof specialHolidayAssignments !== 'undefined' ? specialHolidayAssignments : null);
-            if (typeof calculationSteps !== 'undefined' && calculationSteps?.tempSpecialAssignments) {
-                ingest(calculationSteps.tempSpecialAssignments);
-            }
-            return [...keySet].sort();
-        }
-
-        /**
-         * Τελευταίος τελικός ανατεθείς ειδικής πριν την ημερομηνία (anchor συνέχειας σειράς).
-         * Αν slot=Δ και assigned=Ε, επιστρέφει Ε — επόμενος cursor = μετά τον Ε.
-         */
-        function getLastSpecialRotationAnchorForDate(dateOrKey, groupNum) {
-            let beforeKey;
-            if (typeof dateOrKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateOrKey)) {
-                beforeKey = dateOrKey;
-            } else {
-                const d = dateOrKey instanceof Date ? dateOrKey : new Date(dateOrKey);
-                if (isNaN(d.getTime())) return null;
-                beforeKey = formatDateKey(d);
-            }
-
-            const priorKeys = getSpecialHolidayDateKeysBefore(beforeKey);
-            for (let i = priorKeys.length - 1; i >= 0; i--) {
-                const dk = priorKeys[i];
-                let assigned = null;
-                if (typeof calculationSteps !== 'undefined') {
-                    assigned = calculationSteps?.tempSpecialAssignments?.[dk]?.[groupNum];
-                }
-                if (!assigned) {
-                    assigned = getPersonAssignedOnDateFromStore('special', dk, groupNum);
-                }
-                if (assigned) return assigned;
-            }
-
-            const beforeYm = beforeKey.substring(0, 7);
-            const byType = lastRotationPositions?.special || {};
-            if (byType && typeof byType === 'object') {
-                const monthKeys = Object.keys(byType)
-                    .filter((k) => isMonthKey(k) && k <= beforeYm)
-                    .sort((a, b) => b.localeCompare(a));
-                for (const mk of monthKeys) {
-                    const entry = byType[mk];
-                    if (entry && entry[groupNum]) return entry[groupNum];
-                }
-            }
-            return null;
-        }
-
         function getLastRotationPersonForDate(dayType, date, groupNum) {
-            if (dayType === 'special') {
-                const anchor = getLastSpecialRotationAnchorForDate(date, groupNum);
-                if (anchor) return anchor;
-            }
             const byType = lastRotationPositions?.[dayType] || {};
             const prevMonthKey = getPreviousMonthKeyFromDate(date);
             let person = null;
@@ -1291,29 +1223,6 @@
                 if (!name) return -1;
                 return groupPeople.findIndex((p) => norm(p) === norm(name));
             };
-
-            if (dayTypeCategory === 'special') {
-                const canon =
-                    typeof getSortedGroupListForRotation === 'function'
-                        ? getSortedGroupListForRotation(groupNum, 'special')
-                        : groups[groupNum]?.special || [];
-                if (!canon.length) return 0;
-                const beforeKey = formatDateKey(dateInMonth);
-                const priorKeys = getSpecialHolidayDateKeysBefore(beforeKey);
-                let cursor = 0;
-                for (const dk of priorKeys) {
-                    let assigned = null;
-                    if (typeof calculationSteps !== 'undefined') {
-                        assigned = calculationSteps?.tempSpecialAssignments?.[dk]?.[groupNum];
-                    }
-                    if (!assigned) assigned = getPersonAssignedOnDateFromStore('special', dk, groupNum);
-                    if (!assigned) continue;
-                    const idx = canon.findIndex((p) => normRotPersonName(p) === normRotPersonName(assigned));
-                    if (idx >= 0) cursor = (idx + 1) % canon.length;
-                }
-                return cursor;
-            }
-
             const prevMonthStart = new Date(dateInMonth.getFullYear(), dateInMonth.getMonth() - 1, 1);
             const prevMonthKey = getPreviousMonthKeyFromDate(dateInMonth);
             const prevManualAlternate = findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInMonth, groupNum);
@@ -1374,18 +1283,16 @@
             if (lastKey) {
                 const assigned = getPersonAssignedOnDateFromStore(dayTypeCategory, lastKey, groupNum);
                 let continuity = assigned;
-                if (dayTypeCategory !== 'special') {
-                    if (typeof getPersonForRotationContinuity === 'function') {
-                        continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
-                    } else {
-                        const manual = findManualAlternateReplacementForGroup(lastKey, groupNum);
-                        if (
-                            manual?.baselinePerson &&
-                            manual?.replacementPerson &&
-                            normRotPersonName(assigned) === normRotPersonName(manual.replacementPerson)
-                        ) {
-                            continuity = resolvePersonInGroupRotationList(manual.baselinePerson, groupNum, dayTypeCategory);
-                        }
+                if (typeof getPersonForRotationContinuity === 'function') {
+                    continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
+                } else {
+                    const manual = findManualAlternateReplacementForGroup(lastKey, groupNum);
+                    if (
+                        manual?.baselinePerson &&
+                        manual?.replacementPerson &&
+                        normRotPersonName(assigned) === normRotPersonName(manual.replacementPerson)
+                    ) {
+                        continuity = resolvePersonInGroupRotationList(manual.baselinePerson, groupNum, dayTypeCategory);
                     }
                 }
                 if (continuity) {
@@ -1401,17 +1308,6 @@
 
         /** Month-start seed person: last baseline slot holder before the next assignee. */
         function getRotationSeedPersonForMonthStart(dayTypeCategory, monthStartDate, groupNum) {
-            if (dayTypeCategory === 'special') {
-                const canon =
-                    typeof getSortedGroupListForRotation === 'function'
-                        ? getSortedGroupListForRotation(groupNum, 'special')
-                        : groups[groupNum]?.special || [];
-                if (!canon.length) return null;
-                const cursor = computeRotationPositionAtMonthStart('special', monthStartDate, groupNum, canon);
-                if (Number.isFinite(cursor)) {
-                    return canon[(cursor - 1 + canon.length) % canon.length] || null;
-                }
-            }
             const groupData = typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum];
             const groupPeople = groupData?.[dayTypeCategory] || groups[groupNum]?.[dayTypeCategory] || [];
             if (groupPeople.length > 0) {
@@ -1850,8 +1746,6 @@
         window.captureDutyShiftsCancelRestoreSnapshot = captureDutyShiftsCancelRestoreSnapshot;
         window.restoreDutyShiftsCancelRestoreSnapshot = restoreDutyShiftsCancelRestoreSnapshot;
         window.removeGroupsFromAssignmentValue = removeGroupsFromAssignmentValue;
-        window.getSpecialHolidayDateKeysBefore = getSpecialHolidayDateKeysBefore;
-        window.getLastSpecialRotationAnchorForDate = getLastSpecialRotationAnchorForDate;
 
         function _stripOverrideGroupSetFromArray(stripGroupNums) {
             if (!Array.isArray(stripGroupNums) || stripGroupNums.length === 0) return null;

@@ -3296,15 +3296,8 @@
                 sortedSpecialDays: sortedSpecial,
                 startDate,
                 preservedAssignments: tempSpecialAssignments,
-                shouldRecalculateGroup: (g) => {
-                    if (typeof shouldRecalculateDutyGroup !== 'function') return true;
-                    const recalcSet =
-                        typeof getCalculationRecalcGroupSet === 'function'
-                            ? getCalculationRecalcGroupSet()
-                            : null;
-                    if (!recalcSet) return true;
-                    return shouldRecalculateDutyGroup(g);
-                }
+                shouldRecalculateGroup: (g) =>
+                    typeof shouldRecalculateDutyGroup !== 'function' || shouldRecalculateDutyGroup(g)
             });
 
             for (const entry of engineOut.reasonEntries || []) {
@@ -3323,32 +3316,6 @@
 
             if (engineOut.debtsRemaining?.length) {
                 console.log('[STEP 1] Special debts remaining after period:', engineOut.debtsRemaining);
-            }
-
-            const samePerson =
-                typeof DutyRotationEngine?.namesReferToSamePerson === 'function'
-                    ? DutyRotationEngine.namesReferToSamePerson.bind(DutyRotationEngine)
-                    : null;
-            for (let g = 1; g <= 4; g++) {
-                const prior = [];
-                for (const dk of sortedSpecial) {
-                    const p = engineOut.assignments?.[dk]?.[g];
-                    if (!p) continue;
-                    let dupDate = null;
-                    for (const prev of prior) {
-                        const isDup = samePerson ? samePerson(p, prev.person, g) : normalizePersonKey(p) === normalizePersonKey(prev.person);
-                        if (isDup) {
-                            dupDate = prev.dateKey;
-                            break;
-                        }
-                    }
-                    if (dupDate) {
-                        console.warn(
-                            `[STEP 1] ⚠ Διπλή ανάθεση ειδικής ομάδα ${g}: «${p}» στις ${dk} και ${dupDate}`
-                        );
-                    }
-                    prior.push({ person: p, dateKey: dk });
-                }
             }
 
             return {
@@ -3473,35 +3440,36 @@
                 // Store pure rotation baseline (rotation person per date) for saving to Firestore – so continuation uses baseline, not returner
                 calculationSteps.tempSpecialBaselineAssignments = specialRotationPersons;
 
-                // Store last rotation anchor per group (τελευταίος τελικός ανατεθείς — συνέχεια μετά τον Ε, όχι baseline Δ)
+                // Store last rotation person for each group (overall, for end-of-range continuation)
+                // Use BASELINE (rotation) person for the last date so that when return-from-missing placed A/B (displacing C/D), we continue from E next month
                 calculationSteps.lastSpecialRotationPositions = {};
                 for (let g = 1; g <= 4; g++) {
-                    let lastAnchorPerson = null;
+                    let lastBaselinePerson = null;
                     for (let i = sortedSpecial.length - 1; i >= 0; i--) {
                         const dateKey = sortedSpecial[i];
-                        const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
-                        if (assignedPerson) {
-                            lastAnchorPerson = assignedPerson;
+                        const baselinePerson = specialRotationPersons[dateKey]?.[g];
+                        if (baselinePerson) {
+                            lastBaselinePerson = baselinePerson;
                             break;
                         }
                     }
-                    if (lastAnchorPerson) {
-                        calculationSteps.lastSpecialRotationPositions[g] = lastAnchorPerson;
-                        console.log(
-                            `[SPECIAL ROTATION] Storing last assignee anchor ${lastAnchorPerson} for group ${g} for continuation`
-                        );
+                    if (lastBaselinePerson) {
+                        calculationSteps.lastSpecialRotationPositions[g] = lastBaselinePerson;
+                        console.log(`[SPECIAL ROTATION] Storing last baseline (rotation) person ${lastBaselinePerson} for group ${g} for continuation`);
                     }
                 }
 
-                // Τελευταίος τελικός ανατεθείς ανά μήνα (anchor) — συνέχεια ειδική→ειδική, όχι μήνα→μήνα.
-                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> lastAssigneeAnchor }
-                for (const dateKey of sortedSpecial) {
+                // Store last rotation person per month: use ASSIGNED person on last date in month so lastRotationPositions matches specialHolidayAssignments and next month continues from who actually did the duty
+                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
+                for (let i = sortedSpecial.length - 1; i >= 0; i--) {
+                    const dateKey = sortedSpecial[i];
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
                     if (!lastSpecialRotationPositionsByMonth[monthKey]) {
                         lastSpecialRotationPositionsByMonth[monthKey] = {};
                     }
                     for (let g = 1; g <= 4; g++) {
+                        if (lastSpecialRotationPositionsByMonth[monthKey][g] !== undefined) continue;
                         const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
                         if (assignedPerson) {
                             lastSpecialRotationPositionsByMonth[monthKey][g] = assignedPerson;
@@ -3851,9 +3819,6 @@
                     const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
                     await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineSpecialAssignments', organizedBaseline);
                     Object.assign(rotationBaselineSpecialAssignments, formattedBaseline);
-                    if (typeof rebuildRotationBaselineLastByType === 'function') {
-                        rebuildRotationBaselineLastByType();
-                    }
                 }
                 
                 // Save last rotation positions for special holidays (per month)
@@ -3875,10 +3840,7 @@
                         lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                         updatedBy: user.uid
                     });
-                    console.log(
-                        '[STEP 1] Saved lastRotationPositions.special (last assignee anchor per month) to Firestore:',
-                        lastSpecialRotationPositionsByMonth
-                    );
+                    console.log('Saved Step 1 last rotation positions for special holidays (per month) to Firestore:', lastSpecialRotationPositionsByMonth);
                 }
             } catch (error) {
                 console.error('Error saving Step 1 (Special Holidays) to Firestore:', error);
