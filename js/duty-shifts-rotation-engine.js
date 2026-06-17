@@ -337,6 +337,7 @@
         const out = {
             assignments: {},
             slots: {},
+            slotContinuity: {},
             reasonEntries: [],
             cursorByGroup: {},
             simulatedByMonth: {},
@@ -371,6 +372,8 @@
                     if (!out.slots[dateKey]) out.slots[dateKey] = {};
                     out.assignments[dateKey][groupNum] = preserved;
                     out.slots[dateKey][groupNum] = preserved;
+                    if (!out.slotContinuity[dateKey]) out.slotContinuity[dateKey] = {};
+                    out.slotContinuity[dateKey][groupNum] = preserved;
                     groupState[groupNum].assignedThisPeriod.add(normName(preserved));
                     if (monthKey) {
                         if (!out.simulatedByMonth[monthKey]) out.simulatedByMonth[monthKey] = {};
@@ -389,6 +392,7 @@
 
                 let assigned = null;
                 let slotPerson = null;
+                let slotContinuityPerson = null;
                 let assignmentKind = null;
 
                 // 1) Displaced cascade (slot already consumed when they were bumped)
@@ -397,6 +401,7 @@
                     if (canServeSpecial(displacedPerson, groupNum, dateKey)) {
                         assigned = st.displaced.shift();
                         slotPerson = assigned;
+                        slotContinuityPerson = assigned;
                         assignmentKind = 'displaced-cascade';
                         pushReason(out, {
                             dateKey,
@@ -419,6 +424,7 @@
 
                         const consumed = consumeNextRotationSlot(order, st.cursor, st.assignedThisPeriod);
                         slotPerson = consumed.slotPerson;
+                        slotContinuityPerson = slotPerson;
                         st.cursor = consumed.cursor;
                         if (!slotPerson) continue;
                         assigned = debt.personName;
@@ -460,6 +466,7 @@
                     if (slotCanServe && !slotAlreadyAssigned) {
                         assigned = slotPerson;
                         assignmentKind = 'rotation';
+                        slotContinuityPerson = slotPerson;
                         st.cursor++;
                     } else {
                         const unavailableChain = collectConsecutiveUnavailableSlots(
@@ -473,6 +480,7 @@
                         if (unavailableChain.length > 0) {
                             st.cursor += unavailableChain.length;
                             slotPerson = unavailableChain[0].person;
+                            slotContinuityPerson = unavailableChain[unavailableChain.length - 1].person;
                             for (const { person } of unavailableChain) {
                                 registerSpecialDebt(st, debtKeys, person, groupNum, dateKey);
                             }
@@ -503,6 +511,7 @@
                                     swappedWith: slotPerson,
                                     meta: {
                                         baselinePerson: slotPerson,
+                                        lastConsumedSlotPerson: slotContinuityPerson,
                                         replacementType: 'next-in-baseline',
                                         consecutiveUnavailable: unavailableChain.length > 1,
                                         skippedChain: unavailableChain.map((c) => c.person),
@@ -517,6 +526,7 @@
                             }
                         } else {
                             st.cursor++;
+                            slotContinuityPerson = slotPerson;
                             const replacement = nextEligibleSpecial(
                                 order,
                                 slotIdx,
@@ -550,6 +560,9 @@
 
                 if (!out.slots[dateKey]) out.slots[dateKey] = {};
                 out.slots[dateKey][groupNum] = slotPerson || assigned || null;
+                if (!out.slotContinuity[dateKey]) out.slotContinuity[dateKey] = {};
+                out.slotContinuity[dateKey][groupNum] =
+                    slotContinuityPerson || slotPerson || assigned || null;
 
                 if (assigned) {
                     if (!out.assignments[dateKey]) out.assignments[dateKey] = {};

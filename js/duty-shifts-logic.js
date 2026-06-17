@@ -1940,10 +1940,16 @@
                 const bp = String(reason.meta?.baselinePerson || '').trim();
                 if (bp) return bp;
             }
-            // Missing/disabled replacement should preserve baseline slot continuity:
-            // if A/B were unavailable and G covered, next slot remains after the skipped baseline person.
-            if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
-                return reason.swappedWith;
+            // Missing/disabled replacement: συνέχεια μετά το τελευταίο καταναλωμένο slot (όχι μόνο το πρώτο της αλυσίδας).
+            if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement) {
+                const chain = reason.meta.skippedChain;
+                if (Array.isArray(chain) && chain.length > 0) {
+                    return chain[chain.length - 1];
+                }
+                if (reason.meta.lastConsumedSlotPerson) {
+                    return reason.meta.lastConsumedSlotPerson;
+                }
+                if (reason.swappedWith) return reason.swappedWith;
             }
             if (reason && reason.type === 'swap' && reason.swapPairId != null && !reason.meta?.mutualTwoDaySwap) {
                 const otherKey = findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey);
@@ -3321,6 +3327,7 @@
             return {
                 tempSpecialAssignments: engineOut.assignments || {},
                 specialRotationPersons: engineOut.slots || {},
+                specialSlotContinuity: engineOut.slotContinuity || {},
                 simulatedByMonth: engineOut.simulatedByMonth || {},
                 cursorByGroup: engineOut.cursorByGroup || {}
             };
@@ -3394,6 +3401,7 @@
                 const specialEngineResult = computeSpecialHolidaysWithRotationEngine(sortedSpecial, startDate);
                 const tempSpecialAssignments = specialEngineResult.tempSpecialAssignments;
                 const specialRotationPersons = specialEngineResult.specialRotationPersons;
+                const specialSlotContinuity = specialEngineResult.specialSlotContinuity;
                 calculationSteps.specialRotationCursorByGroup = specialEngineResult.cursorByGroup;
 
                 for (const dateKey of sortedSpecial) {
@@ -3437,30 +3445,34 @@
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempSpecialAssignments = tempSpecialAssignments;
-                // Store pure rotation baseline (rotation person per date) for saving to Firestore – so continuation uses baseline, not returner
+                // Display baseline (πρώτο slot) vs continuity baseline (τελευταίο καταναλωμένο slot για επόμενο μήνα)
                 calculationSteps.tempSpecialBaselineAssignments = specialRotationPersons;
+                calculationSteps.tempSpecialSlotContinuity = specialSlotContinuity;
 
                 // Store last rotation person for each group (overall, for end-of-range continuation)
-                // Use BASELINE (rotation) person for the last date so that when return-from-missing placed A/B (displacing C/D), we continue from E next month
+                // Χρησιμοποιούμε slotContinuity (τελευταίο καταναλωμένο slot), όχι μόνο το πρώτο της αλυσίδας.
                 calculationSteps.lastSpecialRotationPositions = {};
                 for (let g = 1; g <= 4; g++) {
-                    let lastBaselinePerson = null;
+                    let lastContinuityPerson = null;
                     for (let i = sortedSpecial.length - 1; i >= 0; i--) {
                         const dateKey = sortedSpecial[i];
-                        const baselinePerson = specialRotationPersons[dateKey]?.[g];
-                        if (baselinePerson) {
-                            lastBaselinePerson = baselinePerson;
+                        const continuityPerson =
+                            specialSlotContinuity[dateKey]?.[g] ?? specialRotationPersons[dateKey]?.[g];
+                        if (continuityPerson) {
+                            lastContinuityPerson = continuityPerson;
                             break;
                         }
                     }
-                    if (lastBaselinePerson) {
-                        calculationSteps.lastSpecialRotationPositions[g] = lastBaselinePerson;
-                        console.log(`[SPECIAL ROTATION] Storing last baseline (rotation) person ${lastBaselinePerson} for group ${g} for continuation`);
+                    if (lastContinuityPerson) {
+                        calculationSteps.lastSpecialRotationPositions[g] = lastContinuityPerson;
+                        console.log(
+                            `[SPECIAL ROTATION] Storing last continuity slot ${lastContinuityPerson} for group ${g} for continuation`
+                        );
                     }
                 }
 
-                // Store last rotation person per month: use ASSIGNED person on last date in month so lastRotationPositions matches specialHolidayAssignments and next month continues from who actually did the duty
-                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
+                // Per month: continuity anchor (τελευταίο slot περιστροφής στον μήνα) για seed επόμενου μήνα
+                const lastSpecialRotationPositionsByMonth = {};
                 for (let i = sortedSpecial.length - 1; i >= 0; i--) {
                     const dateKey = sortedSpecial[i];
                     const d = new Date(dateKey + 'T00:00:00');
@@ -3470,9 +3482,12 @@
                     }
                     for (let g = 1; g <= 4; g++) {
                         if (lastSpecialRotationPositionsByMonth[monthKey][g] !== undefined) continue;
-                        const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
-                        if (assignedPerson) {
-                            lastSpecialRotationPositionsByMonth[monthKey][g] = assignedPerson;
+                        const continuityPerson =
+                            specialSlotContinuity[dateKey]?.[g] ??
+                            specialRotationPersons[dateKey]?.[g] ??
+                            tempSpecialAssignments[dateKey]?.[g];
+                        if (continuityPerson) {
+                            lastSpecialRotationPositionsByMonth[monthKey][g] = continuityPerson;
                         }
                     }
                 }
@@ -3793,6 +3808,7 @@
                 
                 const tempSpecialAssignments = calculationSteps.tempSpecialAssignments || {};
                 const tempSpecialBaselineAssignments = calculationSteps.tempSpecialBaselineAssignments || {};
+                const tempSpecialSlotContinuity = calculationSteps.tempSpecialSlotContinuity || {};
                 const lastSpecialRotationPositionsByMonth = calculationSteps.lastSpecialRotationPositionsByMonth || {};
                 
                 // Save special holiday assignments to Firestore (μόνο ομάδες επανυπολογισμού — merge με υπάρχουσες)
@@ -3813,9 +3829,13 @@
                     console.log('Saved Step 1 special holiday assignments to Firestore:', Object.keys(toOrganize).length, 'dates');
                 }
 
-                // Save special-holiday rotation baseline (pure rotation order) to Firestore
-                if (Object.keys(tempSpecialBaselineAssignments).length > 0) {
-                    const formattedBaseline = formatGroupAssignmentsToStringMap(tempSpecialBaselineAssignments);
+                // Save special-holiday rotation baseline: slotContinuity (τελευταίο καταναλωμένο slot) για σωστή συνέχεια μήνα
+                const baselineToSave =
+                    Object.keys(tempSpecialSlotContinuity).length > 0
+                        ? tempSpecialSlotContinuity
+                        : tempSpecialBaselineAssignments;
+                if (Object.keys(baselineToSave).length > 0) {
+                    const formattedBaseline = formatGroupAssignmentsToStringMap(baselineToSave);
                     const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
                     await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineSpecialAssignments', organizedBaseline);
                     Object.assign(rotationBaselineSpecialAssignments, formattedBaseline);
