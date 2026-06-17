@@ -283,8 +283,8 @@
                     return;
                 }
                 const norm =
-                    typeof normalizeStatusEffectiveFromDateKey === 'function'
-                        ? normalizeStatusEffectiveFromDateKey(raw)
+                    typeof validateStatusEffectiveDateKey === 'function'
+                        ? validateStatusEffectiveDateKey(raw)
                         : raw;
                 _statusChangeEffectiveResolved = true;
                 const cb = _statusChangeEffectiveCallbacks && _statusChangeEffectiveCallbacks.onConfirm;
@@ -2091,21 +2091,25 @@
                 semi: all ? false : !!document.getElementById('disableSemiSwitch')?.checked,
                 normal: all ? false : !!document.getElementById('disableNormalSwitch')?.checked
             };
+            const isDisabling = !!(st.all || st.special || st.weekend || st.semi || st.normal);
 
             if (typeof scheduleDisabledStateChange === 'function') {
-                const finishDisableSave = (effKey) => {
+                const finishDisableSave = async (effKey) => {
                     const effReturned = scheduleDisabledStateChange(groupNum, personName, st, effKey);
                     const effLabel =
                         typeof formatScheduledStatusEffectiveLabel === 'function'
                             ? formatScheduledStatusEffectiveLabel(effReturned)
                             : effReturned;
-                    const any = st.all || st.special || st.weekend || st.semi || st.normal;
                     alert(
-                        any
+                        isDisabling
                             ? `Η απενεργοποίηση καταχωρήθηκε.\nΙσχύει από ${effLabel}.`
                             : `Η ενεργοποίηση καταχωρήθηκε.\nΙσχύει από ${effLabel}.`
                     );
-                    saveData();
+                    try {
+                        await saveData();
+                    } catch (e) {
+                        console.error('saveDisableSettings saveData:', e);
+                    }
                     renderGroups();
                     const dm = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
                     if (dm) dm.hide();
@@ -2116,47 +2120,58 @@
                         currentPersonActionsListType || 'normal'
                     );
                 };
-                if (isFlexibleStatusEffectiveDatesEnabled()) {
+                const openEffectiveDateStep = () => {
                     openStatusChangeEffectiveModal({
-                        title: 'Ισχύς αλλαγής απενεργοποίησης',
+                        title: isDisabling ? 'Ισχύς απενεργοποίησης' : 'Ισχύς ενεργοποίησης',
                         introHtml:
-                            '<p class="mb-0">Ο υπολογισμός υπηρεσιών εφαρμόζει την κατάσταση από την ημερομηνία ισχύος και μετά.</p>',
+                            '<p class="mb-0">Η κατάσταση ισχύει <strong>ακριβώς από την ημερομηνία που επιλέγετε</strong> και μετά (συμπεριλαμβανομένων υπολογισμών προηγούμενων μηνών).</p>',
                         suggestedDateKey:
                             typeof getSuggestedStatusEffectiveFromDateKey === 'function'
                                 ? getSuggestedStatusEffectiveFromDateKey(new Date())
                                 : undefined,
-                        onConfirm: (effKey) => finishDisableSave(effKey),
+                        onConfirm: (effKey) => {
+                            finishDisableSave(effKey);
+                        },
                         onCancel: () => {}
                     });
+                };
+                if (isFlexibleStatusEffectiveDatesEnabled()) {
+                    openEffectiveDateStep();
                     return;
                 }
                 if (!assertStatusChangeWindowOrAlert()) return;
-                finishDisableSave();
+                openEffectiveDateStep();
                 return;
             } else {
                 const g = groups[groupNum];
                 if (!g) return;
                 if (!g.disabledPersons) g.disabledPersons = {};
-            const any = st.all || st.special || st.weekend || st.semi || st.normal;
-            const keyName = (typeof normalizePersonKey === 'function') ? normalizePersonKey(personName) : String(personName || '').trim();
-            if (!any) {
-                delete g.disabledPersons[personName];
-                if (keyName) delete g.disabledPersons[keyName];
+                const any = st.all || st.special || st.weekend || st.semi || st.normal;
+                const keyName =
+                    typeof normalizePersonKey === 'function'
+                        ? normalizePersonKey(personName)
+                        : String(personName || '').trim();
+                if (!any) {
+                    delete g.disabledPersons[personName];
+                    if (keyName) delete g.disabledPersons[keyName];
                 } else if (keyName) {
                     g.disabledPersons[keyName] = st;
                 } else {
                     g.disabledPersons[personName] = st;
                 }
-            saveData();
-            renderGroups();
-            const modal = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
-            if (modal) modal.hide();
-            openPersonActionsModal(
-                currentPersonActionsGroup,
-                currentPersonActionsName,
-                currentPersonActionsIndex != null ? currentPersonActionsIndex : 0,
-                currentPersonActionsListType || 'normal'
-            );
+                saveData()
+                    .then(() => {
+                        renderGroups();
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
+                        if (modal) modal.hide();
+                        openPersonActionsModal(
+                            currentPersonActionsGroup,
+                            currentPersonActionsName,
+                            currentPersonActionsIndex != null ? currentPersonActionsIndex : 0,
+                            currentPersonActionsListType || 'normal'
+                        );
+                    })
+                    .catch((e) => console.error('saveDisableSettings saveData:', e));
             }
         }
         function openMissingDisabledPeopleModal() {

@@ -117,40 +117,29 @@
             return d.getDate() >= windowStart;
         }
         /**
-         * Αν η «ισχύς από» πέσει στο τελευταίο ημερολογιακό δεκαήμερο του μήνα της,
-         * για υπολογισμούς μεταφέρεται στην 1η του επόμενου μήνα.
-         * Εξαίρεση: όταν ο χρήστης επιλέξει ρητά τη σημερινή ημερομηνία,
-         * η ισχύς παραμένει σήμερα ώστε η αλλαγή να φανεί άμεσα στο UI.
+         * Επικύρωση ημερομηνίας ισχύος (χωρίς αυτόματη μετατόπιση).
+         * Η ημερομηνία που επιλέγει ο χρήστης αποθηκεύεται ακριβώς όπως ορίστηκε.
          */
-        function normalizeStatusEffectiveFromDateKey(dateKey) {
+        function validateStatusEffectiveDateKey(dateKey) {
             if (!dateKey || String(dateKey) === PERSON_STATUS_SCHEDULE_EPOCH) return dateKey;
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey))) return dateKey;
-            const d = dateFromDateKey(dateKey);
+            const s = String(dateKey).trim();
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return dateKey;
+            const d = dateFromDateKey(s);
             if (!d) return dateKey;
-            const todayKey = typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null;
-            if (todayKey && String(dateKey) === todayKey) {
-                return dateKey;
-            }
-            const y = d.getFullYear();
-            const m = d.getMonth();
-            const day = d.getDate();
-            const lastDay = new Date(y, m + 1, 0).getDate();
-            const windowStart = Math.max(1, lastDay - 9);
-            if (day >= windowStart) {
-                const firstNext = new Date(y, m + 1, 1);
-                return typeof formatDateKey === 'function' ? formatDateKey(firstNext) : dateKey;
-            }
-            return dateKey;
+            return typeof formatDateKey === 'function' ? formatDateKey(d) : s;
+        }
+        /** @deprecated Χρησιμοποιείται μόνο για αυτόματες προεπιλογές — όχι για ρητή επιλογή χρήστη. */
+        function normalizeStatusEffectiveFromDateKey(dateKey) {
+            return validateStatusEffectiveDateKey(dateKey);
         }
         function sanitizePersonStatusScheduleEffectiveDates() {
-            if (!personStatusSchedule || typeof normalizeStatusEffectiveFromDateKey !== 'function') return;
+            if (!personStatusSchedule) return;
             for (const key of ['disabled', 'membership', 'listOrders']) {
                 const arr = personStatusSchedule[key];
                 if (!Array.isArray(arr)) continue;
                 for (const e of arr) {
                     if (e && e.effectiveFrom && e.effectiveFrom !== PERSON_STATUS_SCHEDULE_EPOCH) {
-                        const n = normalizeStatusEffectiveFromDateKey(e.effectiveFrom);
-                        if (n !== e.effectiveFrom) e.effectiveFrom = n;
+                        e.effectiveFrom = validateStatusEffectiveDateKey(e.effectiveFrom);
                     }
                 }
             }
@@ -404,7 +393,11 @@
                         e.personKey === pk &&
                         compareScheduleDateKeys(e.effectiveFrom, dk) <= 0
                 )
-                .sort((a, b) => compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom));
+                .sort((a, b) => {
+                    const byEff = compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom);
+                    if (byEff !== 0) return byEff;
+                    return compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
+                });
             if (hits.length) return normalizeDisabledState(hits[0].state);
             return legacyDisabledStateFromGroups(groupNum, personName);
         }
@@ -421,6 +414,29 @@
             else if (cat === 'normal-day') cat = 'normal';
             return !!st[cat];
         }
+        function syncDisabledPersonsMirror(groupNum, personName, asOfDateKey) {
+            const g = groups?.[groupNum];
+            if (!g) return;
+            if (!g.disabledPersons) g.disabledPersons = {};
+            const dk =
+                asOfDateKey ||
+                (typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null);
+            const st =
+                typeof getDisabledStateAtDate === 'function'
+                    ? getDisabledStateAtDate(groupNum, personName, dk)
+                    : emptyDisabledState();
+            const keyName = personScheduleKey(personName);
+            if (disabledStateIsActive(st)) {
+                if (keyName) g.disabledPersons[keyName] = st;
+                g.disabledPersons[personName] = st;
+            } else {
+                delete g.disabledPersons[personName];
+                if (keyName) delete g.disabledPersons[keyName];
+                for (const k of Object.keys(g.disabledPersons)) {
+                    if (personScheduleKey(k) === keyName) delete g.disabledPersons[k];
+                }
+            }
+        }
         function scheduleDisabledStateChange(groupNum, personName, state, effectiveFromKey) {
             ensurePersonStatusScheduleSeeded();
             const pk = personScheduleKey(personName);
@@ -430,7 +446,7 @@
                 (typeof getSuggestedStatusEffectiveFromDateKey === 'function'
                     ? getSuggestedStatusEffectiveFromDateKey(new Date())
                     : getScheduledStatusEffectiveFrom(new Date()));
-            const eff = normalizeStatusEffectiveFromDateKey(raw);
+            const eff = validateStatusEffectiveDateKey(raw);
             personStatusSchedule.disabled.push({
                 personKey: pk,
                 personName,
@@ -439,6 +455,11 @@
                 effectiveFrom: eff,
                 recordedAt: formatDateKey(new Date())
             });
+            syncDisabledPersonsMirror(
+                groupNum,
+                personName,
+                typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null
+            );
             return eff;
         }
         function scheduleMembershipChange(personName, toGroupNum, effectiveFromKey) {
@@ -448,7 +469,7 @@
                 (typeof getSuggestedStatusEffectiveFromDateKey === 'function'
                     ? getSuggestedStatusEffectiveFromDateKey(new Date())
                     : getScheduledStatusEffectiveFrom(new Date()));
-            const eff = normalizeStatusEffectiveFromDateKey(raw);
+            const eff = validateStatusEffectiveDateKey(raw);
             const pk = personScheduleKey(personName);
             personStatusSchedule.membership.push({
                 personKey: pk,
@@ -462,7 +483,7 @@
         function scheduleListOrdersForGroup(groupNum, effectiveFrom) {
             ensurePersonStatusScheduleSeeded();
             syncGroupListArraysFromPriorities(groupNum);
-            const eff = normalizeStatusEffectiveFromDateKey(
+            const eff = validateStatusEffectiveDateKey(
                 effectiveFrom ||
                     (typeof getFirstOfCalendarMonthDateKey === 'function'
                         ? getFirstOfCalendarMonthDateKey(new Date())
