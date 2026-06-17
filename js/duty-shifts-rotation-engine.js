@@ -39,7 +39,7 @@
         if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(personName, groupNum, dateObj, DUTY_TYPE_SPECIAL)) {
             return false;
         }
-        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(personName, groupNum, DUTY_TYPE_SPECIAL)) {
+        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(personName, groupNum, DUTY_TYPE_SPECIAL, dateObj)) {
             return false;
         }
         return true;
@@ -47,7 +47,7 @@
 
     function unavailableReason(personName, groupNum, dateKey) {
         const dateObj = new Date(dateKey + 'T00:00:00');
-        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(personName, groupNum, DUTY_TYPE_SPECIAL)) {
+        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(personName, groupNum, DUTY_TYPE_SPECIAL, dateObj)) {
             return 'disabled';
         }
         if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(personName, groupNum, dateObj, DUTY_TYPE_SPECIAL)) {
@@ -258,6 +258,122 @@
                         reason: 'missing-prior-month'
                     });
                     break;
+                }
+            }
+        }
+        return debts;
+    }
+
+    /** Ποιοι παραλείφθηκαν (απενεργ./απουσία) σύμφωνα με αποθηκευμένα assignmentReasons. */
+    function collectSkippedPersonsFromSavedReasons(dateKey, groupNum, finalAssignee) {
+        const out = [];
+        const gmap =
+            typeof assignmentReasons !== 'undefined' ? assignmentReasons[dateKey]?.[groupNum] : null;
+        if (!gmap || typeof gmap !== 'object') return out;
+
+        for (const personKey of Object.keys(gmap)) {
+            const r = gmap[personKey];
+            if (!r || typeof r !== 'object') continue;
+            if (r.type === 'swap') continue;
+
+            const meta = r.meta || {};
+            if (meta.replacementType === 'already-on-special') continue;
+            if (meta.debtRepayment) continue;
+            if (meta.displacedCascade) continue;
+
+            const isUnavailable =
+                meta.unavailableReplacement ||
+                meta.replacementType === 'next-in-baseline' ||
+                (meta.dutyType === DUTY_TYPE_SPECIAL && (meta.baselinePerson || meta.skippedPersonName));
+
+            if (!isUnavailable && !(Array.isArray(meta.skippedChain) && meta.skippedChain.length)) continue;
+
+            if (Array.isArray(meta.skippedChain) && meta.skippedChain.length) {
+                for (const p of meta.skippedChain) {
+                    if (p && normName(p) !== normName(finalAssignee)) {
+                        out.push({ personName: p, reason: 'inferred-skipped-chain' });
+                    }
+                }
+            } else {
+                const skipped = meta.skippedPersonName || meta.baselinePerson || r.swappedWith;
+                if (skipped && normName(skipped) !== normName(finalAssignee)) {
+                    out.push({ personName: skipped, reason: 'inferred-unavailable-skip' });
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Ανάκτηση ανοιχτών οφειλών από αποθηκευμένα baseline / τελικές / λόγους (χωρίς pendingSpecialDebts).
+     * Καλύπτει περιπτώσεις που ο Δεκέμβριος αποθηκεύτηκε πριν την αποθήκευση οφειλών.
+     */
+    function collectInferredSpecialDebtsFromSavedAssignments(firstDateKeyInRange, sortedSpecialDays) {
+        const debts = [];
+        const sortedSpecialSet = new Set(sortedSpecialDays || []);
+        const added = new Set();
+        const dateKeys = new Set();
+
+        if (typeof assignmentReasons !== 'undefined') {
+            for (const dk of Object.keys(assignmentReasons)) {
+                if (/^\d{4}-\d{2}-\d{2}$/.test(dk)) dateKeys.add(dk);
+            }
+        }
+        const stores = [];
+        if (typeof rotationBaselineSpecialAssignments !== 'undefined') {
+            stores.push(rotationBaselineSpecialAssignments);
+        }
+        if (typeof specialHolidayAssignments !== 'undefined') {
+            stores.push(specialHolidayAssignments);
+        }
+        for (const store of stores) {
+            if (!store || typeof store !== 'object') continue;
+            for (const dk of Object.keys(store)) {
+                if (/^\d{4}-\d{2}-\d{2}$/.test(dk)) dateKeys.add(dk);
+            }
+        }
+
+        for (const dateKey of [...dateKeys].sort()) {
+            if (firstDateKeyInRange && dateKey >= firstDateKeyInRange) continue;
+            if (sortedSpecialSet.has(dateKey)) continue;
+
+            const d = new Date(dateKey + 'T00:00:00');
+            if (isNaN(d.getTime())) continue;
+            if (typeof isSpecialHoliday === 'function' && !isSpecialHoliday(d)) continue;
+
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const finalAssignee = getFinalSpecialAssignee(groupNum, dateKey);
+                if (!finalAssignee) continue;
+
+                let candidates = collectSkippedPersonsFromSavedReasons(dateKey, groupNum, finalAssignee);
+
+                if (candidates.length === 0) {
+                    const baseline =
+                        getBaselinePersonForGroup(dateKey, groupNum) ||
+                        getExpectedSpecialSlotHolder(groupNum, dateKey);
+                    if (baseline && normName(baseline) !== normName(finalAssignee)) {
+                        const slotHolder = getExpectedSpecialSlotHolder(groupNum, dateKey);
+                        if (slotHolder && normName(slotHolder) === normName(baseline)) {
+                            candidates = [{ personName: baseline, reason: 'inferred-baseline-mismatch' }];
+                        }
+                    }
+                }
+
+                for (const { personName, reason } of candidates) {
+                    if (!personName) continue;
+                    const dedupeKey = `${groupNum}|${normName(personName)}|${dateKey}`;
+                    if (added.has(dedupeKey)) continue;
+                    if (normName(personName) === normName(finalAssignee)) continue;
+                    if (wasSpecialDebtAlreadyRepaid(groupNum, personName, dateKey, firstDateKeyInRange)) {
+                        continue;
+                    }
+                    added.add(dedupeKey);
+                    debts.push({
+                        personName,
+                        groupNum,
+                        owedFromDateKey: dateKey,
+                        reason: reason || 'inferred-saved-assignment'
+                    });
                 }
             }
         }
@@ -475,7 +591,8 @@
         const firstDateKey = sortedSpecial[0];
         const priorDebts = mergeSpecialDebts([
             collectPriorMonthSpecialDebts(sortedSpecial, firstDateKey),
-            collectStoredPendingSpecialDebts(firstDateKey)
+            collectStoredPendingSpecialDebts(firstDateKey),
+            collectInferredSpecialDebtsFromSavedAssignments(sortedSpecial, firstDateKey)
         ]);
 
         const groupState = {};
@@ -736,6 +853,7 @@
         resolveInitialSpecialCursor,
         collectPriorMonthSpecialDebts,
         collectStoredPendingSpecialDebts,
+        collectInferredSpecialDebtsFromSavedAssignments,
         mergeSpecialDebts,
         wasSpecialDebtAlreadyRepaid,
         normName,
