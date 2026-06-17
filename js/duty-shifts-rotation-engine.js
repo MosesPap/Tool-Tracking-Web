@@ -101,26 +101,6 @@
             }
         }
 
-        const baselineDateKeysBeforePeriod = firstDateKey
-            ? Object.keys(
-                  (typeof rotationBaselineSpecialAssignments !== 'undefined'
-                      ? rotationBaselineSpecialAssignments
-                      : {}) || {}
-              )
-                  .filter((dk) => /^\d{4}-\d{2}-\d{2}$/.test(dk) && dk < firstDateKey)
-                  .sort()
-                  .reverse()
-            : [];
-        if (baselineDateKeysBeforePeriod.length > 0) {
-            const prevMonthKey = getPreviousMonthKeyFromDateKey(firstDateKey);
-            const prevMonthKeys = baselineDateKeysBeforePeriod.filter(
-                (dk) => !prevMonthKey || dk.substring(0, 7) === prevMonthKey
-            );
-            const lastBaselineKey = prevMonthKeys.length ? prevMonthKeys[0] : baselineDateKeysBeforePeriod[0];
-            const lastBaselinePerson = getBaselinePersonForGroup(lastBaselineKey, groupNum);
-            const idx = findPersonIndex(order, lastBaselinePerson);
-            if (idx >= 0) return (idx + 1) % len;
-        }
         return 0;
     }
 
@@ -164,20 +144,37 @@
         return getAssigneeFromStoreRaw(src[dateKey], groupNum);
     }
 
-    /** Τελευταίο baseline/continuity slot πριν την περίοδο (τελευταία ειδική προηγ. μήνα). */
+    /** Τελευταίο καταναλωμένο slot περιστροφής πριν την περίοδο (όχι το display baseline). */
     function getLastSpecialContinuitySlotBefore(groupNum, firstDateKey) {
         const prevMonthKey = getPreviousMonthKeyFromDateKey(firstDateKey);
-        const baselineStore =
-            typeof rotationBaselineSpecialAssignments !== 'undefined'
-                ? rotationBaselineSpecialAssignments
-                : {};
-        const keys = Object.keys(baselineStore || {})
-            .filter((dk) => /^\d{4}-\d{2}-\d{2}$/.test(dk) && dk < firstDateKey)
-            .filter((dk) => !prevMonthKey || dk.substring(0, 7) === prevMonthKey)
-            .sort();
-        if (!keys.length) return null;
-        const lastKey = keys[keys.length - 1];
-        return getBaselinePersonForGroup(lastKey, groupNum);
+        const dateObj = new Date(firstDateKey + 'T00:00:00');
+
+        if (typeof getLastRotationPersonForDate === 'function') {
+            const stored = getLastRotationPersonForDate(DUTY_TYPE_SPECIAL, dateObj, groupNum);
+            if (stored) return stored;
+        }
+
+        if (typeof assignmentReasons !== 'undefined' && prevMonthKey) {
+            const reasonKeys = Object.keys(assignmentReasons || {})
+                .filter((dk) => /^\d{4}-\d{2}-\d{2}$/.test(dk) && dk < firstDateKey)
+                .filter((dk) => dk.substring(0, 7) === prevMonthKey)
+                .sort();
+            if (reasonKeys.length) {
+                const lastKey = reasonKeys[reasonKeys.length - 1];
+                const gmap = assignmentReasons[lastKey]?.[groupNum];
+                if (gmap && typeof gmap === 'object') {
+                    for (const personKey of Object.keys(gmap)) {
+                        const r = gmap[personKey];
+                        const meta = r?.meta || {};
+                        if (meta.lastConsumedSlotPerson) return meta.lastConsumedSlotPerson;
+                        const chain = meta.skippedChain;
+                        if (Array.isArray(chain) && chain.length) return chain[chain.length - 1];
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     /** True if person already served a special between missedDateKey and range start (debt repaid). */

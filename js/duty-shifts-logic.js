@@ -3833,13 +3833,9 @@
                     console.log('Saved Step 1 special holiday assignments to Firestore:', Object.keys(toOrganize).length, 'dates');
                 }
 
-                // Save special-holiday rotation baseline: slotContinuity (τελευταίο καταναλωμένο slot) για σωστή συνέχεια μήνα
-                const baselineToSave =
-                    Object.keys(tempSpecialSlotContinuity).length > 0
-                        ? tempSpecialSlotContinuity
-                        : tempSpecialBaselineAssignments;
-                if (Object.keys(baselineToSave).length > 0) {
-                    const formattedBaseline = formatGroupAssignmentsToStringMap(baselineToSave);
+                // Save special-holiday rotation baseline: slot ανά ημέρα (πρώτο slot περιστροφής — βασική σειρά εμφάνισης)
+                if (Object.keys(tempSpecialBaselineAssignments).length > 0) {
+                    const formattedBaseline = formatGroupAssignmentsToStringMap(tempSpecialBaselineAssignments);
                     const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
                     await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineSpecialAssignments', organizedBaseline);
                     Object.assign(rotationBaselineSpecialAssignments, formattedBaseline);
