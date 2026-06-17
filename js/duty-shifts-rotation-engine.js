@@ -310,7 +310,8 @@
      */
     function collectInferredSpecialDebtsFromSavedAssignments(firstDateKeyInRange, sortedSpecialDays) {
         const debts = [];
-        const sortedSpecialSet = new Set(sortedSpecialDays || []);
+        const scanAllOpen = firstDateKeyInRange == null && sortedSpecialDays == null;
+        const sortedSpecialSet = scanAllOpen ? new Set() : new Set(sortedSpecialDays || []);
         const added = new Set();
         const dateKeys = new Set();
 
@@ -334,8 +335,10 @@
         }
 
         for (const dateKey of [...dateKeys].sort()) {
-            if (firstDateKeyInRange && dateKey >= firstDateKeyInRange) continue;
-            if (sortedSpecialSet.has(dateKey)) continue;
+            if (!scanAllOpen) {
+                if (firstDateKeyInRange && dateKey >= firstDateKeyInRange) continue;
+                if (sortedSpecialSet.has(dateKey)) continue;
+            }
 
             const d = new Date(dateKey + 'T00:00:00');
             if (isNaN(d.getTime())) continue;
@@ -348,14 +351,9 @@
                 let candidates = collectSkippedPersonsFromSavedReasons(dateKey, groupNum, finalAssignee);
 
                 if (candidates.length === 0) {
-                    const baseline =
-                        getBaselinePersonForGroup(dateKey, groupNum) ||
-                        getExpectedSpecialSlotHolder(groupNum, dateKey);
+                    const baseline = getBaselinePersonForGroup(dateKey, groupNum);
                     if (baseline && normName(baseline) !== normName(finalAssignee)) {
-                        const slotHolder = getExpectedSpecialSlotHolder(groupNum, dateKey);
-                        if (slotHolder && normName(slotHolder) === normName(baseline)) {
-                            candidates = [{ personName: baseline, reason: 'inferred-baseline-mismatch' }];
-                        }
+                        candidates = [{ personName: baseline, reason: 'inferred-baseline-mismatch' }];
                     }
                 }
 
@@ -364,7 +362,12 @@
                     const dedupeKey = `${groupNum}|${normName(personName)}|${dateKey}`;
                     if (added.has(dedupeKey)) continue;
                     if (normName(personName) === normName(finalAssignee)) continue;
-                    if (wasSpecialDebtAlreadyRepaid(groupNum, personName, dateKey, firstDateKeyInRange)) {
+                    if (wasSpecialDebtAlreadyRepaid(
+                        groupNum,
+                        personName,
+                        dateKey,
+                        scanAllOpen ? null : firstDateKeyInRange
+                    )) {
                         continue;
                     }
                     added.add(dedupeKey);
@@ -416,13 +419,17 @@
     function registerSpecialDebt(st, debtKeys, personName, groupNum, dateKey) {
         const nk = normName(personName);
         if (!nk) return;
+        const debt = {
+            personName,
+            groupNum,
+            owedFromDateKey: dateKey,
+            reason: unavailableReason(personName, groupNum, dateKey)
+        };
         if (!st.debts.some((d) => normName(d.personName) === nk)) {
-            st.debts.push({
-                personName,
-                groupNum,
-                owedFromDateKey: dateKey,
-                reason: unavailableReason(personName, groupNum, dateKey)
-            });
+            st.debts.push(debt);
+        }
+        if (typeof addPendingSpecialDebt === 'function') {
+            addPendingSpecialDebt(debt);
         }
         debtKeys.add(nk);
     }

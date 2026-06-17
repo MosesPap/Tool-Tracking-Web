@@ -3874,6 +3874,9 @@
 
                 // Αποθήκευση assignmentReasons + pendingSpecialDebts — continuity επόμενου μήνα
                 try {
+                    if (typeof syncPendingSpecialDebtsFromAllSavedData === 'function') {
+                        syncPendingSpecialDebtsFromAllSavedData();
+                    }
                     const payload =
                         typeof buildAssignmentReasonsSavePayload === 'function'
                             ? buildAssignmentReasonsSavePayload()

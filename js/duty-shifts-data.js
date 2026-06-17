@@ -1176,6 +1176,34 @@
             return Array.isArray(pendingSpecialDebts) ? pendingSpecialDebts.slice() : [];
         }
 
+        /** Προσθήκη ανοιχτής οφειλής (idempotent). */
+        function addPendingSpecialDebt(debt) {
+            const k = specialDebtEntryKey(debt);
+            if (!k) return;
+            if (!Array.isArray(pendingSpecialDebts)) pendingSpecialDebts = [];
+            if (pendingSpecialDebts.some((d) => specialDebtEntryKey(d) === k)) return;
+            pendingSpecialDebts.push({
+                personName: debt.personName,
+                groupNum: debt.groupNum,
+                owedFromDateKey: debt.owedFromDateKey,
+                reason: debt.reason || 'special-skip'
+            });
+        }
+
+        /** Συγχρονισμός pending από αποθηκευμένα baseline/τελικές/λόγους (όλες οι ημερομηνίες). */
+        function syncPendingSpecialDebtsFromAllSavedData() {
+            if (
+                typeof DutyRotationEngine === 'undefined' ||
+                typeof DutyRotationEngine.collectInferredSpecialDebtsFromSavedAssignments !== 'function'
+            ) {
+                return;
+            }
+            const inferred = DutyRotationEngine.collectInferredSpecialDebtsFromSavedAssignments(null, null);
+            for (const d of inferred) {
+                addPendingSpecialDebt(d);
+            }
+        }
+
         /** Μετά από runSpecialPhase: αφαίρεση εξοφλημένων, πρόσθεση νέων ανοιχτών. */
         function updatePendingSpecialDebtsAfterSpecialPhase(engineOut) {
             if (!engineOut) return;
@@ -1189,6 +1217,7 @@
                 existing.add(k);
             }
             pendingSpecialDebts = next;
+            syncPendingSpecialDebtsFromAllSavedData();
         }
 
         function buildAssignmentReasonsSavePayload() {
@@ -2404,6 +2433,9 @@
                 if (typeof rebuildManualAlternateDeferCarryFromReasons === 'function') {
                     rebuildManualAlternateDeferCarryFromReasons();
                 }
+                if (typeof syncPendingSpecialDebtsFromAllSavedData === 'function') {
+                    syncPendingSpecialDebtsFromAllSavedData();
+                }
 
                 // Load per-month calculation locks (κλείδωμα μήνα)
                 monthCalculationLocks = {};
@@ -3120,6 +3152,9 @@
                 
                 // Save assignment reasons (swap/skip indicators) separately
                 try {
+                    if (typeof syncPendingSpecialDebtsFromAllSavedData === 'function') {
+                        syncPendingSpecialDebtsFromAllSavedData();
+                    }
                     console.log('Saving assignmentReasons to Firestore:', Object.keys(assignmentReasons).length, 'dates');
                     if (Object.keys(assignmentReasons).length > 0) {
                         console.log('Sample assignmentReasons being saved:', Object.entries(assignmentReasons).slice(0, 3));
