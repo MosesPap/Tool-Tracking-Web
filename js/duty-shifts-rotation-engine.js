@@ -40,15 +40,54 @@
         return ia >= 0 && ia === ib;
     }
 
-    /** Έχει ήδη ανατεθεί ειδική σε προηγούμενη ημέρα της ίδιας περιόδου υπολογισμού. */
+    /**
+     * Έχει ήδη υπηρετήσει ειδική πριν την currentDateKey:
+     * 1) αναθέσεις της τρέχουσας περιόδου (out.assignments)
+     * 2) αποθηκευμένες αναθέσεις Firebase (specialHolidayAssignments) — π.χ. αντικαταστάτης προηγ. μήνα
+     */
     function hasServedSpecialEarlier(out, sortedSpecial, groupNum, personName, currentDateKey) {
-        if (!personName || !out?.assignments) return false;
-        for (const dk of sortedSpecial) {
-            if (dk >= currentDateKey) break;
-            const prev = out.assignments[dk]?.[groupNum];
-            if (prev && namesReferToSamePerson(prev, personName, groupNum)) return true;
+        if (!personName || !currentDateKey) return false;
+
+        if (out?.assignments) {
+            for (const dk of sortedSpecial || []) {
+                if (dk >= currentDateKey) break;
+                const prev = out.assignments[dk]?.[groupNum];
+                if (prev && namesReferToSamePerson(prev, personName, groupNum)) return true;
+            }
+        }
+
+        if (typeof specialHolidayAssignments !== 'undefined') {
+            const priorKeys = Object.keys(specialHolidayAssignments)
+                .filter((dk) => dk < currentDateKey)
+                .sort();
+            for (const dk of priorKeys) {
+                const d = new Date(dk + 'T00:00:00');
+                if (!isNaN(d.getTime()) && typeof isSpecialHoliday === 'function' && !isSpecialHoliday(d)) {
+                    continue;
+                }
+                const assigned = getFinalSpecialAssignee(groupNum, dk);
+                if (assigned && namesReferToSamePerson(assigned, personName, groupNum)) return true;
+            }
         }
         return false;
+    }
+
+    /** Σπόρος tracker με τελικούς ανατεθέντες από προηγούμενες ειδικές (Firestore). */
+    function seedAssignedFromPriorSpecials(groupNum, firstDateKey, tracker) {
+        if (!firstDateKey || typeof specialHolidayAssignments === 'undefined') return;
+        const keys = Object.keys(specialHolidayAssignments)
+            .filter((dk) => dk < firstDateKey)
+            .sort();
+        for (const dk of keys) {
+            const d = new Date(dk + 'T00:00:00');
+            if (!isNaN(d.getTime()) && typeof isSpecialHoliday === 'function' && !isSpecialHoliday(d)) {
+                continue;
+            }
+            const assigned = getFinalSpecialAssignee(groupNum, dk);
+            if (!assigned) continue;
+            const order = getSpecialOrderForDate(groupNum, dk);
+            markPersonAssignedThisPeriod(tracker, order, assigned, groupNum);
+        }
     }
 
     function resolveInSpecialList(personName, groupNum) {
@@ -123,15 +162,8 @@
 
     function isPersonAssignedThisPeriod(ctx, order, personName, groupNum) {
         if (!personName) return false;
-        if (
-            hasServedSpecialEarlier(
-                ctx.out,
-                ctx.sortedSpecial,
-                groupNum,
-                personName,
-                ctx.currentDateKey
-            )
-        ) {
+        // Πηγή αλήθειας: τελικές αναθέσεις προηγούμενων ειδικών στην ίδια περίοδο (όχι μόνο Sets).
+        if (hasServedSpecialEarlier(ctx.out, ctx.sortedSpecial, groupNum, personName, ctx.currentDateKey)) {
             return true;
         }
         const assignedThisPeriod = ctx.assignedThisPeriod;
@@ -225,7 +257,7 @@
         return null;
     }
 
-    /** Cursor index = next slot in ORDER after last baseline / seed. */
+    /** Cursor index = next slot in ORDER after last special assignee (event-to-event anchor). */
     function resolveInitialSpecialCursor(groupNum, order, firstDateKey, startDate) {
         const len = order.length;
         if (!len) return 0;
@@ -237,32 +269,55 @@
             return 0;
         }
 
-        if (firstDateKey && typeof getRotationSeedPersonForMonthStart === 'function') {
-            const seedPerson = getRotationSeedPersonForMonthStart(
-                DUTY_TYPE_SPECIAL,
-                new Date(firstDateKey + 'T00:00:00'),
-                groupNum
-            );
-            const seedIdx = findPersonIndex(order, seedPerson, groupNum);
-            if (seedIdx >= 0) return (seedIdx + 1) % len;
+        if (firstDateKey) {
+            if (typeof getLastSpecialRotationAnchorForDate === 'function') {
+                const anchor = getLastSpecialRotationAnchorForDate(firstDateKey, groupNum);
+                const anchorIdx = findPersonIndex(order, anchor, groupNum);
+                if (anchorIdx >= 0) return (anchorIdx + 1) % len;
+            }
+            const monthStart = new Date(firstDateKey + 'T00:00:00');
+            if (typeof getRotationSeedPersonForMonthStart === 'function') {
+                const seedPerson = getRotationSeedPersonForMonthStart(
+                    DUTY_TYPE_SPECIAL,
+                    monthStart,
+                    groupNum
+                );
+                const seedIdx = findPersonIndex(order, seedPerson, groupNum);
+                if (seedIdx >= 0) return (seedIdx + 1) % len;
+            }
+            if (typeof getLastRotationPersonForDate === 'function') {
+                const stored = getLastRotationPersonForDate(DUTY_TYPE_SPECIAL, monthStart, groupNum);
+                const storedIdx = findPersonIndex(order, stored, groupNum);
+                if (storedIdx >= 0) return (storedIdx + 1) % len;
+            }
         }
 
-        const baselineDateKeysBeforePeriod = firstDateKey
-            ? Object.keys(
-                  (typeof rotationBaselineSpecialAssignments !== 'undefined'
-                      ? rotationBaselineSpecialAssignments
-                      : {}) || {}
-              )
-                  .filter((dk) => dk < firstDateKey)
-                  .sort()
-                  .reverse()
+        const assigneeDateKeysBeforePeriod = firstDateKey
+            ? getSpecialHolidayDateKeysBefore(firstDateKey)
             : [];
-        if (baselineDateKeysBeforePeriod.length > 0) {
-            const lastBaselinePerson = getBaselinePersonForGroup(baselineDateKeysBeforePeriod[0], groupNum);
-            const idx = findPersonIndex(order, lastBaselinePerson, groupNum);
-            if (idx >= 0) return (idx + 1) % len;
+        if (assigneeDateKeysBeforePeriod.length > 0) {
+            const lastKey = assigneeDateKeysBeforePeriod[assigneeDateKeysBeforePeriod.length - 1];
+            const lastAssigned = getFinalSpecialAssignee(groupNum, lastKey);
+            if (lastAssigned) {
+                const idx = findPersonIndex(order, lastAssigned, groupNum);
+                if (idx >= 0) return (idx + 1) % len;
+            }
         }
         return 0;
+    }
+
+    function getSpecialHolidayDateKeysBefore(beforeDateKey) {
+        if (typeof window !== 'undefined' && typeof window.getSpecialHolidayDateKeysBefore === 'function') {
+            return window.getSpecialHolidayDateKeysBefore(beforeDateKey);
+        }
+        if (typeof specialHolidayAssignments === 'undefined') return [];
+        return Object.keys(specialHolidayAssignments)
+            .filter((dk) => /^\d{4}-\d{2}-\d{2}$/.test(dk) && dk < beforeDateKey)
+            .filter((dk) => {
+                const d = new Date(dk + 'T00:00:00');
+                return !isNaN(d.getTime()) && (!isSpecialHoliday || isSpecialHoliday(d));
+            })
+            .sort();
     }
 
     /** Baseline slot holder for a past special holiday (saved baseline or computed rotation). */
@@ -467,11 +522,13 @@
         const groupState = {};
         for (let groupNum = 1; groupNum <= 4; groupNum++) {
             const order0 = getSpecialOrderForDate(groupNum, firstDateKey);
+            const assignedThisPeriod = createAssignedTracker();
+            seedAssignedFromPriorSpecials(groupNum, firstDateKey, assignedThisPeriod);
             groupState[groupNum] = {
                 cursor: resolveInitialSpecialCursor(groupNum, order0, firstDateKey, startDate),
                 debts: priorDebts.filter((d) => d.groupNum === groupNum),
                 displaced: [],
-                assignedThisPeriod: createAssignedTracker()
+                assignedThisPeriod
             };
         }
 
@@ -626,15 +683,18 @@
                     }
                 }
 
-                // 3) Normal rotation
+                // 3) Normal rotation — consumeNextRotationSlot παραλείπει όσους έχουν ήδη υπηρετήσει
+                // (στην περίοδο ή σε προηγούμενη ειδική με αντικατάσταση από Firebase)
                 if (!assigned) {
-                    slotPerson = order[st.cursor % len];
-                    const slotIdx = st.cursor % len;
-                    st.cursor++;
+                    const consumed = consumeNextRotationSlot(ctx, order, st.cursor, groupNum);
+                    slotPerson = consumed.slotPerson;
+                    st.cursor = consumed.cursor;
+                    const slotIdx = slotPerson ? findPersonIndex(order, slotPerson, groupNum) : 0;
 
                     const slotNk = normName(slotPerson);
-                    const slotCanServe = canServeSpecial(slotPerson, groupNum, dateKey);
-                    const slotAlreadyAssigned = isPersonAssignedThisPeriod(ctx, order, slotPerson, groupNum);
+                    const slotCanServe = slotPerson && canServeSpecial(slotPerson, groupNum, dateKey);
+                    const slotAlreadyAssigned =
+                        slotPerson && isPersonAssignedThisPeriod(ctx, order, slotPerson, groupNum);
 
                     if (slotCanServe && !slotAlreadyAssigned) {
                         assigned = slotPerson;

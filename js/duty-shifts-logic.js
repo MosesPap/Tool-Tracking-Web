@@ -3473,36 +3473,35 @@
                 // Store pure rotation baseline (rotation person per date) for saving to Firestore – so continuation uses baseline, not returner
                 calculationSteps.tempSpecialBaselineAssignments = specialRotationPersons;
 
-                // Store last rotation person for each group (overall, for end-of-range continuation)
-                // Use BASELINE (rotation) person for the last date so that when return-from-missing placed A/B (displacing C/D), we continue from E next month
+                // Store last rotation anchor per group (τελευταίος τελικός ανατεθείς — συνέχεια μετά τον Ε, όχι baseline Δ)
                 calculationSteps.lastSpecialRotationPositions = {};
                 for (let g = 1; g <= 4; g++) {
-                    let lastBaselinePerson = null;
+                    let lastAnchorPerson = null;
                     for (let i = sortedSpecial.length - 1; i >= 0; i--) {
                         const dateKey = sortedSpecial[i];
-                        const baselinePerson = specialRotationPersons[dateKey]?.[g];
-                        if (baselinePerson) {
-                            lastBaselinePerson = baselinePerson;
+                        const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
+                        if (assignedPerson) {
+                            lastAnchorPerson = assignedPerson;
                             break;
                         }
                     }
-                    if (lastBaselinePerson) {
-                        calculationSteps.lastSpecialRotationPositions[g] = lastBaselinePerson;
-                        console.log(`[SPECIAL ROTATION] Storing last baseline (rotation) person ${lastBaselinePerson} for group ${g} for continuation`);
+                    if (lastAnchorPerson) {
+                        calculationSteps.lastSpecialRotationPositions[g] = lastAnchorPerson;
+                        console.log(
+                            `[SPECIAL ROTATION] Storing last assignee anchor ${lastAnchorPerson} for group ${g} for continuation`
+                        );
                     }
                 }
 
-                // Store last rotation person per month: use ASSIGNED person on last date in month so lastRotationPositions matches specialHolidayAssignments and next month continues from who actually did the duty
-                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
-                for (let i = sortedSpecial.length - 1; i >= 0; i--) {
-                    const dateKey = sortedSpecial[i];
+                // Τελευταίος τελικός ανατεθείς ανά μήνα (anchor) — συνέχεια ειδική→ειδική, όχι μήνα→μήνα.
+                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> lastAssigneeAnchor }
+                for (const dateKey of sortedSpecial) {
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
                     if (!lastSpecialRotationPositionsByMonth[monthKey]) {
                         lastSpecialRotationPositionsByMonth[monthKey] = {};
                     }
                     for (let g = 1; g <= 4; g++) {
-                        if (lastSpecialRotationPositionsByMonth[monthKey][g] !== undefined) continue;
                         const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
                         if (assignedPerson) {
                             lastSpecialRotationPositionsByMonth[monthKey][g] = assignedPerson;
@@ -3852,6 +3851,9 @@
                     const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
                     await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineSpecialAssignments', organizedBaseline);
                     Object.assign(rotationBaselineSpecialAssignments, formattedBaseline);
+                    if (typeof rebuildRotationBaselineLastByType === 'function') {
+                        rebuildRotationBaselineLastByType();
+                    }
                 }
                 
                 // Save last rotation positions for special holidays (per month)
@@ -3873,7 +3875,10 @@
                         lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                         updatedBy: user.uid
                     });
-                    console.log('Saved Step 1 last rotation positions for special holidays (per month) to Firestore:', lastSpecialRotationPositionsByMonth);
+                    console.log(
+                        '[STEP 1] Saved lastRotationPositions.special (last assignee anchor per month) to Firestore:',
+                        lastSpecialRotationPositionsByMonth
+                    );
                 }
             } catch (error) {
                 console.error('Error saving Step 1 (Special Holidays) to Firestore:', error);
