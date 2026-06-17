@@ -127,13 +127,23 @@
     }
 
     function getSpecialOrderForDate(groupNum, dateKey) {
-        const gd =
-            typeof groupsForDuty === 'function'
-                ? groupsForDuty(groupNum, dateKey)
-                : typeof groups !== 'undefined'
-                  ? groups[groupNum]
-                  : null;
-        return (gd?.special || []).filter(Boolean);
+        return getCanonicalSpecialOrder(groupNum);
+    }
+
+    function isPersonInSpecialRotationOnDate(personName, groupNum, dateKey) {
+        if (!personName) return false;
+        if (typeof getPersonHomeGroupAtDate === 'function') {
+            return getPersonHomeGroupAtDate(personName, dateKey) === groupNum;
+        }
+        return true;
+    }
+
+    function getPriorSpecialAssignee(groupNum, dateKey) {
+        if (typeof calculationSteps !== 'undefined') {
+            const fromTemp = calculationSteps?.tempSpecialAssignments?.[dateKey]?.[groupNum];
+            if (fromTemp) return fromTemp;
+        }
+        return getFinalSpecialAssignee(groupNum, dateKey);
     }
 
     function canServeSpecial(personName, groupNum, dateKey) {
@@ -257,9 +267,9 @@
         return null;
     }
 
-    /** Cursor index = next slot in ORDER after last special assignee (event-to-event anchor). */
-    function resolveInitialSpecialCursor(groupNum, order, firstDateKey, startDate) {
-        const len = order.length;
+    /** Cursor index = next slot after replaying all prior special assignees on canonical order. */
+    function resolveInitialSpecialCursor(groupNum, canon, firstDateKey, startDate) {
+        const len = (canon || []).length;
         if (!len) return 0;
 
         const isFebruary2026 =
@@ -269,41 +279,15 @@
             return 0;
         }
 
-        if (firstDateKey) {
-            if (typeof getLastSpecialRotationAnchorForDate === 'function') {
-                const anchor = getLastSpecialRotationAnchorForDate(firstDateKey, groupNum);
-                const anchorIdx = findPersonIndex(order, anchor, groupNum);
-                if (anchorIdx >= 0) return (anchorIdx + 1) % len;
-            }
-            const monthStart = new Date(firstDateKey + 'T00:00:00');
-            if (typeof getRotationSeedPersonForMonthStart === 'function') {
-                const seedPerson = getRotationSeedPersonForMonthStart(
-                    DUTY_TYPE_SPECIAL,
-                    monthStart,
-                    groupNum
-                );
-                const seedIdx = findPersonIndex(order, seedPerson, groupNum);
-                if (seedIdx >= 0) return (seedIdx + 1) % len;
-            }
-            if (typeof getLastRotationPersonForDate === 'function') {
-                const stored = getLastRotationPersonForDate(DUTY_TYPE_SPECIAL, monthStart, groupNum);
-                const storedIdx = findPersonIndex(order, stored, groupNum);
-                if (storedIdx >= 0) return (storedIdx + 1) % len;
-            }
+        const priorKeys = firstDateKey ? getSpecialHolidayDateKeysBefore(firstDateKey) : [];
+        let cursor = 0;
+        for (const dk of priorKeys) {
+            const assigned = getPriorSpecialAssignee(groupNum, dk);
+            if (!assigned) continue;
+            const idx = findPersonIndex(canon, assigned, groupNum);
+            if (idx >= 0) cursor = (idx + 1) % len;
         }
-
-        const assigneeDateKeysBeforePeriod = firstDateKey
-            ? getSpecialHolidayDateKeysBefore(firstDateKey)
-            : [];
-        if (assigneeDateKeysBeforePeriod.length > 0) {
-            const lastKey = assigneeDateKeysBeforePeriod[assigneeDateKeysBeforePeriod.length - 1];
-            const lastAssigned = getFinalSpecialAssignee(groupNum, lastKey);
-            if (lastAssigned) {
-                const idx = findPersonIndex(order, lastAssigned, groupNum);
-                if (idx >= 0) return (idx + 1) % len;
-            }
-        }
-        return 0;
+        return cursor;
     }
 
     function getSpecialHolidayDateKeysBefore(beforeDateKey) {
@@ -336,6 +320,11 @@
     }
 
     function getFinalSpecialAssignee(groupNum, dateKey) {
+        const fromTemp =
+            typeof calculationSteps !== 'undefined'
+                ? calculationSteps?.tempSpecialAssignments?.[dateKey]?.[groupNum]
+                : null;
+        if (fromTemp) return fromTemp;
         if (typeof specialHolidayAssignments === 'undefined') return null;
         const raw = specialHolidayAssignments[dateKey];
         if (!raw) return null;
@@ -461,21 +450,29 @@
      * Παραλείπει άτομα που έχουν ήδη ανατεθεί στην περίοδο (π.χ. Δ ως αντικαταστάτης στην #3
      * δεν ξαναμπαίνει displaced όταν εξοφλείται ο Β στην #4 — προχωρά στο slot του Ε).
      */
-    function consumeNextRotationSlot(ctx, order, cursor, groupNum) {
-        const len = order.length;
+    function consumeNextRotationSlot(ctx, canon, cursor, groupNum, dateKey) {
+        const len = canon.length;
         if (!len) return { slotPerson: null, cursor };
         let nextCursor = cursor;
         let skipped = 0;
-        while (skipped < len) {
-            const slotPerson = order[nextCursor % len];
+        while (skipped < len * 2) {
+            const slotPerson = canon[nextCursor % len];
             nextCursor++;
-            if (!isPersonAssignedThisPeriod(ctx, order, slotPerson, groupNum)) {
+            if (!slotPerson) {
+                skipped++;
+                continue;
+            }
+            if (dateKey && !isPersonInSpecialRotationOnDate(slotPerson, groupNum, dateKey)) {
+                skipped++;
+                continue;
+            }
+            if (!isPersonAssignedThisPeriod(ctx, canon, slotPerson, groupNum)) {
                 return { slotPerson, cursor: nextCursor };
             }
             skipped++;
         }
         const fallbackIdx = (nextCursor - 1 + len) % len;
-        return { slotPerson: order[fallbackIdx] || null, cursor: nextCursor };
+        return { slotPerson: canon[fallbackIdx] || null, cursor: nextCursor };
     }
 
     function pushReason(out, entry) {
@@ -521,11 +518,12 @@
 
         const groupState = {};
         for (let groupNum = 1; groupNum <= 4; groupNum++) {
-            const order0 = getSpecialOrderForDate(groupNum, firstDateKey);
+            const canon = getCanonicalSpecialOrder(groupNum);
             const assignedThisPeriod = createAssignedTracker();
             seedAssignedFromPriorSpecials(groupNum, firstDateKey, assignedThisPeriod);
             groupState[groupNum] = {
-                cursor: resolveInitialSpecialCursor(groupNum, order0, firstDateKey, startDate),
+                canon,
+                cursor: resolveInitialSpecialCursor(groupNum, canon, firstDateKey, startDate),
                 debts: priorDebts.filter((d) => d.groupNum === groupNum),
                 displaced: [],
                 assignedThisPeriod
@@ -569,7 +567,7 @@
                     if (!out.slots[dateKey]) out.slots[dateKey] = {};
                     out.assignments[dateKey][groupNum] = preserved;
                     out.slots[dateKey][groupNum] = preserved;
-                    const orderPres = getSpecialOrderForDate(groupNum, dateKey);
+                    const orderPres = groupState[groupNum].canon || getCanonicalSpecialOrder(groupNum);
                     markPersonAssignedSpecial(
                         {
                             out,
@@ -581,6 +579,10 @@
                         orderPres,
                         preserved
                     );
+                    const pIdx = findPersonIndex(orderPres, preserved, groupNum);
+                    if (pIdx >= 0 && orderPres.length) {
+                        groupState[groupNum].cursor = (pIdx + 1) % orderPres.length;
+                    }
                     if (monthKey) {
                         if (!out.simulatedByMonth[monthKey]) out.simulatedByMonth[monthKey] = {};
                         if (!out.simulatedByMonth[monthKey][groupNum]) out.simulatedByMonth[monthKey][groupNum] = new Set();
@@ -589,7 +591,7 @@
                     continue;
                 }
 
-                const order = getSpecialOrderForDate(groupNum, dateKey);
+                const order = groupState[groupNum].canon || getCanonicalSpecialOrder(groupNum);
                 if (!order.length) continue;
 
                 const st = groupState[groupNum];
@@ -647,7 +649,7 @@
                             continue;
                         }
 
-                        const consumed = consumeNextRotationSlot(ctx, order, st.cursor, groupNum);
+                        const consumed = consumeNextRotationSlot(ctx, order, st.cursor, groupNum, dateKey);
                         slotPerson = consumed.slotPerson;
                         st.cursor = consumed.cursor;
                         if (!slotPerson) continue;
@@ -686,7 +688,7 @@
                 // 3) Normal rotation — consumeNextRotationSlot παραλείπει όσους έχουν ήδη υπηρετήσει
                 // (στην περίοδο ή σε προηγούμενη ειδική με αντικατάσταση από Firebase)
                 if (!assigned) {
-                    const consumed = consumeNextRotationSlot(ctx, order, st.cursor, groupNum);
+                    const consumed = consumeNextRotationSlot(ctx, order, st.cursor, groupNum, dateKey);
                     slotPerson = consumed.slotPerson;
                     st.cursor = consumed.cursor;
                     const slotIdx = slotPerson ? findPersonIndex(order, slotPerson, groupNum) : 0;
@@ -780,6 +782,12 @@
                     }
                 } else if (assignmentKind) {
                     // slot consumed but no assignee
+                }
+
+                // Συγχρονισμός cursor μετά το slot που καταναλώθηκε (όχι cascade)
+                if (slotPerson && assignmentKind && assignmentKind !== 'displaced-cascade') {
+                    const slotIdx = findPersonIndex(order, slotPerson, groupNum);
+                    if (slotIdx >= 0) st.cursor = (slotIdx + 1) % len;
                 }
             }
         }

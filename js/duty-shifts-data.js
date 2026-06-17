@@ -1293,10 +1293,25 @@
             };
 
             if (dayTypeCategory === 'special') {
-                const anchor = getLastSpecialRotationAnchorForDate(dateInMonth, groupNum);
-                const anchorIdx = findIdx(anchor);
-                if (anchor && anchorIdx >= 0) return (anchorIdx + 1) % len;
-                return 0;
+                const canon =
+                    typeof getSortedGroupListForRotation === 'function'
+                        ? getSortedGroupListForRotation(groupNum, 'special')
+                        : groups[groupNum]?.special || [];
+                if (!canon.length) return 0;
+                const beforeKey = formatDateKey(dateInMonth);
+                const priorKeys = getSpecialHolidayDateKeysBefore(beforeKey);
+                let cursor = 0;
+                for (const dk of priorKeys) {
+                    let assigned = null;
+                    if (typeof calculationSteps !== 'undefined') {
+                        assigned = calculationSteps?.tempSpecialAssignments?.[dk]?.[groupNum];
+                    }
+                    if (!assigned) assigned = getPersonAssignedOnDateFromStore('special', dk, groupNum);
+                    if (!assigned) continue;
+                    const idx = canon.findIndex((p) => normRotPersonName(p) === normRotPersonName(assigned));
+                    if (idx >= 0) cursor = (idx + 1) % canon.length;
+                }
+                return cursor;
             }
 
             const prevMonthStart = new Date(dateInMonth.getFullYear(), dateInMonth.getMonth() - 1, 1);
@@ -1387,8 +1402,15 @@
         /** Month-start seed person: last baseline slot holder before the next assignee. */
         function getRotationSeedPersonForMonthStart(dayTypeCategory, monthStartDate, groupNum) {
             if (dayTypeCategory === 'special') {
-                const anchor = getLastSpecialRotationAnchorForDate(monthStartDate, groupNum);
-                if (anchor) return anchor;
+                const canon =
+                    typeof getSortedGroupListForRotation === 'function'
+                        ? getSortedGroupListForRotation(groupNum, 'special')
+                        : groups[groupNum]?.special || [];
+                if (!canon.length) return null;
+                const cursor = computeRotationPositionAtMonthStart('special', monthStartDate, groupNum, canon);
+                if (Number.isFinite(cursor)) {
+                    return canon[(cursor - 1 + canon.length) % canon.length] || null;
+                }
             }
             const groupData = typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum];
             const groupPeople = groupData?.[dayTypeCategory] || groups[groupNum]?.[dayTypeCategory] || [];
