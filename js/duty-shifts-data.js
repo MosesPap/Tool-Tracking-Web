@@ -1220,21 +1220,37 @@
             return Array.isArray(pendingSpecialDebts) ? pendingSpecialDebts.slice() : [];
         }
 
-        /** Προσθήκη ανοιχτής οφειλής (idempotent). */
+        /** Προσθήκη/ενημέρωση ανοιχτής οφειλής (idempotent ανά κλειδί). */
         function addPendingSpecialDebt(debt) {
             const k = specialDebtEntryKey(debt);
             if (!k) return;
+            if (
+                typeof DutyRotationEngine !== 'undefined' &&
+                typeof DutyRotationEngine.isPersonEligibleForSpecialDebt === 'function' &&
+                !DutyRotationEngine.isPersonEligibleForSpecialDebt(
+                    debt.personName,
+                    debt.groupNum,
+                    debt.owedFromDateKey
+                )
+            ) {
+                return;
+            }
             if (!Array.isArray(pendingSpecialDebts)) pendingSpecialDebts = [];
-            if (pendingSpecialDebts.some((d) => specialDebtEntryKey(d) === k)) return;
-            pendingSpecialDebts.push({
+            const entry = {
                 personName: debt.personName,
                 groupNum: debt.groupNum,
                 owedFromDateKey: debt.owedFromDateKey,
                 reason: debt.reason || 'special-skip'
-            });
+            };
+            const idx = pendingSpecialDebts.findIndex((d) => specialDebtEntryKey(d) === k);
+            if (idx >= 0) {
+                pendingSpecialDebts[idx] = entry;
+                return;
+            }
+            pendingSpecialDebts.push(entry);
         }
 
-        /** Συγχρονισμός pending από αποθηκευμένα baseline/τελικές/λόγους (όλες οι ημερομηνίες). */
+        /** Συγχρονισμός pending από αποθηκευμένα baseline/τελικές/λόγους — αφαιρεί άκυρες εγγραφές. */
         function syncPendingSpecialDebtsFromAllSavedData() {
             if (
                 typeof DutyRotationEngine === 'undefined' ||
@@ -1243,25 +1259,58 @@
                 return;
             }
             const inferred = DutyRotationEngine.collectInferredSpecialDebtsFromSavedAssignments(null, null);
+            const inferredKeys = new Set(inferred.map((d) => specialDebtEntryKey(d)).filter(Boolean));
+            pendingSpecialDebts = (pendingSpecialDebts || []).filter((d) => {
+                const k = specialDebtEntryKey(d);
+                if (!k) return false;
+                const reason = String(d.reason || '');
+                const isInferred =
+                    reason.startsWith('inferred-') ||
+                    reason === 'missing-prior-month' ||
+                    reason === 'stored-pending';
+                if (isInferred && !inferredKeys.has(k)) return false;
+                if (
+                    typeof DutyRotationEngine.isPersonEligibleForSpecialDebt === 'function' &&
+                    !DutyRotationEngine.isPersonEligibleForSpecialDebt(
+                        d.personName,
+                        d.groupNum,
+                        d.owedFromDateKey
+                    )
+                ) {
+                    return false;
+                }
+                return true;
+            });
             for (const d of inferred) {
                 addPendingSpecialDebt(d);
             }
         }
 
-        /** Μετά από runSpecialPhase: αφαίρεση εξοφλημένων, πρόσθεση νέων ανοιχτών. */
-        function updatePendingSpecialDebtsAfterSpecialPhase(engineOut) {
+        /** Μετά από runSpecialPhase: αφαίρεση εξοφλημένων, επαναυπολογισμός ημερομηνιών περιόδου. */
+        function updatePendingSpecialDebtsAfterSpecialPhase(engineOut, sortedSpecialDays) {
             if (!engineOut) return;
+            const recalcDates = new Set(Array.isArray(sortedSpecialDays) ? sortedSpecialDays : []);
             const repaid = new Set((engineOut.debtsRepaid || []).map((d) => specialDebtEntryKey(d)).filter(Boolean));
-            const next = (pendingSpecialDebts || []).filter((d) => !repaid.has(specialDebtEntryKey(d)));
+            let next = (pendingSpecialDebts || []).filter((d) => {
+                const k = specialDebtEntryKey(d);
+                if (!k) return false;
+                if (repaid.has(k)) return false;
+                if (recalcDates.has(d.owedFromDateKey)) return false;
+                return true;
+            });
             const existing = new Set(next.map((d) => specialDebtEntryKey(d)).filter(Boolean));
             for (const d of engineOut.debtsRemaining || []) {
                 const k = specialDebtEntryKey(d);
                 if (!k || existing.has(k)) continue;
-                next.push(d);
+                next.push({
+                    personName: d.personName,
+                    groupNum: d.groupNum,
+                    owedFromDateKey: d.owedFromDateKey,
+                    reason: d.reason || 'special-skip'
+                });
                 existing.add(k);
             }
             pendingSpecialDebts = next;
-            syncPendingSpecialDebtsFromAllSavedData();
         }
 
         function buildAssignmentReasonsSavePayload() {

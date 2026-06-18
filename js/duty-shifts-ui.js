@@ -1689,28 +1689,43 @@
             const modal = bootstrap.Modal.getInstance(document.getElementById('addPersonModal'));
             modal.hide();
         }
-        function openPersonActionsModal(groupNum, personName, index, listType) {
-            currentPersonActionsGroup = groupNum;
-            currentPersonActionsName = personName;
-            currentPersonActionsIndex = index;
-            currentPersonActionsListType = listType;
-            
-            document.getElementById('personActionsName').textContent = personName;
-            document.getElementById('personActionsGroup').textContent = getGroupName(groupNum);
-
-            // Update disable settings button label (summary)
+        function updatePersonActionsModalContent() {
+            if (!currentPersonActionsGroup || !currentPersonActionsName) return;
+            const groupNum = currentPersonActionsGroup;
+            const personName = currentPersonActionsName;
+            const nameEl = document.getElementById('personActionsName');
+            const groupEl = document.getElementById('personActionsGroup');
+            if (nameEl) nameEl.textContent = personName;
+            if (groupEl) groupEl.textContent = getGroupName(groupNum);
             try {
                 const st = getDisabledState(groupNum, personName);
-                const enabledTypes = ['special', 'weekend', 'semi', 'normal'].filter(t => !!st[t]);
+                const enabledTypes = ['special', 'weekend', 'semi', 'normal'].filter((t) => !!st[t]);
                 const isAll = !!st.all;
                 const textEl = document.getElementById('toggleDisablePersonButtonText');
                 if (textEl) {
                     textEl.textContent = isAll
                         ? 'Απενεργοποίηση (Πλήρης)'
-                        : (enabledTypes.length ? `Απενεργοποίηση (${enabledTypes.length} τύποι)` : 'Απενεργοποίηση (Ρυθμίσεις)');
+                        : enabledTypes.length
+                          ? `Απενεργοποίηση (${enabledTypes.length} τύποι)`
+                          : 'Απενεργοποίηση (Ρυθμίσεις)';
                 }
             } catch (_) {}
-            
+        }
+        function ensurePersonActionsModalVisible() {
+            updatePersonActionsModalContent();
+            const el = document.getElementById('personActionsModal');
+            if (!el) return;
+            if (!el.classList.contains('show')) {
+                const modal = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
+                modal.show();
+            }
+        }
+        function openPersonActionsModal(groupNum, personName, index, listType) {
+            currentPersonActionsGroup = groupNum;
+            currentPersonActionsName = personName;
+            currentPersonActionsIndex = index;
+            currentPersonActionsListType = listType;
+            updatePersonActionsModalContent();
             const modal = new bootstrap.Modal(document.getElementById('personActionsModal'));
             modal.show();
         }
@@ -2104,7 +2119,6 @@
             modal.show();
         }
         function saveDisableSettings() {
-            reopenPersonActionsModalWhenClosed = false;
             if (!currentPersonActionsGroup || !currentPersonActionsName) return;
             const groupNum = currentPersonActionsGroup;
             const personName = currentPersonActionsName;
@@ -2147,6 +2161,7 @@
                         );
                     }
                     const dm = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
+                    reopenPersonActionsModalWhenClosed = true;
                     if (dm) dm.hide();
                     try {
                         if (typeof persistPersonStatusSchedule === 'function') {
@@ -2170,12 +2185,7 @@
                         console.error('saveDisableSettings saveData:', e);
                     }
                     renderGroups();
-                    openPersonActionsModal(
-                        currentPersonActionsGroup,
-                        currentPersonActionsName,
-                        currentPersonActionsIndex != null ? currentPersonActionsIndex : 0,
-                        currentPersonActionsListType || 'normal'
-                    );
+                    ensurePersonActionsModalVisible();
                 };
                 const openEffectiveDateStep = () => {
                     openStatusChangeEffectiveModal({
@@ -2221,14 +2231,10 @@
                 saveData()
                     .then(() => {
                         renderGroups();
+                        reopenPersonActionsModalWhenClosed = true;
                         const modal = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
                         if (modal) modal.hide();
-                        openPersonActionsModal(
-                            currentPersonActionsGroup,
-                            currentPersonActionsName,
-                            currentPersonActionsIndex != null ? currentPersonActionsIndex : 0,
-                            currentPersonActionsListType || 'normal'
-                        );
+                        ensurePersonActionsModalVisible();
                     })
                     .catch((e) => console.error('saveDisableSettings saveData:', e));
             }

@@ -3333,7 +3333,7 @@
                 console.log('[STEP 1] Special debts repaid in period:', engineOut.debtsRepaid);
             }
             if (typeof updatePendingSpecialDebtsAfterSpecialPhase === 'function') {
-                updatePendingSpecialDebtsAfterSpecialPhase(engineOut);
+                updatePendingSpecialDebtsAfterSpecialPhase(engineOut, sortedSpecial);
             }
 
             return {
