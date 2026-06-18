@@ -2006,6 +2006,27 @@
                 alert('Σφάλμα κατά την αντικατάσταση: ' + (e?.message || e));
             }
         }
+        let pendingDisableSettingsCapture = null;
+
+        function captureDisableSettingsFormState() {
+            const all = !!document.getElementById('disableAllSwitch')?.checked;
+            if (all) {
+                return { all: true, special: false, weekend: false, semi: false, normal: false };
+            }
+            return {
+                all: false,
+                special: !!document.getElementById('disableSpecialSwitch')?.checked,
+                weekend: !!document.getElementById('disableWeekendSwitch')?.checked,
+                semi: !!document.getElementById('disableSemiSwitch')?.checked,
+                normal: !!document.getElementById('disableNormalSwitch')?.checked
+            };
+        }
+
+        function isDisableSettingsFormActive(st) {
+            if (typeof disabledStateIsActive === 'function') return disabledStateIsActive(st);
+            return !!(st && (st.all || st.special || st.weekend || st.semi || st.normal));
+        }
+
         function openDisableSettingsFromActions() {
             if (!currentPersonActionsGroup || !currentPersonActionsName) return;
             const groupNum = currentPersonActionsGroup;
@@ -2016,8 +2037,8 @@
             const hintEl = document.getElementById('disableSettingsEffectiveHint');
             if (hintEl) {
                 hintEl.innerHTML = isFlexibleStatusEffectiveDatesEnabled()
-                    ? 'Οι αλλαγές καταστάσεως καταχωρούνται με <strong>ημερομηνία ισχύος</strong> (επιλέγετε στο επόμενο βήμα). Προεπιλογή: τελευταίο δεκαπενθήμερο μήνα → 1η επόμενου· αλλιώς → 1η τρέχοντος. Αν η ημερομηνία ισχύος πέσει στο τελευταίο <strong>δεκαήμερο</strong> του ημερολογιακού μήνα της (κανόνας υπολογισμού), για υπολογισμούς μεταφέρεται στην 1η του επόμενου μήνα. Οι απουσίες ορίζονται με start/end.'
-                    : 'Οι αλλαγές καταστάσεως επιτρέπονται <strong>μόνο στο τελευταίο ημερολογιακό δεκαπενθήμερο</strong> του μήνα· η ισχύς για υπολογισμούς είναι η <strong>1η του επόμενου μήνα</strong> (κλασική λειτουργία). Για επιλογή ημερομηνίας ισχύος οποτεδήποτε, ενεργοποιήστε την «Ευέλικτη ημερομηνία ισχύος» στις Ρυθμίσεις. Οι απουσίες ορίζονται με start/end.';
+                    ? 'Οι αλλαγές καταστάσεως καταχωρούνται με <strong>ημερομηνία ισχύος</strong> (επιλέγετε στο επόμενο βήμα). Η ημερομηνία που επιλέγετε εφαρμόζεται <strong>ακριβώς</strong> όπως ορίστηκε.'
+                    : 'Οι αλλαγές καταστάσεως επιτρέπονται <strong>μόνο στο τελευταίο ημερολογιακό δεκαπενθήμερο</strong> του μήνα. Η ισχύς είναι η ημερομηνία που επιλέγετε στο επόμενο βήμα. Για επιλογή οποτεδήποτε, ενεργοποιήστε «Ευέλικτη ημερομηνία ισχύος» στις Ρυθμίσεις.';
             }
 
             const st = getDisabledState(groupNum, personName);
@@ -2083,25 +2104,42 @@
             const groupNum = currentPersonActionsGroup;
             const personName = currentPersonActionsName;
 
-            const all = !!document.getElementById('disableAllSwitch')?.checked;
-            const st = {
-                all,
-                special: all ? false : !!document.getElementById('disableSpecialSwitch')?.checked,
-                weekend: all ? false : !!document.getElementById('disableWeekendSwitch')?.checked,
-                semi: all ? false : !!document.getElementById('disableSemiSwitch')?.checked,
-                normal: all ? false : !!document.getElementById('disableNormalSwitch')?.checked
-            };
-            const isDisabling = !!(st.all || st.special || st.weekend || st.semi || st.normal);
+            pendingDisableSettingsCapture = captureDisableSettingsFormState();
+            const st = pendingDisableSettingsCapture;
+            const isDisabling = isDisableSettingsFormActive(st);
+            const currentlyDisabled = isDisableSettingsFormActive(getDisabledState(groupNum, personName));
+
+            if (!isDisabling && !currentlyDisabled) {
+                alert(
+                    'Δεν έχετε επιλέξει απενεργοποίηση.\n\n' +
+                        'Ενεργοποιήστε «Πλήρης απενεργοποίηση» ή τουλάχιστον έναν τύπο υπηρεσίας πριν την αποθήκευση.'
+                );
+                pendingDisableSettingsCapture = null;
+                return;
+            }
+            if (!isDisabling && currentlyDisabled) {
+                if (
+                    !confirm(
+                        'Θα καταχωρηθεί πλήρης ενεργοποίηση (όλοι οι τύποι υπηρεσίας).\n\nΘέλετε να συνεχίσετε;'
+                    )
+                ) {
+                    pendingDisableSettingsCapture = null;
+                    return;
+                }
+            }
 
             if (typeof scheduleDisabledStateChange === 'function') {
                 const finishDisableSave = async (effKey) => {
-                    const effReturned = scheduleDisabledStateChange(groupNum, personName, st, effKey);
+                    const savedSt = pendingDisableSettingsCapture || captureDisableSettingsFormState();
+                    const savingDisable = isDisableSettingsFormActive(savedSt);
+                    pendingDisableSettingsCapture = null;
+                    const effReturned = scheduleDisabledStateChange(groupNum, personName, savedSt, effKey);
                     const effLabel =
                         typeof formatScheduledStatusEffectiveLabel === 'function'
                             ? formatScheduledStatusEffectiveLabel(effReturned)
                             : effReturned;
                     alert(
-                        isDisabling
+                        savingDisable
                             ? `Η απενεργοποίηση καταχωρήθηκε.\nΙσχύει από ${effLabel}.`
                             : `Η ενεργοποίηση καταχωρήθηκε.\nΙσχύει από ${effLabel}.`
                     );
@@ -2132,7 +2170,9 @@
                         onConfirm: (effKey) => {
                             finishDisableSave(effKey);
                         },
-                        onCancel: () => {}
+                        onCancel: () => {
+                            pendingDisableSettingsCapture = null;
+                        }
                     });
                 };
                 if (isFlexibleStatusEffectiveDatesEnabled()) {

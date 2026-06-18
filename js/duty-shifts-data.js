@@ -519,6 +519,9 @@
         window.getSortedGroupListForRotation = getSortedGroupListForRotation;
         window.syncGroupListArraysFromPriorities = syncGroupListArraysFromPriorities;
         window.scheduleListOrdersForGroup = scheduleListOrdersForGroup;
+        window.disabledStateIsActive = disabledStateIsActive;
+        window.scheduleDisabledStateChange = scheduleDisabledStateChange;
+        window.validateStatusEffectiveDateKey = validateStatusEffectiveDateKey;
         function getPendingScheduledStatusSummary(personName, groupNum) {
             ensurePersonStatusScheduleSeeded();
             const todayKey = formatDateKey(new Date());
