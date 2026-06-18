@@ -602,13 +602,26 @@
     }
 
     /**
-     * Όσοι υπηρέτησαν ειδική στον ίδιο μήνα πριν την πρώτη ημέρα υπολογισμού (κανονικό slot).
-     * Δεν φορτώνουμε ιστορικό από προηγούμενους μήνες/έτη — αυτό καλύπτει η συνέχεια cursor.
-     * Μετράει μόνο κανονικές αναθέσεις περιστροφής (wasRotationSpecialAssignee), όχι αντικαταστάτες.
+     * Όσοι έχουν ήδη υπηρετήσει ειδική πριν την πρώτη ημέρα υπολογισμού.
+     * - Ίδιος μήνας: μόνο κανονικό slot περιστροφής (wasRotationSpecialAssignee).
+     * - Δεκ→Ιαν (ξεχωριστός υπολογισμός Ιανουαρίου): τελικοί ορισμοί Δεκεμβρίου στο lap
+     *   (και αντικαταστάτες) ώστε να μην επαναλαμβάνονται στις 01/01.
      */
-    function seedAssignedThisPeriodFromPriorSpecials(groupNum, firstDateKey, assignedSet, extraStores, rotationLen) {
+    function seedAssignedThisPeriodFromPriorSpecials(
+        groupNum,
+        firstDateKey,
+        assignedSet,
+        extraStores,
+        rotationLen,
+        sortedSpecialDays
+    ) {
         if (!firstDateKey) return;
         const monthKey = firstDateKey.substring(0, 7);
+        const prevMonthKey = getPreviousMonthKeyFromDateKey(firstDateKey);
+        const carryDecemberIntoJanuary = shouldCarryPrevMonthSpecialsIntoAssigned(
+            firstDateKey,
+            sortedSpecialDays
+        );
 
         const stores = [];
         if (typeof specialHolidayAssignments !== 'undefined') stores.push(specialHolidayAssignments);
@@ -624,10 +637,19 @@
             for (const dk of Object.keys(store).sort()) {
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
                 if (dk >= firstDateKey) continue;
-                if (dk.substring(0, 7) !== monthKey) continue;
+
+                const dkMonth = dk.substring(0, 7);
                 const assigned = getFinalSpecialAssignee(groupNum, dk, store);
                 if (!assigned) continue;
-                if (!wasRotationSpecialAssignee(groupNum, dk, assigned, store)) continue;
+
+                if (dkMonth === monthKey) {
+                    if (!wasRotationSpecialAssignee(groupNum, dk, assigned, store)) continue;
+                } else if (carryDecemberIntoJanuary && dkMonth === prevMonthKey) {
+                    // Τελικός ορισμός Δεκεμβρίου (συμπεριλ. αντικατάστασης) μετράει στο lap
+                } else {
+                    continue;
+                }
+
                 const dedupe = `${dk}|${normName(assigned)}`;
                 if (seenDatePerson.has(dedupe)) continue;
                 seenDatePerson.add(dedupe);
@@ -641,6 +663,19 @@
         for (const { person } of lapEntries) {
             assignedSet.add(normName(person));
         }
+    }
+
+    /** Δεκέμβριος → Ιανουάριος: κληρονομία lap μόνο όταν ο Ιανουάριος υπολογίζεται χωρίς Δεκέμβριο στην ίδια περίοδο. */
+    function shouldCarryPrevMonthSpecialsIntoAssigned(firstDateKey, sortedSpecialDays) {
+        const monthKey = firstDateKey.substring(0, 7);
+        const prevMonthKey = getPreviousMonthKeyFromDateKey(firstDateKey);
+        if (!prevMonthKey || !monthKey) return false;
+        const [py, pm] = prevMonthKey.split('-').map(Number);
+        const [cy, cm] = monthKey.split('-').map(Number);
+        if (!(py === cy - 1 && pm === 12 && cm === 1)) return false;
+        if (!Array.isArray(sortedSpecialDays) || !sortedSpecialDays.length) return false;
+        if (sortedSpecialDays.some((dk) => dk.substring(0, 7) === prevMonthKey)) return false;
+        return true;
     }
 
     function pushReason(out, entry) {
@@ -695,7 +730,8 @@
                 firstDateKey,
                 groupState[groupNum].assignedThisPeriod,
                 priorAssignmentStores,
-                order0.length
+                order0.length,
+                sortedSpecial
             );
         }
 
