@@ -602,12 +602,12 @@
     }
 
     /**
-     * Όσοι υπηρέτησαν ειδική στον ίδιο μήνα πριν την πρώτη ημέρα υπολογισμού (κανονικό slot).
-     * Δεν φορτώνουμε ιστορικό από προηγούμενους μήνες/έτη — αυτό καλύπτει η συνέχεια cursor.
+     * Όσοι υπηρέτησαν ειδική πριν την πρώτη ημέρα υπολογισμού — δεν ξαναμπαίνουν στο τρέχον lap.
+     * Lap = οι τελευταίες N αναθέσεις (N = μήκος λίστας περιστροφής) πριν την πρώτη ημέρα.
+     * Μετράει μόνο κανονικό slot περιστροφής (wasRotationSpecialAssignee), όχι αντικαταστάτες.
      */
     function seedAssignedThisPeriodFromPriorSpecials(groupNum, firstDateKey, assignedSet, extraStores, rotationLen) {
         if (!firstDateKey) return;
-        const monthKey = firstDateKey.substring(0, 7);
 
         const stores = [];
         if (typeof specialHolidayAssignments !== 'undefined') stores.push(specialHolidayAssignments);
@@ -623,7 +623,6 @@
             for (const dk of Object.keys(store).sort()) {
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
                 if (dk >= firstDateKey) continue;
-                if (dk.substring(0, 7) !== monthKey) continue;
                 const assigned = getFinalSpecialAssignee(groupNum, dk, store);
                 if (!assigned) continue;
                 if (!wasRotationSpecialAssignee(groupNum, dk, assigned, store)) continue;
