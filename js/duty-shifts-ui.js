@@ -2146,6 +2146,15 @@
                             typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null
                         );
                     }
+                    const dm = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
+                    if (dm) dm.hide();
+                    try {
+                        if (typeof persistPersonStatusSchedule === 'function') {
+                            await persistPersonStatusSchedule();
+                        }
+                    } catch (e) {
+                        console.error('saveDisableSettings persistPersonStatusSchedule:', e);
+                    }
                     const effLabel =
                         typeof formatScheduledStatusEffectiveLabel === 'function'
                             ? formatScheduledStatusEffectiveLabel(effReturned)
@@ -2161,8 +2170,6 @@
                         console.error('saveDisableSettings saveData:', e);
                     }
                     renderGroups();
-                    const dm = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
-                    if (dm) dm.hide();
                     openPersonActionsModal(
                         currentPersonActionsGroup,
                         currentPersonActionsName,

@@ -103,6 +103,21 @@
         function compareScheduleDateKeys(a, b) {
             return String(a || '').localeCompare(String(b || ''));
         }
+        let personStatusScheduleSeq = 0;
+        function scheduleRecordedAtNow() {
+            return new Date().toISOString();
+        }
+        function nextPersonStatusScheduleSeq() {
+            personStatusScheduleSeq += 1;
+            return personStatusScheduleSeq;
+        }
+        function compareScheduleEntries(a, b) {
+            const byRec = compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
+            if (byRec !== 0) return byRec;
+            const byEff = compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom);
+            if (byEff !== 0) return byEff;
+            return (b._seq || 0) - (a._seq || 0);
+        }
         function dateFromDateKey(dateKey) {
             const d = new Date(String(dateKey) + 'T00:00:00');
             return isNaN(d.getTime()) ? null : d;
@@ -398,13 +413,7 @@
                         disabledScheduleEntryMatchesPerson(e, groupNum, personName) &&
                         compareScheduleDateKeys(e.effectiveFrom, dk) <= 0
                 )
-                .sort((a, b) => {
-                    const byRec = compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
-                    if (byRec !== 0) return byRec;
-                    const byEff = compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom);
-                    if (byEff !== 0) return byEff;
-                    return 0;
-                });
+                .sort(compareScheduleEntries);
             if (hits.length) return normalizeDisabledState(hits[0].state);
             return legacyDisabledStateFromGroups(groupNum, personName);
         }
@@ -460,7 +469,8 @@
                 groupNum,
                 state: st,
                 effectiveFrom: eff,
-                recordedAt: formatDateKey(new Date())
+                recordedAt: scheduleRecordedAtNow(),
+                _seq: nextPersonStatusScheduleSeq()
             });
             syncDisabledPersonsMirror(
                 groupNum,
@@ -483,7 +493,8 @@
                 personName,
                 groupNum: toGroupNum,
                 effectiveFrom: eff,
-                recordedAt: formatDateKey(new Date())
+                recordedAt: scheduleRecordedAtNow(),
+                _seq: nextPersonStatusScheduleSeq()
             });
             return eff;
         }
@@ -2091,6 +2102,8 @@
         // Track data loading to prevent duplicate loads
         let dataLastLoaded = null;
         let isLoadingData = false;
+        let saveDataInFlight = 0;
+        let pendingLoadDataAfterSave = false;
         const DATA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache duration
         
         // Initialize (guard against duplicate initialization which can cause slow loads after refresh)
@@ -2178,6 +2191,11 @@
 
         // Load data from Firebase Firestore
         async function loadData() {
+            if (saveDataInFlight > 0) {
+                pendingLoadDataAfterSave = true;
+                console.log('loadData deferred: save in progress');
+                return;
+            }
             try {
                 // Wait for Firebase to be ready
                 if (!window.db) {
@@ -3019,7 +3037,38 @@
         }
 
         // Save data to Firebase Firestore
+        async function persistPersonStatusSchedule() {
+            if (!window.db) return false;
+            const user = window.auth?.currentUser;
+            if (!user) return false;
+            ensurePersonStatusScheduleSeeded();
+            if (typeof sanitizePersonStatusScheduleEffectiveDates === 'function') {
+                sanitizePersonStatusScheduleEffectiveDates();
+            }
+            const db = window.db || firebase.firestore();
+            const schedPayload = {
+                disabled: personStatusSchedule.disabled || [],
+                membership: personStatusSchedule.membership || [],
+                listOrders: personStatusSchedule.listOrders || [],
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: user.uid
+            };
+            await db.collection('dutyShifts').doc('personStatusSchedule').set(schedPayload);
+            console.log(
+                'Saved personStatusSchedule to Firestore:',
+                schedPayload.disabled.length,
+                'disabled,',
+                schedPayload.membership.length,
+                'membership,',
+                schedPayload.listOrders.length,
+                'listOrders'
+            );
+            return true;
+        }
+        window.persistPersonStatusSchedule = persistPersonStatusSchedule;
+
         async function saveData() {
+            saveDataInFlight += 1;
             try {
                 // Wait for Firebase to be ready
                 if (!window.db) {
@@ -3035,6 +3084,12 @@
                     console.log('User not authenticated, saving to localStorage');
                     saveDataToLocalStorage();
                     return;
+                }
+
+                try {
+                    await persistPersonStatusSchedule();
+                } catch (error) {
+                    console.error('Error saving personStatusSchedule to Firestore:', error);
                 }
                 
                 // Save groups
@@ -3052,22 +3107,7 @@
                     console.error('Error saving groups to Firestore:', error);
                 }
 
-                try {
-                    ensurePersonStatusScheduleSeeded();
-                    if (typeof sanitizePersonStatusScheduleEffectiveDates === 'function') {
-                        sanitizePersonStatusScheduleEffectiveDates();
-                    }
-                    const schedPayload = {
-                        disabled: personStatusSchedule.disabled || [],
-                        membership: personStatusSchedule.membership || [],
-                        listOrders: personStatusSchedule.listOrders || [],
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    };
-                    await db.collection('dutyShifts').doc('personStatusSchedule').set(schedPayload);
-                } catch (error) {
-                    console.error('Error saving personStatusSchedule to Firestore:', error);
-                }
+                // personStatusSchedule already persisted at start of saveData
                 
                 // Save holidays
                 try {
@@ -3280,6 +3320,23 @@
                 console.error('Error details:', error.message, error.stack);
                 // Fallback to localStorage
                 saveDataToLocalStorage();
+            } finally {
+                saveDataInFlight = Math.max(0, saveDataInFlight - 1);
+                if (saveDataInFlight === 0 && pendingLoadDataAfterSave) {
+                    pendingLoadDataAfterSave = false;
+                    try {
+                        await loadData();
+                        requestAnimationFrame(() => {
+                            renderGroups();
+                            renderHolidays();
+                            renderRecurringHolidays();
+                            renderCalendar();
+                            updateStatistics();
+                        });
+                    } catch (e) {
+                        console.error('Deferred loadData after save failed:', e);
+                    }
+                }
             }
         }
 
