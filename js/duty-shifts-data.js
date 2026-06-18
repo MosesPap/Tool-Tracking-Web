@@ -382,21 +382,28 @@
                 normal: getGroupRotationListAtDate(groupNum, 'normal', dk)
             };
         }
+        function disabledScheduleEntryMatchesPerson(entry, groupNum, personName) {
+            if (!entry || entry.groupNum !== groupNum) return false;
+            const pk = personScheduleKey(personName);
+            if (entry.personKey && entry.personKey === pk) return true;
+            if (entry.personName && personScheduleKey(entry.personName) === pk) return true;
+            return false;
+        }
         function getDisabledStateAtDate(groupNum, personName, dateKey) {
             ensurePersonStatusScheduleSeeded();
-            const pk = personScheduleKey(personName);
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
             const hits = personStatusSchedule.disabled
                 .filter(
                     (e) =>
-                        e.groupNum === groupNum &&
-                        e.personKey === pk &&
+                        disabledScheduleEntryMatchesPerson(e, groupNum, personName) &&
                         compareScheduleDateKeys(e.effectiveFrom, dk) <= 0
                 )
                 .sort((a, b) => {
+                    const byRec = compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
+                    if (byRec !== 0) return byRec;
                     const byEff = compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom);
                     if (byEff !== 0) return byEff;
-                    return compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
+                    return 0;
                 });
             if (hits.length) return normalizeDisabledState(hits[0].state);
             return legacyDisabledStateFromGroups(groupNum, personName);
@@ -522,6 +529,8 @@
         window.disabledStateIsActive = disabledStateIsActive;
         window.scheduleDisabledStateChange = scheduleDisabledStateChange;
         window.validateStatusEffectiveDateKey = validateStatusEffectiveDateKey;
+        window.getDisabledStateAtDate = getDisabledStateAtDate;
+        window.syncDisabledPersonsMirror = syncDisabledPersonsMirror;
         function getPendingScheduledStatusSummary(personName, groupNum) {
             ensurePersonStatusScheduleSeeded();
             const todayKey = formatDateKey(new Date());

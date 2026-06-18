@@ -724,6 +724,9 @@
             }
         }
         function renderGroups(preserveOpenLists = true, forceOpenLists = []) {
+            if (typeof clearDutyCalcContextDateKey === 'function') {
+                clearDutyCalcContextDateKey();
+            }
             // Track open lists before rendering if preserveOpenLists is true
             const openLists = preserveOpenLists ? getOpenLists() : [];
             groupListRenderRegistry.clear();
@@ -866,10 +869,12 @@
             personDiv.dataset.index = index;
             personDiv.dataset.listType = listType;
             
-            // Check if person is currently missing/disabled
+            // Check if person is currently missing/disabled (always evaluate as of today in group lists)
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
-            const isDisabledForThisList = isPersonDisabledForDuty(person, groupNum, listType);
-            const st = getDisabledState(groupNum, person);
+            const listAsOfToday = new Date();
+            listAsOfToday.setHours(0, 0, 0, 0);
+            const isDisabledForThisList = isPersonDisabledForDuty(person, groupNum, listType, listAsOfToday);
+            const st = getDisabledState(groupNum, person, listAsOfToday);
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -2134,6 +2139,13 @@
                     const savingDisable = isDisableSettingsFormActive(savedSt);
                     pendingDisableSettingsCapture = null;
                     const effReturned = scheduleDisabledStateChange(groupNum, personName, savedSt, effKey);
+                    if (typeof syncDisabledPersonsMirror === 'function') {
+                        syncDisabledPersonsMirror(
+                            groupNum,
+                            personName,
+                            typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null
+                        );
+                    }
                     const effLabel =
                         typeof formatScheduledStatusEffectiveLabel === 'function'
                             ? formatScheduledStatusEffectiveLabel(effReturned)

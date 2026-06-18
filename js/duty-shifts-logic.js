@@ -455,6 +455,8 @@
                 dateKey = asOfDate;
             } else if (typeof dutyCalcContextDateKey === 'string' && dutyCalcContextDateKey) {
                 dateKey = dutyCalcContextDateKey;
+            } else if (typeof formatDateKey === 'function') {
+                dateKey = formatDateKey(new Date());
             }
             if (dateKey && typeof isPersonDisabledForDutyAtDate === 'function') {
                 return isPersonDisabledForDutyAtDate(person, groupNum, dutyCategory, dateKey);
