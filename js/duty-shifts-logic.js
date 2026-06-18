@@ -3900,6 +3900,9 @@
                 } catch (reasonErr) {
                     console.error('Error saving assignmentReasons after Step 1:', reasonErr);
                 }
+                if (typeof renderCalendar === 'function') {
+                    renderCalendar();
+                }
             } catch (error) {
                 console.error('Error saving Step 1 (Special Holidays) to Firestore:', error);
             }

@@ -2154,6 +2154,11 @@
         let saveDataInFlight = 0;
         let pendingLoadDataAfterSave = false;
         const DATA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache duration
+
+        function isStepByStepCalculationActive() {
+            const el = document.getElementById('stepByStepCalculationModal');
+            return !!(el && el.classList.contains('show'));
+        }
         
         // Initialize (guard against duplicate initialization which can cause slow loads after refresh)
         let dutyShiftsInitStarted = false;
@@ -2179,11 +2184,13 @@
                         const now = Date.now();
                         if (dataLastLoaded && (now - dataLastLoaded) < DATA_CACHE_DURATION && !isLoadingData) {
                             await loadDutyShiftsUserPreferences(user);
-                            renderGroups();
-                            renderHolidays();
-                            renderRecurringHolidays();
-                            renderCalendar();
-                            updateStatistics();
+                            if (!isStepByStepCalculationActive()) {
+                                renderGroups();
+                                renderHolidays();
+                                renderRecurringHolidays();
+                                renderCalendar();
+                                updateStatistics();
+                            }
                             return;
                         }
                         
@@ -2243,6 +2250,11 @@
             if (saveDataInFlight > 0) {
                 pendingLoadDataAfterSave = true;
                 console.log('loadData deferred: save in progress');
+                return;
+            }
+            if (isStepByStepCalculationActive()) {
+                pendingLoadDataAfterSave = true;
+                console.log('loadData deferred: step-by-step calculation active');
                 return;
             }
             try {
@@ -3373,18 +3385,6 @@
                 saveDataInFlight = Math.max(0, saveDataInFlight - 1);
                 if (saveDataInFlight === 0 && pendingLoadDataAfterSave) {
                     pendingLoadDataAfterSave = false;
-                    try {
-                        await loadData();
-                        requestAnimationFrame(() => {
-                            renderGroups();
-                            renderHolidays();
-                            renderRecurringHolidays();
-                            renderCalendar();
-                            updateStatistics();
-                        });
-                    } catch (e) {
-                        console.error('Deferred loadData after save failed:', e);
-                    }
                 }
             }
         }
