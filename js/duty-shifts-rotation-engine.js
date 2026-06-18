@@ -194,72 +194,16 @@
         return false;
     }
 
-    function isFullyDeactivatedAtDate(personName, groupNum, dateKey) {
-        if (typeof getDisabledStateAtDate !== 'function') return false;
-        const st = getDisabledStateAtDate(groupNum, personName, dateKey);
-        return !!st.all;
-    }
-
-    function isAbsentOnSpecialDate(personName, groupNum, dateKey) {
-        const dateObj = new Date(dateKey + 'T00:00:00');
-        if (isNaN(dateObj.getTime())) return false;
-        return (
-            typeof isPersonMissingOnDate === 'function' &&
-            isPersonMissingOnDate(personName, groupNum, dateObj, DUTY_TYPE_SPECIAL)
-        );
-    }
-
-    /** Μερική απενεργοποίηση μόνο για ειδικές (όχι πλήρης). */
-    function isPartialSpecialDisableAtDate(personName, groupNum, dateKey) {
-        if (typeof getDisabledStateAtDate !== 'function') return false;
-        const st = getDisabledStateAtDate(groupNum, personName, dateKey);
-        if (st.all) return false;
-        return !!st.special;
-    }
-
-    /** Ήταν slot περιστροφής ή μέλος αλυσίδας skip εκείνης της ημέρας. */
-    function personHeldSpecialRotationSlot(personName, groupNum, dateKey) {
-        const holder = getExpectedSpecialSlotHolder(groupNum, dateKey);
-        if (holder && normName(holder) === normName(personName)) return true;
-        const baseline = getBaselinePersonForGroup(dateKey, groupNum);
-        if (baseline && normName(baseline) === normName(personName)) return true;
-
-        const gmap =
-            typeof assignmentReasons !== 'undefined' ? assignmentReasons[dateKey]?.[groupNum] : null;
-        if (!gmap || typeof gmap !== 'object') return false;
-        for (const personKey of Object.keys(gmap)) {
-            const r = gmap[personKey];
-            const meta = r?.meta || {};
-            if (Array.isArray(meta.skippedChain) && meta.skippedChain.length) {
-                if (meta.skippedChain.some((p) => p && normName(p) === normName(personName))) return true;
-            }
-            if (meta.replacementType === 'next-in-baseline') {
-                const bp = meta.baselinePerson || meta.skippedPersonName;
-                if (bp && normName(bp) === normName(personName)) return true;
-            }
-        }
-        return false;
-    }
-
     /**
-     * Οφειλή ειδικής: απουσία ή μερική απενεργ. ειδικών (όχι πλήρης απενεργοποίηση),
-     * κατείχε slot περιστροφής, κάποιος άλλος ορίστηκε τελικά.
+     * Οφειλή ειδικής μόνο όταν το άτομο δεν μπορούσε να υπηρετήσει εκείνη την ημέρα
+     * και κάποιος άλλος ορίστηκε τελικά.
      */
     function isPersonEligibleForSpecialDebt(personName, groupNum, owedFromDateKey, beforeDateKey) {
         if (!personName || !groupNum || !owedFromDateKey) return false;
         const finalAssignee = getFinalSpecialAssignee(groupNum, owedFromDateKey);
         if (finalAssignee && normName(finalAssignee) === normName(personName)) return false;
+        if (canServeSpecial(personName, groupNum, owedFromDateKey)) return false;
         if (wasSpecialDebtAlreadyRepaid(groupNum, personName, owedFromDateKey, beforeDateKey)) return false;
-        if (isFullyDeactivatedAtDate(personName, groupNum, owedFromDateKey)) return false;
-
-        const absent = isAbsentOnSpecialDate(personName, groupNum, owedFromDateKey);
-        const partialSpecialDisabled = isPartialSpecialDisableAtDate(
-            personName,
-            groupNum,
-            owedFromDateKey
-        );
-        if (!absent && !partialSpecialDisabled) return false;
-        if (!personHeldSpecialRotationSlot(personName, groupNum, owedFromDateKey)) return false;
         return true;
     }
 
@@ -359,13 +303,21 @@
 
             if (Array.isArray(meta.skippedChain) && meta.skippedChain.length) {
                 for (const p of meta.skippedChain) {
-                    if (p && normName(p) !== normName(finalAssignee)) {
+                    if (
+                        p &&
+                        normName(p) !== normName(finalAssignee) &&
+                        !canServeSpecial(p, groupNum, dateKey)
+                    ) {
                         out.push({ personName: p, reason: 'inferred-skipped-chain' });
                     }
                 }
             } else {
-                const skipped = meta.skippedPersonName || meta.baselinePerson;
-                if (skipped && normName(skipped) !== normName(finalAssignee)) {
+                const skipped = meta.skippedPersonName || meta.baselinePerson || r.swappedWith;
+                if (
+                    skipped &&
+                    normName(skipped) !== normName(finalAssignee) &&
+                    !canServeSpecial(skipped, groupNum, dateKey)
+                ) {
                     out.push({ personName: skipped, reason: 'inferred-unavailable-skip' });
                 }
             }
@@ -421,7 +373,11 @@
 
                 if (candidates.length === 0) {
                     const baseline = getBaselinePersonForGroup(dateKey, groupNum);
-                    if (baseline && normName(baseline) !== normName(finalAssignee)) {
+                    if (
+                        baseline &&
+                        normName(baseline) !== normName(finalAssignee) &&
+                        !canServeSpecial(baseline, groupNum, dateKey)
+                    ) {
                         candidates = [{ personName: baseline, reason: 'inferred-baseline-mismatch' }];
                     }
                 }
@@ -441,16 +397,12 @@
                     ) {
                         continue;
                     }
-                    const debtReason =
-                        reason && reason.startsWith('inferred-')
-                            ? unavailableReason(personName, groupNum, dateKey)
-                            : reason || unavailableReason(personName, groupNum, dateKey);
                     added.add(dedupeKey);
                     debts.push({
                         personName,
                         groupNum,
                         owedFromDateKey: dateKey,
-                        reason: debtReason || 'inferred-saved-assignment'
+                        reason: reason || 'inferred-saved-assignment'
                     });
                 }
             }
@@ -501,7 +453,6 @@
     function registerSpecialDebt(st, debtKeys, personName, groupNum, dateKey) {
         const nk = normName(personName);
         if (!nk) return;
-        if (!isPersonEligibleForSpecialDebt(personName, groupNum, dateKey)) return;
         const debt = {
             personName,
             groupNum,
