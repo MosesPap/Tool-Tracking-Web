@@ -2159,6 +2159,68 @@
             const el = document.getElementById('stepByStepCalculationModal');
             return !!(el && el.classList.contains('show'));
         }
+
+        function snapshotAssignmentStores() {
+            return {
+                specialHolidayAssignments: JSON.parse(JSON.stringify(specialHolidayAssignments || {})),
+                weekendAssignments: JSON.parse(JSON.stringify(weekendAssignments || {})),
+                semiNormalAssignments: JSON.parse(JSON.stringify(semiNormalAssignments || {})),
+                normalDayAssignments: JSON.parse(JSON.stringify(normalDayAssignments || {})),
+                assignmentReasons: JSON.parse(JSON.stringify(assignmentReasons || {})),
+                rotationBaselineSpecialAssignments: JSON.parse(
+                    JSON.stringify(rotationBaselineSpecialAssignments || {})
+                ),
+                rotationBaselineWeekendAssignments: JSON.parse(
+                    JSON.stringify(rotationBaselineWeekendAssignments || {})
+                ),
+                rotationBaselineSemiAssignments: JSON.parse(JSON.stringify(rotationBaselineSemiAssignments || {})),
+                rotationBaselineNormalAssignments: JSON.parse(
+                    JSON.stringify(rotationBaselineNormalAssignments || {})
+                )
+            };
+        }
+
+        function restoreAssignmentStores(snap) {
+            if (!snap) return;
+            specialHolidayAssignments = snap.specialHolidayAssignments || {};
+            weekendAssignments = snap.weekendAssignments || {};
+            semiNormalAssignments = snap.semiNormalAssignments || {};
+            normalDayAssignments = snap.normalDayAssignments || {};
+            assignmentReasons = snap.assignmentReasons || {};
+            rotationBaselineSpecialAssignments = snap.rotationBaselineSpecialAssignments || {};
+            rotationBaselineWeekendAssignments = snap.rotationBaselineWeekendAssignments || {};
+            rotationBaselineSemiAssignments = snap.rotationBaselineSemiAssignments || {};
+            rotationBaselineNormalAssignments = snap.rotationBaselineNormalAssignments || {};
+            if (typeof rebuildRotationBaselineLastByType === 'function') {
+                rebuildRotationBaselineLastByType();
+            }
+        }
+
+        async function flushPendingLoadDataIfNeeded() {
+            if (pendingLoadDataAfterSave && !isStepByStepCalculationActive() && saveDataInFlight === 0) {
+                pendingLoadDataAfterSave = false;
+                await loadData();
+                requestAnimationFrame(() => {
+                    renderGroups();
+                    renderHolidays();
+                    renderRecurringHolidays();
+                    renderCalendar();
+                    updateStatistics();
+                });
+            }
+        }
+
+        let _stepCalcModalLoadFlushWired = false;
+        function wireStepByStepCalculationModalListeners() {
+            if (_stepCalcModalLoadFlushWired) return;
+            const el = document.getElementById('stepByStepCalculationModal');
+            if (!el) return;
+            _stepCalcModalLoadFlushWired = true;
+            el.addEventListener('hidden.bs.modal', () => {
+                flushPendingLoadDataIfNeeded();
+            });
+        }
+        window.wireStepByStepCalculationModalListeners = wireStepByStepCalculationModalListeners;
         
         // Initialize (guard against duplicate initialization which can cause slow loads after refresh)
         let dutyShiftsInitStarted = false;
@@ -2167,6 +2229,7 @@
             if (dutyShiftsInitStarted) return;
             dutyShiftsInitStarted = true;
             restoreCalendarCellHeight();
+            wireStepByStepCalculationModalListeners();
             
             const tryAttach = () => {
                 // Wait for Firebase to be ready (do NOT re-dispatch DOMContentLoaded)
@@ -2193,21 +2256,31 @@
                             }
                             return;
                         }
+
+                        loadDataFromLocalStorage();
+                        requestAnimationFrame(() => {
+                            if (!isStepByStepCalculationActive()) {
+                                renderGroups();
+                                renderHolidays();
+                                renderRecurringHolidays();
+                                renderCalendar();
+                                updateStatistics();
+                            }
+                        });
                         
-                        isLoadingData = true;
                         await loadData();
                         await loadDutyShiftsUserPreferences(user);
                         dataLastLoaded = Date.now();
-                        isLoadingData = false;
                         
-                        // Render UI in next frame to reduce long main-thread blocking
-                        requestAnimationFrame(() => {
-                        renderGroups();
-                        renderHolidays();
-                        renderRecurringHolidays();
-                        renderCalendar();
-                        updateStatistics();
-                        });
+                        if (!isStepByStepCalculationActive()) {
+                            requestAnimationFrame(() => {
+                                renderGroups();
+                                renderHolidays();
+                                renderRecurringHolidays();
+                                renderCalendar();
+                                updateStatistics();
+                            });
+                        }
                     } else {
                         resetDutyShiftsUserPreferencesSessionCache();
                         // Not authenticated, use localStorage
@@ -2257,6 +2330,13 @@
                 console.log('loadData deferred: step-by-step calculation active');
                 return;
             }
+            if (isLoadingData) {
+                pendingLoadDataAfterSave = true;
+                console.log('loadData deferred: load already in progress');
+                return;
+            }
+
+            const assignmentSnapshotAtLoadStart = snapshotAssignmentStores();
             try {
                 // Wait for Firebase to be ready
                 if (!window.db) {
@@ -2273,6 +2353,8 @@
                     loadDataFromLocalStorage();
                     return;
                 }
+
+                isLoadingData = true;
                 
                 // Fetch all Firestore documents in parallel to reduce load time.
                 const dutyShifts = db.collection('dutyShifts');
@@ -2629,10 +2711,20 @@
                 // criticalAssignments are kept as history only and must not affect the current calendar.
                 
                 console.log('Data loaded from Firebase');
+                dataLastLoaded = Date.now();
+                if (isStepByStepCalculationActive()) {
+                    restoreAssignmentStores(assignmentSnapshotAtLoadStart);
+                    pendingLoadDataAfterSave = true;
+                    console.log('loadData: kept in-memory assignments (calculation in progress)');
+                }
             } catch (error) {
                 console.error('Error loading data from Firebase:', error);
                 // Fallback to localStorage
                 loadDataFromLocalStorage();
+            } finally {
+                if (isLoadingData) {
+                    isLoadingData = false;
+                }
             }
         }
 

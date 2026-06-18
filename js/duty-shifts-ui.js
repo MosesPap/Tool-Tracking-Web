@@ -5732,6 +5732,9 @@
             installFor('calculateStartMonth');
         }
         function showStepByStepCalculation() {
+            if (typeof wireStepByStepCalculationModalListeners === 'function') {
+                wireStepByStepCalculationModalListeners();
+            }
             calculationSteps.currentStep = 1;
             renderCurrentStep();
             const modal = new bootstrap.Modal(document.getElementById('stepByStepCalculationModal'));

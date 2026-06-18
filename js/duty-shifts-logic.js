@@ -7838,17 +7838,11 @@
                 }
                 await saveData();
                 
-                // Reload data from Firebase to refresh the display
-                if (loadingAlert && loadingAlert.parentNode) {
-                    loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Φόρτωση δεδομένων...';
-                }
-                await loadData();
-                
-                // Refresh all UI components
+                // Refresh all UI components from in-memory state (do not reload from Firebase)
                 renderGroups();
                 renderHolidays();
                 renderRecurringHolidays();
-            renderCalendar();
+                renderCalendar();
                 updateStatistics();
                 
                 // Remove loading indicator
