@@ -3131,6 +3131,9 @@
                 calculationSteps.cancelRestoreSnapshot = null;
                 calculationSteps.dutyProtectionSnapshot = null;
                 calculationSteps.highestCommittedStep = 0;
+                if (typeof clearPinnedAssignmentStores === 'function') {
+                    clearPinnedAssignmentStores();
+                }
                 
                 // Preserve manual modal / mutual swap / alternate-replacement for selected groups only
                 if (typeof captureManualDutyProtectionSnapshot === 'function') {

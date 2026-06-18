@@ -1732,6 +1732,9 @@
             calculationSteps.highestCommittedStep = Math.max(calculationSteps.highestCommittedStep || 0, n);
             calculationSteps.cancelRestoreSnapshot = null;
             pendingLoadDataAfterSave = false;
+            if (typeof pinAssignmentStoresAfterStepCalc === 'function') {
+                pinAssignmentStoresAfterStepCalc();
+            }
         }
         window.markCalculationStepCommitted = markCalculationStepCommitted;
 
@@ -2165,11 +2168,39 @@
         let saveDataInFlight = 0;
         let pendingLoadDataAfterSave = false;
         let skipLoadDataAfterStepCalcModalClose = false;
+        /** Αναθέσεις μετά από OK βήματος — δεν αντικαθίστανται από καθυστερημένο loadData. */
+        let preservedAssignmentsAfterStepCalc = null;
+
+        function pinAssignmentStoresAfterStepCalc() {
+            preservedAssignmentsAfterStepCalc = snapshotAssignmentStores();
+            pendingLoadDataAfterSave = false;
+            skipLoadDataAfterStepCalcModalClose = true;
+            try {
+                if (typeof saveDataToLocalStorage === 'function') {
+                    saveDataToLocalStorage();
+                }
+            } catch (e) {
+                console.warn('pinAssignmentStoresAfterStepCalc localStorage:', e);
+            }
+        }
+
+        function clearPinnedAssignmentStores() {
+            preservedAssignmentsAfterStepCalc = null;
+            skipLoadDataAfterStepCalcModalClose = false;
+        }
+
+        function hasPinnedAssignmentStores() {
+            return !!preservedAssignmentsAfterStepCalc;
+        }
+
+        window.pinAssignmentStoresAfterStepCalc = pinAssignmentStoresAfterStepCalc;
+        window.clearPinnedAssignmentStores = clearPinnedAssignmentStores;
+        window.hasPinnedAssignmentStores = hasPinnedAssignmentStores;
 
         function clearPendingLoadDataAfterCalcCancel(committedSteps) {
             pendingLoadDataAfterSave = false;
             if ((committedSteps || 0) > 0) {
-                skipLoadDataAfterStepCalcModalClose = true;
+                pinAssignmentStoresAfterStepCalc();
             }
         }
         window.clearPendingLoadDataAfterCalcCancel = clearPendingLoadDataAfterCalcCancel;
@@ -2236,6 +2267,10 @@
         }
 
         async function flushPendingLoadDataIfNeeded() {
+            if (hasPinnedAssignmentStores()) {
+                pendingLoadDataAfterSave = false;
+                return;
+            }
             if (skipLoadDataAfterStepCalcModalClose) {
                 skipLoadDataAfterStepCalcModalClose = false;
                 pendingLoadDataAfterSave = false;
@@ -2309,7 +2344,9 @@
                             return;
                         }
 
-                        loadDataFromLocalStorage();
+                        if (!hasPinnedAssignmentStores()) {
+                            loadDataFromLocalStorage();
+                        }
                         requestAnimationFrame(() => {
                             if (!isStepByStepCalculationActive()) {
                                 renderGroups();
@@ -2320,7 +2357,9 @@
                             }
                         });
                         
-                        await loadData();
+                        if (!hasPinnedAssignmentStores()) {
+                            await loadData();
+                        }
                         await loadDutyShiftsUserPreferences(user);
                         dataLastLoaded = Date.now();
                         
@@ -2372,6 +2411,11 @@
 
         // Load data from Firebase Firestore
         async function loadData() {
+            if (hasPinnedAssignmentStores()) {
+                pendingLoadDataAfterSave = false;
+                console.log('loadData skipped: pinned assignments after committed step');
+                return;
+            }
             if (saveDataInFlight > 0) {
                 pendingLoadDataAfterSave = true;
                 console.log('loadData deferred: save in progress');
@@ -2765,23 +2809,31 @@
                 
                 console.log('Data loaded from Firebase');
                 dataLastLoaded = Date.now();
-                const assignmentsChangedDuringFetch =
-                    assignmentStoresSignature(assignmentSnapshotAtLoadStart) !==
-                    assignmentStoresSignature(inMemoryBeforeFirebaseApply);
-                if (assignmentsChangedDuringFetch || isStepByStepCalculationActive()) {
-                    restoreAssignmentStores(inMemoryBeforeFirebaseApply);
-                    if (isStepByStepCalculationActive()) {
-                        pendingLoadDataAfterSave = true;
+                if (preservedAssignmentsAfterStepCalc) {
+                    restoreAssignmentStores(preservedAssignmentsAfterStepCalc);
+                    console.log('loadData: restored pinned assignments (in-flight load completed)');
+                } else {
+                    const assignmentsChangedDuringFetch =
+                        assignmentStoresSignature(assignmentSnapshotAtLoadStart) !==
+                        assignmentStoresSignature(inMemoryBeforeFirebaseApply);
+                    if (assignmentsChangedDuringFetch || isStepByStepCalculationActive()) {
+                        restoreAssignmentStores(inMemoryBeforeFirebaseApply);
+                        if (isStepByStepCalculationActive()) {
+                            pendingLoadDataAfterSave = true;
+                        }
+                        console.log(
+                            'loadData: kept in-memory assignments' +
+                                (assignmentsChangedDuringFetch ? ' (updated during Firebase fetch)' : ' (calculation active)')
+                        );
                     }
-                    console.log(
-                        'loadData: kept in-memory assignments' +
-                            (assignmentsChangedDuringFetch ? ' (updated during Firebase fetch)' : ' (calculation active)')
-                    );
                 }
             } catch (error) {
                 console.error('Error loading data from Firebase:', error);
-                // Fallback to localStorage
-                loadDataFromLocalStorage();
+                if (!hasPinnedAssignmentStores()) {
+                    loadDataFromLocalStorage();
+                } else if (preservedAssignmentsAfterStepCalc) {
+                    restoreAssignmentStores(preservedAssignmentsAfterStepCalc);
+                }
             } finally {
                 if (isLoadingData) {
                     isLoadingData = false;
