@@ -1721,8 +1721,19 @@
             /** Captured before month recalc clear; used to restore manual modal / mutual swap / alternate replacement. */
             dutyProtectionSnapshot: null,
             /** Full in-memory snapshot before partial month clear (restore on Ακύρωση). */
-            cancelRestoreSnapshot: null
+            cancelRestoreSnapshot: null,
+            /** Last step whose OK save completed (1–4). Cancel keeps committed steps. */
+            highestCommittedStep: 0
         };
+
+        function markCalculationStepCommitted(stepNum) {
+            const n = parseInt(stepNum, 10);
+            if (!n || n < 1) return;
+            calculationSteps.highestCommittedStep = Math.max(calculationSteps.highestCommittedStep || 0, n);
+            calculationSteps.cancelRestoreSnapshot = null;
+            pendingLoadDataAfterSave = false;
+        }
+        window.markCalculationStepCommitted = markCalculationStepCommitted;
 
         /** Groups selected for recalc. Null = καμία ομάδα — δεν τρέχει επανυπολογισμός. */
         function getCalculationRecalcGroupSet() {
@@ -2153,6 +2164,15 @@
         let isLoadingData = false;
         let saveDataInFlight = 0;
         let pendingLoadDataAfterSave = false;
+        let skipLoadDataAfterStepCalcModalClose = false;
+
+        function clearPendingLoadDataAfterCalcCancel(committedSteps) {
+            pendingLoadDataAfterSave = false;
+            if ((committedSteps || 0) > 0) {
+                skipLoadDataAfterStepCalcModalClose = true;
+            }
+        }
+        window.clearPendingLoadDataAfterCalcCancel = clearPendingLoadDataAfterCalcCancel;
         const DATA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache duration
 
         function isStepByStepCalculationActive() {
@@ -2197,7 +2217,20 @@
         }
 
         async function flushPendingLoadDataIfNeeded() {
-            if (pendingLoadDataAfterSave && !isStepByStepCalculationActive() && saveDataInFlight === 0) {
+            if (skipLoadDataAfterStepCalcModalClose) {
+                skipLoadDataAfterStepCalcModalClose = false;
+                pendingLoadDataAfterSave = false;
+                return;
+            }
+            if (
+                (calculationSteps.highestCommittedStep || 0) > 0 ||
+                saveDataInFlight > 0 ||
+                isStepByStepCalculationActive()
+            ) {
+                pendingLoadDataAfterSave = false;
+                return;
+            }
+            if (pendingLoadDataAfterSave) {
                 pendingLoadDataAfterSave = false;
                 await loadData();
                 requestAnimationFrame(() => {

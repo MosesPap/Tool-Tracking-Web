@@ -3130,6 +3130,7 @@
                 calculationSteps.currentStep = 1;
                 calculationSteps.cancelRestoreSnapshot = null;
                 calculationSteps.dutyProtectionSnapshot = null;
+                calculationSteps.highestCommittedStep = 0;
                 
                 // Preserve manual modal / mutual swap / alternate-replacement for selected groups only
                 if (typeof captureManualDutyProtectionSnapshot === 'function') {
@@ -3741,6 +3742,9 @@
                         setStepFooterBusy(true);
                         try {
                             await saveStep1_SpecialHolidays();
+                            if (typeof markCalculationStepCommitted === 'function') {
+                                markCalculationStepCommitted(1);
+                            }
                             calculationSteps.currentStep = 2;
                             renderCurrentStep();
                             const m = bootstrap.Modal.getInstance(document.getElementById('specialHolidayResultsModal'));
@@ -4566,6 +4570,9 @@
                     setStepFooterBusy(true);
                     try {
                         await saveFinalWeekendAssignments(updatedAssignments);
+                        if (typeof markCalculationStepCommitted === 'function') {
+                            markCalculationStepCommitted(2);
+                        }
                         // Proceed to Step 3
                         calculationSteps.currentStep = 3;
                         renderCurrentStep();
@@ -5321,6 +5328,9 @@
                     setStepFooterBusy(true);
                     try {
                         await saveFinalSemiNormalAssignments(updatedAssignments);
+                        if (typeof markCalculationStepCommitted === 'function') {
+                            markCalculationStepCommitted(3);
+                        }
                         // Proceed to Step 4
                         calculationSteps.currentStep = 4;
                         renderCurrentStep();
@@ -7510,7 +7520,13 @@
         }
         async function cancelStepByStepCalculation() {
             const snap = calculationSteps.cancelRestoreSnapshot;
+            const committed = calculationSteps.highestCommittedStep || 0;
             calculationSteps.cancelRestoreSnapshot = null;
+            calculationSteps.highestCommittedStep = 0;
+            calculationSteps.stripManualOverrideGroups = [];
+            if (typeof clearPendingLoadDataAfterCalcCancel === 'function') {
+                clearPendingLoadDataAfterCalcCancel(committed);
+            }
 
             const modal = bootstrap.Modal.getInstance(document.getElementById('stepByStepCalculationModal'));
             if (modal) {
@@ -7522,16 +7538,18 @@
             document.body.style.overflow = '';
             document.body.style.paddingRight = '';
 
-            if (snap && typeof restoreDutyShiftsCancelRestoreSnapshot === 'function') {
+            if (committed === 0 && snap && typeof restoreDutyShiftsCancelRestoreSnapshot === 'function') {
                 restoreDutyShiftsCancelRestoreSnapshot(snap);
                 try {
                     if (typeof saveData === 'function') await saveData();
-                    if (typeof renderCalendar === 'function') renderCalendar();
                 } catch (err) {
                     console.error('cancelStepByStepCalculation restore:', err);
                     alert('Η ακύρωση επανέφερε τα δεδομένα στη μνήμη, αλλά αποτυχία αποθήκευσης στο cloud. Δοκιμάστε ξανά ή ανανεώστε τη σελίδα.');
                 }
             }
+            if (typeof renderGroups === 'function') renderGroups();
+            if (typeof renderCalendar === 'function') renderCalendar();
+            if (typeof updateStatistics === 'function') updateStatistics();
         }
         async function executeCalculation() {
             let loadingAlert = null;
