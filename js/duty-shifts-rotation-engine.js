@@ -560,12 +560,54 @@
     }
 
     /**
-     * Όσοι υπηρέτησαν ειδική πριν την περίοδο υπολογισμού — δεν ξαναμπαίνουν στο τρέχον lap.
-     * Lap = οι τελευταίες N αναθέσεις (N = μήκος λίστας περιστροφής) πριν την πρώτη ημέρα.
-     * Διαβάζει specialHolidayAssignments + πρόσθετα stores (temp κ.λπ.).
+     * True αν ο ορισμός ήταν κανονική αναθέση slot περιστροφής (όχι αντικατάσταση/εξόφληση/cascade).
+     */
+    function wasRotationSpecialAssignee(groupNum, dateKey, personName, store) {
+        const final = getFinalSpecialAssignee(groupNum, dateKey, store);
+        if (!final || normName(final) !== normName(personName)) return false;
+
+        const gmap =
+            typeof assignmentReasons !== 'undefined' ? assignmentReasons[dateKey]?.[groupNum] : null;
+        if (gmap && typeof gmap === 'object') {
+            for (const personKey of Object.keys(gmap)) {
+                const r = gmap[personKey];
+                if (!r || typeof r !== 'object') continue;
+                const meta = r.meta || {};
+                const entryName = r.personName || personKey;
+
+                if (normName(meta.replacementPersonName) === normName(personName)) return false;
+                if (normName(meta.skippedPersonName) === normName(personName)) return false;
+                if (normName(meta.baselinePerson) === normName(personName) && normName(entryName) !== normName(personName)) {
+                    return false;
+                }
+                if (Array.isArray(meta.skippedChain) && meta.skippedChain.some((p) => normName(p) === normName(personName))) {
+                    return false;
+                }
+                if (
+                    normName(entryName) === normName(personName) &&
+                    (meta.replacementType ||
+                        meta.unavailableReplacement ||
+                        meta.debtRepayment ||
+                        meta.displacedCascade)
+                ) {
+                    return false;
+                }
+            }
+        }
+
+        const baseline = getBaselinePersonForGroup(dateKey, groupNum);
+        if (baseline && normName(baseline) !== normName(personName)) return false;
+
+        return true;
+    }
+
+    /**
+     * Όσοι υπηρέτησαν ειδική στον ίδιο μήνα πριν την πρώτη ημέρα υπολογισμού (κανονικό slot).
+     * Δεν φορτώνουμε ιστορικό από προηγούμενους μήνες/έτη — αυτό καλύπτει η συνέχεια cursor.
      */
     function seedAssignedThisPeriodFromPriorSpecials(groupNum, firstDateKey, assignedSet, extraStores, rotationLen) {
         if (!firstDateKey) return;
+        const monthKey = firstDateKey.substring(0, 7);
 
         const stores = [];
         if (typeof specialHolidayAssignments !== 'undefined') stores.push(specialHolidayAssignments);
@@ -581,8 +623,10 @@
             for (const dk of Object.keys(store).sort()) {
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
                 if (dk >= firstDateKey) continue;
+                if (dk.substring(0, 7) !== monthKey) continue;
                 const assigned = getFinalSpecialAssignee(groupNum, dk, store);
                 if (!assigned) continue;
+                if (!wasRotationSpecialAssignee(groupNum, dk, assigned, store)) continue;
                 const dedupe = `${dk}|${normName(assigned)}`;
                 if (seenDatePerson.has(dedupe)) continue;
                 seenDatePerson.add(dedupe);
