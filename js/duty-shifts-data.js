@@ -2180,6 +2180,25 @@
             return !!(el && el.classList.contains('show'));
         }
 
+        function assignmentStoresSignature(snap) {
+            if (!snap) return '';
+            try {
+                return JSON.stringify({
+                    special: snap.specialHolidayAssignments,
+                    weekend: snap.weekendAssignments,
+                    semi: snap.semiNormalAssignments,
+                    normal: snap.normalDayAssignments,
+                    reasons: snap.assignmentReasons,
+                    rbSpecial: snap.rotationBaselineSpecialAssignments,
+                    rbWeekend: snap.rotationBaselineWeekendAssignments,
+                    rbSemi: snap.rotationBaselineSemiAssignments,
+                    rbNormal: snap.rotationBaselineNormalAssignments
+                });
+            } catch (_) {
+                return '';
+            }
+        }
+
         function snapshotAssignmentStores() {
             return {
                 specialHolidayAssignments: JSON.parse(JSON.stringify(specialHolidayAssignments || {})),
@@ -2388,8 +2407,7 @@
                 }
 
                 isLoadingData = true;
-                
-                // Fetch all Firestore documents in parallel to reduce load time.
+
                 const dutyShifts = db.collection('dutyShifts');
                 const [
                     groupsDoc,
@@ -2434,6 +2452,8 @@
                     dutyShifts.doc('personStatusSchedule').get(),
                     dutyShifts.doc('settings').get()
                 ]);
+
+                const inMemoryBeforeFirebaseApply = snapshotAssignmentStores();
                 
                 // Load groups
                 if (groupsDoc.exists) {
@@ -2745,10 +2765,18 @@
                 
                 console.log('Data loaded from Firebase');
                 dataLastLoaded = Date.now();
-                if (isStepByStepCalculationActive()) {
-                    restoreAssignmentStores(assignmentSnapshotAtLoadStart);
-                    pendingLoadDataAfterSave = true;
-                    console.log('loadData: kept in-memory assignments (calculation in progress)');
+                const assignmentsChangedDuringFetch =
+                    assignmentStoresSignature(assignmentSnapshotAtLoadStart) !==
+                    assignmentStoresSignature(inMemoryBeforeFirebaseApply);
+                if (assignmentsChangedDuringFetch || isStepByStepCalculationActive()) {
+                    restoreAssignmentStores(inMemoryBeforeFirebaseApply);
+                    if (isStepByStepCalculationActive()) {
+                        pendingLoadDataAfterSave = true;
+                    }
+                    console.log(
+                        'loadData: kept in-memory assignments' +
+                            (assignmentsChangedDuringFetch ? ' (updated during Firebase fetch)' : ' (calculation active)')
+                    );
                 }
             } catch (error) {
                 console.error('Error loading data from Firebase:', error);
