@@ -1121,6 +1121,39 @@
             return { person, nextPos: person != null ? (pos + 1) % rotLen : (posState + 1) % rotLen };
         }
 
+        /**
+         * Προώθηση δείκτη σειράς ημιαργίας πέρα από απενεργοποιημένους / απόντες (και προαιρετικά defer-skip).
+         * Χρησιμοποιείται στην τελική ανάθεση — όχι στο baseline preview (εκεί μένει η θέση για return-from-missing).
+         */
+        function advanceSemiPosPastUnavailable(groupPeople, groupNum, dateKey, posState, deferSkipPerson) {
+            const rotLen = groupPeople.length;
+            if (!rotLen) return 0;
+            const date = new Date(dateKey + 'T00:00:00');
+            if (isNaN(date.getTime())) return ((posState % rotLen) + rotLen) % rotLen;
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const deferNorm = deferSkipPerson ? norm(deferSkipPerson) : null;
+            let pos = ((posState % rotLen) + rotLen) % rotLen;
+            let guard = 0;
+            while (guard++ <= rotLen + 2) {
+                const cand = groupPeople[pos];
+                if (!cand) break;
+                if (deferNorm && norm(cand) === deferNorm) {
+                    pos = (pos + 1) % rotLen;
+                    continue;
+                }
+                if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'semi', date)) {
+                    pos = (pos + 1) % rotLen;
+                    continue;
+                }
+                if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(cand, groupNum, date, 'semi')) {
+                    pos = (pos + 1) % rotLen;
+                    continue;
+                }
+                break;
+            }
+            return pos;
+        }
+
         function buildExpectedSemiPersonMapForCalendarMonth(year, monthIndex0, groupNum) {
             const out = {};
             const groupPeople =
@@ -1895,35 +1928,52 @@
                 return true;
             };
 
-            // Month-specific cold start (not calc-range start): Feb-2026 all groups; April groups 1–2 only.
-            const isFebruary2026Month = dateInMonth.getFullYear() === 2026 && dateInMonth.getMonth() === 1;
-            const isAprilMonth = dateInMonth.getMonth() === 3;
-            if (isFebruary2026Month || (isAprilMonth && (groupNum === 1 || groupNum === 2))) {
-                globalPos[groupNum] = 0;
-                return;
-            }
-
             // Same calculation run: previous calendar month already built in Step 3.
             const prevMonthKey =
                 typeof getPreviousMonthKeyFromDate === 'function' ? getPreviousMonthKeyFromDate(dateInMonth) : null;
             const inRunPerson = prevMonthKey
                 ? calculationSteps?.rotationContinuityInRun?.[dayTypeCategory]?.[prevMonthKey]?.[groupNum]
                 : null;
-            if (applySeedFromLastPerson(inRunPerson)) return;
 
-            if (typeof computeRotationPositionAtMonthStart === 'function') {
+            // Month-specific cold start (not calc-range start): Feb-2026 all groups; April groups 1–2 only.
+            const isFebruary2026Month = dateInMonth.getFullYear() === 2026 && dateInMonth.getMonth() === 1;
+            const isAprilMonth = dateInMonth.getMonth() === 3;
+            if (isFebruary2026Month || (isAprilMonth && (groupNum === 1 || groupNum === 2))) {
+                globalPos[groupNum] = 0;
+            } else if (applySeedFromLastPerson(inRunPerson)) {
+                /* seeded from in-run continuity */
+            } else if (typeof computeRotationPositionAtMonthStart === 'function') {
                 const cursor = computeRotationPositionAtMonthStart(dayTypeCategory, dateInMonth, groupNum, groupPeople);
                 if (cursor != null && Number.isFinite(cursor) && cursor >= 0) {
                     globalPos[groupNum] = cursor % rotationDays;
-                    return;
+                } else {
+                    const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
+                        ? getRotationSeedPersonForMonthStart(dayTypeCategory, dateInMonth, groupNum)
+                        : getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+                    if (!applySeedFromLastPerson(lastPersonName)) {
+                        const daysSinceStart = getRotationPosition(dateInMonth, dayTypeCategory, groupNum);
+                        globalPos[groupNum] = daysSinceStart % rotationDays;
+                    }
+                }
+            } else {
+                const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
+                    ? getRotationSeedPersonForMonthStart(dayTypeCategory, dateInMonth, groupNum)
+                    : getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+                if (!applySeedFromLastPerson(lastPersonName)) {
+                    const daysSinceStart = getRotationPosition(dateInMonth, dayTypeCategory, groupNum);
+                    globalPos[groupNum] = daysSinceStart % rotationDays;
                 }
             }
-            const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
-                ? getRotationSeedPersonForMonthStart(dayTypeCategory, dateInMonth, groupNum)
-                : getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-            if (applySeedFromLastPerson(lastPersonName)) return;
-            const daysSinceStart = getRotationPosition(dateInMonth, dayTypeCategory, groupNum);
-            globalPos[groupNum] = daysSinceStart % rotationDays;
+
+            if (dayTypeCategory === 'semi' && typeof formatDateKey === 'function') {
+                globalPos[groupNum] = advanceSemiPosPastUnavailable(
+                    groupPeople,
+                    groupNum,
+                    formatDateKey(dateInMonth),
+                    globalPos[groupNum],
+                    null
+                );
+            }
         }
 
         /** Track last rotation continuity person per month during multi-month Step 3/2 runs. */
@@ -9794,6 +9844,7 @@
                         reseedGlobalRotationPositionAtMonthStart('semi', date, groupNum, groupPeople, globalSemiPos);
                     }
                     let pos = globalSemiPos[groupNum] % rotationDays;
+                    let deferFulfillmentSemiRun = null;
                     const existingManualAlternateSemiRun = findExistingManualAlternateOnDateGroup(dateKey, groupNum);
                     if (existingManualAlternateSemiRun) {
                         const bi = groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(existingManualAlternateSemiRun.baseline));
@@ -9805,7 +9856,6 @@
                         const stDefer = deferManualAlternateSkipSemiRun[groupNum];
                         if (stDefer?.person) {
                             const dn = normSemiRun(stDefer.person);
-                            let deferFulfillmentSemiRun = null;
                             if (groupPeople[pos] && normSemiRun(groupPeople[pos]) === dn) {
                                 const latestSemi =
                                     typeof getManualAlternateDeferFromPreviousMonth === 'function'
@@ -9821,21 +9871,22 @@
                                             : null
                                 };
                             }
-                            let guard = 0;
-                            while (
-                                guard++ <= rotationDays + 2 &&
-                                groupPeople[pos] &&
-                                normSemiRun(groupPeople[pos]) === dn
-                            ) {
-                                pos = (pos + 1) % rotationDays;
-                                delete deferManualAlternateSkipSemiRun[groupNum];
-                            }
-                            globalSemiPos[groupNum] = pos;
-                            if (deferFulfillmentSemiRun) {
-                                deferFulfillmentSemiRun.rotationSlotPerson = groupPeople[pos] || null;
-                                semiDeferFulfillmentPending[`${dateKey}:${groupNum}`] = deferFulfillmentSemiRun;
-                            }
                         }
+                    }
+                    const deferSkipForAdvance = deferManualAlternateSkipSemiRun[groupNum]?.person || null;
+                    const posBeforeDeferAdvance = pos;
+                    pos = advanceSemiPosPastUnavailable(groupPeople, groupNum, dateKey, pos, deferSkipForAdvance);
+                    if (
+                        deferSkipForAdvance &&
+                        groupPeople[posBeforeDeferAdvance] &&
+                        normSemiRun(groupPeople[posBeforeDeferAdvance]) === normSemiRun(deferSkipForAdvance)
+                    ) {
+                        delete deferManualAlternateSkipSemiRun[groupNum];
+                    }
+                    globalSemiPos[groupNum] = pos;
+                    if (deferFulfillmentSemiRun) {
+                        deferFulfillmentSemiRun.rotationSlotPerson = groupPeople[pos] || null;
+                        semiDeferFulfillmentPending[`${dateKey}:${groupNum}`] = deferFulfillmentSemiRun;
                     }
                     let person = groupPeople[pos];
                     const rotationPersonAtSlot = person;
