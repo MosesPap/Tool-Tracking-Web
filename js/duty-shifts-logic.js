@@ -455,8 +455,6 @@
                 dateKey = asOfDate;
             } else if (typeof dutyCalcContextDateKey === 'string' && dutyCalcContextDateKey) {
                 dateKey = dutyCalcContextDateKey;
-            } else if (typeof formatDateKey === 'function') {
-                dateKey = formatDateKey(new Date());
             }
             if (dateKey && typeof isPersonDisabledForDutyAtDate === 'function') {
                 return isPersonDisabledForDutyAtDate(person, groupNum, dutyCategory, dateKey);
@@ -1121,39 +1119,6 @@
             return { person, nextPos: person != null ? (pos + 1) % rotLen : (posState + 1) % rotLen };
         }
 
-        /**
-         * Προώθηση δείκτη σειράς ημιαργίας πέρα από απενεργοποιημένους / απόντες (και προαιρετικά defer-skip).
-         * Χρησιμοποιείται στην τελική ανάθεση — όχι στο baseline preview (εκεί μένει η θέση για return-from-missing).
-         */
-        function advanceSemiPosPastUnavailable(groupPeople, groupNum, dateKey, posState, deferSkipPerson) {
-            const rotLen = groupPeople.length;
-            if (!rotLen) return 0;
-            const date = new Date(dateKey + 'T00:00:00');
-            if (isNaN(date.getTime())) return ((posState % rotLen) + rotLen) % rotLen;
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            const deferNorm = deferSkipPerson ? norm(deferSkipPerson) : null;
-            let pos = ((posState % rotLen) + rotLen) % rotLen;
-            let guard = 0;
-            while (guard++ <= rotLen + 2) {
-                const cand = groupPeople[pos];
-                if (!cand) break;
-                if (deferNorm && norm(cand) === deferNorm) {
-                    pos = (pos + 1) % rotLen;
-                    continue;
-                }
-                if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'semi', date)) {
-                    pos = (pos + 1) % rotLen;
-                    continue;
-                }
-                if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(cand, groupNum, date, 'semi')) {
-                    pos = (pos + 1) % rotLen;
-                    continue;
-                }
-                break;
-            }
-            return pos;
-        }
-
         function buildExpectedSemiPersonMapForCalendarMonth(year, monthIndex0, groupNum) {
             const out = {};
             const groupPeople =
@@ -1295,47 +1260,6 @@
                 if (t) return t;
             }
             return null;
-        }
-
-        /**
-         * Απουσία μεγαλύτερη από ένα ημερολογιακό μήνα (>30 ημέρες μεταξύ έναρξης και λήξης):
-         * επανένταξη μόνο στη φυσική σειρά (καθημερινές / ημιαργίες / αργίες), χωρίς return-from-missing.
-         */
-        function isAbsenceLongerThanOneMonth(startKey, endKey) {
-            if (!startKey || !endKey) return false;
-            if (typeof startKey !== 'string' || typeof endKey !== 'string') return false;
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(startKey) || !/^\d{4}-\d{2}-\d{2}$/.test(endKey)) return false;
-            const start = new Date(startKey + 'T00:00:00');
-            const end = new Date(endKey + 'T00:00:00');
-            if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
-            const days = Math.round((end - start) / (1000 * 60 * 60 * 24));
-            return days > 30;
-        }
-
-        function lookupMissingPeriodStartKey(groupNum, personName, endKey) {
-            if (!endKey || !groupNum || !personName) return null;
-            const g = typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum];
-            const missingMap = g?.missingPeriods || {};
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            const targetPerson = norm(personName);
-            for (const key of Object.keys(missingMap)) {
-                if (norm(key) !== targetPerson) continue;
-                const periods = Array.isArray(missingMap[key]) ? missingMap[key] : [];
-                for (const p of periods) {
-                    const ek = typeof inputValueToDateKey === 'function' ? inputValueToDateKey(p?.end) : null;
-                    if (ek === endKey) {
-                        return typeof inputValueToDateKey === 'function' ? inputValueToDateKey(p?.start) : null;
-                    }
-                }
-            }
-            return null;
-        }
-
-        /** false = μακρά απουσία → μόνο φυσική σειρά, όχι ειδική επανένταξη. */
-        function shouldUseReturnFromMissingForPeriod(period, startKey, endKey) {
-            const sk = startKey || (typeof inputValueToDateKey === 'function' ? inputValueToDateKey(period?.start) : null);
-            const ek = endKey || (typeof inputValueToDateKey === 'function' ? inputValueToDateKey(period?.end) : null);
-            return !isAbsenceLongerThanOneMonth(sk, ek);
         }
 
         function normalizePersonKey(personName) {
@@ -1919,106 +1843,44 @@
         function reseedGlobalRotationPositionAtMonthStart(dayTypeCategory, dateInMonth, groupNum, groupPeople, globalPos) {
             const rotationDays = groupPeople.length;
             if (!rotationDays) return;
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-            const applySeedFromLastPerson = (lastPersonName) => {
-                if (!lastPersonName) return false;
-                const lastPersonIndex = groupPeople.findIndex((p) => norm(p) === norm(lastPersonName));
-                if (lastPersonIndex < 0) return false;
-                globalPos[groupNum] = (lastPersonIndex + 1) % rotationDays;
-                return true;
-            };
-
-            // Same calculation run: previous calendar month already built in Step 3.
-            const prevMonthKey =
-                typeof getPreviousMonthKeyFromDate === 'function' ? getPreviousMonthKeyFromDate(dateInMonth) : null;
-            const inRunPerson = prevMonthKey
-                ? calculationSteps?.rotationContinuityInRun?.[dayTypeCategory]?.[prevMonthKey]?.[groupNum]
-                : null;
-
-            // Month-specific cold start (not calc-range start): Feb-2026 all groups; April groups 1–2 only.
-            const isFebruary2026Month = dateInMonth.getFullYear() === 2026 && dateInMonth.getMonth() === 1;
-            const isAprilMonth = dateInMonth.getMonth() === 3;
-            if (isFebruary2026Month || (isAprilMonth && (groupNum === 1 || groupNum === 2))) {
+            const startDate = calculationSteps?.startDate;
+            const isFebruary2026 = startDate && startDate.getFullYear() === 2026 && startDate.getMonth() === 1;
+            const isAprilStart = startDate && startDate.getMonth() === 3;
+            if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
                 globalPos[groupNum] = 0;
-            } else if (applySeedFromLastPerson(inRunPerson)) {
-                /* seeded from in-run continuity */
-            } else if (typeof computeRotationPositionAtMonthStart === 'function') {
+                return;
+            }
+            if (typeof computeRotationPositionAtMonthStart === 'function') {
                 const cursor = computeRotationPositionAtMonthStart(dayTypeCategory, dateInMonth, groupNum, groupPeople);
-                if (cursor != null && Number.isFinite(cursor) && cursor >= 0) {
+                if (Number.isFinite(cursor)) {
                     globalPos[groupNum] = cursor % rotationDays;
-                } else {
-                    const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
-                        ? getRotationSeedPersonForMonthStart(dayTypeCategory, dateInMonth, groupNum)
-                        : getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-                    if (!applySeedFromLastPerson(lastPersonName)) {
-                        const daysSinceStart = getRotationPosition(dateInMonth, dayTypeCategory, groupNum);
-                        globalPos[groupNum] = daysSinceStart % rotationDays;
-                    }
+                    return;
                 }
+            }
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
+                ? getRotationSeedPersonForMonthStart(dayTypeCategory, dateInMonth, groupNum)
+                : getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+            const lastPersonIndex = lastPersonName
+                ? groupPeople.findIndex(p => norm(p) === norm(lastPersonName))
+                : -1;
+            if (lastPersonName && lastPersonIndex >= 0) {
+                globalPos[groupNum] = (lastPersonIndex + 1) % rotationDays;
             } else {
-                const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
-                    ? getRotationSeedPersonForMonthStart(dayTypeCategory, dateInMonth, groupNum)
-                    : getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-                if (!applySeedFromLastPerson(lastPersonName)) {
-                    const daysSinceStart = getRotationPosition(dateInMonth, dayTypeCategory, groupNum);
-                    globalPos[groupNum] = daysSinceStart % rotationDays;
-                }
+                const daysSinceStart = getRotationPosition(dateInMonth, dayTypeCategory, groupNum);
+                globalPos[groupNum] = daysSinceStart % rotationDays;
             }
-
-            if (dayTypeCategory === 'semi' && typeof formatDateKey === 'function') {
-                globalPos[groupNum] = advanceSemiPosPastUnavailable(
-                    groupPeople,
-                    groupNum,
-                    formatDateKey(dateInMonth),
-                    globalPos[groupNum],
-                    null
-                );
-            }
-        }
-
-        /** Track last rotation continuity person per month during multi-month Step 3/2 runs. */
-        function recordRotationContinuityInRun(dayTypeCategory, monthKey, groupNum, dateKey, assignedPerson, assignmentsMap) {
-            if (!assignedPerson || !monthKey || !calculationSteps) return;
-            const personForRot =
-                typeof getPersonForRotationContinuity === 'function'
-                    ? getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, assignmentsMap)
-                    : assignedPerson;
-            if (!personForRot) return;
-            if (!calculationSteps.rotationContinuityInRun) calculationSteps.rotationContinuityInRun = {};
-            if (!calculationSteps.rotationContinuityInRun[dayTypeCategory]) {
-                calculationSteps.rotationContinuityInRun[dayTypeCategory] = {};
-            }
-            if (!calculationSteps.rotationContinuityInRun[dayTypeCategory][monthKey]) {
-                calculationSteps.rotationContinuityInRun[dayTypeCategory][monthKey] = {};
-            }
-            calculationSteps.rotationContinuityInRun[dayTypeCategory][monthKey][groupNum] = personForRot;
         }
 
         function markManualAlternateDeferFulfilled() {
             /* defer cleared in resolveRotationPositionWithManualAlternate when skip applied */
         }
 
-        function applyManualAlternateToAssignedPerson(
-            assignedPerson,
-            existingManualAlternate,
-            wasDisabledOnlySkipped,
-            asOfDate,
-            groupNum,
-            dutyCategory
-        ) {
+        function applyManualAlternateToAssignedPerson(assignedPerson, existingManualAlternate, wasDisabledOnlySkipped) {
             if (!existingManualAlternate || !assignedPerson || wasDisabledOnlySkipped) return assignedPerson;
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
             if (norm(assignedPerson) === norm(existingManualAlternate.baseline)) {
-                const replacement = existingManualAlternate.replacement;
-                if (
-                    replacement &&
-                    groupNum &&
-                    typeof isPersonDisabledForDuty === 'function' &&
-                    isPersonDisabledForDuty(replacement, groupNum, dutyCategory || 'semi', asOfDate)
-                ) {
-                    return assignedPerson;
-                }
-                return replacement;
+                return existingManualAlternate.replacement;
             }
             return assignedPerson;
         }
@@ -2078,16 +1940,10 @@
                 const bp = String(reason.meta?.baselinePerson || '').trim();
                 if (bp) return bp;
             }
-            // Missing/disabled replacement: συνέχεια μετά το τελευταίο καταναλωμένο slot (όχι μόνο το πρώτο της αλυσίδας).
-            if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement) {
-                const chain = reason.meta.skippedChain;
-                if (Array.isArray(chain) && chain.length > 0) {
-                    return chain[chain.length - 1];
-                }
-                if (reason.meta.lastConsumedSlotPerson) {
-                    return reason.meta.lastConsumedSlotPerson;
-                }
-                if (reason.swappedWith) return reason.swappedWith;
+            // Missing/disabled replacement should preserve baseline slot continuity:
+            // if A/B were unavailable and G covered, next slot remains after the skipped baseline person.
+            if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
+                return reason.swappedWith;
             }
             if (reason && reason.type === 'swap' && reason.swapPairId != null && !reason.meta?.mutualTwoDaySwap) {
                 const otherKey = findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey);
@@ -3266,10 +3122,6 @@
                 calculationSteps.currentStep = 1;
                 calculationSteps.cancelRestoreSnapshot = null;
                 calculationSteps.dutyProtectionSnapshot = null;
-                calculationSteps.highestCommittedStep = 0;
-                if (typeof clearPinnedAssignmentStores === 'function') {
-                    clearPinnedAssignmentStores();
-                }
                 
                 // Preserve manual modal / mutual swap / alternate-replacement for selected groups only
                 if (typeof captureManualDutyProtectionSnapshot === 'function') {
@@ -3392,99 +3244,6 @@
                     break;
             }
         }
-        function getRecurringSpecialHolidayDisplayName(dateKey) {
-            const date = new Date(dateKey + 'T00:00:00');
-            if (isNaN(date.getTime())) return 'Ειδική Αργία';
-            let holidayName = '';
-            const year = date.getFullYear();
-            const month = date.getMonth() + 1;
-            const day = date.getDate();
-            for (const holidayDef of recurringSpecialHolidays) {
-                if (holidayDef.type === 'fixed' && holidayDef.month === month && holidayDef.day === day) {
-                    holidayName = holidayDef.name;
-                    break;
-                } else if (holidayDef.type === 'easter-relative') {
-                    const orthodoxHolidays = calculateOrthodoxHolidays(year);
-                    const easterDate = orthodoxHolidays.easterSunday;
-                    const holidayDate = new Date(easterDate);
-                    holidayDate.setDate(holidayDate.getDate() + (holidayDef.offset || 0));
-                    if (formatDateKey(holidayDate) === dateKey) {
-                        holidayName = holidayDef.name;
-                        break;
-                    }
-                }
-            }
-            return holidayName || 'Ειδική Αργία';
-        }
-
-        /**
-         * Βήμα 1 ειδικών αργιών μέσω DutyRotationEngine (εξόφληση οφειλής πριν την κανονική περιστροφή).
-         */
-        function computeSpecialHolidaysWithRotationEngine(sortedSpecial, startDate) {
-            const tempSpecialAssignments = {};
-            if (typeof seedPreservedDutyAssignmentsIntoTemp === 'function') {
-                seedPreservedDutyAssignmentsIntoTemp(
-                    tempSpecialAssignments,
-                    specialHolidayAssignments,
-                    sortedSpecial
-                );
-            }
-
-            if (typeof DutyRotationEngine === 'undefined' || typeof DutyRotationEngine.runSpecialPhase !== 'function') {
-                console.error('[STEP 1] DutyRotationEngine not loaded — cannot compute special holidays.');
-                return {
-                    tempSpecialAssignments,
-                    specialRotationPersons: {},
-                    simulatedByMonth: {},
-                    cursorByGroup: {}
-                };
-            }
-
-            const engineOut = DutyRotationEngine.runSpecialPhase({
-                sortedSpecialDays: sortedSpecial,
-                startDate,
-                preservedAssignments: tempSpecialAssignments,
-                priorAssignmentStores: [
-                    calculationSteps.tempSpecialAssignments || {},
-                    specialHolidayAssignments || {}
-                ],
-                shouldRecalculateGroup: (g) =>
-                    typeof shouldRecalculateDutyGroup !== 'function' || shouldRecalculateDutyGroup(g)
-            });
-
-            for (const entry of engineOut.reasonEntries || []) {
-                if (typeof storeAssignmentReason !== 'function') continue;
-                storeAssignmentReason(
-                    entry.dateKey,
-                    entry.groupNum,
-                    entry.personName,
-                    entry.type || 'skip',
-                    entry.reason || '',
-                    entry.swappedWith || null,
-                    null,
-                    entry.meta || null
-                );
-            }
-
-            if (engineOut.debtsRemaining?.length) {
-                console.log('[STEP 1] Special debts remaining after period:', engineOut.debtsRemaining);
-            }
-            if (engineOut.debtsRepaid?.length) {
-                console.log('[STEP 1] Special debts repaid in period:', engineOut.debtsRepaid);
-            }
-            if (typeof updatePendingSpecialDebtsAfterSpecialPhase === 'function') {
-                updatePendingSpecialDebtsAfterSpecialPhase(engineOut, sortedSpecial);
-            }
-
-            return {
-                tempSpecialAssignments: engineOut.assignments || {},
-                specialRotationPersons: engineOut.slots || {},
-                specialSlotContinuity: engineOut.slotContinuity || {},
-                simulatedByMonth: engineOut.simulatedByMonth || {},
-                cursorByGroup: engineOut.cursorByGroup || {}
-            };
-        }
-
         function renderStep1_SpecialHolidays() {
             const stepContent = document.getElementById('stepContent');
             const startDate = calculationSteps.startDate;
@@ -3549,26 +3308,602 @@
                 html += '</thead>';
                 html += '<tbody>';
                 
+                // Sort special holidays by date
                 const sortedSpecial = [...specialHolidays].sort();
-                const specialEngineResult = computeSpecialHolidaysWithRotationEngine(sortedSpecial, startDate);
-                const tempSpecialAssignments = specialEngineResult.tempSpecialAssignments;
-                const specialRotationPersons = specialEngineResult.specialRotationPersons;
-                const specialSlotContinuity = specialEngineResult.specialSlotContinuity;
-                calculationSteps.specialRotationCursorByGroup = specialEngineResult.cursorByGroup;
+                // Return-from-missing: persons replaced on a special date due to missing will be assigned on another special (same month first, else next)
+                const returnFromMissingSpecial = []; // { personName, groupNum, missedDateKey }
+                
+                // Store assignments and rotation positions for saving when Next is pressed
+                const tempSpecialAssignments = {}; // dateKey -> { groupNum -> personName }
+                if (typeof seedPreservedDutyAssignmentsIntoTemp === 'function') {
+                    seedPreservedDutyAssignmentsIntoTemp(
+                        tempSpecialAssignments,
+                        specialHolidayAssignments,
+                        sortedSpecial
+                    );
+                }
+                // Track rotation persons (who SHOULD be assigned according to rotation, before missing/skip)
+                const specialRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
+                // For missing replacement: keep a simulated set of special assignments so hasConsecutiveDuty can validate neighbors.
+                const simulatedSpecialAssignmentsForConflict = {}; // monthKey -> { groupNum -> Set(person) }
+                
+                // Initialize global rotation positions from baseline and assignments only (no lastRotationPositions).
+                const globalSpecialRotationPosition = {}; // groupNum -> position in group list
+                const firstDateKey = sortedSpecial.length > 0 ? sortedSpecial[0] : null;
+                const baselineDateKeysBeforePeriod = firstDateKey
+                    ? Object.keys(rotationBaselineSpecialAssignments || {}).filter(dk => dk < firstDateKey).sort().reverse()
+                    : [];
+                const getBaselinePersonForGroup = (dateKey, g) => {
+                    const raw = rotationBaselineSpecialAssignments?.[dateKey];
+                    if (!raw) return null;
+                    if (typeof raw === 'object' && !Array.isArray(raw) && typeof extractGroupAssignmentsMap === 'function')
+                        return (extractGroupAssignmentsMap(raw)[g] || null);
+                    if (typeof parseAssignedPersonForGroupFromAssignment === 'function')
+                        return parseAssignedPersonForGroupFromAssignment(raw, g);
+                    return null;
+                };
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
+                    const groupPeople = groupData.special || [];
+                    if (groupPeople.length === 0) continue;
+                    const rotationDays = groupPeople.length;
+                    const isFebruary2026 = calculationSteps.startDate &&
+                        calculationSteps.startDate.getFullYear() === 2026 &&
+                        calculationSteps.startDate.getMonth() === 1;
+                    const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
+                    if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
+                        globalSpecialRotationPosition[groupNum] = 0;
+                        console.log(
+                            `[SPECIAL ROTATION] Starting from first person (position 0) for group ${groupNum} - ${
+                                isAprilStart ? 'April start' : 'February 2026'
+                            }`
+                        );
+                    } else if (firstDateKey && typeof getRotationSeedPersonForMonthStart === 'function') {
+                        const seedPerson = getRotationSeedPersonForMonthStart('special', new Date(firstDateKey + 'T00:00:00'), groupNum);
+                        const seedIdx = seedPerson ? groupPeople.indexOf(seedPerson) : -1;
+                        if (seedPerson && seedIdx >= 0) {
+                            globalSpecialRotationPosition[groupNum] = (seedIdx + 1) % rotationDays;
+                            console.log(`[SPECIAL ROTATION] From manual-alternate seed ${seedPerson} (index ${seedIdx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`);
+                        } else if (baselineDateKeysBeforePeriod.length > 0) {
+                            const lastBaselineDateKey = baselineDateKeysBeforePeriod[0];
+                            const lastBaselinePerson = getBaselinePersonForGroup(lastBaselineDateKey, groupNum);
+                            const idx = lastBaselinePerson ? groupPeople.indexOf(lastBaselinePerson) : -1;
+                            if (idx >= 0) {
+                                globalSpecialRotationPosition[groupNum] = (idx + 1) % rotationDays;
+                                console.log(`[SPECIAL ROTATION] From baseline ${lastBaselineDateKey} last baseline person ${lastBaselinePerson} (index ${idx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`);
+                            } else {
+                                globalSpecialRotationPosition[groupNum] = 0;
+                            }
+                        } else {
+                            globalSpecialRotationPosition[groupNum] = 0;
+                        }
+                    } else if (baselineDateKeysBeforePeriod.length > 0) {
+                        const lastBaselineDateKey = baselineDateKeysBeforePeriod[0];
+                        const lastBaselinePerson = getBaselinePersonForGroup(lastBaselineDateKey, groupNum);
+                        const idx = lastBaselinePerson ? groupPeople.indexOf(lastBaselinePerson) : -1;
+                        if (idx >= 0) {
+                            globalSpecialRotationPosition[groupNum] = (idx + 1) % rotationDays;
+                            console.log(`[SPECIAL ROTATION] From baseline ${lastBaselineDateKey} last baseline person ${lastBaselinePerson} (index ${idx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`);
+                        } else {
+                            globalSpecialRotationPosition[groupNum] = 0;
+                            console.log(`[SPECIAL ROTATION] No baseline person found for group ${groupNum} in baseline, starting at 0`);
+                        }
+                    } else {
+                        globalSpecialRotationPosition[groupNum] = 0;
+                        console.log(`[SPECIAL ROTATION] No baseline dates before period for group ${groupNum}, starting at 0`);
+                    }
+                }
 
+                // Pre-pass: add only people who missed specials in months BEFORE the current calculation range
+                // (not future months). So when calculating April we only consider missed specials before April;
+                // when calculating December we consider A/B who missed April, etc. Never reserve someone for
+                // a future missed period (e.g. F missing Dec/Jan must not affect April).
+                const sortedSpecialSet = new Set(sortedSpecial);
+                const firstDateKeyInRange = sortedSpecial.length > 0 ? sortedSpecial[0] : null;
+                const addedReturnFromPrevMonths = new Set();
+                const normPerson = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const g = groups[groupNum];
+                    const missingMap = g?.missingPeriods || {};
+                    const specialList =
+                        typeof getSortedGroupListForRotation === 'function'
+                            ? getSortedGroupListForRotation(groupNum, 'special')
+                            : (g?.special || []);
+                    if (specialList.length === 0) continue;
+                    for (const personName of Object.keys(missingMap)) {
+                        if (!specialList.some(p => normPerson(p) === normPerson(personName))) continue;
+                        const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
+                        for (const period of periods) {
+                            const pStartKey = inputValueToDateKey(period?.start);
+                            const pEndKey = inputValueToDateKey(period?.end);
+                            if (!pStartKey || !pEndKey) continue;
+                            const dedupeKey = `${personName}|${groupNum}`;
+                            if (addedReturnFromPrevMonths.has(dedupeKey)) break;
+                            const pStart = new Date(pStartKey + 'T00:00:00');
+                            const pEnd = new Date(pEndKey + 'T00:00:00');
+                            if (isNaN(pStart.getTime()) || isNaN(pEnd.getTime())) continue;
+                            let missedDateKey = null;
+                            for (const d = new Date(pStart); d <= pEnd; d.setDate(d.getDate() + 1)) {
+                                if (!isSpecialHoliday(d)) continue;
+                                const dk = formatDateKey(d);
+                                if (sortedSpecialSet.has(dk)) continue;
+                                missedDateKey = dk;
+                                break;
+                            }
+                            if (!missedDateKey) continue;
+                            // Only count as return-from-missing if the missed special is BEFORE the current range (not a future month).
+                            if (firstDateKeyInRange && missedDateKey >= firstDateKeyInRange) continue;
+                            addedReturnFromPrevMonths.add(dedupeKey);
+                            returnFromMissingSpecial.push({ personName, groupNum, missedDateKey });
+                            console.log(`[SPECIAL RETURN-FROM-MISSING] ${personName} (group ${groupNum}) missed special ${missedDateKey} (before current range); will assign in current range`);
+                            break;
+                        }
+                    }
+                }
+
+                // People who will be assigned by return-from-missing must not be used as replacements for others (use next in rotation instead).
+                const reservedReturnFromMissingByGroup = {};
+                for (const e of returnFromMissingSpecial) {
+                    if (!reservedReturnFromMissingByGroup[e.groupNum]) reservedReturnFromMissingByGroup[e.groupNum] = new Set();
+                    reservedReturnFromMissingByGroup[e.groupNum].add(e.personName);
+                }
+                // When a slot opens (rotation person missing), we may assign an unassigned return-from-missing person here; track so the loop later skips them.
+                const assignedReturnFromMissingInForEach = new Set();
+                // When a return-from-missing person takes a slot, the displaced baseline gets the next available special (cascade).
+                const displacedByReturnFromMissing = { 1: [], 2: [], 3: [], 4: [] };
+                const deferManualAlternateSkipSpecial = {};
+                let prevCalMonthKeySpecialDefer = null;
+
+                sortedSpecial.forEach((dateKey, specialIndex) => {
+                    if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
+                    const date = new Date(dateKey + 'T00:00:00');
+                    const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    const dayName = getGreekDayName(date);
+                    const monthKeyForConflict = getMonthKeyFromDate(date);
+                    const calMonthKeySpecial = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    if (prevCalMonthKeySpecialDefer !== calMonthKeySpecial) {
+                        for (const k of Object.keys(deferManualAlternateSkipSpecial)) delete deferManualAlternateSkipSpecial[k];
+                        if (typeof seedManualAlternateDeferAllGroupsForMonthStart === 'function') {
+                            seedManualAlternateDeferAllGroupsForMonthStart(deferManualAlternateSkipSpecial, 'special', date);
+                        }
+                        prevCalMonthKeySpecialDefer = calMonthKeySpecial;
+                    }
+                    if (!simulatedSpecialAssignmentsForConflict[monthKeyForConflict]) {
+                        simulatedSpecialAssignmentsForConflict[monthKeyForConflict] = {};
+                    }
+                    
+                    // Get holiday name
+                    let holidayName = '';
+                    const year = date.getFullYear();
+                    const month = date.getMonth() + 1;
+                    const day = date.getDate();
+                    
+                    // Check recurring holidays
+                    for (const holidayDef of recurringSpecialHolidays) {
+                        if (holidayDef.type === 'fixed' && holidayDef.month === month && holidayDef.day === day) {
+                            holidayName = holidayDef.name;
+                            break;
+                        } else if (holidayDef.type === 'easter-relative') {
+                            const orthodoxHolidays = calculateOrthodoxHolidays(year);
+                            const easterDate = orthodoxHolidays.easterSunday;
+                            const holidayDate = new Date(easterDate);
+                            holidayDate.setDate(holidayDate.getDate() + (holidayDef.offset || 0));
+                            if (formatDateKey(holidayDate) === dateKey) {
+                                holidayName = holidayDef.name;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Helpers for return-from-missing vs displaced: need (p,g) check in scope for each date.
+                    const isAlreadyAssignedInSavedForDate = (p, g) => {
+                        if (!specialHolidayAssignments) return false;
+                        const normP = normalizePersonKey(p);
+                        for (const dk of Object.keys(specialHolidayAssignments)) {
+                            const raw = specialHolidayAssignments[dk];
+                            const assigned = (typeof extractGroupAssignmentsMap === 'function' && raw && typeof raw === 'object' && !Array.isArray(raw))
+                                ? (extractGroupAssignmentsMap(raw)[g] || null)
+                                : (typeof parseAssignedPersonForGroupFromAssignment === 'function' ? parseAssignedPersonForGroupFromAssignment(raw, g) : null);
+                            if (assigned && normalizePersonKey(assigned) === normP) return true;
+                        }
+                        return false;
+                    };
+                    const isUnassignedReturnFromMissingForDate = (p, g) => {
+                        if (assignedReturnFromMissingInForEach.has(`${p}|${g}`)) return false;
+                        if (sortedSpecial.some(dk => tempSpecialAssignments[dk]?.[g] === p)) return false;
+                        if (isAlreadyAssignedInSavedForDate(p, g)) return false;
+                        return true;
+                    };
+
+                    // Calculate who will be assigned for each group based on rotation order (per-group position from globalSpecialRotationPosition)
+                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
+                            continue;
+                        }
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
+                        const groupPeople = groupData.special || [];
+                        
+                        if (groupPeople.length === 0) {
+                            html += '<td class="text-muted">-</td>';
+                        } else {
+                            const rotationDays = groupPeople.length;
+                            if (globalSpecialRotationPosition[groupNum] === undefined) {
+                                globalSpecialRotationPosition[groupNum] = 0;
+                            }
+                            const manualAltResolvedSpecial = resolveRotationPositionWithManualAlternate(
+                                groupNum,
+                                groupPeople,
+                                rotationDays,
+                                globalSpecialRotationPosition,
+                                deferManualAlternateSkipSpecial,
+                                dateKey,
+                                'special'
+                            );
+                            let rotationPosition = manualAltResolvedSpecial.rotationPosition % rotationDays;
+                            const existingManualAlternateSpecial = manualAltResolvedSpecial.existingManualAlternate;
+                            const rotationPerson = groupPeople[rotationPosition];
+                            if (!specialRotationPersons[dateKey]) {
+                                specialRotationPersons[dateKey] = {};
+                            }
+
+                            let assignedPerson = rotationPerson;
+                            let wasReplaced = false;
+                            let replacementIndex = null;
+                            let wasDisabledOnlySkippedSpecial = false;
+                            const displacedQueue = displacedByReturnFromMissing[groupNum] || [];
+                            const rotationPersonDisabled = rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'special');
+                            const alreadyOnAnotherSpecialRaw = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === rotationPerson);
+                            const baselineWouldBeMissing = !rotationPersonDisabled && !alreadyOnAnotherSpecialRaw && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
+                            const hasUnassignedReturnFromMissing = returnFromMissingSpecial.some(e => e.groupNum === groupNum && isUnassignedReturnFromMissingForDate(e.personName, groupNum) && !isPersonMissingOnDate(e.personName, groupNum, date, 'special'));
+                            const displacedPersonPeek = displacedQueue.length > 0 ? displacedQueue[0] : null;
+                            const displacedAvailableOnThisDate = displacedPersonPeek && !isPersonMissingOnDate(displacedPersonPeek, groupNum, date, 'special');
+                            // Displaced cascade: only use displaced when (1) they are not missing today, (2) slot not fillable by return-from-missing (so we never skip a return-from-missing).
+                            const useDisplacedQueue = displacedQueue.length > 0 && displacedAvailableOnThisDate && (!baselineWouldBeMissing || !hasUnassignedReturnFromMissing);
+                            // Displaced cascade: someone was replaced by a return-from-missing on a previous date – assign them to this date only if they are available (not missing) on this date.
+                            if (useDisplacedQueue) {
+                                const displacedPerson = displacedQueue.shift();
+                                assignedPerson = displacedPerson;
+                                wasReplaced = true;
+                                replacementIndex = rotationPosition;
+                                displacedByReturnFromMissing[groupNum].push(rotationPerson);
+                                const reasonDisplaced = `Βασική Σειρά: ${rotationPerson}. Αντικατάσταση: ${displacedPerson} (ανατέθηκε εδώ αφού αντικαταστάθηκε σε προηγούμενη ειδική αργία).`;
+                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonDisplaced, rotationPerson, null, {
+                                    baselinePerson: rotationPerson,
+                                    replacementType: 'displaced-cascade'
+                                });
+                            }
+                            const alreadyOnAnotherSpecial = !wasReplaced && alreadyOnAnotherSpecialRaw;
+                            // DISABLED: When rotation person is disabled, whole baseline shifts – skip them, no replacement line (only if we didn't already assign a displaced person).
+                            const isRotationPersonDisabledSpecial = !wasReplaced && rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'special');
+                            if (isRotationPersonDisabledSpecial) {
+                                let foundEligible = false;
+                                const searchList = groupPeople;
+                                const searchLen = searchList.length;
+                                for (let offset = 1; offset <= searchLen * 2 && !foundEligible; offset++) {
+                                    const idx = (rotationPosition + offset) % searchLen;
+                                    const candidate = searchList[idx];
+                                    if (!candidate) continue;
+                                    if (reservedReturnFromMissingByGroup[groupNum]?.has(candidate)) continue;
+                                    if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
+                                    assignedPerson = candidate;
+                                    replacementIndex = idx;
+                                    wasReplaced = true;
+                                    wasDisabledOnlySkippedSpecial = true;
+                                    foundEligible = true;
+                                    break;
+                                }
+                                if (!foundEligible) assignedPerson = null;
+                            }
+                            // ALREADY ON ANOTHER SPECIAL: rotation person was replacement on a previous special in this period – skip them to avoid double assignment
+                            if (!isRotationPersonDisabledSpecial && rotationPerson && alreadyOnAnotherSpecial) {
+                                let foundEligible = false;
+                                const searchListR = groupPeople;
+                                const searchLenR = searchListR.length;
+                                for (let offset = 1; offset <= searchLenR * 2 && !foundEligible; offset++) {
+                                    const idx = (rotationPosition + offset) % searchLenR;
+                                    const candidate = searchListR[idx];
+                                    if (!candidate) continue;
+                                    if (reservedReturnFromMissingByGroup[groupNum]?.has(candidate)) continue;
+                                    if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
+                                    const candidateAlreadyOnAnother = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === candidate);
+                                    if (candidateAlreadyOnAnother) continue;
+                                    assignedPerson = candidate;
+                                    replacementIndex = idx;
+                                    wasReplaced = true;
+                                    wasDisabledOnlySkippedSpecial = true; // treat like skip for baseline display
+                                    foundEligible = true;
+                                    break;
+                                }
+                                if (!foundEligible) assignedPerson = null;
+                            }
+                            // 1) Always keep baseline: rotation person is the reference for this date/group.
+                            specialRotationPersons[dateKey][groupNum] = rotationPerson;
+
+                            // 2) If baseline (rotation) person is missing on this date: fill slot with (a) unassigned previous-missing, or (b) next eligible in baseline. Keep record.
+                            const baselineIsMissingHere = !wasReplaced && !isRotationPersonDisabledSpecial && !alreadyOnAnotherSpecial && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
+                            if (baselineIsMissingHere) {
+                                let foundReplacement = false;
+                                const pendingForGroup = returnFromMissingSpecial.filter(e => e.groupNum === groupNum);
+                                const pendingReturnFromMissingForGroup = new Set(pendingForGroup.map(e => e.personName));
+                                // Order: earliest missed first, then baseline (groupPeople) order – so first available slot goes to who missed first, no one skipped.
+                                const sortedPendingByMissedThenBaseline = pendingForGroup.slice().sort((a, b) => {
+                                    const d = (a.missedDateKey || '').localeCompare(b.missedDateKey || '');
+                                    if (d !== 0) return d;
+                                    return groupPeople.indexOf(a.personName) - groupPeople.indexOf(b.personName);
+                                });
+
+                                // 2a) First: swap with a previous missing person (return-from-missing) who is not yet assigned – pick by missed-date order then baseline (A then B).
+                                for (const entry of sortedPendingByMissedThenBaseline) {
+                                    if (foundReplacement) break;
+                                    const prevMissingPerson = entry.personName;
+                                    if (!isUnassignedReturnFromMissingForDate(prevMissingPerson, groupNum)) continue;
+                                    if (isPersonMissingOnDate(prevMissingPerson, groupNum, date, 'special')) continue;
+                                    assignedPerson = prevMissingPerson;
+                                    wasReplaced = true;
+                                    replacementIndex = rotationPosition;
+                                    foundReplacement = true;
+                                    assignedReturnFromMissingInForEach.add(`${prevMissingPerson}|${groupNum}`);
+                                    (displacedByReturnFromMissing[groupNum] = displacedByReturnFromMissing[groupNum] || []).push(rotationPerson);
+                                    const reasonReturn = `Βασική σειρά: ${rotationPerson} (απουσία). Αντικατάσταση: ${assignedPerson} (επέστρεψε από απουσία).`;
+                                    storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonReturn, rotationPerson, null, {
+                                        baselinePerson: rotationPerson,
+                                        replacementType: 'return-from-missing',
+                                        missedDateKey: dateKey,
+                                        assignedReturnFromMissing: true
+                                    });
+                                    returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
+                                    if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
+                                    reservedReturnFromMissingByGroup[groupNum].add(rotationPerson);
+                                    break;
+                                }
+
+                                // 2b) If all previous missing are already assigned: replace with next eligible person from baseline (rotation).
+                                if (!foundReplacement) {
+                                    for (let offset = 1; offset <= groupPeople.length * 2; offset++) {
+                                        const idx = (rotationPosition + offset) % groupPeople.length;
+                                        const candidate = groupPeople[idx];
+                                        if (!candidate) continue;
+                                        if (reservedReturnFromMissingByGroup[groupNum]?.has(candidate)) continue;
+                                        if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
+                                        if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
+                                        if (sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === candidate)) continue;
+                                        assignedPerson = candidate;
+                                        replacementIndex = idx;
+                                        wasReplaced = true;
+                                        foundReplacement = true;
+                                        const reasonNext = `Βασική σειρά: ${rotationPerson} (απουσία). Αντικατάσταση: ${assignedPerson} (επόμενος στη σειρά).`;
+                                        storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonNext, rotationPerson, null, {
+                                            baselinePerson: rotationPerson,
+                                            replacementType: 'next-in-baseline',
+                                            missedDateKey: dateKey
+                                        });
+                                        returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
+                                        if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
+                                        reservedReturnFromMissingByGroup[groupNum].add(rotationPerson);
+                                        break;
+                                    }
+                                }
+                                if (!foundReplacement) assignedPerson = null;
+                            }
+
+                            assignedPerson = applyManualAlternateToAssignedPerson(
+                                assignedPerson,
+                                existingManualAlternateSpecial,
+                                wasDisabledOnlySkippedSpecial
+                            );
+                            if (
+                                existingManualAlternateSpecial &&
+                                assignedPerson &&
+                                !wasDisabledOnlySkippedSpecial
+                            ) {
+                                const normSp = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                                if (normSp(assignedPerson) === normSp(existingManualAlternateSpecial.replacement)) {
+                                    specialRotationPersons[dateKey][groupNum] = existingManualAlternateSpecial.baseline;
+                                } else {
+                                    specialRotationPersons[dateKey][groupNum] = rotationPerson;
+                                }
+                            } else {
+                                specialRotationPersons[dateKey][groupNum] = rotationPerson;
+                            }
+
+                            // Step 1 is special-holidays only: preview reflects missing replacement only (no weekend skip logic here).
+                            
+                            // Store assignment for saving
+                            if (assignedPerson) {
+                                if (
+                                    manualAltResolvedSpecial.deferFulfillment &&
+                                    !wasDisabledOnlySkippedSpecial &&
+                                    tryStoreManualAlternateDeferFulfillmentReason(
+                                        dateKey,
+                                        groupNum,
+                                        assignedPerson,
+                                        manualAltResolvedSpecial.deferFulfillment
+                                    )
+                                ) {
+                                    specialRotationPersons[dateKey][groupNum] =
+                                        manualAltResolvedSpecial.deferFulfillment.skippedReplacement;
+                                }
+                                if (!tempSpecialAssignments[dateKey]) {
+                                    tempSpecialAssignments[dateKey] = {};
+                                }
+                                tempSpecialAssignments[dateKey][groupNum] = assignedPerson;
+
+                                // Track in simulated set for neighbor-conflict checking
+                                if (!simulatedSpecialAssignmentsForConflict[monthKeyForConflict][groupNum]) {
+                                    simulatedSpecialAssignmentsForConflict[monthKeyForConflict][groupNum] = new Set();
+                                }
+                                simulatedSpecialAssignmentsForConflict[monthKeyForConflict][groupNum].add(assignedPerson);
+                                const isManualAltSpecial = isManualAlternateReplacementOnDate(dateKey, groupNum, assignedPerson);
+                                advanceGlobalRotationAfterDutyAssignment(
+                                    groupNum,
+                                    groupPeople,
+                                    rotationDays,
+                                    rotationPosition,
+                                    assignedPerson,
+                                    globalSpecialRotationPosition,
+                                    deferManualAlternateSkipSpecial,
+                                    {
+                                        wasReplaced,
+                                        replacementIndex,
+                                        isManualAlternateReplacement: isManualAltSpecial
+                                    }
+                                );
+                            } else {
+                                globalSpecialRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                            }
+                        }
+                    }
+                });
+                
+                // Return-from-missing for special: assign returning people in the next special duty as a replacement to the baseline rotation.
+                // Each returning person takes the slot of the baseline (rotation) person on a target date; baseline is unchanged for display/continuation.
+                // Target: same month first, else next available special.
+                const usedReturnFromMissingSpecial = new Set();
+                const isAlreadyAssignedInSavedForLoop = (p, g) => {
+                    if (!specialHolidayAssignments) return false;
+                    const normP = normalizePersonKey(p);
+                    for (const dk of Object.keys(specialHolidayAssignments)) {
+                        const raw = specialHolidayAssignments[dk];
+                        const assigned = (typeof extractGroupAssignmentsMap === 'function' && raw && typeof raw === 'object' && !Array.isArray(raw))
+                            ? (extractGroupAssignmentsMap(raw)[g] || null)
+                            : (typeof parseAssignedPersonForGroupFromAssignment === 'function' ? parseAssignedPersonForGroupFromAssignment(raw, g) : null);
+                        if (assigned && normalizePersonKey(assigned) === normP) return true;
+                    }
+                    return false;
+                };
+                // Process return-from-missing in baseline (rotation) order: A then B then C… so first slot goes to A, second to B.
+                const returnFromMissingSortedByBaselineOrder = returnFromMissingSpecial.slice().sort((a, b) => {
+                    if (a.groupNum !== b.groupNum) return a.groupNum - b.groupNum;
+                    const groupPeopleA =
+                        typeof getSortedGroupListForRotation === 'function'
+                            ? getSortedGroupListForRotation(a.groupNum, 'special')
+                            : (groups[a.groupNum] || {}).special || [];
+                    const groupPeopleB =
+                        typeof getSortedGroupListForRotation === 'function'
+                            ? getSortedGroupListForRotation(b.groupNum, 'special')
+                            : (groups[b.groupNum] || {}).special || [];
+                    const idxA = groupPeopleA.indexOf(a.personName);
+                    const idxB = groupPeopleB.indexOf(b.personName);
+                    return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+                });
+                for (const entry of returnFromMissingSortedByBaselineOrder) {
+                    const { personName, groupNum, missedDateKey } = entry;
+                    if (assignedReturnFromMissingInForEach.has(`${personName}|${groupNum}`)) continue;
+                    if (isAlreadyAssignedInSavedForLoop(personName, groupNum)) continue;
+                    const missedDate = new Date(missedDateKey + 'T00:00:00');
+                    const missedMonthKey = getMonthKeyFromDate(missedDate);
+                    let targetKey = null;
+                    const sameMonthSpecials = sortedSpecial.filter((dk) => {
+                        const d = new Date(dk + 'T00:00:00');
+                        return getMonthKeyFromDate(d) === missedMonthKey && dk !== missedDateKey;
+                    });
+                    // Prefer same-month specials (excluding the missed date). Only assign to a date when the person is NOT missing (they must be back).
+                    for (const dk of sameMonthSpecials) {
+                        if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
+                        const dateObj = new Date(dk + 'T00:00:00');
+                        if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
+                        targetKey = dk;
+                        break;
+                    }
+                    if (!targetKey) {
+                        for (const dk of sortedSpecial) {
+                            if (dk <= missedDateKey) continue;
+                            if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
+                            const dateObj = new Date(dk + 'T00:00:00');
+                            if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
+                            targetKey = dk;
+                            break;
+                        }
+                    }
+                    if (!targetKey) continue;
+                    usedReturnFromMissingSpecial.add(`${targetKey}:${groupNum}`);
+                    const displacedPerson = tempSpecialAssignments[targetKey]?.[groupNum] || null;
+                    const targetMonthKey = getMonthKeyFromDate(new Date(targetKey + 'T00:00:00'));
+                    const isSameMonthSwap = targetMonthKey === missedMonthKey;
+                    // Strict baseline: person who should take the missed date in a same-month swap is the BASELINE for the target date (next in rotation), not whoever was temporarily assigned
+                    const baselinePersonForTarget = specialRotationPersons[targetKey]?.[groupNum] || displacedPerson;
+
+                    if (!tempSpecialAssignments[targetKey]) tempSpecialAssignments[targetKey] = {};
+                    tempSpecialAssignments[targetKey][groupNum] = personName;
+                    const reasonText = displacedPerson
+                        ? `Επέστρεψε από απουσία· αντικατέστησε προσωρινά ${displacedPerson} στην ημερομηνία αυτή.`
+                        : 'Επέστρεψε από απουσία.';
+                    storeAssignmentReason(targetKey, groupNum, personName, 'skip', reasonText, displacedPerson, null, { returnFromMissing: true, missingEnd: missedDateKey });
+
+                    // Same-month swap: assign to missed date the baseline person for target, or next eligible in rotation if that person is also missing
+                    if (isSameMonthSwap && baselinePersonForTarget) {
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
+                        const groupPeople = groupData.special || [];
+                        const missedDateObj = new Date(missedDateKey + 'T00:00:00');
+                        let personForMissedDate = null;
+                        const startIndex = groupPeople.indexOf(baselinePersonForTarget);
+                        const rotationDays = groupPeople.length;
+                        if (rotationDays > 0) {
+                            for (let offset = 0; offset <= rotationDays * 2; offset++) {
+                                const idx = startIndex >= 0 ? (startIndex + offset) % rotationDays : offset % rotationDays;
+                                const candidate = groupPeople[idx];
+                                if (!candidate) continue;
+                                if (candidate === personName) continue; // returner is taking target date
+                                if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
+                                if (isPersonMissingOnDate(candidate, groupNum, missedDateObj, 'special')) continue;
+                                personForMissedDate = candidate;
+                                break;
+                            }
+                        }
+                        if (!personForMissedDate) personForMissedDate = baselinePersonForTarget; // fallback
+                        if (!tempSpecialAssignments[missedDateKey]) tempSpecialAssignments[missedDateKey] = {};
+                        const previousOnMissed = tempSpecialAssignments[missedDateKey][groupNum] || null;
+                        tempSpecialAssignments[missedDateKey][groupNum] = personForMissedDate;
+                        const swapReason = personForMissedDate === baselinePersonForTarget
+                            ? `Αντικατάσταση· ανταλλαγή ημερομηνίας με ${personName} (απουσία ${missedDateKey}).`
+                            : `Αντικατάσταση· ${baselinePersonForTarget} απουσία ${missedDateKey}, ανατέθηκε ο/η ${personForMissedDate}. Ανταλλαγή με ${personName}.`;
+                        storeAssignmentReason(missedDateKey, groupNum, personForMissedDate, 'skip', swapReason, previousOnMissed, null, { sameMonthSwap: true, swappedWith: personName });
+                        const monthKeyMissed = getMonthKeyFromDate(missedDate);
+                        if (simulatedSpecialAssignmentsForConflict[monthKeyMissed]?.[groupNum]) {
+                            if (previousOnMissed) simulatedSpecialAssignmentsForConflict[monthKeyMissed][groupNum].delete(previousOnMissed);
+                            simulatedSpecialAssignmentsForConflict[monthKeyMissed][groupNum].add(personForMissedDate);
+                        }
+                    }
+
+                    const monthKeyT = getMonthKeyFromDate(new Date(targetKey + 'T00:00:00'));
+                    if (simulatedSpecialAssignmentsForConflict[monthKeyT]?.[groupNum]) {
+                        if (displacedPerson) simulatedSpecialAssignmentsForConflict[monthKeyT][groupNum].delete(displacedPerson);
+                        simulatedSpecialAssignmentsForConflict[monthKeyT][groupNum].add(personName);
+                    }
+                }
+                
+                // Build preview table after return-from-missing so we show baseline vs αντικατάσταση (including return-from-missing)
                 for (const dateKey of sortedSpecial) {
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    const holidayName = getRecurringSpecialHolidayDisplayName(dateKey);
+                    const dayName = getGreekDayName(date);
+                    let holidayName = '';
+                    const year = date.getFullYear();
+                    const month = date.getMonth() + 1;
+                    const day = date.getDate();
+                    for (const holidayDef of recurringSpecialHolidays) {
+                        if (holidayDef.type === 'fixed' && holidayDef.month === month && holidayDef.day === day) {
+                            holidayName = holidayDef.name;
+                            break;
+                        } else if (holidayDef.type === 'easter-relative') {
+                            const orthodoxHolidays = calculateOrthodoxHolidays(year);
+                            const easterDate = orthodoxHolidays.easterSunday;
+                            const holidayDate = new Date(easterDate);
+                            holidayDate.setDate(holidayDate.getDate() + (holidayDef.offset || 0));
+                            if (formatDateKey(holidayDate) === dateKey) {
+                                holidayName = holidayDef.name;
+                                break;
+                            }
+                        }
+                    }
                     html += '<tr>';
                     html += `<td><strong>${dateStr}</strong></td>`;
-                    html += `<td>${holidayName}</td>`;
+                    html += `<td>${holidayName || 'Ειδική Αργία'}</td>`;
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const groupData =
-                            (typeof groupsForDuty === 'function'
-                                ? groupsForDuty(groupNum, dateKey)
-                                : groups[groupNum]) || { special: [] };
+                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
                         const groupPeople = groupData.special || [];
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
@@ -3593,38 +3928,33 @@
                     }
                     html += '</tr>';
                 }
-
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempSpecialAssignments = tempSpecialAssignments;
-                // Display baseline (πρώτο slot) vs continuity baseline (τελευταίο καταναλωμένο slot για επόμενο μήνα)
+                // Store pure rotation baseline (rotation person per date) for saving to Firestore – so continuation uses baseline, not returner
                 calculationSteps.tempSpecialBaselineAssignments = specialRotationPersons;
-                calculationSteps.tempSpecialSlotContinuity = specialSlotContinuity;
 
                 // Store last rotation person for each group (overall, for end-of-range continuation)
-                // Χρησιμοποιούμε slotContinuity (τελευταίο καταναλωμένο slot), όχι μόνο το πρώτο της αλυσίδας.
+                // Use BASELINE (rotation) person for the last date so that when return-from-missing placed A/B (displacing C/D), we continue from E next month
                 calculationSteps.lastSpecialRotationPositions = {};
                 for (let g = 1; g <= 4; g++) {
-                    let lastContinuityPerson = null;
+                    let lastBaselinePerson = null;
                     for (let i = sortedSpecial.length - 1; i >= 0; i--) {
                         const dateKey = sortedSpecial[i];
-                        const continuityPerson =
-                            specialSlotContinuity[dateKey]?.[g] ?? specialRotationPersons[dateKey]?.[g];
-                        if (continuityPerson) {
-                            lastContinuityPerson = continuityPerson;
+                        const baselinePerson = specialRotationPersons[dateKey]?.[g];
+                        if (baselinePerson) {
+                            lastBaselinePerson = baselinePerson;
                             break;
                         }
                     }
-                    if (lastContinuityPerson) {
-                        calculationSteps.lastSpecialRotationPositions[g] = lastContinuityPerson;
-                        console.log(
-                            `[SPECIAL ROTATION] Storing last continuity slot ${lastContinuityPerson} for group ${g} for continuation`
-                        );
+                    if (lastBaselinePerson) {
+                        calculationSteps.lastSpecialRotationPositions[g] = lastBaselinePerson;
+                        console.log(`[SPECIAL ROTATION] Storing last baseline (rotation) person ${lastBaselinePerson} for group ${g} for continuation`);
                     }
                 }
 
-                // Per month: continuity anchor (τελευταίο slot περιστροφής στον μήνα) για seed επόμενου μήνα
-                const lastSpecialRotationPositionsByMonth = {};
+                // Store last rotation person per month: use ASSIGNED person on last date in month so lastRotationPositions matches specialHolidayAssignments and next month continues from who actually did the duty
+                const lastSpecialRotationPositionsByMonth = {}; // monthKey -> { groupNum -> assignedPerson }
                 for (let i = sortedSpecial.length - 1; i >= 0; i--) {
                     const dateKey = sortedSpecial[i];
                     const d = new Date(dateKey + 'T00:00:00');
@@ -3634,12 +3964,9 @@
                     }
                     for (let g = 1; g <= 4; g++) {
                         if (lastSpecialRotationPositionsByMonth[monthKey][g] !== undefined) continue;
-                        const continuityPerson =
-                            specialSlotContinuity[dateKey]?.[g] ??
-                            specialRotationPersons[dateKey]?.[g] ??
-                            tempSpecialAssignments[dateKey]?.[g];
-                        if (continuityPerson) {
-                            lastSpecialRotationPositionsByMonth[monthKey][g] = continuityPerson;
+                        const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
+                        if (assignedPerson) {
+                            lastSpecialRotationPositionsByMonth[monthKey][g] = assignedPerson;
                         }
                     }
                 }
@@ -3653,118 +3980,6 @@
             html += '</div>';
             stepContent.innerHTML = html;
         }
-        /** Λόγος αλλαγής ειδικής στο modal αποτελεσμάτων — όχι generic «σύγκρουση» όταν υπάρχει engine reason. */
-        function resolveSpecialHolidayChangeReason(dateKey, groupNum, baseline, computed, date) {
-            const compReason =
-                typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, computed) : null;
-            const meta = compReason?.meta || {};
-            const raw = String(compReason?.reason || '').trim();
-
-            if (meta.debtRepayment) {
-                const owed = meta.owedFromDateKey || '';
-                const displaced = meta.displacedSlotPerson || compReason?.swappedWith || baseline;
-                return (
-                    raw ||
-                    `Εξόφληση οφειλής ειδικής${owed ? ` (από ${owed})` : ''}. Το slot ${displaced || baseline} μετακινήθηκε σε επόμενη ειδική.`
-                ).split('.').filter(Boolean)[0];
-            }
-            if (meta.displacedCascade) {
-                return (raw || 'Τοποθετήθηκε λόγω μετακίνησης από προηγούμενη ειδική (cascade).').split('.').filter(Boolean)[0];
-            }
-            if (meta.returnFromMissing) {
-                return (raw || 'Επέστρεψε από απουσία.').split('.').filter(Boolean)[0];
-            }
-            if (meta.replacementType === 'already-on-special') {
-                return (
-                    raw ||
-                    `Ο/η ${baseline} είχε ήδη ειδική στην περίοδο — αντικαταστάτης ο/η ${computed}.`
-                ).split('.').filter(Boolean)[0];
-            }
-            if (
-                meta.unavailableReplacement ||
-                meta.replacementType === 'next-in-baseline' ||
-                (compReason?.swappedWith && computed)
-            ) {
-                if (typeof resolveUnavailableReplacementDisplayText === 'function' && compReason) {
-                    const rebuilt = resolveUnavailableReplacementDisplayText(
-                        compReason,
-                        dateKey,
-                        groupNum,
-                        computed,
-                        'special'
-                    );
-                    if (rebuilt) return rebuilt.split('.').filter(Boolean)[0];
-                }
-                if (
-                    typeof isPersonDisabledForDuty === 'function' &&
-                    isPersonDisabledForDuty(baseline, groupNum, 'special')
-                ) {
-                    return (
-                        buildUnavailableReplacementReason({
-                            skippedPersonName: baseline,
-                            replacementPersonName: computed,
-                            dateObj: date,
-                            groupNum,
-                            dutyCategory: 'special'
-                        }) || ''
-                    )
-                        .split('.')
-                        .filter(Boolean)[0];
-                }
-                if (
-                    typeof isPersonMissingOnDate === 'function' &&
-                    isPersonMissingOnDate(baseline, groupNum, date, 'special')
-                ) {
-                    return (
-                        buildUnavailableReplacementReason({
-                            skippedPersonName: baseline,
-                            replacementPersonName: computed,
-                            dateObj: date,
-                            groupNum,
-                            dutyCategory: 'special'
-                        }) || ''
-                    )
-                        .split('.')
-                        .filter(Boolean)[0];
-                }
-                if (raw) return raw.split('.').filter(Boolean)[0];
-            }
-            if (raw) return raw.split('.').filter(Boolean)[0];
-            if (
-                typeof isPersonDisabledForDuty === 'function' &&
-                isPersonDisabledForDuty(baseline, groupNum, 'special')
-            ) {
-                return (
-                    buildUnavailableReplacementReason({
-                        skippedPersonName: baseline,
-                        replacementPersonName: computed,
-                        dateObj: date,
-                        groupNum,
-                        dutyCategory: 'special'
-                    }) || ''
-                )
-                    .split('.')
-                    .filter(Boolean)[0];
-            }
-            if (
-                typeof isPersonMissingOnDate === 'function' &&
-                isPersonMissingOnDate(baseline, groupNum, date, 'special')
-            ) {
-                return (
-                    buildUnavailableReplacementReason({
-                        skippedPersonName: baseline,
-                        replacementPersonName: computed,
-                        dateObj: date,
-                        groupNum,
-                        dutyCategory: 'special'
-                    }) || ''
-                )
-                    .split('.')
-                    .filter(Boolean)[0];
-            }
-            return 'Αλλαγή (κανόνας/σύγκρουση)';
-        }
-
         function showSpecialHolidayResultsAndProceed() {
             try {
                 const dayTypeLists = calculationSteps.dayTypeLists || { special: [] };
@@ -3805,7 +4020,22 @@
                         if (!base || !comp) continue;
                         if (base === comp) continue;
 
-                        const reason = resolveSpecialHolidayChangeReason(dateKey, groupNum, base, comp, date);
+                        let reason = '';
+                        const compReason = getAssignmentReason(dateKey, groupNum, comp);
+                        if (compReason && compReason.meta && compReason.meta.returnFromMissing) {
+                            reason = (compReason.reason || 'Επέστρεψε από απουσία.').split('.').filter(Boolean)[0] || 'Επέστρεψε από απουσία';
+                        } else if (isPersonDisabledForDuty(base, groupNum, 'special') || isPersonMissingOnDate(base, groupNum, date, 'special')) {
+                            // Keep the same style as other steps: show the first sentence (without "Ανατέθηκε...")
+                            reason = buildUnavailableReplacementReason({
+                                skippedPersonName: base,
+                                replacementPersonName: comp,
+                                dateObj: date,
+                                groupNum,
+                                dutyCategory: 'special'
+                            }) || '';
+                        } else {
+                            reason = 'Αλλαγή (κανόνας/σύγκρουση)';
+                        }
 
                         changes.push({
                             dateKey,
@@ -3881,9 +4111,6 @@
                         setStepFooterBusy(true);
                         try {
                             await saveStep1_SpecialHolidays();
-                            if (typeof markCalculationStepCommitted === 'function') {
-                                markCalculationStepCommitted(1);
-                            }
                             calculationSteps.currentStep = 2;
                             renderCurrentStep();
                             const m = bootstrap.Modal.getInstance(document.getElementById('specialHolidayResultsModal'));
@@ -3963,7 +4190,6 @@
                 
                 const tempSpecialAssignments = calculationSteps.tempSpecialAssignments || {};
                 const tempSpecialBaselineAssignments = calculationSteps.tempSpecialBaselineAssignments || {};
-                const tempSpecialSlotContinuity = calculationSteps.tempSpecialSlotContinuity || {};
                 const lastSpecialRotationPositionsByMonth = calculationSteps.lastSpecialRotationPositionsByMonth || {};
                 
                 // Save special holiday assignments to Firestore (μόνο ομάδες επανυπολογισμού — merge με υπάρχουσες)
@@ -3984,15 +4210,12 @@
                     console.log('Saved Step 1 special holiday assignments to Firestore:', Object.keys(toOrganize).length, 'dates');
                 }
 
-                // Save special-holiday rotation baseline: slot ανά ημέρα (πρώτο slot περιστροφής — βασική σειρά εμφάνισης)
+                // Save special-holiday rotation baseline (pure rotation order) to Firestore
                 if (Object.keys(tempSpecialBaselineAssignments).length > 0) {
                     const formattedBaseline = formatGroupAssignmentsToStringMap(tempSpecialBaselineAssignments);
                     const organizedBaseline = organizeAssignmentsByMonth(formattedBaseline);
                     await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'rotationBaselineSpecialAssignments', organizedBaseline);
                     Object.assign(rotationBaselineSpecialAssignments, formattedBaseline);
-                    if (typeof rebuildRotationBaselineLastByType === 'function') {
-                        rebuildRotationBaselineLastByType();
-                    }
                 }
                 
                 // Save last rotation positions for special holidays (per month)
@@ -4015,36 +4238,6 @@
                         updatedBy: user.uid
                     });
                     console.log('Saved Step 1 last rotation positions for special holidays (per month) to Firestore:', lastSpecialRotationPositionsByMonth);
-                }
-
-                // Αποθήκευση assignmentReasons + pendingSpecialDebts — continuity επόμενου μήνα
-                try {
-                    if (typeof syncPendingSpecialDebtsFromAllSavedData === 'function') {
-                        syncPendingSpecialDebtsFromAllSavedData();
-                    }
-                    const payload =
-                        typeof buildAssignmentReasonsSavePayload === 'function'
-                            ? buildAssignmentReasonsSavePayload()
-                            : assignmentReasons;
-                    const hasReasonDates = Object.keys(assignmentReasons).some((k) => /^\d{4}-\d{2}-\d{2}$/.test(k));
-                    const hasPendingDebts = Array.isArray(pendingSpecialDebts) && pendingSpecialDebts.length > 0;
-                    if (hasReasonDates || hasPendingDebts) {
-                        const sanitizedReasons = sanitizeForFirestore(payload);
-                        await db.collection('dutyShifts').doc('assignmentReasons').set({
-                            ...sanitizedReasons,
-                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                            updatedBy: user.uid
-                        });
-                        console.log(
-                            'Saved assignmentReasons to Firestore after Step 1 (special holidays)',
-                            hasPendingDebts ? `pendingSpecialDebts: ${pendingSpecialDebts.length}` : ''
-                        );
-                    }
-                } catch (reasonErr) {
-                    console.error('Error saving assignmentReasons after Step 1:', reasonErr);
-                }
-                if (typeof renderCalendar === 'function') {
-                    renderCalendar();
                 }
             } catch (error) {
                 console.error('Error saving Step 1 (Special Holidays) to Firestore:', error);
@@ -4709,9 +4902,6 @@
                     setStepFooterBusy(true);
                     try {
                         await saveFinalWeekendAssignments(updatedAssignments);
-                        if (typeof markCalculationStepCommitted === 'function') {
-                            markCalculationStepCommitted(2);
-                        }
                         // Proceed to Step 3
                         calculationSteps.currentStep = 3;
                         renderCurrentStep();
@@ -5467,9 +5657,6 @@
                     setStepFooterBusy(true);
                     try {
                         await saveFinalSemiNormalAssignments(updatedAssignments);
-                        if (typeof markCalculationStepCommitted === 'function') {
-                            markCalculationStepCommitted(3);
-                        }
                         // Proceed to Step 4
                         calculationSteps.currentStep = 4;
                         renderCurrentStep();
@@ -6054,11 +6241,8 @@
                         // Process deferred return-from-missing: assign 3 normal days after return in current calculated month.
                         const deferredList = calculationSteps.deferredReturnFromMissing || [];
                         calculationSteps.deferredReturnFromMissing = deferredList.filter((entry) => {
-                            const personName = entry.personName, groupNum = entry.groupNum, pEndKey = entry.pEndKey;
-                            const pStartKeyDefer = entry.pStartKey || lookupMissingPeriodStartKey(groupNum, personName, pEndKey);
-                            if (isAbsenceLongerThanOneMonth(pStartKeyDefer, pEndKey)) return false;
                             if (entry.returnKey < calcStartKey || entry.returnKey > calcEndKey) return true;
-                            const returnKey = entry.returnKey;
+                            const personName = entry.personName, groupNum = entry.groupNum, returnKey = entry.returnKey, pEndKey = entry.pEndKey;
                             // Already placed in a previous month for this same missing period (pEndKey)? Skip deferred – no re-assign here.
                             for (const dk in assignmentReasons) {
                                 if (dk >= returnKey) continue;
@@ -6195,23 +6379,6 @@
                                     const pStartKey = inputValueToDateKey(period?.start);
                                     const pEndKey = inputValueToDateKey(period?.end);
                                     if (!pStartKey || !pEndKey) continue;
-                                    if (!shouldUseReturnFromMissingForPeriod(period, pStartKey, pEndKey)) {
-                                        if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
-                                            dutyNormalDebug.recordReturnFromMissingPlan({
-                                                personName,
-                                                groupNum,
-                                                pStartKey,
-                                                pEndKey,
-                                                returnKey: addDaysToDateKey(pEndKey, 1),
-                                                firstMissedKey: null,
-                                                targetKey: null,
-                                                status: 'skipped',
-                                                reasonCode: 'RETURN_SKIPPED_LONG_ABSENCE',
-                                                message: 'Απουσία >1 μήνας — επανένταξη στη φυσική σειρά καθημερινών'
-                                            });
-                                        }
-                                        continue;
-                                    }
                                     const endInRange = (pEndKey >= calcStartKey && pEndKey <= calcEndKey);
                                     const endInPrevMonth = periodEndsInPrevMonth(pEndKey);
                                     // Also accept when return day (day after period end) falls in calculation range
@@ -6287,7 +6454,7 @@
                                         }
                                         if (returnKey > calcEndKey) {
                                             calculationSteps.deferredReturnFromMissing = calculationSteps.deferredReturnFromMissing || [];
-                                            calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pStartKey, pEndKey, returnKey });
+                                            calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pEndKey, returnKey });
                                         }
                                         continue;
                                     }
@@ -6413,7 +6580,7 @@
                                     // 3) If no slot in calculated month and return is next month: defer to next month calculation.
                                     if (!targetKey && returnKey > calcEndKey) {
                                         calculationSteps.deferredReturnFromMissing = calculationSteps.deferredReturnFromMissing || [];
-                                        calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pStartKey, pEndKey, returnKey, track });
+                                        calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pEndKey, returnKey, track });
                                     }
 
                                     if (!targetKey) {
@@ -7679,13 +7846,7 @@
         }
         async function cancelStepByStepCalculation() {
             const snap = calculationSteps.cancelRestoreSnapshot;
-            const committed = calculationSteps.highestCommittedStep || 0;
             calculationSteps.cancelRestoreSnapshot = null;
-            calculationSteps.highestCommittedStep = 0;
-            calculationSteps.stripManualOverrideGroups = [];
-            if (typeof clearPendingLoadDataAfterCalcCancel === 'function') {
-                clearPendingLoadDataAfterCalcCancel(committed);
-            }
 
             const modal = bootstrap.Modal.getInstance(document.getElementById('stepByStepCalculationModal'));
             if (modal) {
@@ -7697,18 +7858,16 @@
             document.body.style.overflow = '';
             document.body.style.paddingRight = '';
 
-            if (committed === 0 && snap && typeof restoreDutyShiftsCancelRestoreSnapshot === 'function') {
+            if (snap && typeof restoreDutyShiftsCancelRestoreSnapshot === 'function') {
                 restoreDutyShiftsCancelRestoreSnapshot(snap);
                 try {
                     if (typeof saveData === 'function') await saveData();
+                    if (typeof renderCalendar === 'function') renderCalendar();
                 } catch (err) {
                     console.error('cancelStepByStepCalculation restore:', err);
                     alert('Η ακύρωση επανέφερε τα δεδομένα στη μνήμη, αλλά αποτυχία αποθήκευσης στο cloud. Δοκιμάστε ξανά ή ανανεώστε τη σελίδα.');
                 }
             }
-            if (typeof renderGroups === 'function') renderGroups();
-            if (typeof renderCalendar === 'function') renderCalendar();
-            if (typeof updateStatistics === 'function') updateStatistics();
         }
         async function executeCalculation() {
             let loadingAlert = null;
@@ -8015,11 +8174,17 @@
                 }
                 await saveData();
                 
-                // Refresh all UI components from in-memory state (do not reload from Firebase)
+                // Reload data from Firebase to refresh the display
+                if (loadingAlert && loadingAlert.parentNode) {
+                    loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Φόρτωση δεδομένων...';
+                }
+                await loadData();
+                
+                // Refresh all UI components
                 renderGroups();
                 renderHolidays();
                 renderRecurringHolidays();
-                renderCalendar();
+            renderCalendar();
                 updateStatistics();
                 
                 // Remove loading indicator
@@ -8579,19 +8744,6 @@
                                 const pStartKey = period.start;
                                 const pEndKey = period.end;
                                 if (!pStartKey || !pEndKey) continue;
-                                if (!shouldUseReturnFromMissingForPeriod(period, pStartKey, pEndKey)) {
-                                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
-                                        dutyWeekendDebug.recordAbsentPlacement({
-                                            groupNum,
-                                            personName,
-                                            absenceEndKey: pEndKey,
-                                            status: 'skipped',
-                                            reasonCode: 'RETURN_SKIPPED_LONG_ABSENCE',
-                                            message: 'Απουσία >1 μήνας — επανένταξη στη φυσική σειρά ΣΚ/αργιών'
-                                        });
-                                    }
-                                    continue;
-                                }
                                 const calcStartDateObj = calcStartKeyW ? new Date(calcStartKeyW + 'T00:00:00') : null;
                                 const prevMonthStart = calcStartDateObj ? new Date(calcStartDateObj.getFullYear(), calcStartDateObj.getMonth() - 1, 1) : null;
                                 const prevMonthStartKey = prevMonthStart ? formatDateKey(prevMonthStart) : null;
@@ -9248,10 +9400,7 @@
                             assignedPerson = applyManualAlternateToAssignedPerson(
                                 assignedPerson,
                                 existingManualAlternateWeekend,
-                                wasDisabledOnlySkippedWeekend,
-                                date,
-                                groupNum,
-                                'weekend'
+                                wasDisabledOnlySkippedWeekend
                             );
                             if (
                                 existingManualAlternateWeekend &&
@@ -9530,8 +9679,6 @@
             });
 
             const sortedSemi = [...(semiNormalDays || [])].sort();
-            calculationSteps.rotationContinuityInRun = calculationSteps.rotationContinuityInRun || {};
-            calculationSteps.rotationContinuityInRun.semi = {};
             if (sortedSemi.length === 0) {
                 stepContent.innerHTML = '<div class="step-content"><h6 class="mb-3">Ημιαργίες</h6><div class="alert alert-info">Δεν υπάρχουν ημιαργίες στην επιλεγμένη περίοδο.</div></div>';
                 return;
@@ -9617,19 +9764,6 @@
                             const pStartKey = inputValueToDateKey(period?.start);
                             const pEndKey = inputValueToDateKey(period?.end);
                             if (!pStartKey || !pEndKey) continue;
-                            if (!shouldUseReturnFromMissingForPeriod(period, pStartKey, pEndKey)) {
-                                if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
-                                    dutySemiDebug.recordAbsentPlacement({
-                                        groupNum,
-                                        personName,
-                                        absenceEndKey: pEndKey,
-                                        status: 'skipped',
-                                        reasonCode: 'RETURN_SKIPPED_LONG_ABSENCE',
-                                        message: 'Απουσία >1 μήνας — επανένταξη στη φυσική σειρά ημιαργιών'
-                                    });
-                                }
-                                continue;
-                            }
                             const pEndDate = new Date(pEndKey + 'T00:00:00');
                             const calcStartDateObj = calcStartKey ? new Date(calcStartKey + 'T00:00:00') : null;
                             const prevMonthStart = calcStartDateObj ? new Date(calcStartDateObj.getFullYear(), calcStartDateObj.getMonth() - 1, 1) : null;
@@ -9801,7 +9935,6 @@
                 const meta = semiMeta[dateKey];
                 if (!meta) continue;
                 const { date, monthKey } = meta;
-                if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                 if (prevCalMonthKeySemiDeferRun !== monthKey) {
                     for (const k of Object.keys(deferManualAlternateSkipSemiRun)) delete deferManualAlternateSkipSemiRun[k];
                     if (typeof seedManualAlternateDeferAllGroupsForMonthStart === 'function') {
@@ -9826,36 +9959,19 @@
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
                         const map = extractGroupAssignmentsMap(semiNormalAssignments?.[dateKey]);
-                        const preserved = map[groupNum];
-                        if (
-                            preserved &&
-                            !(
-                                typeof isPersonDisabledForDuty === 'function' &&
-                                isPersonDisabledForDuty(preserved, groupNum, 'semi', date)
-                            )
-                        ) {
+                        if (map[groupNum]) {
                             if (!baseline[dateKey]) baseline[dateKey] = {};
-                            baseline[dateKey][groupNum] = preserved;
+                            baseline[dateKey][groupNum] = map[groupNum];
                         }
                         continue;
                     }
-                    const groupData =
-                        (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum, dateKey) : groups[groupNum]) ||
-                        { semi: [] };
+                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { semi: [] };
                     const groupPeople = groupData.semi || [];
                     if (groupPeople.length === 0) continue;
                     const rotationDays = groupPeople.length;
                     const designated = returnFromMissingSemiTargetsRun[dateKey]?.[groupNum];
                     const designatedInList = designated && groupPeople.find(p => normSemiRun(p) === normSemiRun(designated.personName));
-                    if (
-                        designated &&
-                        designatedInList &&
-                        !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi') &&
-                        !(
-                            typeof isPersonDisabledForDuty === 'function' &&
-                            isPersonDisabledForDuty(designated.personName, groupNum, 'semi', date)
-                        )
-                    ) {
+                    if (designated && designatedInList && !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi')) {
                         baseline[dateKey][groupNum] = designatedInList;
                         const displacedPerson = baselineSemiByDate[dateKey]?.[groupNum];
                         const originalIndex = displacedPerson != null ? groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(displacedPerson)) : -1;
@@ -9863,7 +9979,6 @@
                         globalSemiPos[groupNum] = (originalIndex >= 0 ? originalIndex : (designatedIndex >= 0 ? designatedIndex + 1 : 0)) % rotationDays;
                         const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                         storeAssignmentReason(dateKey, groupNum, designated.personName, 'skip', semiReasonText, null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
-                        recordRotationContinuityInRun('semi', monthKey, groupNum, dateKey, designatedInList, baseline);
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.recordAbsentPlacement({
                                 groupNum,
@@ -9881,7 +9996,6 @@
                         reseedGlobalRotationPositionAtMonthStart('semi', date, groupNum, groupPeople, globalSemiPos);
                     }
                     let pos = globalSemiPos[groupNum] % rotationDays;
-                    let deferFulfillmentSemiRun = null;
                     const existingManualAlternateSemiRun = findExistingManualAlternateOnDateGroup(dateKey, groupNum);
                     if (existingManualAlternateSemiRun) {
                         const bi = groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(existingManualAlternateSemiRun.baseline));
@@ -9893,6 +10007,7 @@
                         const stDefer = deferManualAlternateSkipSemiRun[groupNum];
                         if (stDefer?.person) {
                             const dn = normSemiRun(stDefer.person);
+                            let deferFulfillmentSemiRun = null;
                             if (groupPeople[pos] && normSemiRun(groupPeople[pos]) === dn) {
                                 const latestSemi =
                                     typeof getManualAlternateDeferFromPreviousMonth === 'function'
@@ -9908,22 +10023,21 @@
                                             : null
                                 };
                             }
+                            let guard = 0;
+                            while (
+                                guard++ <= rotationDays + 2 &&
+                                groupPeople[pos] &&
+                                normSemiRun(groupPeople[pos]) === dn
+                            ) {
+                                pos = (pos + 1) % rotationDays;
+                                delete deferManualAlternateSkipSemiRun[groupNum];
+                            }
+                            globalSemiPos[groupNum] = pos;
+                            if (deferFulfillmentSemiRun) {
+                                deferFulfillmentSemiRun.rotationSlotPerson = groupPeople[pos] || null;
+                                semiDeferFulfillmentPending[`${dateKey}:${groupNum}`] = deferFulfillmentSemiRun;
+                            }
                         }
-                    }
-                    const deferSkipForAdvance = deferManualAlternateSkipSemiRun[groupNum]?.person || null;
-                    const posBeforeDeferAdvance = pos;
-                    pos = advanceSemiPosPastUnavailable(groupPeople, groupNum, dateKey, pos, deferSkipForAdvance);
-                    if (
-                        deferSkipForAdvance &&
-                        groupPeople[posBeforeDeferAdvance] &&
-                        normSemiRun(groupPeople[posBeforeDeferAdvance]) === normSemiRun(deferSkipForAdvance)
-                    ) {
-                        delete deferManualAlternateSkipSemiRun[groupNum];
-                    }
-                    globalSemiPos[groupNum] = pos;
-                    if (deferFulfillmentSemiRun) {
-                        deferFulfillmentSemiRun.rotationSlotPerson = groupPeople[pos] || null;
-                        semiDeferFulfillmentPending[`${dateKey}:${groupNum}`] = deferFulfillmentSemiRun;
                     }
                     let person = groupPeople[pos];
                     const rotationPersonAtSlot = person;
@@ -9935,7 +10049,7 @@
                         });
                     }
                     // DISABLED: When rotation person is disabled, whole baseline shifts – store eligible person, no replacement line.
-                    if (person && isPersonDisabledForDuty(person, groupNum, 'semi', date)) {
+                    if (person && isPersonDisabledForDuty(person, groupNum, 'semi')) {
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.logStep('disabled-baseline', `${person} απενεργοποιημένος — αναζήτηση επόμενου.`);
                         }
@@ -9947,7 +10061,7 @@
                             const candidate = groupPeople[idx];
                             if (!candidate) continue;
                             if (deferSkipPersonRun && normSemiRun(candidate) === normSemiRun(deferSkipPersonRun)) continue;
-                            if (isPersonDisabledForDuty(candidate, groupNum, 'semi', date)) continue;
+                            if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                             eligiblePerson = candidate;
                             eligibleIndex = idx;
@@ -9960,7 +10074,7 @@
                                 eligiblePerson
                             );
                         }
-                        baseline[dateKey][groupNum] = eligiblePerson || undefined;
+                        baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
                         if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
                             storeUnavailableReplacementReason(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date, 'semi');
                         }
@@ -9978,7 +10092,7 @@
                             const candidate = groupPeople[idx];
                             if (!candidate) continue;
                             if (deferSkipPersonRunMissing && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunMissing)) continue;
-                            if (isPersonDisabledForDuty(candidate, groupNum, 'semi', date)) continue;
+                            if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                             eligiblePerson = candidate;
                             eligibleIndex = idx;
@@ -9991,7 +10105,7 @@
                                 eligiblePerson
                             );
                         }
-                        baseline[dateKey][groupNum] = eligiblePerson || undefined;
+                        baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
                         if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
                             storeUnavailableReplacementReason(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date, 'semi');
                             if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
@@ -10018,24 +10132,13 @@
                     baseline[dateKey][groupNum] = applyManualAlternateToAssignedPerson(
                         baseline[dateKey][groupNum],
                         existingManualAlternateSemiRun,
-                        false,
-                        date,
-                        groupNum,
-                        'semi'
+                        false
                     );
                     if (existingManualAlternateSemiRun && baseline[dateKey][groupNum] &&
                         normSemiRun(baseline[dateKey][groupNum]) === normSemiRun(existingManualAlternateSemiRun.replacement)) {
                         nextPos = (pos + 1) % rotationDays;
                     }
                     globalSemiPos[groupNum] = nextPos;
-                    recordRotationContinuityInRun(
-                        'semi',
-                        monthKey,
-                        groupNum,
-                        dateKey,
-                        baseline[dateKey][groupNum],
-                        baseline
-                    );
                 }
             }
 
@@ -10523,7 +10626,6 @@
                                 const pStartKey = inputValueToDateKey(period?.start);
                                 const pEndKey = inputValueToDateKey(period?.end);
                                 if (!pStartKey || !pEndKey) continue;
-                                if (!shouldUseReturnFromMissingForPeriod(period, pStartKey, pEndKey)) continue;
                                 // Allow periods that ended within calculation range OR in the month immediately before calcStartKey
                                 // (e.g., if calculating March, also check periods ending in February)
                                 const pEndDate = new Date(pEndKey + 'T00:00:00');
@@ -10864,10 +10966,7 @@
                             assignedPerson = applyManualAlternateToAssignedPerson(
                                 assignedPerson,
                                 existingManualAlternateSemi,
-                                wasDisabledOnlySkippedSemi,
-                                date,
-                                groupNum,
-                                'semi'
+                                wasDisabledOnlySkippedSemi
                             );
                             if (existingManualAlternateSemi && assignedPerson && !wasDisabledOnlySkippedSemi) {
                                 const normS = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
@@ -11487,23 +11586,6 @@
                         const pStartKey = inputValueToDateKey(period?.start);
                         const pEndKey = inputValueToDateKey(period?.end);
                         if (!pStartKey || !pEndKey) continue;
-                        if (!shouldUseReturnFromMissingForPeriod(period, pStartKey, pEndKey)) {
-                            if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
-                                dutyNormalDebug.recordReturnFromMissingPlan({
-                                    personName,
-                                    groupNum,
-                                    pStartKey,
-                                    pEndKey,
-                                    returnKey: addDays(pEndKey, 1),
-                                    firstMissedKey: null,
-                                    targetKey: null,
-                                    status: 'skipped',
-                                    reasonCode: 'RETURN_SKIPPED_LONG_ABSENCE',
-                                    message: 'Απουσία >1 μήνας — επανένταξη στη φυσική σειρά καθημερινών'
-                                });
-                            }
-                            continue;
-                        }
                         const endInRange = pEndKey >= calcStartKey && pEndKey <= calcEndKey;
                         const endInPrevMonth = periodEndsInPrevMonth(pEndKey);
                         const returnKeyForRange = addDays(pEndKey, 1);
@@ -11557,7 +11639,6 @@
                                 calculationSteps.deferredReturnFromMissing.push({
                                     personName,
                                     groupNum,
-                                    pStartKey,
                                     pEndKey,
                                     returnKey
                                 });
@@ -11612,7 +11693,6 @@
                                 calculationSteps.deferredReturnFromMissing.push({
                                     personName,
                                     groupNum,
-                                    pStartKey,
                                     pEndKey,
                                     returnKey,
                                     track

@@ -283,8 +283,8 @@
                     return;
                 }
                 const norm =
-                    typeof validateStatusEffectiveDateKey === 'function'
-                        ? validateStatusEffectiveDateKey(raw)
+                    typeof normalizeStatusEffectiveFromDateKey === 'function'
+                        ? normalizeStatusEffectiveFromDateKey(raw)
                         : raw;
                 _statusChangeEffectiveResolved = true;
                 const cb = _statusChangeEffectiveCallbacks && _statusChangeEffectiveCallbacks.onConfirm;
@@ -724,9 +724,6 @@
             }
         }
         function renderGroups(preserveOpenLists = true, forceOpenLists = []) {
-            if (typeof clearDutyCalcContextDateKey === 'function') {
-                clearDutyCalcContextDateKey();
-            }
             // Track open lists before rendering if preserveOpenLists is true
             const openLists = preserveOpenLists ? getOpenLists() : [];
             groupListRenderRegistry.clear();
@@ -869,12 +866,10 @@
             personDiv.dataset.index = index;
             personDiv.dataset.listType = listType;
             
-            // Check if person is currently missing/disabled (always evaluate as of today in group lists)
+            // Check if person is currently missing/disabled
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
-            const listAsOfToday = new Date();
-            listAsOfToday.setHours(0, 0, 0, 0);
-            const isDisabledForThisList = isPersonDisabledForDuty(person, groupNum, listType, listAsOfToday);
-            const st = getDisabledState(groupNum, person, listAsOfToday);
+            const isDisabledForThisList = isPersonDisabledForDuty(person, groupNum, listType);
+            const st = getDisabledState(groupNum, person);
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -1689,43 +1684,28 @@
             const modal = bootstrap.Modal.getInstance(document.getElementById('addPersonModal'));
             modal.hide();
         }
-        function updatePersonActionsModalContent() {
-            if (!currentPersonActionsGroup || !currentPersonActionsName) return;
-            const groupNum = currentPersonActionsGroup;
-            const personName = currentPersonActionsName;
-            const nameEl = document.getElementById('personActionsName');
-            const groupEl = document.getElementById('personActionsGroup');
-            if (nameEl) nameEl.textContent = personName;
-            if (groupEl) groupEl.textContent = getGroupName(groupNum);
-            try {
-                const st = getDisabledState(groupNum, personName);
-                const enabledTypes = ['special', 'weekend', 'semi', 'normal'].filter((t) => !!st[t]);
-                const isAll = !!st.all;
-                const textEl = document.getElementById('toggleDisablePersonButtonText');
-                if (textEl) {
-                    textEl.textContent = isAll
-                        ? 'Απενεργοποίηση (Πλήρης)'
-                        : enabledTypes.length
-                          ? `Απενεργοποίηση (${enabledTypes.length} τύποι)`
-                          : 'Απενεργοποίηση (Ρυθμίσεις)';
-                }
-            } catch (_) {}
-        }
-        function ensurePersonActionsModalVisible() {
-            updatePersonActionsModalContent();
-            const el = document.getElementById('personActionsModal');
-            if (!el) return;
-            if (!el.classList.contains('show')) {
-                const modal = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
-                modal.show();
-            }
-        }
         function openPersonActionsModal(groupNum, personName, index, listType) {
             currentPersonActionsGroup = groupNum;
             currentPersonActionsName = personName;
             currentPersonActionsIndex = index;
             currentPersonActionsListType = listType;
-            updatePersonActionsModalContent();
+            
+            document.getElementById('personActionsName').textContent = personName;
+            document.getElementById('personActionsGroup').textContent = getGroupName(groupNum);
+
+            // Update disable settings button label (summary)
+            try {
+                const st = getDisabledState(groupNum, personName);
+                const enabledTypes = ['special', 'weekend', 'semi', 'normal'].filter(t => !!st[t]);
+                const isAll = !!st.all;
+                const textEl = document.getElementById('toggleDisablePersonButtonText');
+                if (textEl) {
+                    textEl.textContent = isAll
+                        ? 'Απενεργοποίηση (Πλήρης)'
+                        : (enabledTypes.length ? `Απενεργοποίηση (${enabledTypes.length} τύποι)` : 'Απενεργοποίηση (Ρυθμίσεις)');
+                }
+            } catch (_) {}
+            
             const modal = new bootstrap.Modal(document.getElementById('personActionsModal'));
             modal.show();
         }
@@ -2026,27 +2006,6 @@
                 alert('Σφάλμα κατά την αντικατάσταση: ' + (e?.message || e));
             }
         }
-        let pendingDisableSettingsCapture = null;
-
-        function captureDisableSettingsFormState() {
-            const all = !!document.getElementById('disableAllSwitch')?.checked;
-            if (all) {
-                return { all: true, special: false, weekend: false, semi: false, normal: false };
-            }
-            return {
-                all: false,
-                special: !!document.getElementById('disableSpecialSwitch')?.checked,
-                weekend: !!document.getElementById('disableWeekendSwitch')?.checked,
-                semi: !!document.getElementById('disableSemiSwitch')?.checked,
-                normal: !!document.getElementById('disableNormalSwitch')?.checked
-            };
-        }
-
-        function isDisableSettingsFormActive(st) {
-            if (typeof disabledStateIsActive === 'function') return disabledStateIsActive(st);
-            return !!(st && (st.all || st.special || st.weekend || st.semi || st.normal));
-        }
-
         function openDisableSettingsFromActions() {
             if (!currentPersonActionsGroup || !currentPersonActionsName) return;
             const groupNum = currentPersonActionsGroup;
@@ -2057,8 +2016,8 @@
             const hintEl = document.getElementById('disableSettingsEffectiveHint');
             if (hintEl) {
                 hintEl.innerHTML = isFlexibleStatusEffectiveDatesEnabled()
-                    ? 'Οι αλλαγές καταστάσεως καταχωρούνται με <strong>ημερομηνία ισχύος</strong> (επιλέγετε στο επόμενο βήμα). Η ημερομηνία που επιλέγετε εφαρμόζεται <strong>ακριβώς</strong> όπως ορίστηκε.'
-                    : 'Οι αλλαγές καταστάσεως επιτρέπονται <strong>μόνο στο τελευταίο ημερολογιακό δεκαπενθήμερο</strong> του μήνα. Η ισχύς είναι η ημερομηνία που επιλέγετε στο επόμενο βήμα. Για επιλογή οποτεδήποτε, ενεργοποιήστε «Ευέλικτη ημερομηνία ισχύος» στις Ρυθμίσεις.';
+                    ? 'Οι αλλαγές καταστάσεως καταχωρούνται με <strong>ημερομηνία ισχύος</strong> (επιλέγετε στο επόμενο βήμα). Προεπιλογή: τελευταίο δεκαπενθήμερο μήνα → 1η επόμενου· αλλιώς → 1η τρέχοντος. Αν η ημερομηνία ισχύος πέσει στο τελευταίο <strong>δεκαήμερο</strong> του ημερολογιακού μήνα της (κανόνας υπολογισμού), για υπολογισμούς μεταφέρεται στην 1η του επόμενου μήνα. Οι απουσίες ορίζονται με start/end.'
+                    : 'Οι αλλαγές καταστάσεως επιτρέπονται <strong>μόνο στο τελευταίο ημερολογιακό δεκαπενθήμερο</strong> του μήνα· η ισχύς για υπολογισμούς είναι η <strong>1η του επόμενου μήνα</strong> (κλασική λειτουργία). Για επιλογή ημερομηνίας ισχύος οποτεδήποτε, ενεργοποιήστε την «Ευέλικτη ημερομηνία ισχύος» στις Ρυθμίσεις. Οι απουσίες ορίζονται με start/end.';
             }
 
             const st = getDisabledState(groupNum, personName);
@@ -2119,124 +2078,85 @@
             modal.show();
         }
         function saveDisableSettings() {
+            reopenPersonActionsModalWhenClosed = false;
             if (!currentPersonActionsGroup || !currentPersonActionsName) return;
             const groupNum = currentPersonActionsGroup;
             const personName = currentPersonActionsName;
 
-            pendingDisableSettingsCapture = captureDisableSettingsFormState();
-            const st = pendingDisableSettingsCapture;
-            const isDisabling = isDisableSettingsFormActive(st);
-            const currentlyDisabled = isDisableSettingsFormActive(getDisabledState(groupNum, personName));
-
-            if (!isDisabling && !currentlyDisabled) {
-                alert(
-                    'Δεν έχετε επιλέξει απενεργοποίηση.\n\n' +
-                        'Ενεργοποιήστε «Πλήρης απενεργοποίηση» ή τουλάχιστον έναν τύπο υπηρεσίας πριν την αποθήκευση.'
-                );
-                pendingDisableSettingsCapture = null;
-                return;
-            }
-            if (!isDisabling && currentlyDisabled) {
-                if (
-                    !confirm(
-                        'Θα καταχωρηθεί πλήρης ενεργοποίηση (όλοι οι τύποι υπηρεσίας).\n\nΘέλετε να συνεχίσετε;'
-                    )
-                ) {
-                    pendingDisableSettingsCapture = null;
-                    return;
-                }
-            }
+            const all = !!document.getElementById('disableAllSwitch')?.checked;
+            const st = {
+                all,
+                special: all ? false : !!document.getElementById('disableSpecialSwitch')?.checked,
+                weekend: all ? false : !!document.getElementById('disableWeekendSwitch')?.checked,
+                semi: all ? false : !!document.getElementById('disableSemiSwitch')?.checked,
+                normal: all ? false : !!document.getElementById('disableNormalSwitch')?.checked
+            };
 
             if (typeof scheduleDisabledStateChange === 'function') {
-                const finishDisableSave = async (effKey) => {
-                    const savedSt = pendingDisableSettingsCapture || captureDisableSettingsFormState();
-                    const savingDisable = isDisableSettingsFormActive(savedSt);
-                    pendingDisableSettingsCapture = null;
-                    const effReturned = scheduleDisabledStateChange(groupNum, personName, savedSt, effKey);
-                    if (typeof syncDisabledPersonsMirror === 'function') {
-                        syncDisabledPersonsMirror(
-                            groupNum,
-                            personName,
-                            typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null
-                        );
-                    }
-                    const dm = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
-                    reopenPersonActionsModalWhenClosed = true;
-                    if (dm) dm.hide();
-                    try {
-                        if (typeof persistPersonStatusSchedule === 'function') {
-                            await persistPersonStatusSchedule();
-                        }
-                    } catch (e) {
-                        console.error('saveDisableSettings persistPersonStatusSchedule:', e);
-                    }
+                const finishDisableSave = (effKey) => {
+                    const effReturned = scheduleDisabledStateChange(groupNum, personName, st, effKey);
                     const effLabel =
                         typeof formatScheduledStatusEffectiveLabel === 'function'
                             ? formatScheduledStatusEffectiveLabel(effReturned)
                             : effReturned;
+                    const any = st.all || st.special || st.weekend || st.semi || st.normal;
                     alert(
-                        savingDisable
+                        any
                             ? `Η απενεργοποίηση καταχωρήθηκε.\nΙσχύει από ${effLabel}.`
                             : `Η ενεργοποίηση καταχωρήθηκε.\nΙσχύει από ${effLabel}.`
                     );
-                    try {
-                        await saveData();
-                    } catch (e) {
-                        console.error('saveDisableSettings saveData:', e);
-                    }
+                    saveData();
                     renderGroups();
-                    ensurePersonActionsModalVisible();
+                    const dm = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
+                    if (dm) dm.hide();
+                    openPersonActionsModal(
+                        currentPersonActionsGroup,
+                        currentPersonActionsName,
+                        currentPersonActionsIndex != null ? currentPersonActionsIndex : 0,
+                        currentPersonActionsListType || 'normal'
+                    );
                 };
-                const openEffectiveDateStep = () => {
+                if (isFlexibleStatusEffectiveDatesEnabled()) {
                     openStatusChangeEffectiveModal({
-                        title: isDisabling ? 'Ισχύς απενεργοποίησης' : 'Ισχύς ενεργοποίησης',
+                        title: 'Ισχύς αλλαγής απενεργοποίησης',
                         introHtml:
-                            '<p class="mb-0">Η κατάσταση ισχύει <strong>ακριβώς από την ημερομηνία που επιλέγετε</strong> και μετά (συμπεριλαμβανομένων υπολογισμών προηγούμενων μηνών).</p>',
+                            '<p class="mb-0">Ο υπολογισμός υπηρεσιών εφαρμόζει την κατάσταση από την ημερομηνία ισχύος και μετά.</p>',
                         suggestedDateKey:
                             typeof getSuggestedStatusEffectiveFromDateKey === 'function'
                                 ? getSuggestedStatusEffectiveFromDateKey(new Date())
                                 : undefined,
-                        onConfirm: (effKey) => {
-                            finishDisableSave(effKey);
-                        },
-                        onCancel: () => {
-                            pendingDisableSettingsCapture = null;
-                        }
+                        onConfirm: (effKey) => finishDisableSave(effKey),
+                        onCancel: () => {}
                     });
-                };
-                if (isFlexibleStatusEffectiveDatesEnabled()) {
-                    openEffectiveDateStep();
                     return;
                 }
                 if (!assertStatusChangeWindowOrAlert()) return;
-                openEffectiveDateStep();
+                finishDisableSave();
                 return;
             } else {
                 const g = groups[groupNum];
                 if (!g) return;
                 if (!g.disabledPersons) g.disabledPersons = {};
-                const any = st.all || st.special || st.weekend || st.semi || st.normal;
-                const keyName =
-                    typeof normalizePersonKey === 'function'
-                        ? normalizePersonKey(personName)
-                        : String(personName || '').trim();
-                if (!any) {
-                    delete g.disabledPersons[personName];
-                    if (keyName) delete g.disabledPersons[keyName];
+            const any = st.all || st.special || st.weekend || st.semi || st.normal;
+            const keyName = (typeof normalizePersonKey === 'function') ? normalizePersonKey(personName) : String(personName || '').trim();
+            if (!any) {
+                delete g.disabledPersons[personName];
+                if (keyName) delete g.disabledPersons[keyName];
                 } else if (keyName) {
                     g.disabledPersons[keyName] = st;
                 } else {
                     g.disabledPersons[personName] = st;
                 }
-                saveData()
-                    .then(() => {
-                        renderGroups();
-                        reopenPersonActionsModalWhenClosed = true;
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
-                        if (modal) modal.hide();
-                        ensurePersonActionsModalVisible();
-                    })
-                    .catch((e) => console.error('saveDisableSettings saveData:', e));
+            saveData();
+            renderGroups();
+            const modal = bootstrap.Modal.getInstance(document.getElementById('disableSettingsModal'));
+            if (modal) modal.hide();
+            openPersonActionsModal(
+                currentPersonActionsGroup,
+                currentPersonActionsName,
+                currentPersonActionsIndex != null ? currentPersonActionsIndex : 0,
+                currentPersonActionsListType || 'normal'
+            );
             }
         }
         function openMissingDisabledPeopleModal() {
@@ -5732,9 +5652,6 @@
             installFor('calculateStartMonth');
         }
         function showStepByStepCalculation() {
-            if (typeof wireStepByStepCalculationModalListeners === 'function') {
-                wireStepByStepCalculationModalListeners();
-            }
             calculationSteps.currentStep = 1;
             renderCurrentStep();
             const modal = new bootstrap.Modal(document.getElementById('stepByStepCalculationModal'));
@@ -5794,21 +5711,19 @@
                         if (!base || !comp) continue;
                         if (base === comp) continue;
 
-                        const reason =
-                            typeof resolveSpecialHolidayChangeReason === 'function'
-                                ? resolveSpecialHolidayChangeReason(dateKey, groupNum, base, comp, date)
-                                : isPersonDisabledForDuty(base, groupNum, 'special') ||
-                                    isPersonMissingOnDate(base, groupNum, date, 'special')
-                                  ? (
-                                        buildUnavailableReplacementReason({
-                                            skippedPersonName: base,
-                                            replacementPersonName: comp,
-                                            dateObj: date,
-                                            groupNum,
-                                            dutyCategory: 'special'
-                                        }) || ''
-                                    ).split('.').filter(Boolean)[0]
-                                  : 'Αλλαγή (κανόνας/σύγκρουση)';
+                        let reason = '';
+                        if (isPersonDisabledForDuty(base, groupNum, 'special') || isPersonMissingOnDate(base, groupNum, date, 'special')) {
+                            // Keep the same style as other steps: show the first sentence (without "Ανατέθηκε...")
+                            reason = buildUnavailableReplacementReason({
+                                skippedPersonName: base,
+                                replacementPersonName: comp,
+                                dateObj: date,
+                                groupNum,
+                                dutyCategory: 'special'
+                            }) || '';
+                        } else {
+                            reason = 'Αλλαγή (κανόνας/σύγκρουση)';
+                        }
 
                         changes.push({
                             dateKey,

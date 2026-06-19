@@ -35,8 +35,6 @@
         // Track skip/swap reasons for each assignment
         // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap'|'shift', reason: '...', swappedWith: '...', swapPairId, meta? }
         let assignmentReasons = {};
-        /** Ανοιχτές οφειλές ειδικής (απενεργ./απουσία) — αποθηκεύονται στο assignmentReasons doc. */
-        let pendingSpecialDebts = [];
         /** Carry-over: replacement skipped once in month after manual alternate (per duty category). */
         let manualAlternateDeferCarry = { normal: {}, semi: {}, weekend: {}, special: {} };
         // Track critical assignments from last duties - these must NEVER be deleted
@@ -103,21 +101,6 @@
         function compareScheduleDateKeys(a, b) {
             return String(a || '').localeCompare(String(b || ''));
         }
-        let personStatusScheduleSeq = 0;
-        function scheduleRecordedAtNow() {
-            return new Date().toISOString();
-        }
-        function nextPersonStatusScheduleSeq() {
-            personStatusScheduleSeq += 1;
-            return personStatusScheduleSeq;
-        }
-        function compareScheduleEntries(a, b) {
-            const byRec = compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
-            if (byRec !== 0) return byRec;
-            const byEff = compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom);
-            if (byEff !== 0) return byEff;
-            return (b._seq || 0) - (a._seq || 0);
-        }
         function dateFromDateKey(dateKey) {
             const d = new Date(String(dateKey) + 'T00:00:00');
             return isNaN(d.getTime()) ? null : d;
@@ -132,29 +115,40 @@
             return d.getDate() >= windowStart;
         }
         /**
-         * Επικύρωση ημερομηνίας ισχύος (χωρίς αυτόματη μετατόπιση).
-         * Η ημερομηνία που επιλέγει ο χρήστης αποθηκεύεται ακριβώς όπως ορίστηκε.
+         * Αν η «ισχύς από» πέσει στο τελευταίο ημερολογιακό δεκαήμερο του μήνα της,
+         * για υπολογισμούς μεταφέρεται στην 1η του επόμενου μήνα.
+         * Εξαίρεση: όταν ο χρήστης επιλέξει ρητά τη σημερινή ημερομηνία,
+         * η ισχύς παραμένει σήμερα ώστε η αλλαγή να φανεί άμεσα στο UI.
          */
-        function validateStatusEffectiveDateKey(dateKey) {
-            if (!dateKey || String(dateKey) === PERSON_STATUS_SCHEDULE_EPOCH) return dateKey;
-            const s = String(dateKey).trim();
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return dateKey;
-            const d = dateFromDateKey(s);
-            if (!d) return dateKey;
-            return typeof formatDateKey === 'function' ? formatDateKey(d) : s;
-        }
-        /** @deprecated Χρησιμοποιείται μόνο για αυτόματες προεπιλογές — όχι για ρητή επιλογή χρήστη. */
         function normalizeStatusEffectiveFromDateKey(dateKey) {
-            return validateStatusEffectiveDateKey(dateKey);
+            if (!dateKey || String(dateKey) === PERSON_STATUS_SCHEDULE_EPOCH) return dateKey;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey))) return dateKey;
+            const d = dateFromDateKey(dateKey);
+            if (!d) return dateKey;
+            const todayKey = typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null;
+            if (todayKey && String(dateKey) === todayKey) {
+                return dateKey;
+            }
+            const y = d.getFullYear();
+            const m = d.getMonth();
+            const day = d.getDate();
+            const lastDay = new Date(y, m + 1, 0).getDate();
+            const windowStart = Math.max(1, lastDay - 9);
+            if (day >= windowStart) {
+                const firstNext = new Date(y, m + 1, 1);
+                return typeof formatDateKey === 'function' ? formatDateKey(firstNext) : dateKey;
+            }
+            return dateKey;
         }
         function sanitizePersonStatusScheduleEffectiveDates() {
-            if (!personStatusSchedule) return;
+            if (!personStatusSchedule || typeof normalizeStatusEffectiveFromDateKey !== 'function') return;
             for (const key of ['disabled', 'membership', 'listOrders']) {
                 const arr = personStatusSchedule[key];
                 if (!Array.isArray(arr)) continue;
                 for (const e of arr) {
                     if (e && e.effectiveFrom && e.effectiveFrom !== PERSON_STATUS_SCHEDULE_EPOCH) {
-                        e.effectiveFrom = validateStatusEffectiveDateKey(e.effectiveFrom);
+                        const n = normalizeStatusEffectiveFromDateKey(e.effectiveFrom);
+                        if (n !== e.effectiveFrom) e.effectiveFrom = n;
                     }
                 }
             }
@@ -397,29 +391,19 @@
                 normal: getGroupRotationListAtDate(groupNum, 'normal', dk)
             };
         }
-        function disabledScheduleEntryMatchesPerson(entry, groupNum, personName) {
-            if (!entry || entry.groupNum !== groupNum) return false;
-            const pk = personScheduleKey(personName);
-            if (entry.personKey && entry.personKey === pk) return true;
-            if (entry.personName && personScheduleKey(entry.personName) === pk) return true;
-            return false;
-        }
         function getDisabledStateAtDate(groupNum, personName, dateKey) {
             ensurePersonStatusScheduleSeeded();
+            const pk = personScheduleKey(personName);
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
-            const hits = personStatusSchedule.disabled.filter(
-                (e) =>
-                    disabledScheduleEntryMatchesPerson(e, groupNum, personName) &&
-                    compareScheduleDateKeys(e.effectiveFrom, dk) <= 0
-            );
-            if (hits.length) {
-                hits.sort((a, b) => {
-                    const byEff = compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom);
-                    if (byEff !== 0) return byEff;
-                    return compareScheduleEntries(a, b);
-                });
-                return normalizeDisabledState(hits[0].state);
-            }
+            const hits = personStatusSchedule.disabled
+                .filter(
+                    (e) =>
+                        e.groupNum === groupNum &&
+                        e.personKey === pk &&
+                        compareScheduleDateKeys(e.effectiveFrom, dk) <= 0
+                )
+                .sort((a, b) => compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom));
+            if (hits.length) return normalizeDisabledState(hits[0].state);
             return legacyDisabledStateFromGroups(groupNum, personName);
         }
         function isPersonDisabledForDutyAtDate(person, groupNum, dutyCategory, dateKey) {
@@ -435,29 +419,6 @@
             else if (cat === 'normal-day') cat = 'normal';
             return !!st[cat];
         }
-        function syncDisabledPersonsMirror(groupNum, personName, asOfDateKey) {
-            const g = groups?.[groupNum];
-            if (!g) return;
-            if (!g.disabledPersons) g.disabledPersons = {};
-            const dk =
-                asOfDateKey ||
-                (typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null);
-            const st =
-                typeof getDisabledStateAtDate === 'function'
-                    ? getDisabledStateAtDate(groupNum, personName, dk)
-                    : emptyDisabledState();
-            const keyName = personScheduleKey(personName);
-            if (disabledStateIsActive(st)) {
-                if (keyName) g.disabledPersons[keyName] = st;
-                g.disabledPersons[personName] = st;
-            } else {
-                delete g.disabledPersons[personName];
-                if (keyName) delete g.disabledPersons[keyName];
-                for (const k of Object.keys(g.disabledPersons)) {
-                    if (personScheduleKey(k) === keyName) delete g.disabledPersons[k];
-                }
-            }
-        }
         function scheduleDisabledStateChange(groupNum, personName, state, effectiveFromKey) {
             ensurePersonStatusScheduleSeeded();
             const pk = personScheduleKey(personName);
@@ -467,21 +428,15 @@
                 (typeof getSuggestedStatusEffectiveFromDateKey === 'function'
                     ? getSuggestedStatusEffectiveFromDateKey(new Date())
                     : getScheduledStatusEffectiveFrom(new Date()));
-            const eff = validateStatusEffectiveDateKey(raw);
+            const eff = normalizeStatusEffectiveFromDateKey(raw);
             personStatusSchedule.disabled.push({
                 personKey: pk,
                 personName,
                 groupNum,
                 state: st,
                 effectiveFrom: eff,
-                recordedAt: scheduleRecordedAtNow(),
-                _seq: nextPersonStatusScheduleSeq()
+                recordedAt: formatDateKey(new Date())
             });
-            syncDisabledPersonsMirror(
-                groupNum,
-                personName,
-                typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null
-            );
             return eff;
         }
         function scheduleMembershipChange(personName, toGroupNum, effectiveFromKey) {
@@ -491,22 +446,21 @@
                 (typeof getSuggestedStatusEffectiveFromDateKey === 'function'
                     ? getSuggestedStatusEffectiveFromDateKey(new Date())
                     : getScheduledStatusEffectiveFrom(new Date()));
-            const eff = validateStatusEffectiveDateKey(raw);
+            const eff = normalizeStatusEffectiveFromDateKey(raw);
             const pk = personScheduleKey(personName);
             personStatusSchedule.membership.push({
                 personKey: pk,
                 personName,
                 groupNum: toGroupNum,
                 effectiveFrom: eff,
-                recordedAt: scheduleRecordedAtNow(),
-                _seq: nextPersonStatusScheduleSeq()
+                recordedAt: formatDateKey(new Date())
             });
             return eff;
         }
         function scheduleListOrdersForGroup(groupNum, effectiveFrom) {
             ensurePersonStatusScheduleSeeded();
             syncGroupListArraysFromPriorities(groupNum);
-            const eff = validateStatusEffectiveDateKey(
+            const eff = normalizeStatusEffectiveFromDateKey(
                 effectiveFrom ||
                     (typeof getFirstOfCalendarMonthDateKey === 'function'
                         ? getFirstOfCalendarMonthDateKey(new Date())
@@ -542,11 +496,6 @@
         window.getSortedGroupListForRotation = getSortedGroupListForRotation;
         window.syncGroupListArraysFromPriorities = syncGroupListArraysFromPriorities;
         window.scheduleListOrdersForGroup = scheduleListOrdersForGroup;
-        window.disabledStateIsActive = disabledStateIsActive;
-        window.scheduleDisabledStateChange = scheduleDisabledStateChange;
-        window.validateStatusEffectiveDateKey = validateStatusEffectiveDateKey;
-        window.getDisabledStateAtDate = getDisabledStateAtDate;
-        window.syncDisabledPersonsMirror = syncDisabledPersonsMirror;
         function getPendingScheduledStatusSummary(personName, groupNum) {
             ensurePersonStatusScheduleSeeded();
             const todayKey = formatDateKey(new Date());
@@ -954,26 +903,8 @@
             const prevMonthKey = getPreviousMonthKeyFromDate(date);
             let person = null;
 
-            // In-run continuity from a multi-month calculation session (Step 2/3).
-            if (typeof calculationSteps !== 'undefined' && calculationSteps) {
-                person = calculationSteps.rotationContinuityInRun?.[dayType]?.[prevMonthKey]?.[groupNum] || null;
-                if (!person) {
-                    const stepLastByMonth =
-                        dayType === 'semi'
-                            ? calculationSteps.lastSemiRotationPositionsByMonth
-                            : dayType === 'weekend'
-                              ? calculationSteps.lastWeekendRotationPositionsByMonth
-                              : dayType === 'normal'
-                                ? calculationSteps.lastNormalRotationPositionsByMonth
-                                : dayType === 'special'
-                                  ? calculationSteps.lastSpecialRotationPositionsByMonth
-                                  : null;
-                    person = stepLastByMonth?.[prevMonthKey]?.[groupNum] || null;
-                }
-            }
-
             // Month-scoped format
-            if (!person && byType && typeof byType === 'object' && !Array.isArray(byType)) {
+            if (byType && typeof byType === 'object' && !Array.isArray(byType)) {
                 const monthEntry = byType[prevMonthKey];
                 if (monthEntry && typeof monthEntry === 'object' && !Array.isArray(monthEntry) && monthEntry[groupNum]) {
                     person = monthEntry[groupNum];
@@ -1216,130 +1147,9 @@
             }
         }
 
-        function specialDebtEntryKey(d) {
-            if (!d || !d.personName || !d.groupNum || !d.owedFromDateKey) return '';
-            const nk =
-                typeof normalizePersonKey === 'function' ? normalizePersonKey(d.personName) : String(d.personName || '').trim();
-            return `${d.groupNum}|${nk}|${d.owedFromDateKey}`;
-        }
-
-        function parseAssignmentReasonsDocData(data) {
-            const raw = data && typeof data === 'object' ? { ...data } : {};
-            delete raw.lastUpdated;
-            delete raw.updatedBy;
-            let pending = [];
-            if (Array.isArray(raw.pendingSpecialDebts)) {
-                pending = raw.pendingSpecialDebts.filter((d) => specialDebtEntryKey(d));
-            }
-            delete raw.pendingSpecialDebts;
-            if (raw._manualAlternateDeferCarry && typeof raw._manualAlternateDeferCarry === 'object') {
-                manualAlternateDeferCarry = raw._manualAlternateDeferCarry;
-                delete raw._manualAlternateDeferCarry;
-            }
-            return { reasons: raw, pendingSpecialDebts: pending };
-        }
-
-        function getPendingSpecialDebts() {
-            return Array.isArray(pendingSpecialDebts) ? pendingSpecialDebts.slice() : [];
-        }
-
-        /** Προσθήκη/ενημέρωση ανοιχτής οφειλής (idempotent ανά κλειδί). */
-        function addPendingSpecialDebt(debt) {
-            const k = specialDebtEntryKey(debt);
-            if (!k) return;
-            if (
-                typeof DutyRotationEngine !== 'undefined' &&
-                typeof DutyRotationEngine.isPersonEligibleForSpecialDebt === 'function' &&
-                !DutyRotationEngine.isPersonEligibleForSpecialDebt(
-                    debt.personName,
-                    debt.groupNum,
-                    debt.owedFromDateKey
-                )
-            ) {
-                return;
-            }
-            if (!Array.isArray(pendingSpecialDebts)) pendingSpecialDebts = [];
-            const entry = {
-                personName: debt.personName,
-                groupNum: debt.groupNum,
-                owedFromDateKey: debt.owedFromDateKey,
-                reason: debt.reason || 'special-skip'
-            };
-            const idx = pendingSpecialDebts.findIndex((d) => specialDebtEntryKey(d) === k);
-            if (idx >= 0) {
-                pendingSpecialDebts[idx] = entry;
-                return;
-            }
-            pendingSpecialDebts.push(entry);
-        }
-
-        /** Συγχρονισμός pending από αποθηκευμένα baseline/τελικές/λόγους — αφαιρεί άκυρες εγγραφές. */
-        function syncPendingSpecialDebtsFromAllSavedData() {
-            if (
-                typeof DutyRotationEngine === 'undefined' ||
-                typeof DutyRotationEngine.collectInferredSpecialDebtsFromSavedAssignments !== 'function'
-            ) {
-                return;
-            }
-            const inferred = DutyRotationEngine.collectInferredSpecialDebtsFromSavedAssignments(null, null);
-            const inferredKeys = new Set(inferred.map((d) => specialDebtEntryKey(d)).filter(Boolean));
-            pendingSpecialDebts = (pendingSpecialDebts || []).filter((d) => {
-                const k = specialDebtEntryKey(d);
-                if (!k) return false;
-                const reason = String(d.reason || '');
-                const isInferred =
-                    reason.startsWith('inferred-') ||
-                    reason === 'missing-prior-month' ||
-                    reason === 'stored-pending';
-                if (isInferred && !inferredKeys.has(k)) return false;
-                if (
-                    typeof DutyRotationEngine.isPersonEligibleForSpecialDebt === 'function' &&
-                    !DutyRotationEngine.isPersonEligibleForSpecialDebt(
-                        d.personName,
-                        d.groupNum,
-                        d.owedFromDateKey
-                    )
-                ) {
-                    return false;
-                }
-                return true;
-            });
-            for (const d of inferred) {
-                addPendingSpecialDebt(d);
-            }
-        }
-
-        /** Μετά από runSpecialPhase: αφαίρεση εξοφλημένων, επαναυπολογισμός ημερομηνιών περιόδου. */
-        function updatePendingSpecialDebtsAfterSpecialPhase(engineOut, sortedSpecialDays) {
-            if (!engineOut) return;
-            const recalcDates = new Set(Array.isArray(sortedSpecialDays) ? sortedSpecialDays : []);
-            const repaid = new Set((engineOut.debtsRepaid || []).map((d) => specialDebtEntryKey(d)).filter(Boolean));
-            let next = (pendingSpecialDebts || []).filter((d) => {
-                const k = specialDebtEntryKey(d);
-                if (!k) return false;
-                if (repaid.has(k)) return false;
-                if (recalcDates.has(d.owedFromDateKey)) return false;
-                return true;
-            });
-            const existing = new Set(next.map((d) => specialDebtEntryKey(d)).filter(Boolean));
-            for (const d of engineOut.debtsRemaining || []) {
-                const k = specialDebtEntryKey(d);
-                if (!k || existing.has(k)) continue;
-                next.push({
-                    personName: d.personName,
-                    groupNum: d.groupNum,
-                    owedFromDateKey: d.owedFromDateKey,
-                    reason: d.reason || 'special-skip'
-                });
-                existing.add(k);
-            }
-            pendingSpecialDebts = next;
-        }
-
         function buildAssignmentReasonsSavePayload() {
             return {
                 ...assignmentReasons,
-                pendingSpecialDebts: pendingSpecialDebts || [],
                 _manualAlternateDeferCarry: manualAlternateDeferCarry
             };
         }
@@ -1420,10 +1230,7 @@
             // Fast path: no manual alternate in previous month -> seed directly from previous month baseline continuity.
             // This avoids synthetic cursor drift and preserves exact baseline carry-over.
             if (!prevManualAlternate?.replacementPerson) {
-                const inRunPerson =
-                    typeof calculationSteps !== 'undefined' && calculationSteps?.rotationContinuityInRun?.[dayTypeCategory]?.[prevMonthKey]?.[groupNum];
                 const lastContinuityPerson =
-                    inRunPerson ||
                     getLastAssignmentContinuityPersonForPreviousMonth(dayTypeCategory, dateInMonth, groupNum) ||
                     getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum) ||
                     getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
@@ -1431,7 +1238,7 @@
                 if (lastContinuityPerson && continuityIdx >= 0) {
                     return (continuityIdx + 1) % len;
                 }
-                return null;
+                return 0;
             }
 
             let cursor = 0;
@@ -1505,7 +1312,7 @@
             const groupPeople = groupData?.[dayTypeCategory] || groups[groupNum]?.[dayTypeCategory] || [];
             if (groupPeople.length > 0) {
                 const cursor = computeRotationPositionAtMonthStart(dayTypeCategory, monthStartDate, groupNum, groupPeople);
-                if (cursor != null && Number.isFinite(cursor) && cursor >= 0) {
+                if (Number.isFinite(cursor)) {
                     const len = groupPeople.length;
                     return groupPeople[(cursor - 1 + len) % len] || null;
                 }
@@ -1747,22 +1554,8 @@
             /** Captured before month recalc clear; used to restore manual modal / mutual swap / alternate replacement. */
             dutyProtectionSnapshot: null,
             /** Full in-memory snapshot before partial month clear (restore on Ακύρωση). */
-            cancelRestoreSnapshot: null,
-            /** Last step whose OK save completed (1–4). Cancel keeps committed steps. */
-            highestCommittedStep: 0
+            cancelRestoreSnapshot: null
         };
-
-        function markCalculationStepCommitted(stepNum) {
-            const n = parseInt(stepNum, 10);
-            if (!n || n < 1) return;
-            calculationSteps.highestCommittedStep = Math.max(calculationSteps.highestCommittedStep || 0, n);
-            calculationSteps.cancelRestoreSnapshot = null;
-            pendingLoadDataAfterSave = false;
-            if (typeof pinAssignmentStoresAfterStepCalc === 'function') {
-                pinAssignmentStoresAfterStepCalc();
-            }
-        }
-        window.markCalculationStepCommitted = markCalculationStepCommitted;
 
         /** Groups selected for recalc. Null = καμία ομάδα — δεν τρέχει επανυπολογισμός. */
         function getCalculationRecalcGroupSet() {
@@ -2191,149 +1984,7 @@
         // Track data loading to prevent duplicate loads
         let dataLastLoaded = null;
         let isLoadingData = false;
-        let saveDataInFlight = 0;
-        let pendingLoadDataAfterSave = false;
-        let skipLoadDataAfterStepCalcModalClose = false;
-        /** Αναθέσεις μετά από OK βήματος — δεν αντικαθίστανται από καθυστερημένο loadData. */
-        let preservedAssignmentsAfterStepCalc = null;
-
-        function pinAssignmentStoresAfterStepCalc() {
-            preservedAssignmentsAfterStepCalc = snapshotAssignmentStores();
-            pendingLoadDataAfterSave = false;
-            skipLoadDataAfterStepCalcModalClose = true;
-            try {
-                if (typeof saveDataToLocalStorage === 'function') {
-                    saveDataToLocalStorage();
-                }
-            } catch (e) {
-                console.warn('pinAssignmentStoresAfterStepCalc localStorage:', e);
-            }
-        }
-
-        function clearPinnedAssignmentStores() {
-            preservedAssignmentsAfterStepCalc = null;
-            skipLoadDataAfterStepCalcModalClose = false;
-        }
-
-        function hasPinnedAssignmentStores() {
-            return !!preservedAssignmentsAfterStepCalc;
-        }
-
-        window.pinAssignmentStoresAfterStepCalc = pinAssignmentStoresAfterStepCalc;
-        window.clearPinnedAssignmentStores = clearPinnedAssignmentStores;
-        window.hasPinnedAssignmentStores = hasPinnedAssignmentStores;
-
-        function clearPendingLoadDataAfterCalcCancel(committedSteps) {
-            pendingLoadDataAfterSave = false;
-            if ((committedSteps || 0) > 0) {
-                pinAssignmentStoresAfterStepCalc();
-            }
-        }
-        window.clearPendingLoadDataAfterCalcCancel = clearPendingLoadDataAfterCalcCancel;
         const DATA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache duration
-
-        function isStepByStepCalculationActive() {
-            const el = document.getElementById('stepByStepCalculationModal');
-            return !!(el && el.classList.contains('show'));
-        }
-
-        function assignmentStoresSignature(snap) {
-            if (!snap) return '';
-            try {
-                return JSON.stringify({
-                    special: snap.specialHolidayAssignments,
-                    weekend: snap.weekendAssignments,
-                    semi: snap.semiNormalAssignments,
-                    normal: snap.normalDayAssignments,
-                    reasons: snap.assignmentReasons,
-                    rbSpecial: snap.rotationBaselineSpecialAssignments,
-                    rbWeekend: snap.rotationBaselineWeekendAssignments,
-                    rbSemi: snap.rotationBaselineSemiAssignments,
-                    rbNormal: snap.rotationBaselineNormalAssignments
-                });
-            } catch (_) {
-                return '';
-            }
-        }
-
-        function snapshotAssignmentStores() {
-            return {
-                specialHolidayAssignments: JSON.parse(JSON.stringify(specialHolidayAssignments || {})),
-                weekendAssignments: JSON.parse(JSON.stringify(weekendAssignments || {})),
-                semiNormalAssignments: JSON.parse(JSON.stringify(semiNormalAssignments || {})),
-                normalDayAssignments: JSON.parse(JSON.stringify(normalDayAssignments || {})),
-                assignmentReasons: JSON.parse(JSON.stringify(assignmentReasons || {})),
-                rotationBaselineSpecialAssignments: JSON.parse(
-                    JSON.stringify(rotationBaselineSpecialAssignments || {})
-                ),
-                rotationBaselineWeekendAssignments: JSON.parse(
-                    JSON.stringify(rotationBaselineWeekendAssignments || {})
-                ),
-                rotationBaselineSemiAssignments: JSON.parse(JSON.stringify(rotationBaselineSemiAssignments || {})),
-                rotationBaselineNormalAssignments: JSON.parse(
-                    JSON.stringify(rotationBaselineNormalAssignments || {})
-                )
-            };
-        }
-
-        function restoreAssignmentStores(snap) {
-            if (!snap) return;
-            specialHolidayAssignments = snap.specialHolidayAssignments || {};
-            weekendAssignments = snap.weekendAssignments || {};
-            semiNormalAssignments = snap.semiNormalAssignments || {};
-            normalDayAssignments = snap.normalDayAssignments || {};
-            assignmentReasons = snap.assignmentReasons || {};
-            rotationBaselineSpecialAssignments = snap.rotationBaselineSpecialAssignments || {};
-            rotationBaselineWeekendAssignments = snap.rotationBaselineWeekendAssignments || {};
-            rotationBaselineSemiAssignments = snap.rotationBaselineSemiAssignments || {};
-            rotationBaselineNormalAssignments = snap.rotationBaselineNormalAssignments || {};
-            if (typeof rebuildRotationBaselineLastByType === 'function') {
-                rebuildRotationBaselineLastByType();
-            }
-        }
-
-        async function flushPendingLoadDataIfNeeded() {
-            if (hasPinnedAssignmentStores()) {
-                pendingLoadDataAfterSave = false;
-                return;
-            }
-            if (skipLoadDataAfterStepCalcModalClose) {
-                skipLoadDataAfterStepCalcModalClose = false;
-                pendingLoadDataAfterSave = false;
-                return;
-            }
-            if (
-                (calculationSteps.highestCommittedStep || 0) > 0 ||
-                saveDataInFlight > 0 ||
-                isStepByStepCalculationActive()
-            ) {
-                pendingLoadDataAfterSave = false;
-                return;
-            }
-            if (pendingLoadDataAfterSave) {
-                pendingLoadDataAfterSave = false;
-                await loadData();
-                requestAnimationFrame(() => {
-                    renderGroups();
-                    renderHolidays();
-                    renderRecurringHolidays();
-                    renderCalendar();
-                    updateStatistics();
-                });
-            }
-        }
-
-        let _stepCalcModalLoadFlushWired = false;
-        function wireStepByStepCalculationModalListeners() {
-            if (_stepCalcModalLoadFlushWired) return;
-            const el = document.getElementById('stepByStepCalculationModal');
-            if (!el) return;
-            _stepCalcModalLoadFlushWired = true;
-            el.addEventListener('hidden.bs.modal', () => {
-                flushPendingLoadDataIfNeeded();
-            });
-        }
-        window.wireStepByStepCalculationModalListeners = wireStepByStepCalculationModalListeners;
         
         // Initialize (guard against duplicate initialization which can cause slow loads after refresh)
         let dutyShiftsInitStarted = false;
@@ -2342,7 +1993,6 @@
             if (dutyShiftsInitStarted) return;
             dutyShiftsInitStarted = true;
             restoreCalendarCellHeight();
-            wireStepByStepCalculationModalListeners();
             
             const tryAttach = () => {
                 // Wait for Firebase to be ready (do NOT re-dispatch DOMContentLoaded)
@@ -2360,44 +2010,28 @@
                         const now = Date.now();
                         if (dataLastLoaded && (now - dataLastLoaded) < DATA_CACHE_DURATION && !isLoadingData) {
                             await loadDutyShiftsUserPreferences(user);
-                            if (!isStepByStepCalculationActive()) {
-                                renderGroups();
-                                renderHolidays();
-                                renderRecurringHolidays();
-                                renderCalendar();
-                                updateStatistics();
-                            }
+                            renderGroups();
+                            renderHolidays();
+                            renderRecurringHolidays();
+                            renderCalendar();
+                            updateStatistics();
                             return;
                         }
-
-                        if (!hasPinnedAssignmentStores()) {
-                            loadDataFromLocalStorage();
-                        }
-                        requestAnimationFrame(() => {
-                            if (!isStepByStepCalculationActive()) {
-                                renderGroups();
-                                renderHolidays();
-                                renderRecurringHolidays();
-                                renderCalendar();
-                                updateStatistics();
-                            }
-                        });
                         
-                        if (!hasPinnedAssignmentStores()) {
-                            await loadData();
-                        }
+                        isLoadingData = true;
+                        await loadData();
                         await loadDutyShiftsUserPreferences(user);
                         dataLastLoaded = Date.now();
+                        isLoadingData = false;
                         
-                        if (!isStepByStepCalculationActive()) {
-                            requestAnimationFrame(() => {
-                                renderGroups();
-                                renderHolidays();
-                                renderRecurringHolidays();
-                                renderCalendar();
-                                updateStatistics();
-                            });
-                        }
+                        // Render UI in next frame to reduce long main-thread blocking
+                        requestAnimationFrame(() => {
+                        renderGroups();
+                        renderHolidays();
+                        renderRecurringHolidays();
+                        renderCalendar();
+                        updateStatistics();
+                        });
                     } else {
                         resetDutyShiftsUserPreferencesSessionCache();
                         // Not authenticated, use localStorage
@@ -2437,28 +2071,6 @@
 
         // Load data from Firebase Firestore
         async function loadData() {
-            if (hasPinnedAssignmentStores()) {
-                pendingLoadDataAfterSave = false;
-                console.log('loadData skipped: pinned assignments after committed step');
-                return;
-            }
-            if (saveDataInFlight > 0) {
-                pendingLoadDataAfterSave = true;
-                console.log('loadData deferred: save in progress');
-                return;
-            }
-            if (isStepByStepCalculationActive()) {
-                pendingLoadDataAfterSave = true;
-                console.log('loadData deferred: step-by-step calculation active');
-                return;
-            }
-            if (isLoadingData) {
-                pendingLoadDataAfterSave = true;
-                console.log('loadData deferred: load already in progress');
-                return;
-            }
-
-            const assignmentSnapshotAtLoadStart = snapshotAssignmentStores();
             try {
                 // Wait for Firebase to be ready
                 if (!window.db) {
@@ -2475,9 +2087,8 @@
                     loadDataFromLocalStorage();
                     return;
                 }
-
-                isLoadingData = true;
-
+                
+                // Fetch all Firestore documents in parallel to reduce load time.
                 const dutyShifts = db.collection('dutyShifts');
                 const [
                     groupsDoc,
@@ -2522,8 +2133,6 @@
                     dutyShifts.doc('personStatusSchedule').get(),
                     dutyShifts.doc('settings').get()
                 ]);
-
-                const inMemoryBeforeFirebaseApply = snapshotAssignmentStores();
                 
                 // Load groups
                 if (groupsDoc.exists) {
@@ -2738,20 +2347,21 @@
                     criticalAssignments = {};
                 }
                 
-                // Load assignment reasons (+ pending special debts)
+                // Load assignment reasons
                 if (assignmentReasonsDoc.exists) {
-                    const parsed = parseAssignmentReasonsDocData(assignmentReasonsDoc.data() || {});
-                    assignmentReasons = parsed.reasons;
-                    pendingSpecialDebts = parsed.pendingSpecialDebts;
+                    const data = assignmentReasonsDoc.data() || {};
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    if (data._manualAlternateDeferCarry && typeof data._manualAlternateDeferCarry === 'object') {
+                        manualAlternateDeferCarry = data._manualAlternateDeferCarry;
+                        delete data._manualAlternateDeferCarry;
+                    }
+                    assignmentReasons = data;
                 } else {
                     assignmentReasons = {};
-                    pendingSpecialDebts = [];
                 }
                 if (typeof rebuildManualAlternateDeferCarryFromReasons === 'function') {
                     rebuildManualAlternateDeferCarryFromReasons();
-                }
-                if (typeof syncPendingSpecialDebtsFromAllSavedData === 'function') {
-                    syncPendingSpecialDebtsFromAllSavedData();
                 }
 
                 // Load per-month calculation locks (κλείδωμα μήνα)
@@ -2834,36 +2444,10 @@
                 // criticalAssignments are kept as history only and must not affect the current calendar.
                 
                 console.log('Data loaded from Firebase');
-                dataLastLoaded = Date.now();
-                if (preservedAssignmentsAfterStepCalc) {
-                    restoreAssignmentStores(preservedAssignmentsAfterStepCalc);
-                    console.log('loadData: restored pinned assignments (in-flight load completed)');
-                } else {
-                    const assignmentsChangedDuringFetch =
-                        assignmentStoresSignature(assignmentSnapshotAtLoadStart) !==
-                        assignmentStoresSignature(inMemoryBeforeFirebaseApply);
-                    if (assignmentsChangedDuringFetch || isStepByStepCalculationActive()) {
-                        restoreAssignmentStores(inMemoryBeforeFirebaseApply);
-                        if (isStepByStepCalculationActive()) {
-                            pendingLoadDataAfterSave = true;
-                        }
-                        console.log(
-                            'loadData: kept in-memory assignments' +
-                                (assignmentsChangedDuringFetch ? ' (updated during Firebase fetch)' : ' (calculation active)')
-                        );
-                    }
-                }
             } catch (error) {
                 console.error('Error loading data from Firebase:', error);
-                if (!hasPinnedAssignmentStores()) {
-                    loadDataFromLocalStorage();
-                } else if (preservedAssignmentsAfterStepCalc) {
-                    restoreAssignmentStores(preservedAssignmentsAfterStepCalc);
-                }
-            } finally {
-                if (isLoadingData) {
-                    isLoadingData = false;
-                }
+                // Fallback to localStorage
+                loadDataFromLocalStorage();
             }
         }
 
@@ -3107,22 +2691,21 @@
             const savedAssignmentReasons = localStorage.getItem('dutyShiftsAssignmentReasons');
             if (savedAssignmentReasons) {
                 try {
-                    const parsedRaw = JSON.parse(savedAssignmentReasons);
-                    if (parsedRaw && typeof parsedRaw === 'object') {
-                        const parsed = parseAssignmentReasonsDocData(parsedRaw);
-                        assignmentReasons = parsed.reasons;
-                        pendingSpecialDebts = parsed.pendingSpecialDebts;
+                    const parsed = JSON.parse(savedAssignmentReasons);
+                    if (parsed && typeof parsed === 'object') {
+                        if (parsed._manualAlternateDeferCarry && typeof parsed._manualAlternateDeferCarry === 'object') {
+                            manualAlternateDeferCarry = parsed._manualAlternateDeferCarry;
+                            delete parsed._manualAlternateDeferCarry;
+                        }
+                        assignmentReasons = parsed;
                     } else {
                         assignmentReasons = {};
-                        pendingSpecialDebts = [];
                     }
                 } catch (_) {
                     assignmentReasons = {};
-                    pendingSpecialDebts = [];
                 }
             } else {
                 assignmentReasons = {};
-                pendingSpecialDebts = [];
             }
             const savedDeferCarry = localStorage.getItem('dutyShiftsManualAlternateDeferCarry');
             if (savedDeferCarry) {
@@ -3329,38 +2912,7 @@
         }
 
         // Save data to Firebase Firestore
-        async function persistPersonStatusSchedule() {
-            if (!window.db) return false;
-            const user = window.auth?.currentUser;
-            if (!user) return false;
-            ensurePersonStatusScheduleSeeded();
-            if (typeof sanitizePersonStatusScheduleEffectiveDates === 'function') {
-                sanitizePersonStatusScheduleEffectiveDates();
-            }
-            const db = window.db || firebase.firestore();
-            const schedPayload = {
-                disabled: personStatusSchedule.disabled || [],
-                membership: personStatusSchedule.membership || [],
-                listOrders: personStatusSchedule.listOrders || [],
-                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedBy: user.uid
-            };
-            await db.collection('dutyShifts').doc('personStatusSchedule').set(schedPayload);
-            console.log(
-                'Saved personStatusSchedule to Firestore:',
-                schedPayload.disabled.length,
-                'disabled,',
-                schedPayload.membership.length,
-                'membership,',
-                schedPayload.listOrders.length,
-                'listOrders'
-            );
-            return true;
-        }
-        window.persistPersonStatusSchedule = persistPersonStatusSchedule;
-
         async function saveData() {
-            saveDataInFlight += 1;
             try {
                 // Wait for Firebase to be ready
                 if (!window.db) {
@@ -3376,12 +2928,6 @@
                     console.log('User not authenticated, saving to localStorage');
                     saveDataToLocalStorage();
                     return;
-                }
-
-                try {
-                    await persistPersonStatusSchedule();
-                } catch (error) {
-                    console.error('Error saving personStatusSchedule to Firestore:', error);
                 }
                 
                 // Save groups
@@ -3399,7 +2945,22 @@
                     console.error('Error saving groups to Firestore:', error);
                 }
 
-                // personStatusSchedule already persisted at start of saveData
+                try {
+                    ensurePersonStatusScheduleSeeded();
+                    if (typeof sanitizePersonStatusScheduleEffectiveDates === 'function') {
+                        sanitizePersonStatusScheduleEffectiveDates();
+                    }
+                    const schedPayload = {
+                        disabled: personStatusSchedule.disabled || [],
+                        membership: personStatusSchedule.membership || [],
+                        listOrders: personStatusSchedule.listOrders || [],
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    };
+                    await db.collection('dutyShifts').doc('personStatusSchedule').set(schedPayload);
+                } catch (error) {
+                    console.error('Error saving personStatusSchedule to Firestore:', error);
+                }
                 
                 // Save holidays
                 try {
@@ -3517,14 +3078,14 @@
                 
                 // Save assignment reasons (swap/skip indicators) separately
                 try {
-                    if (typeof syncPendingSpecialDebtsFromAllSavedData === 'function') {
-                        syncPendingSpecialDebtsFromAllSavedData();
-                    }
                     console.log('Saving assignmentReasons to Firestore:', Object.keys(assignmentReasons).length, 'dates');
                     if (Object.keys(assignmentReasons).length > 0) {
                         console.log('Sample assignmentReasons being saved:', Object.entries(assignmentReasons).slice(0, 3));
                     }
-                    const reasonsPayload = buildAssignmentReasonsSavePayload();
+                    const reasonsPayload = {
+                        ...assignmentReasons,
+                        _manualAlternateDeferCarry: manualAlternateDeferCarry
+                    };
                     const sanitizedReasons = sanitizeForFirestore(reasonsPayload);
                     await db.collection('dutyShifts').doc('assignmentReasons').set({
                         ...sanitizedReasons,
@@ -3612,11 +3173,6 @@
                 console.error('Error details:', error.message, error.stack);
                 // Fallback to localStorage
                 saveDataToLocalStorage();
-            } finally {
-                saveDataInFlight = Math.max(0, saveDataInFlight - 1);
-                if (saveDataInFlight === 0 && pendingLoadDataAfterSave) {
-                    pendingLoadDataAfterSave = false;
-                }
             }
         }
 
@@ -3635,14 +3191,10 @@
             localStorage.setItem('dutyShiftsSpecialHolidayAssignments', JSON.stringify(specialHolidayAssignments));
             // Deprecated: do not persist dutyAssignments
             localStorage.setItem('dutyShiftsCriticalAssignments', JSON.stringify(criticalAssignments));
-            localStorage.setItem(
-                'dutyShiftsAssignmentReasons',
-                JSON.stringify(
-                    typeof buildAssignmentReasonsSavePayload === 'function'
-                        ? buildAssignmentReasonsSavePayload()
-                        : { ...assignmentReasons, _manualAlternateDeferCarry: manualAlternateDeferCarry }
-                )
-            );
+            localStorage.setItem('dutyShiftsAssignmentReasons', JSON.stringify({
+                ...assignmentReasons,
+                _manualAlternateDeferCarry: manualAlternateDeferCarry
+            }));
             localStorage.setItem('dutyShiftsManualAlternateDeferCarry', JSON.stringify(manualAlternateDeferCarry));
             localStorage.setItem('dutyShiftsLastRotationPositions', JSON.stringify(lastRotationPositions));
             localStorage.setItem('dutyShiftsRankings', JSON.stringify(rankings));
@@ -5282,87 +4834,6 @@
             return 'normal';
         }
 
-        /** Sorted YYYY-MM-DD keys in month for a duty rotation type (normal/semi/weekend/special). */
-        function collectDayKeysForRotationTypeInMonth(year, month, rotationType) {
-            const keys = [];
-            const lastDay = new Date(year, month + 1, 0);
-            const d = new Date(year, month, 1);
-            while (d <= lastDay) {
-                const dk = formatDateKey(d);
-                if (mapDayTypeToRotationType(getDayType(d)) === rotationType) keys.push(dk);
-                d.setDate(d.getDate() + 1);
-            }
-            return keys.sort();
-        }
-
-        /**
-         * Simulate pure rotation slots through the month (ignores swaps & return-from-missing shifts).
-         * Matches pureNormalRotationByDate / Excel «αρχική σειρά» semantics.
-         */
-        function simulatePureRotationLastSlotForMonth(rotationType, year, month, groupNum, groupData) {
-            const rawList = (groupData?.[rotationType] || []).filter(Boolean);
-            if (!rawList.length) return '';
-
-            const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
-            const dayKeys = collectDayKeysForRotationTypeInMonth(year, month, rotationType);
-            if (!dayKeys.length) return '';
-
-            const firstDay = new Date(year, month, 1);
-            const seed =
-                typeof getLastBaselineRotationPersonForDate === 'function'
-                    ? getLastBaselineRotationPersonForDate(rotationType, firstDay, groupNum)
-                    : null;
-            let cursor = 0;
-            if (seed) {
-                const si = rawList.findIndex((p) => normName(p) === normName(seed));
-                if (si >= 0) cursor = (si + 1) % rawList.length;
-            }
-
-            let deferSkip = null;
-            let deferSkipOnCursor = false;
-            if (typeof findLatestManualAlternateInPreviousMonth === 'function') {
-                const prevManual = findLatestManualAlternateInPreviousMonth(rotationType, firstDay, groupNum);
-                if (prevManual?.replacementPerson) {
-                    deferSkip =
-                        typeof resolvePersonInGroupRotationList === 'function'
-                            ? resolvePersonInGroupRotationList(prevManual.replacementPerson, groupNum, rotationType)
-                            : prevManual.replacementPerson;
-                    deferSkipOnCursor = true;
-                }
-            }
-
-            let lastSlot = seed ? normName(seed) : '';
-
-            for (const dk of dayKeys) {
-                if (typeof findManualAlternateReplacementForGroup === 'function') {
-                    const manual = findManualAlternateReplacementForGroup(dk, groupNum);
-                    if (manual?.baselinePerson) {
-                        lastSlot = normName(manual.baselinePerson);
-                        const bIdx = rawList.findIndex((p) => normName(p) === normName(manual.baselinePerson));
-                        if (bIdx >= 0) cursor = (bIdx + 1) % rawList.length;
-                        continue;
-                    }
-                }
-
-                while (
-                    deferSkip &&
-                    deferSkipOnCursor &&
-                    rawList[cursor] &&
-                    normName(rawList[cursor]) === normName(deferSkip)
-                ) {
-                    cursor = (cursor + 1) % rawList.length;
-                    deferSkip = null;
-                    deferSkipOnCursor = false;
-                }
-
-                const slotPerson = rawList[cursor];
-                if (slotPerson) lastSlot = normName(slotPerson);
-                cursor = (cursor + 1) % rawList.length;
-            }
-
-            return lastSlot;
-        }
-
         function getAssignedPersonNameForGroupFromAssignment(assignment, groupNum) {
             try {
                 // Support object format: { "1": "Name", "2": "Name", ... }
@@ -5410,53 +4881,48 @@
                 return false;
             };
 
-            // Pure rotation simulation (αρχική σειρά): αγνοεί ανταλλαγές σύγκρουσης και μετατοπίσεις
-            // return-from-missing που αλλάζουν τις τελικές αναθέσεις αλλά όχι τη θέση slot περιστροφής.
-            for (const t of ['normal', 'semi', 'weekend', 'special']) {
-                const simulated = simulatePureRotationLastSlotForMonth(t, year, month, groupNum, groupData);
-                if (simulated) lastAssigned[t] = simulated;
+            const firstDayOfExportMonth = new Date(year, month, 1);
 
-                // Αντικατάσταση επιλαχών στην τελευταία ημέρα τύπου: ο αντικαταστάτης κλείνει τη σειρά.
-                if (t !== 'special') {
-                    const typeDayKeys = collectDayKeysForRotationTypeInMonth(year, month, t);
-                    if (typeDayKeys.length) {
-                        const lastTypeKey = typeDayKeys[typeDayKeys.length - 1];
-                        const manualAlt = findManualAlternateReplacementForGroup(lastTypeKey, groupNum);
-                        if (manualAlt?.replacementPerson && manualAlt?.baselinePerson) {
-                            const actualAssignment =
-                                (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(lastTypeKey) : null) ??
-                                (dutyAssignments?.[lastTypeKey] || '');
-                            const actualPerson = getAssignedPersonNameForGroupFromAssignment(actualAssignment, groupNum);
-                            if (
-                                actualPerson &&
-                                normName(actualPerson) === normName(manualAlt.replacementPerson) &&
-                                normName(manualAlt.baselinePerson) !== normName(manualAlt.replacementPerson)
-                            ) {
-                                lastAssigned[t] = normName(manualAlt.replacementPerson);
-                            }
-                        } else {
-                            // Απουσία/απενεργοποίηση ολόκληρου επόμενου μήνα στην τελευταία ημέρα τύπου.
-                            const baseline =
-                                typeof getRotationBaselineAssignmentForDate === 'function'
-                                    ? getRotationBaselineAssignmentForDate(lastTypeKey)
-                                    : null;
-                            const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
-                            const baselinePerson = baselineMap?.[groupNum] || '';
-                            const actualAssignment =
-                                (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(lastTypeKey) : null) ??
-                                (dutyAssignments?.[lastTypeKey] || '');
-                            const actualPerson = getAssignedPersonNameForGroupFromAssignment(actualAssignment, groupNum);
-                            if (
-                                baselinePerson &&
-                                actualPerson &&
-                                normName(actualPerson) !== normName(baselinePerson) &&
-                                (isDisabledForType(baselinePerson, t) || isMissingWholeNextMonth(baselinePerson))
-                            ) {
-                                lastAssigned[t] = normName(actualPerson);
-                            }
-                        }
-                    }
+            // Seed from previous baseline month(s) only, so Excel alternates follow initial rotation order
+            // and ignore swaps/conflict replacements.
+            for (const t of ['normal', 'semi', 'weekend', 'special']) {
+                const fromChain = typeof getLastBaselineRotationPersonForDate === 'function'
+                    ? getLastBaselineRotationPersonForDate(t, firstDayOfExportMonth, groupNum)
+                    : null;
+                if (fromChain) lastAssigned[t] = normName(fromChain);
+            }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month, day);
+                const dayKey = formatDateKey(date);
+                const dayType = getDayType(date);
+                const rotationType = mapDayTypeToRotationType(dayType);
+
+                // Prefer baseline (rotation) assignment when available, so replacements (e.g. manual skip)
+                // do not shift the computed "next on rotation" list.
+                const baseline = (typeof getRotationBaselineAssignmentForDate === 'function')
+                    ? getRotationBaselineAssignmentForDate(dayKey)
+                    : null;
+                const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
+                const baselinePerson = baselineMap?.[groupNum] || '';
+                const actualAssignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
+                const actualPerson = getAssignedPersonNameForGroupFromAssignment(actualAssignment, groupNum) || '';
+
+                let personName = normName(baselinePerson);
+                // For non-special duty types: if baseline holder is unavailable for the whole next month
+                // and this date was actually served by a replacement, continue from the replacement.
+                // This prevents showing the replacement again as immediate alternate (A,B -> should be B,C).
+                if (
+                    rotationType !== 'special' &&
+                    baselinePerson &&
+                    actualPerson &&
+                    normName(actualPerson) !== normName(baselinePerson) &&
+                    (isDisabledForType(baselinePerson, rotationType) || isMissingWholeNextMonth(baselinePerson))
+                ) {
+                    personName = normName(actualPerson);
                 }
+                // Last chronological duty in this month wins (do not keep only the first day of the month).
+                if (personName) lastAssigned[rotationType] = personName;
             }
 
             const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
