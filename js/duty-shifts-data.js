@@ -4881,6 +4881,47 @@
                 return false;
             };
 
+            const collectDutyDayKeysInMonth = (rotationType) => {
+                const keys = [];
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const date = new Date(year, month, day);
+                    if (mapDayTypeToRotationType(getDayType(date)) === rotationType) {
+                        keys.push(formatDateKey(date));
+                    }
+                }
+                return keys;
+            };
+
+            /** Rotation slot holder for Excel alternates (baseline chain; manual alternate keeps slot on skipped person). */
+            const resolveRotationSlotHolder = (dayKey, rotationType) => {
+                const baseline = (typeof getRotationBaselineAssignmentForDate === 'function')
+                    ? getRotationBaselineAssignmentForDate(dayKey)
+                    : null;
+                const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
+                let holder = baselineMap?.[groupNum] || '';
+                const manual = typeof findManualAlternateReplacementForGroup === 'function'
+                    ? findManualAlternateReplacementForGroup(dayKey, groupNum)
+                    : null;
+                if (manual?.baselinePerson) {
+                    holder = manual.baselinePerson;
+                }
+                const actualAssignment = (typeof getAssignmentForDate === 'function'
+                    ? getAssignmentForDate(dayKey)
+                    : null) ?? (dutyAssignments?.[dayKey] || '');
+                const actualPerson = getAssignedPersonNameForGroupFromAssignment(actualAssignment, groupNum) || '';
+                let personName = normName(holder);
+                if (
+                    rotationType !== 'special' &&
+                    holder &&
+                    actualPerson &&
+                    normName(actualPerson) !== normName(holder) &&
+                    (isDisabledForType(holder, rotationType) || isMissingWholeNextMonth(holder))
+                ) {
+                    personName = normName(actualPerson);
+                }
+                return personName;
+            };
+
             const firstDayOfExportMonth = new Date(year, month, 1);
 
             // Seed from previous baseline month(s) only, so Excel alternates follow initial rotation order
@@ -4897,30 +4938,7 @@
                 const dayKey = formatDateKey(date);
                 const dayType = getDayType(date);
                 const rotationType = mapDayTypeToRotationType(dayType);
-
-                // Prefer baseline (rotation) assignment when available, so replacements (e.g. manual skip)
-                // do not shift the computed "next on rotation" list.
-                const baseline = (typeof getRotationBaselineAssignmentForDate === 'function')
-                    ? getRotationBaselineAssignmentForDate(dayKey)
-                    : null;
-                const baselineMap = baseline ? extractGroupAssignmentsMap(baseline) : null;
-                const baselinePerson = baselineMap?.[groupNum] || '';
-                const actualAssignment = (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null) ?? (dutyAssignments?.[dayKey] || '');
-                const actualPerson = getAssignedPersonNameForGroupFromAssignment(actualAssignment, groupNum) || '';
-
-                let personName = normName(baselinePerson);
-                // For non-special duty types: if baseline holder is unavailable for the whole next month
-                // and this date was actually served by a replacement, continue from the replacement.
-                // This prevents showing the replacement again as immediate alternate (A,B -> should be B,C).
-                if (
-                    rotationType !== 'special' &&
-                    baselinePerson &&
-                    actualPerson &&
-                    normName(actualPerson) !== normName(baselinePerson) &&
-                    (isDisabledForType(baselinePerson, rotationType) || isMissingWholeNextMonth(baselinePerson))
-                ) {
-                    personName = normName(actualPerson);
-                }
+                const personName = resolveRotationSlotHolder(dayKey, rotationType);
                 // Last chronological duty in this month wins (do not keep only the first day of the month).
                 if (personName) lastAssigned[rotationType] = personName;
             }
@@ -4943,34 +4961,112 @@
             };
             const getMissingReasonOverNextMonth = (personName) => getMissingReasonOverRange(personName, nextMonthStartKey, nextMonthEndKey);
 
+            /**
+             * Next N in rotation for Excel — follows baseline duty chronology, not current list index.
+             * List reorder (e.g. swap Γ↔Β positions) must not make Γ first alternate when Β is last in list
+             * but Γ held the last actual normal duty.
+             */
+            const nextNFromBaselineChain = (type, count, { allowIneligible = false } = {}) => {
+                const rawList = (groupData?.[type] || []).filter(Boolean);
+                const eligible = (p) => allowIneligible || (!isDisabledForType(p, type) && !isMissingWholeNextMonth(p));
+                const eligibleCount = rawList.filter(eligible).length;
+                const picks = [];
+                const seen = new Set();
+
+                const tryAdd = (person) => {
+                    if (!person || picks.length >= count) return;
+                    const resolved = rawList.find((p) => normName(p) === normName(person)) || person;
+                    if (!eligible(resolved)) return;
+                    const key = normName(resolved);
+                    if (seen.has(key)) return;
+                    if (picks.length === 1 && key === normName(picks[0]) && eligibleCount > 1) return;
+                    seen.add(key);
+                    picks.push(resolved);
+                };
+
+                const monthKeys = collectDutyDayKeysInMonth(type);
+                const lastMonthKey = monthKeys.length
+                    ? monthKeys[monthKeys.length - 1]
+                    : formatDateKey(new Date(year, month, daysInMonth));
+
+                const baselineStore = typeof getBaselineStoreForDayType === 'function'
+                    ? getBaselineStoreForDayType(type)
+                    : null;
+                const baselineKeysAfter = Object.keys(baselineStore || {})
+                    .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k) && k > lastMonthKey)
+                    .filter((k) => getDutyCategoryForDateKeyLocal(k) === type)
+                    .sort();
+
+                for (const dk of baselineKeysAfter) {
+                    if (picks.length >= count) break;
+                    tryAdd(resolveRotationSlotHolder(dk, type));
+                }
+
+                if (picks.length < count) {
+                    const scanStart = new Date(year, month + 1, 1);
+                    let scanned = 0;
+                    const maxScan = 400;
+                    while (picks.length < count && scanned < maxScan) {
+                        const d = new Date(scanStart);
+                        d.setDate(scanStart.getDate() + scanned++);
+                        if (mapDayTypeToRotationType(getDayType(d)) !== type) continue;
+                        const dk = formatDateKey(d);
+                        if (dk <= lastMonthKey) continue;
+                        if (baselineKeysAfter.includes(dk)) continue;
+                        const fromBaseline = resolveRotationSlotHolder(dk, type);
+                        if (fromBaseline) {
+                            tryAdd(fromBaseline);
+                        } else if (typeof computeExpectedRotationPersonForDate === 'function') {
+                            tryAdd(computeExpectedRotationPersonForDate(type, dk, groupNum));
+                        }
+                    }
+                }
+
+                if (picks.length < count) {
+                    const successor = new Map();
+                    for (let i = 0; i < monthKeys.length - 1; i++) {
+                        const p1 = resolveRotationSlotHolder(monthKeys[i], type);
+                        const p2 = resolveRotationSlotHolder(monthKeys[i + 1], type);
+                        if (p1 && p2) successor.set(normName(p1), p2);
+                    }
+                    let last = lastAssigned[type];
+                    if (!last && monthKeys.length) {
+                        last = resolveRotationSlotHolder(monthKeys[monthKeys.length - 1], type);
+                    }
+                    let cursor = normName(last);
+                    let guard = 0;
+                    while (picks.length < count && cursor && guard++ < rawList.length * 3) {
+                        const nxt = successor.get(cursor);
+                        if (!nxt) break;
+                        cursor = normName(nxt);
+                        tryAdd(nxt);
+                    }
+                }
+
+                if (picks.length < count) {
+                    const anchor = picks.length ? picks[picks.length - 1] : (lastAssigned[type] || '');
+                    let startIdx = 0;
+                    const lastIdx = anchor ? rawList.findIndex((p) => normName(p) === normName(anchor)) : -1;
+                    if (lastIdx >= 0) startIdx = (lastIdx + 1) % rawList.length;
+                    let cursor = startIdx;
+                    let checked = 0;
+                    while (checked < rawList.length * 2 && picks.length < count) {
+                        tryAdd(rawList[cursor]);
+                        cursor = (cursor + 1) % rawList.length;
+                        checked++;
+                    }
+                }
+
+                while (picks.length < count) picks.push('');
+                return picks.slice(0, count);
+            };
+
             const nextTwoForType = (type) => {
                 const rawList = (groupData?.[type] || []).filter(Boolean);
                 if (rawList.length === 0) return ['', ''];
-
-                const eligible = (p) => !isDisabledForType(p, type) && !isMissingWholeNextMonth(p);
-                const eligibleCount = rawList.filter(eligible).length;
+                const eligibleCount = rawList.filter((p) => !isDisabledForType(p, type) && !isMissingWholeNextMonth(p)).length;
                 if (eligibleCount === 0) return ['', ''];
-
-                const last = lastAssigned[type];
-                let startIdx = 0;
-                const lastIdx = last ? rawList.findIndex(p => normName(p) === normName(last)) : -1;
-                if (lastIdx >= 0) startIdx = (lastIdx + 1) % rawList.length;
-
-                const picks = [];
-                let cursor = startIdx;
-                let checked = 0;
-                const maxChecks = rawList.length * 2; // enough to wrap and still pick 2 (or same when single eligible)
-                while (checked < maxChecks && picks.length < 2) {
-                    const candidate = rawList[cursor];
-                    if (eligible(candidate)) {
-                        if (picks.length === 0 || candidate !== picks[0] || eligibleCount === 1) {
-                            picks.push(candidate);
-                        }
-                    }
-                    cursor = (cursor + 1) % rawList.length;
-                    checked++;
-                }
-
+                const picks = nextNFromBaselineChain(type, 2);
                 return [picks[0] || '', picks[1] || ''];
             };
 
@@ -4979,15 +5075,10 @@
             const nextThreeForSpecial = () => {
                 const rawList = (groupData?.special || []).filter(Boolean);
                 if (rawList.length === 0) return { names: ['', '', ''], notes: ['', '', ''] };
-                const last = lastAssigned.special;
-                let startIdx = 0;
-                if (last) {
-                    const idx = rawList.findIndex(p => normName(p) === normName(last));
-                    if (idx >= 0) startIdx = idx + 1;
-                }
+                const outNames = nextNFromBaselineChain('special', 3, { allowIneligible: true });
                 const findNextSpecialDates = (count = 3, maxDays = 3650) => {
                     const out = [];
-                    const start = new Date(year, month + 1, 1); // start scanning after current month
+                    const start = new Date(year, month + 1, 1);
                     for (let i = 0; i < maxDays && out.length < count; i++) {
                         const d = new Date(start);
                         d.setDate(start.getDate() + i);
@@ -5002,10 +5093,9 @@
                     const end = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0);
                     return { startKey: formatDateKey(start), endKey: formatDateKey(end) };
                 };
-                const outNames = [];
                 const outNotes = [];
                 for (let i = 0; i < 3; i++) {
-                    const name = rawList[(startIdx + i) % rawList.length] || '';
+                    const name = outNames[i] || '';
                     let note = '';
                     if (name) {
                         if (isDisabledForType(name, 'special')) {
@@ -5016,7 +5106,6 @@
                             if (r) note = r;
                         }
                     }
-                    outNames.push(name);
                     outNotes.push(note);
                 }
                 return { names: outNames, notes: outNotes };

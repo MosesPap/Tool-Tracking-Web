@@ -1523,6 +1523,26 @@
             }
             return null;
         }
+
+        /** True when person already received return-from-missing placement for this absence period (e.g. backward Friday in prior month). */
+        function hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, missingEndKey) {
+            if (!personName || !groupNum || !missingEndKey) return false;
+            const returnKey = (() => {
+                const d = new Date(missingEndKey + 'T00:00:00');
+                if (isNaN(d.getTime())) return null;
+                d.setDate(d.getDate() + 1);
+                return formatDateKey(d);
+            })();
+            for (const dk in assignmentReasons || {}) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+                if (returnKey && dk >= returnKey) continue;
+                const reason = getAssignmentReason(dk, groupNum, personName);
+                if (reason?.meta?.returnFromMissing && reason.meta.missingEnd === missingEndKey) {
+                    return true;
+                }
+            }
+            return false;
+        }
         /** Find the other date in a swap pair (for rotation: the person on that date is the one who was swapped out of currentDateKey). */
         function findSwapOtherDateKey(swapPairIdRaw, groupNum, currentDateKey) {
             if (swapPairIdRaw === null || swapPairIdRaw === undefined) return null;
@@ -6244,12 +6264,8 @@
                             if (entry.returnKey < calcStartKey || entry.returnKey > calcEndKey) return true;
                             const personName = entry.personName, groupNum = entry.groupNum, returnKey = entry.returnKey, pEndKey = entry.pEndKey;
                             // Already placed in a previous month for this same missing period (pEndKey)? Skip deferred – no re-assign here.
-                            for (const dk in assignmentReasons) {
-                                if (dk >= returnKey) continue;
-                                const reason = getAssignmentReason(dk, groupNum, personName);
-                                if (reason && reason.meta?.returnFromMissing && reason.meta?.missingEnd === pEndKey) {
-                                    return false; // remove from deferred – already assigned in a previous month
-                                }
+                            if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey)) {
+                                return false; // remove from deferred – already assigned in a previous month
                             }
                             let track = entry.track;
                             if (!track) {
@@ -6425,16 +6441,7 @@
                                     if (!returnKey) continue;
 
                                     // Already placed for this same missing period (pEndKey) in a previous month? Skip – do not re-assign in this month; they get duty again on their normal rotation turn.
-                                    let alreadyPlacedForThisPeriod = false;
-                                    for (const dk in assignmentReasons) {
-                                        if (dk >= returnKey) continue;
-                                        const reason = getAssignmentReason(dk, groupNum, personName);
-                                        if (reason && reason.meta?.returnFromMissing && reason.meta?.missingEnd === pEndKey) {
-                                            alreadyPlacedForThisPeriod = true;
-                                            break;
-                                        }
-                                    }
-                                    if (alreadyPlacedForThisPeriod) continue;
+                                    if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey)) continue;
 
                                     // If no baseline duty in calculated month during missing period, defer to next month if return is next month.
                                     if (!firstMissedKey) {
@@ -8843,6 +8850,20 @@
                                     }
                                     continue;
                                 }
+                                if (hasReturnFromMissingAlreadyPlacedForPeriod(rosterPersonName, groupNum, pEndKey)) {
+                                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                        dutyWeekendDebug.recordAbsentPlacement({
+                                            groupNum,
+                                            personName: rosterPersonName,
+                                            absenceEndKey: pEndKey,
+                                            missingRangeStr: missingRangeStrForDebug,
+                                            status: 'skipped',
+                                            reasonCode: 'RETURN_ALREADY_PLACED',
+                                            message: `Ήδη τοποθετήθηκε για αυτή την περίοδο απουσίας πριν την ${calcStartKeyW}.`
+                                        });
+                                    }
+                                    continue;
+                                }
                                 let targetWeekendKey = null;
                                 let isBackwardAssignment = false;
                                 const sameMonthPick = findSameMonthReturnWeekendTarget(
@@ -9838,6 +9859,20 @@
                                 }
                                 continue;
                             }
+                            if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey)) {
+                                if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                                    dutySemiDebug.recordAbsentPlacement({
+                                        groupNum,
+                                        personName,
+                                        absenceEndKey: pEndKey,
+                                        missingRangeStr: formatDDMMYYYYSemiRun(pStartKey) + ' - ' + formatDDMMYYYYSemiRun(pEndKey),
+                                        status: 'skipped',
+                                        reasonCode: 'RETURN_ALREADY_PLACED',
+                                        message: `Ήδη τοποθετήθηκε για αυτή την περίοδο απουσίας πριν την ${calcStartKey}.`
+                                    });
+                                }
+                                continue;
+                            }
                             // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
                             const thirdDayAfterEnd = addDaysToDateKeyRun(pEndKey, 3);
                             if (!thirdDayAfterEnd) continue;
@@ -10698,7 +10733,8 @@
                                     }
                                 }
                                 if (!hadMissedSemi) continue;
-                                
+                                if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey)) continue;
+
                                 // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
                                 const thirdDayAfterEnd = addDaysToDateKeyLocal(pEndKey, 3);
                                 if (!thirdDayAfterEnd) continue;
@@ -11645,6 +11681,8 @@
                             }
                             continue;
                         }
+
+                        if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey)) continue;
 
                         const isTargetSlotUsable = (candidateKey) => {
                             if (!candidateKey || candidateKey < calcStartKey || candidateKey > calcEndKey) return false;
