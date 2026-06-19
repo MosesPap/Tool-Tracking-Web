@@ -1998,11 +1998,27 @@
             /* defer cleared in resolveRotationPositionWithManualAlternate when skip applied */
         }
 
-        function applyManualAlternateToAssignedPerson(assignedPerson, existingManualAlternate, wasDisabledOnlySkipped) {
+        function applyManualAlternateToAssignedPerson(
+            assignedPerson,
+            existingManualAlternate,
+            wasDisabledOnlySkipped,
+            asOfDate,
+            groupNum,
+            dutyCategory
+        ) {
             if (!existingManualAlternate || !assignedPerson || wasDisabledOnlySkipped) return assignedPerson;
             const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
             if (norm(assignedPerson) === norm(existingManualAlternate.baseline)) {
-                return existingManualAlternate.replacement;
+                const replacement = existingManualAlternate.replacement;
+                if (
+                    replacement &&
+                    groupNum &&
+                    typeof isPersonDisabledForDuty === 'function' &&
+                    isPersonDisabledForDuty(replacement, groupNum, dutyCategory || 'semi', asOfDate)
+                ) {
+                    return assignedPerson;
+                }
+                return replacement;
             }
             return assignedPerson;
         }
@@ -9232,7 +9248,10 @@
                             assignedPerson = applyManualAlternateToAssignedPerson(
                                 assignedPerson,
                                 existingManualAlternateWeekend,
-                                wasDisabledOnlySkippedWeekend
+                                wasDisabledOnlySkippedWeekend,
+                                date,
+                                groupNum,
+                                'weekend'
                             );
                             if (
                                 existingManualAlternateWeekend &&
@@ -9782,6 +9801,7 @@
                 const meta = semiMeta[dateKey];
                 if (!meta) continue;
                 const { date, monthKey } = meta;
+                if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                 if (prevCalMonthKeySemiDeferRun !== monthKey) {
                     for (const k of Object.keys(deferManualAlternateSkipSemiRun)) delete deferManualAlternateSkipSemiRun[k];
                     if (typeof seedManualAlternateDeferAllGroupsForMonthStart === 'function') {
@@ -9806,19 +9826,36 @@
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
                         const map = extractGroupAssignmentsMap(semiNormalAssignments?.[dateKey]);
-                        if (map[groupNum]) {
+                        const preserved = map[groupNum];
+                        if (
+                            preserved &&
+                            !(
+                                typeof isPersonDisabledForDuty === 'function' &&
+                                isPersonDisabledForDuty(preserved, groupNum, 'semi', date)
+                            )
+                        ) {
                             if (!baseline[dateKey]) baseline[dateKey] = {};
-                            baseline[dateKey][groupNum] = map[groupNum];
+                            baseline[dateKey][groupNum] = preserved;
                         }
                         continue;
                     }
-                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { semi: [] };
+                    const groupData =
+                        (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum, dateKey) : groups[groupNum]) ||
+                        { semi: [] };
                     const groupPeople = groupData.semi || [];
                     if (groupPeople.length === 0) continue;
                     const rotationDays = groupPeople.length;
                     const designated = returnFromMissingSemiTargetsRun[dateKey]?.[groupNum];
                     const designatedInList = designated && groupPeople.find(p => normSemiRun(p) === normSemiRun(designated.personName));
-                    if (designated && designatedInList && !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi')) {
+                    if (
+                        designated &&
+                        designatedInList &&
+                        !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi') &&
+                        !(
+                            typeof isPersonDisabledForDuty === 'function' &&
+                            isPersonDisabledForDuty(designated.personName, groupNum, 'semi', date)
+                        )
+                    ) {
                         baseline[dateKey][groupNum] = designatedInList;
                         const displacedPerson = baselineSemiByDate[dateKey]?.[groupNum];
                         const originalIndex = displacedPerson != null ? groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(displacedPerson)) : -1;
@@ -9898,7 +9935,7 @@
                         });
                     }
                     // DISABLED: When rotation person is disabled, whole baseline shifts – store eligible person, no replacement line.
-                    if (person && isPersonDisabledForDuty(person, groupNum, 'semi')) {
+                    if (person && isPersonDisabledForDuty(person, groupNum, 'semi', date)) {
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.logStep('disabled-baseline', `${person} απενεργοποιημένος — αναζήτηση επόμενου.`);
                         }
@@ -9910,7 +9947,7 @@
                             const candidate = groupPeople[idx];
                             if (!candidate) continue;
                             if (deferSkipPersonRun && normSemiRun(candidate) === normSemiRun(deferSkipPersonRun)) continue;
-                            if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
+                            if (isPersonDisabledForDuty(candidate, groupNum, 'semi', date)) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                             eligiblePerson = candidate;
                             eligibleIndex = idx;
@@ -9923,7 +9960,7 @@
                                 eligiblePerson
                             );
                         }
-                        baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
+                        baseline[dateKey][groupNum] = eligiblePerson || undefined;
                         if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
                             storeUnavailableReplacementReason(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date, 'semi');
                         }
@@ -9941,7 +9978,7 @@
                             const candidate = groupPeople[idx];
                             if (!candidate) continue;
                             if (deferSkipPersonRunMissing && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunMissing)) continue;
-                            if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
+                            if (isPersonDisabledForDuty(candidate, groupNum, 'semi', date)) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                             eligiblePerson = candidate;
                             eligibleIndex = idx;
@@ -9954,7 +9991,7 @@
                                 eligiblePerson
                             );
                         }
-                        baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
+                        baseline[dateKey][groupNum] = eligiblePerson || undefined;
                         if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
                             storeUnavailableReplacementReason(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date, 'semi');
                             if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
@@ -9981,7 +10018,10 @@
                     baseline[dateKey][groupNum] = applyManualAlternateToAssignedPerson(
                         baseline[dateKey][groupNum],
                         existingManualAlternateSemiRun,
-                        false
+                        false,
+                        date,
+                        groupNum,
+                        'semi'
                     );
                     if (existingManualAlternateSemiRun && baseline[dateKey][groupNum] &&
                         normSemiRun(baseline[dateKey][groupNum]) === normSemiRun(existingManualAlternateSemiRun.replacement)) {
@@ -10824,7 +10864,10 @@
                             assignedPerson = applyManualAlternateToAssignedPerson(
                                 assignedPerson,
                                 existingManualAlternateSemi,
-                                wasDisabledOnlySkippedSemi
+                                wasDisabledOnlySkippedSemi,
+                                date,
+                                groupNum,
+                                'semi'
                             );
                             if (existingManualAlternateSemi && assignedPerson && !wasDisabledOnlySkippedSemi) {
                                 const normS = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());

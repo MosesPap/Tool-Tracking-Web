@@ -407,14 +407,19 @@
         function getDisabledStateAtDate(groupNum, personName, dateKey) {
             ensurePersonStatusScheduleSeeded();
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
-            const hits = personStatusSchedule.disabled
-                .filter(
-                    (e) =>
-                        disabledScheduleEntryMatchesPerson(e, groupNum, personName) &&
-                        compareScheduleDateKeys(e.effectiveFrom, dk) <= 0
-                )
-                .sort(compareScheduleEntries);
-            if (hits.length) return normalizeDisabledState(hits[0].state);
+            const hits = personStatusSchedule.disabled.filter(
+                (e) =>
+                    disabledScheduleEntryMatchesPerson(e, groupNum, personName) &&
+                    compareScheduleDateKeys(e.effectiveFrom, dk) <= 0
+            );
+            if (hits.length) {
+                hits.sort((a, b) => {
+                    const byEff = compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom);
+                    if (byEff !== 0) return byEff;
+                    return compareScheduleEntries(a, b);
+                });
+                return normalizeDisabledState(hits[0].state);
+            }
             return legacyDisabledStateFromGroups(groupNum, personName);
         }
         function isPersonDisabledForDutyAtDate(person, groupNum, dutyCategory, dateKey) {
