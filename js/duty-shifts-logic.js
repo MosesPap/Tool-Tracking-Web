@@ -1524,21 +1524,112 @@
             return null;
         }
 
+        function normalizeReasonDateKey(value) {
+            if (!value) return null;
+            if (typeof inputValueToDateKey === 'function') {
+                const k = inputValueToDateKey(value);
+                if (k) return k;
+            }
+            const s = String(value).trim();
+            return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+        }
+
+        function getSemiAssignedPersonFromStore(store, dateKey, groupNum) {
+            if (!store || !dateKey) return null;
+            const raw = store[dateKey];
+            if (!raw) return null;
+            const map = typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : null;
+            if (map?.[groupNum]) return map[groupNum];
+            if (typeof raw === 'object' && !Array.isArray(raw) && raw[groupNum]) return raw[groupNum];
+            if (typeof parseAssignedPersonForGroupFromAssignment === 'function') {
+                return parseAssignedPersonForGroupFromAssignment(raw, groupNum);
+            }
+            return null;
+        }
+
         /** True when person already received return-from-missing placement for this absence period (e.g. backward Friday in prior month). */
-        function hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, missingEndKey) {
+        function hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, missingEndKey, absenceStartKey) {
             if (!personName || !groupNum || !missingEndKey) return false;
-            const returnKey = (() => {
-                const d = new Date(missingEndKey + 'T00:00:00');
-                if (isNaN(d.getTime())) return null;
-                d.setDate(d.getDate() + 1);
-                return formatDateKey(d);
-            })();
+            const normEnd = normalizeReasonDateKey(missingEndKey);
+            if (!normEnd) return false;
+            const returnKey = typeof addDaysToDateKey === 'function' ? addDaysToDateKey(normEnd, 1) : null;
+            const pNorm = normalizePersonKey(personName);
+
             for (const dk in assignmentReasons || {}) {
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
                 if (returnKey && dk >= returnKey) continue;
-                const reason = getAssignmentReason(dk, groupNum, personName);
-                if (reason?.meta?.returnFromMissing && reason.meta.missingEnd === missingEndKey) {
-                    return true;
+                const gmap = assignmentReasons[dk]?.[groupNum] || assignmentReasons[dk]?.[String(groupNum)];
+                if (!gmap) continue;
+                for (const pn of Object.keys(gmap)) {
+                    if (normalizePersonKey(pn) !== pNorm) continue;
+                    const reason = gmap[pn];
+                    const metaEnd = normalizeReasonDateKey(reason?.meta?.missingEnd);
+                    if (reason?.meta?.returnFromMissing && metaEnd === normEnd) return true;
+                }
+            }
+
+            const semiStores = [semiNormalAssignments];
+            if (typeof calculationSteps !== 'undefined' && calculationSteps?.finalSemiAssignments) {
+                semiStores.push(calculationSteps.finalSemiAssignments);
+            }
+            for (const store of semiStores) {
+                if (!store || typeof store !== 'object') continue;
+                for (const dk in store) {
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+                    if (returnKey && dk >= returnKey) continue;
+                    const assigned = getSemiAssignedPersonFromStore(store, dk, groupNum);
+                    if (!assigned || normalizePersonKey(assigned) !== pNorm) continue;
+                    const reason = getAssignmentReason(dk, groupNum, personName);
+                    const metaEnd = normalizeReasonDateKey(reason?.meta?.missingEnd);
+                    if (reason?.meta?.returnFromMissing && metaEnd === normEnd) return true;
+                }
+            }
+
+            const normStart = absenceStartKey ? normalizeReasonDateKey(absenceStartKey) : null;
+            if (!normStart) return false;
+
+            let latestSemiBeforeAbsence = null;
+            for (const store of semiStores) {
+                if (!store || typeof store !== 'object') continue;
+                for (const dk in store) {
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+                    if (dk >= normStart) continue;
+                    const assigned = getSemiAssignedPersonFromStore(store, dk, groupNum);
+                    if (!assigned || normalizePersonKey(assigned) !== pNorm) continue;
+                    if (!latestSemiBeforeAbsence || dk > latestSemiBeforeAbsence) latestSemiBeforeAbsence = dk;
+                }
+            }
+            if (!latestSemiBeforeAbsence) return false;
+
+            const reasonBefore = getAssignmentReason(latestSemiBeforeAbsence, groupNum, personName);
+            if (reasonBefore?.meta?.returnFromMissing) {
+                const metaEnd = normalizeReasonDateKey(reasonBefore.meta.missingEnd);
+                return !metaEnd || metaEnd === normEnd;
+            }
+
+            const dStart = new Date(normStart + 'T00:00:00');
+            const dAssigned = new Date(latestSemiBeforeAbsence + 'T00:00:00');
+            const daysBefore = Math.floor((dStart - dAssigned) / 86400000);
+            return daysBefore > 0 && daysBefore <= 21;
+        }
+
+        function personFulfilledSemiReturnForPrevMonthEndingAbsence(person, groupNum, calcStartKey) {
+            if (!person || !groupNum || !calcStartKey) return false;
+            const calcStartDate = dateKeyToDate(calcStartKey);
+            if (isNaN(calcStartDate.getTime())) return false;
+            const prevMonthStartKey = formatDateKey(new Date(calcStartDate.getFullYear(), calcStartDate.getMonth() - 1, 1));
+            const prevMonthEndKey = formatDateKey(new Date(calcStartDate.getFullYear(), calcStartDate.getMonth(), 0));
+            const missingMap = (groups?.[groupNum]?.missingPeriods) || {};
+            for (const pn of Object.keys(missingMap)) {
+                if (normalizePersonKey(pn) !== normalizePersonKey(person)) continue;
+                for (const period of missingMap[pn]) {
+                    const pStartKey = inputValueToDateKey(period?.start);
+                    const pEndKey = inputValueToDateKey(period?.end);
+                    if (!pStartKey || !pEndKey) continue;
+                    if (pEndKey < prevMonthStartKey || pEndKey > prevMonthEndKey) continue;
+                    if (hasReturnFromMissingAlreadyPlacedForPeriod(person, groupNum, pEndKey, pStartKey)) {
+                        return true;
+                    }
                 }
             }
             return false;
@@ -6441,7 +6532,7 @@
                                     if (!returnKey) continue;
 
                                     // Already placed for this same missing period (pEndKey) in a previous month? Skip – do not re-assign in this month; they get duty again on their normal rotation turn.
-                                    if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey)) continue;
+                                    if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey, pStartKey)) continue;
 
                                     // If no baseline duty in calculated month during missing period, defer to next month if return is next month.
                                     if (!firstMissedKey) {
@@ -8850,7 +8941,7 @@
                                     }
                                     continue;
                                 }
-                                if (hasReturnFromMissingAlreadyPlacedForPeriod(rosterPersonName, groupNum, pEndKey)) {
+                                if (hasReturnFromMissingAlreadyPlacedForPeriod(rosterPersonName, groupNum, pEndKey, pStartKey)) {
                                     if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                         dutyWeekendDebug.recordAbsentPlacement({
                                             groupNum,
@@ -9859,7 +9950,7 @@
                                 }
                                 continue;
                             }
-                            if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey)) {
+                            if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey, pStartKey)) {
                                 if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                                     dutySemiDebug.recordAbsentPlacement({
                                         groupNum,
@@ -9963,6 +10054,7 @@
             const baseline = {}; // dateKey -> { groupNum -> person }
             const globalSemiPos = {}; // groupNum -> index (continues across semi days)
             const deferManualAlternateSkipSemiRun = {};
+            const semiFulfilledReturnDeferUsedRun = {};
             const semiDeferFulfillmentPending = {}; // `${dateKey}:${groupNum}` -> defer context
             let prevCalMonthKeySemiDeferRun = null;
             let prevCalMonthKeySemiRot = null;
@@ -10154,6 +10246,38 @@
                             }
                         }
                         if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays; // next semi goes to person after the one we assigned
+                    } else if (
+                        person &&
+                        !semiFulfilledReturnDeferUsedRun[`${monthKey}:${groupNum}:${normalizePersonKey(person)}`] &&
+                        personFulfilledSemiReturnForPrevMonthEndingAbsence(person, groupNum, calcStartKey)
+                    ) {
+                        const fulfilledDeferKey = `${monthKey}:${groupNum}:${normalizePersonKey(person)}`;
+                        semiFulfilledReturnDeferUsedRun[fulfilledDeferKey] = true;
+                        if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                            dutySemiDebug.logStep(
+                                'return-fulfilled-skip',
+                                `${person} παράλειψη — ήδη κάλυψε ημιαργία απουσίας στον προηγούμενο μήνα.`
+                            );
+                        }
+                        let eligiblePerson = null;
+                        let eligibleIndex = -1;
+                        const deferSkipPersonRunFulfilled = deferManualAlternateSkipSemiRun[groupNum]?.person;
+                        for (let offset = 1; offset <= rotationDays * 2; offset++) {
+                            const idx = (pos + offset) % rotationDays;
+                            const candidate = groupPeople[idx];
+                            if (!candidate) continue;
+                            if (deferSkipPersonRunFulfilled && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunFulfilled)) continue;
+                            if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
+                            if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
+                            eligiblePerson = candidate;
+                            eligibleIndex = idx;
+                            break;
+                        }
+                        baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
+                        if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
+                            storeUnavailableReplacementReason(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date, 'semi');
+                        }
+                        if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays;
                     } else {
                         baseline[dateKey][groupNum] = person;
                     }
@@ -10733,7 +10857,7 @@
                                     }
                                 }
                                 if (!hadMissedSemi) continue;
-                                if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey)) continue;
+                                if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey, pStartKey)) continue;
 
                                 // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
                                 const thirdDayAfterEnd = addDaysToDateKeyLocal(pEndKey, 3);
@@ -11682,7 +11806,7 @@
                             continue;
                         }
 
-                        if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey)) continue;
+                        if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey, pStartKey)) continue;
 
                         const isTargetSlotUsable = (candidateKey) => {
                             if (!candidateKey || candidateKey < calcStartKey || candidateKey > calcEndKey) return false;
