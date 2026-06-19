@@ -1615,7 +1615,7 @@
 
         function personFulfilledSemiReturnForPrevMonthEndingAbsence(person, groupNum, calcStartKey) {
             if (!person || !groupNum || !calcStartKey) return false;
-            const calcStartDate = dateKeyToDate(calcStartKey);
+            const calcStartDate = new Date(calcStartKey + 'T00:00:00');
             if (isNaN(calcStartDate.getTime())) return false;
             const prevMonthStartKey = formatDateKey(new Date(calcStartDate.getFullYear(), calcStartDate.getMonth() - 1, 1));
             const prevMonthEndKey = formatDateKey(new Date(calcStartDate.getFullYear(), calcStartDate.getMonth(), 0));
