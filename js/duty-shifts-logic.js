@@ -627,7 +627,7 @@
         function isUnavailableReplacementReason(reason) {
             if (!reason || reason.type !== 'skip') return false;
             const m = reason.meta || {};
-            if (m.returnFromMissing || m.preserveBaseline || m.manualAlternateReplacement || m.manualAlternateDeferFulfillment) {
+            if (m.returnFromMissing || m.preserveBaseline || m.manualAlternateReplacement || m.manualAlternateDeferFulfillment || m.semiReturnFulfilledSkip) {
                 return false;
             }
             return !!m.unavailableReplacement;
@@ -673,7 +673,8 @@
                 existing?.meta?.returnFromMissing ||
                 existing?.meta?.preserveBaseline ||
                 existing?.meta?.manualAlternateReplacement ||
-                existing?.meta?.manualAlternateDeferFulfillment
+                existing?.meta?.manualAlternateDeferFulfillment ||
+                existing?.meta?.semiReturnFulfilledSkip
             ) {
                 return;
             }
@@ -1607,16 +1608,51 @@
                 return !metaEnd || metaEnd === normEnd;
             }
 
-            const dStart = new Date(normStart + 'T00:00:00');
-            const dAssigned = new Date(latestSemiBeforeAbsence + 'T00:00:00');
-            const daysBefore = Math.floor((dStart - dAssigned) / 86400000);
-            return daysBefore > 0 && daysBefore <= 21;
+            const sortedSemi =
+                typeof calculationSteps !== 'undefined' && Array.isArray(calculationSteps?.dayTypeLists?.semi)
+                    ? [...calculationSteps.dayTypeLists.semi].sort()
+                    : Object.keys(semiNormalAssignments || {})
+                          .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k))
+                          .sort();
+            const dayBeforeStart =
+                typeof addDaysToDateKey === 'function' ? addDaysToDateKey(normStart, -1) : null;
+            let backwardTarget = null;
+            for (const dk of sortedSemi) {
+                if (dk >= normStart) break;
+                backwardTarget = dk;
+            }
+            if (backwardTarget && dayBeforeStart && backwardTarget === dayBeforeStart) {
+                let prev = null;
+                for (const dk of sortedSemi) {
+                    if (dk >= dayBeforeStart) break;
+                    prev = dk;
+                }
+                backwardTarget = prev;
+            }
+            return !!(backwardTarget && latestSemiBeforeAbsence === backwardTarget);
         }
 
-        function personFulfilledSemiReturnForPrevMonthEndingAbsence(person, groupNum, calcStartKey) {
-            if (!person || !groupNum || !calcStartKey) return false;
+        function personWasAbsentOnSemiDuringPeriod(person, groupNum, pStartKey, pEndKey) {
+            if (!person || !pStartKey || !pEndKey) return false;
+            const start = new Date(pStartKey + 'T00:00:00');
+            const end = new Date(pEndKey + 'T00:00:00');
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                if (typeof getDayType === 'function' && getDayType(d) !== 'semi-normal-day') continue;
+                if (
+                    typeof isPersonMissingOnDate === 'function' &&
+                    isPersonMissingOnDate(person, groupNum, new Date(d), 'semi')
+                ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function getFulfilledSemiReturnSkipContext(person, groupNum, calcStartKey) {
+            if (!person || !groupNum || !calcStartKey) return null;
             const calcStartDate = new Date(calcStartKey + 'T00:00:00');
-            if (isNaN(calcStartDate.getTime())) return false;
+            if (isNaN(calcStartDate.getTime())) return null;
             const prevMonthStartKey = formatDateKey(new Date(calcStartDate.getFullYear(), calcStartDate.getMonth() - 1, 1));
             const prevMonthEndKey = formatDateKey(new Date(calcStartDate.getFullYear(), calcStartDate.getMonth(), 0));
             const missingMap = (groups?.[groupNum]?.missingPeriods) || {};
@@ -1627,12 +1663,32 @@
                     const pEndKey = inputValueToDateKey(period?.end);
                     if (!pStartKey || !pEndKey) continue;
                     if (pEndKey < prevMonthStartKey || pEndKey > prevMonthEndKey) continue;
-                    if (hasReturnFromMissingAlreadyPlacedForPeriod(person, groupNum, pEndKey, pStartKey)) {
-                        return true;
-                    }
+                    if (!personWasAbsentOnSemiDuringPeriod(person, groupNum, pStartKey, pEndKey)) continue;
+                    if (!hasReturnFromMissingAlreadyPlacedForPeriod(person, groupNum, pEndKey, pStartKey)) continue;
+                    return { absenceEndKey: pEndKey, absenceStartKey: pStartKey };
                 }
             }
-            return false;
+            return null;
+        }
+
+        function storeSemiReturnFulfilledSkipReason(dateKey, groupNum, replacementPerson, skippedPerson, dateObj, absenceEndKey) {
+            const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const dayName = typeof getGreekDayName === 'function' ? getGreekDayName(dateObj) : '';
+            const endStr =
+                absenceEndKey && typeof formatDateKeyAsGreekDMY === 'function'
+                    ? formatDateKeyAsGreekDMY(absenceEndKey)
+                    : '';
+            const reason =
+                `Ο/Η ${replacementPerson} ανατέθηκε αντί του/της ${skippedPerson} στις ${dateStr}` +
+                (dayName ? ` ημέρα ${dayName}` : '') +
+                ` επειδή ο/η ${skippedPerson} είχε ήδη καλύψει την ημιαργία απουσίας` +
+                (endStr ? ` (λήξη ${endStr})` : '') +
+                ` στον προηγούμενο μήνα.`;
+            storeAssignmentReason(dateKey, groupNum, replacementPerson, 'skip', reason, skippedPerson, null, {
+                semiReturnFulfilledSkip: true,
+                returnFromMissing: true,
+                missingEnd: absenceEndKey || null
+            });
         }
         /** Find the other date in a swap pair (for rotation: the person on that date is the one who was swapped out of currentDateKey). */
         function findSwapOtherDateKey(swapPairIdRaw, groupNum, currentDateKey) {
@@ -10246,38 +10302,48 @@
                             }
                         }
                         if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays; // next semi goes to person after the one we assigned
-                    } else if (
-                        person &&
-                        !semiFulfilledReturnDeferUsedRun[`${monthKey}:${groupNum}:${normalizePersonKey(person)}`] &&
-                        personFulfilledSemiReturnForPrevMonthEndingAbsence(person, groupNum, calcStartKey)
-                    ) {
+                    } else if (person) {
                         const fulfilledDeferKey = `${monthKey}:${groupNum}:${normalizePersonKey(person)}`;
-                        semiFulfilledReturnDeferUsedRun[fulfilledDeferKey] = true;
-                        if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
-                            dutySemiDebug.logStep(
-                                'return-fulfilled-skip',
-                                `${person} παράλειψη — ήδη κάλυψε ημιαργία απουσίας στον προηγούμενο μήνα.`
-                            );
+                        const fulfilledSkipCtx =
+                            !semiFulfilledReturnDeferUsedRun[fulfilledDeferKey] &&
+                            getFulfilledSemiReturnSkipContext(person, groupNum, calcStartKey);
+                        if (fulfilledSkipCtx) {
+                            semiFulfilledReturnDeferUsedRun[fulfilledDeferKey] = true;
+                            if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                                dutySemiDebug.logStep(
+                                    'return-fulfilled-skip',
+                                    `${person} παράλειψη — ήδη κάλυψε ημιαργία απουσίας στον προηγούμενο μήνα.`
+                                );
+                            }
+                            let eligiblePerson = null;
+                            let eligibleIndex = -1;
+                            const deferSkipPersonRunFulfilled = deferManualAlternateSkipSemiRun[groupNum]?.person;
+                            for (let offset = 1; offset <= rotationDays * 2; offset++) {
+                                const idx = (pos + offset) % rotationDays;
+                                const candidate = groupPeople[idx];
+                                if (!candidate) continue;
+                                if (deferSkipPersonRunFulfilled && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunFulfilled)) continue;
+                                if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
+                                if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
+                                eligiblePerson = candidate;
+                                eligibleIndex = idx;
+                                break;
+                            }
+                            baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
+                            if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
+                                storeSemiReturnFulfilledSkipReason(
+                                    dateKey,
+                                    groupNum,
+                                    eligiblePerson,
+                                    rotationPersonAtSlot,
+                                    date,
+                                    fulfilledSkipCtx.absenceEndKey
+                                );
+                            }
+                            if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays;
+                        } else {
+                            baseline[dateKey][groupNum] = person;
                         }
-                        let eligiblePerson = null;
-                        let eligibleIndex = -1;
-                        const deferSkipPersonRunFulfilled = deferManualAlternateSkipSemiRun[groupNum]?.person;
-                        for (let offset = 1; offset <= rotationDays * 2; offset++) {
-                            const idx = (pos + offset) % rotationDays;
-                            const candidate = groupPeople[idx];
-                            if (!candidate) continue;
-                            if (deferSkipPersonRunFulfilled && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunFulfilled)) continue;
-                            if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
-                            if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
-                            eligiblePerson = candidate;
-                            eligibleIndex = idx;
-                            break;
-                        }
-                        baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
-                        if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
-                            storeUnavailableReplacementReason(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date, 'semi');
-                        }
-                        if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays;
                     } else {
                         baseline[dateKey][groupNum] = person;
                     }
