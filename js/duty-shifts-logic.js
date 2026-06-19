@@ -1264,6 +1264,47 @@
             return null;
         }
 
+        /**
+         * Απουσία μεγαλύτερη από ένα ημερολογιακό μήνα (>30 ημέρες μεταξύ έναρξης και λήξης):
+         * επανένταξη μόνο στη φυσική σειρά (καθημερινές / ημιαργίες / αργίες), χωρίς return-from-missing.
+         */
+        function isAbsenceLongerThanOneMonth(startKey, endKey) {
+            if (!startKey || !endKey) return false;
+            if (typeof startKey !== 'string' || typeof endKey !== 'string') return false;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(startKey) || !/^\d{4}-\d{2}-\d{2}$/.test(endKey)) return false;
+            const start = new Date(startKey + 'T00:00:00');
+            const end = new Date(endKey + 'T00:00:00');
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+            const days = Math.round((end - start) / (1000 * 60 * 60 * 24));
+            return days > 30;
+        }
+
+        function lookupMissingPeriodStartKey(groupNum, personName, endKey) {
+            if (!endKey || !groupNum || !personName) return null;
+            const g = typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum];
+            const missingMap = g?.missingPeriods || {};
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const targetPerson = norm(personName);
+            for (const key of Object.keys(missingMap)) {
+                if (norm(key) !== targetPerson) continue;
+                const periods = Array.isArray(missingMap[key]) ? missingMap[key] : [];
+                for (const p of periods) {
+                    const ek = typeof inputValueToDateKey === 'function' ? inputValueToDateKey(p?.end) : null;
+                    if (ek === endKey) {
+                        return typeof inputValueToDateKey === 'function' ? inputValueToDateKey(p?.start) : null;
+                    }
+                }
+            }
+            return null;
+        }
+
+        /** false = μακρά απουσία → μόνο φυσική σειρά, όχι ειδική επανένταξη. */
+        function shouldUseReturnFromMissingForPeriod(period, startKey, endKey) {
+            const sk = startKey || (typeof inputValueToDateKey === 'function' ? inputValueToDateKey(period?.start) : null);
+            const ek = endKey || (typeof inputValueToDateKey === 'function' ? inputValueToDateKey(period?.end) : null);
+            return !isAbsenceLongerThanOneMonth(sk, ek);
+        }
+
         function normalizePersonKey(personName) {
             return String(personName || '')
                 .trim()
@@ -5918,8 +5959,11 @@
                         // Process deferred return-from-missing: assign 3 normal days after return in current calculated month.
                         const deferredList = calculationSteps.deferredReturnFromMissing || [];
                         calculationSteps.deferredReturnFromMissing = deferredList.filter((entry) => {
+                            const personName = entry.personName, groupNum = entry.groupNum, pEndKey = entry.pEndKey;
+                            const pStartKeyDefer = entry.pStartKey || lookupMissingPeriodStartKey(groupNum, personName, pEndKey);
+                            if (isAbsenceLongerThanOneMonth(pStartKeyDefer, pEndKey)) return false;
                             if (entry.returnKey < calcStartKey || entry.returnKey > calcEndKey) return true;
-                            const personName = entry.personName, groupNum = entry.groupNum, returnKey = entry.returnKey, pEndKey = entry.pEndKey;
+                            const returnKey = entry.returnKey;
                             // Already placed in a previous month for this same missing period (pEndKey)? Skip deferred – no re-assign here.
                             for (const dk in assignmentReasons) {
                                 if (dk >= returnKey) continue;
@@ -6056,6 +6100,23 @@
                                     const pStartKey = inputValueToDateKey(period?.start);
                                     const pEndKey = inputValueToDateKey(period?.end);
                                     if (!pStartKey || !pEndKey) continue;
+                                    if (!shouldUseReturnFromMissingForPeriod(period, pStartKey, pEndKey)) {
+                                        if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                            dutyNormalDebug.recordReturnFromMissingPlan({
+                                                personName,
+                                                groupNum,
+                                                pStartKey,
+                                                pEndKey,
+                                                returnKey: addDaysToDateKey(pEndKey, 1),
+                                                firstMissedKey: null,
+                                                targetKey: null,
+                                                status: 'skipped',
+                                                reasonCode: 'RETURN_SKIPPED_LONG_ABSENCE',
+                                                message: 'Απουσία >1 μήνας — επανένταξη στη φυσική σειρά καθημερινών'
+                                            });
+                                        }
+                                        continue;
+                                    }
                                     const endInRange = (pEndKey >= calcStartKey && pEndKey <= calcEndKey);
                                     const endInPrevMonth = periodEndsInPrevMonth(pEndKey);
                                     // Also accept when return day (day after period end) falls in calculation range
@@ -6131,7 +6192,7 @@
                                         }
                                         if (returnKey > calcEndKey) {
                                             calculationSteps.deferredReturnFromMissing = calculationSteps.deferredReturnFromMissing || [];
-                                            calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pEndKey, returnKey });
+                                            calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pStartKey, pEndKey, returnKey });
                                         }
                                         continue;
                                     }
@@ -6257,7 +6318,7 @@
                                     // 3) If no slot in calculated month and return is next month: defer to next month calculation.
                                     if (!targetKey && returnKey > calcEndKey) {
                                         calculationSteps.deferredReturnFromMissing = calculationSteps.deferredReturnFromMissing || [];
-                                        calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pEndKey, returnKey, track });
+                                        calculationSteps.deferredReturnFromMissing.push({ personName, groupNum, pStartKey, pEndKey, returnKey, track });
                                     }
 
                                     if (!targetKey) {
@@ -8423,6 +8484,19 @@
                                 const pStartKey = period.start;
                                 const pEndKey = period.end;
                                 if (!pStartKey || !pEndKey) continue;
+                                if (!shouldUseReturnFromMissingForPeriod(period, pStartKey, pEndKey)) {
+                                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                        dutyWeekendDebug.recordAbsentPlacement({
+                                            groupNum,
+                                            personName,
+                                            absenceEndKey: pEndKey,
+                                            status: 'skipped',
+                                            reasonCode: 'RETURN_SKIPPED_LONG_ABSENCE',
+                                            message: 'Απουσία >1 μήνας — επανένταξη στη φυσική σειρά ΣΚ/αργιών'
+                                        });
+                                    }
+                                    continue;
+                                }
                                 const calcStartDateObj = calcStartKeyW ? new Date(calcStartKeyW + 'T00:00:00') : null;
                                 const prevMonthStart = calcStartDateObj ? new Date(calcStartDateObj.getFullYear(), calcStartDateObj.getMonth() - 1, 1) : null;
                                 const prevMonthStartKey = prevMonthStart ? formatDateKey(prevMonthStart) : null;
@@ -9443,6 +9517,19 @@
                             const pStartKey = inputValueToDateKey(period?.start);
                             const pEndKey = inputValueToDateKey(period?.end);
                             if (!pStartKey || !pEndKey) continue;
+                            if (!shouldUseReturnFromMissingForPeriod(period, pStartKey, pEndKey)) {
+                                if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                                    dutySemiDebug.recordAbsentPlacement({
+                                        groupNum,
+                                        personName,
+                                        absenceEndKey: pEndKey,
+                                        status: 'skipped',
+                                        reasonCode: 'RETURN_SKIPPED_LONG_ABSENCE',
+                                        message: 'Απουσία >1 μήνας — επανένταξη στη φυσική σειρά ημιαργιών'
+                                    });
+                                }
+                                continue;
+                            }
                             const pEndDate = new Date(pEndKey + 'T00:00:00');
                             const calcStartDateObj = calcStartKey ? new Date(calcStartKey + 'T00:00:00') : null;
                             const prevMonthStart = calcStartDateObj ? new Date(calcStartDateObj.getFullYear(), calcStartDateObj.getMonth() - 1, 1) : null;
@@ -10305,6 +10392,7 @@
                                 const pStartKey = inputValueToDateKey(period?.start);
                                 const pEndKey = inputValueToDateKey(period?.end);
                                 if (!pStartKey || !pEndKey) continue;
+                                if (!shouldUseReturnFromMissingForPeriod(period, pStartKey, pEndKey)) continue;
                                 // Allow periods that ended within calculation range OR in the month immediately before calcStartKey
                                 // (e.g., if calculating March, also check periods ending in February)
                                 const pEndDate = new Date(pEndKey + 'T00:00:00');
@@ -11265,6 +11353,23 @@
                         const pStartKey = inputValueToDateKey(period?.start);
                         const pEndKey = inputValueToDateKey(period?.end);
                         if (!pStartKey || !pEndKey) continue;
+                        if (!shouldUseReturnFromMissingForPeriod(period, pStartKey, pEndKey)) {
+                            if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                dutyNormalDebug.recordReturnFromMissingPlan({
+                                    personName,
+                                    groupNum,
+                                    pStartKey,
+                                    pEndKey,
+                                    returnKey: addDays(pEndKey, 1),
+                                    firstMissedKey: null,
+                                    targetKey: null,
+                                    status: 'skipped',
+                                    reasonCode: 'RETURN_SKIPPED_LONG_ABSENCE',
+                                    message: 'Απουσία >1 μήνας — επανένταξη στη φυσική σειρά καθημερινών'
+                                });
+                            }
+                            continue;
+                        }
                         const endInRange = pEndKey >= calcStartKey && pEndKey <= calcEndKey;
                         const endInPrevMonth = periodEndsInPrevMonth(pEndKey);
                         const returnKeyForRange = addDays(pEndKey, 1);
@@ -11318,6 +11423,7 @@
                                 calculationSteps.deferredReturnFromMissing.push({
                                     personName,
                                     groupNum,
+                                    pStartKey,
                                     pEndKey,
                                     returnKey
                                 });
@@ -11372,6 +11478,7 @@
                                 calculationSteps.deferredReturnFromMissing.push({
                                     personName,
                                     groupNum,
+                                    pStartKey,
                                     pEndKey,
                                     returnKey,
                                     track
