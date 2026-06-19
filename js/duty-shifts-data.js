@@ -949,8 +949,26 @@
             const prevMonthKey = getPreviousMonthKeyFromDate(date);
             let person = null;
 
+            // In-run continuity from a multi-month calculation session (Step 2/3).
+            if (typeof calculationSteps !== 'undefined' && calculationSteps) {
+                person = calculationSteps.rotationContinuityInRun?.[dayType]?.[prevMonthKey]?.[groupNum] || null;
+                if (!person) {
+                    const stepLastByMonth =
+                        dayType === 'semi'
+                            ? calculationSteps.lastSemiRotationPositionsByMonth
+                            : dayType === 'weekend'
+                              ? calculationSteps.lastWeekendRotationPositionsByMonth
+                              : dayType === 'normal'
+                                ? calculationSteps.lastNormalRotationPositionsByMonth
+                                : dayType === 'special'
+                                  ? calculationSteps.lastSpecialRotationPositionsByMonth
+                                  : null;
+                    person = stepLastByMonth?.[prevMonthKey]?.[groupNum] || null;
+                }
+            }
+
             // Month-scoped format
-            if (byType && typeof byType === 'object' && !Array.isArray(byType)) {
+            if (!person && byType && typeof byType === 'object' && !Array.isArray(byType)) {
                 const monthEntry = byType[prevMonthKey];
                 if (monthEntry && typeof monthEntry === 'object' && !Array.isArray(monthEntry) && monthEntry[groupNum]) {
                     person = monthEntry[groupNum];
@@ -1397,7 +1415,10 @@
             // Fast path: no manual alternate in previous month -> seed directly from previous month baseline continuity.
             // This avoids synthetic cursor drift and preserves exact baseline carry-over.
             if (!prevManualAlternate?.replacementPerson) {
+                const inRunPerson =
+                    typeof calculationSteps !== 'undefined' && calculationSteps?.rotationContinuityInRun?.[dayTypeCategory]?.[prevMonthKey]?.[groupNum];
                 const lastContinuityPerson =
+                    inRunPerson ||
                     getLastAssignmentContinuityPersonForPreviousMonth(dayTypeCategory, dateInMonth, groupNum) ||
                     getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum) ||
                     getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
@@ -1405,7 +1426,7 @@
                 if (lastContinuityPerson && continuityIdx >= 0) {
                     return (continuityIdx + 1) % len;
                 }
-                return 0;
+                return null;
             }
 
             let cursor = 0;
@@ -1479,7 +1500,7 @@
             const groupPeople = groupData?.[dayTypeCategory] || groups[groupNum]?.[dayTypeCategory] || [];
             if (groupPeople.length > 0) {
                 const cursor = computeRotationPositionAtMonthStart(dayTypeCategory, monthStartDate, groupNum, groupPeople);
-                if (Number.isFinite(cursor)) {
+                if (cursor != null && Number.isFinite(cursor) && cursor >= 0) {
                     const len = groupPeople.length;
                     return groupPeople[(cursor - 1 + len) % len] || null;
                 }

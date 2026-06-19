@@ -1886,33 +1886,62 @@
         function reseedGlobalRotationPositionAtMonthStart(dayTypeCategory, dateInMonth, groupNum, groupPeople, globalPos) {
             const rotationDays = groupPeople.length;
             if (!rotationDays) return;
-            const startDate = calculationSteps?.startDate;
-            const isFebruary2026 = startDate && startDate.getFullYear() === 2026 && startDate.getMonth() === 1;
-            const isAprilStart = startDate && startDate.getMonth() === 3;
-            if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
+            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+            const applySeedFromLastPerson = (lastPersonName) => {
+                if (!lastPersonName) return false;
+                const lastPersonIndex = groupPeople.findIndex((p) => norm(p) === norm(lastPersonName));
+                if (lastPersonIndex < 0) return false;
+                globalPos[groupNum] = (lastPersonIndex + 1) % rotationDays;
+                return true;
+            };
+
+            // Month-specific cold start (not calc-range start): Feb-2026 all groups; April groups 1–2 only.
+            const isFebruary2026Month = dateInMonth.getFullYear() === 2026 && dateInMonth.getMonth() === 1;
+            const isAprilMonth = dateInMonth.getMonth() === 3;
+            if (isFebruary2026Month || (isAprilMonth && (groupNum === 1 || groupNum === 2))) {
                 globalPos[groupNum] = 0;
                 return;
             }
+
+            // Same calculation run: previous calendar month already built in Step 3.
+            const prevMonthKey =
+                typeof getPreviousMonthKeyFromDate === 'function' ? getPreviousMonthKeyFromDate(dateInMonth) : null;
+            const inRunPerson = prevMonthKey
+                ? calculationSteps?.rotationContinuityInRun?.[dayTypeCategory]?.[prevMonthKey]?.[groupNum]
+                : null;
+            if (applySeedFromLastPerson(inRunPerson)) return;
+
             if (typeof computeRotationPositionAtMonthStart === 'function') {
                 const cursor = computeRotationPositionAtMonthStart(dayTypeCategory, dateInMonth, groupNum, groupPeople);
-                if (Number.isFinite(cursor)) {
+                if (cursor != null && Number.isFinite(cursor) && cursor >= 0) {
                     globalPos[groupNum] = cursor % rotationDays;
                     return;
                 }
             }
-            const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
             const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
                 ? getRotationSeedPersonForMonthStart(dayTypeCategory, dateInMonth, groupNum)
                 : getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-            const lastPersonIndex = lastPersonName
-                ? groupPeople.findIndex(p => norm(p) === norm(lastPersonName))
-                : -1;
-            if (lastPersonName && lastPersonIndex >= 0) {
-                globalPos[groupNum] = (lastPersonIndex + 1) % rotationDays;
-            } else {
-                const daysSinceStart = getRotationPosition(dateInMonth, dayTypeCategory, groupNum);
-                globalPos[groupNum] = daysSinceStart % rotationDays;
+            if (applySeedFromLastPerson(lastPersonName)) return;
+            const daysSinceStart = getRotationPosition(dateInMonth, dayTypeCategory, groupNum);
+            globalPos[groupNum] = daysSinceStart % rotationDays;
+        }
+
+        /** Track last rotation continuity person per month during multi-month Step 3/2 runs. */
+        function recordRotationContinuityInRun(dayTypeCategory, monthKey, groupNum, dateKey, assignedPerson, assignmentsMap) {
+            if (!assignedPerson || !monthKey || !calculationSteps) return;
+            const personForRot =
+                typeof getPersonForRotationContinuity === 'function'
+                    ? getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, assignmentsMap)
+                    : assignedPerson;
+            if (!personForRot) return;
+            if (!calculationSteps.rotationContinuityInRun) calculationSteps.rotationContinuityInRun = {};
+            if (!calculationSteps.rotationContinuityInRun[dayTypeCategory]) {
+                calculationSteps.rotationContinuityInRun[dayTypeCategory] = {};
             }
+            if (!calculationSteps.rotationContinuityInRun[dayTypeCategory][monthKey]) {
+                calculationSteps.rotationContinuityInRun[dayTypeCategory][monthKey] = {};
+            }
+            calculationSteps.rotationContinuityInRun[dayTypeCategory][monthKey][groupNum] = personForRot;
         }
 
         function markManualAlternateDeferFulfilled() {
@@ -9432,6 +9461,8 @@
             });
 
             const sortedSemi = [...(semiNormalDays || [])].sort();
+            calculationSteps.rotationContinuityInRun = calculationSteps.rotationContinuityInRun || {};
+            calculationSteps.rotationContinuityInRun.semi = {};
             if (sortedSemi.length === 0) {
                 stepContent.innerHTML = '<div class="step-content"><h6 class="mb-3">Ημιαργίες</h6><div class="alert alert-info">Δεν υπάρχουν ημιαργίες στην επιλεγμένη περίοδο.</div></div>';
                 return;
@@ -9745,6 +9776,7 @@
                         globalSemiPos[groupNum] = (originalIndex >= 0 ? originalIndex : (designatedIndex >= 0 ? designatedIndex + 1 : 0)) % rotationDays;
                         const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                         storeAssignmentReason(dateKey, groupNum, designated.personName, 'skip', semiReasonText, null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
+                        recordRotationContinuityInRun('semi', monthKey, groupNum, dateKey, designatedInList, baseline);
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.recordAbsentPlacement({
                                 groupNum,
@@ -9905,6 +9937,14 @@
                         nextPos = (pos + 1) % rotationDays;
                     }
                     globalSemiPos[groupNum] = nextPos;
+                    recordRotationContinuityInRun(
+                        'semi',
+                        monthKey,
+                        groupNum,
+                        dateKey,
+                        baseline[dateKey][groupNum],
+                        baseline
+                    );
                 }
             }
 
