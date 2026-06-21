@@ -1248,6 +1248,43 @@
             return missed;
         }
 
+        function getSortedSemiKeysInRange(rangeStartKey, rangeEndKey) {
+            const keys = new Set();
+            if (typeof calculationSteps !== 'undefined' && Array.isArray(calculationSteps?.dayTypeLists?.semi)) {
+                for (const dk of calculationSteps.dayTypeLists.semi) {
+                    if (dk >= rangeStartKey && dk <= rangeEndKey) keys.add(dk);
+                }
+            }
+            const start = new Date(rangeStartKey + 'T00:00:00');
+            const end = new Date(rangeEndKey + 'T00:00:00');
+            if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                    if (typeof getDayType === 'function' && getDayType(d) === 'semi-normal-day') {
+                        keys.add(formatDateKey(d));
+                    }
+                }
+            }
+            return [...keys].sort();
+        }
+
+        /** True only when baseline expected this person on a semi during the absence and they were missing. */
+        function personMissedBaselineSemiDuringAbsence(person, groupNum, pStartKey, pEndKey) {
+            if (!person || !groupNum || !pStartKey || !pEndKey) return false;
+            const sortedSemi = getSortedSemiKeysInRange(pStartKey, pEndKey);
+            if (!sortedSemi.length) return false;
+            const baselineSemiByDate = buildBaselineSemiByDateForSortedSemi(sortedSemi);
+            const missed = collectMissedSemisInRange(
+                sortedSemi,
+                pStartKey,
+                pEndKey,
+                groupNum,
+                person,
+                baselineSemiByDate,
+                normalizePersonKey
+            );
+            return missed.length > 0;
+        }
+
         /** First eligible semi on/after threshold: prefer same calendar month as threshold, then any later semi in range. */
         function pickSemiReturnFromMissingTargetKey(sortedSemi, thirdDayAfterEnd, calcStartKey, calcEndKey, occupiedMap, groupNum) {
             if (!thirdDayAfterEnd || !Array.isArray(sortedSemi) || sortedSemi.length === 0 || !calcStartKey || !calcEndKey) return null;
@@ -1668,7 +1705,7 @@
             const normStart = absenceStartKey ? normalizeReasonDateKey(absenceStartKey) : null;
             if (!normEnd) return false;
             if (!personOwnsMissingPeriod(personName, groupNum, normStart, normEnd)) return false;
-            if (!personWasAbsentOnSemiDuringPeriod(personName, groupNum, normStart, normEnd)) return false;
+            if (!personMissedBaselineSemiDuringAbsence(personName, groupNum, normStart, normEnd)) return false;
 
             if (hasReturnFromMissingMetadataForPeriod(personName, groupNum, normEnd)) return true;
 
@@ -1708,23 +1745,6 @@
             return false;
         }
 
-        function personWasAbsentOnSemiDuringPeriod(person, groupNum, pStartKey, pEndKey) {
-            if (!person || !pStartKey || !pEndKey) return false;
-            const start = new Date(pStartKey + 'T00:00:00');
-            const end = new Date(pEndKey + 'T00:00:00');
-            if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
-            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-                if (typeof getDayType === 'function' && getDayType(d) !== 'semi-normal-day') continue;
-                if (
-                    typeof isPersonMissingOnDate === 'function' &&
-                    isPersonMissingOnDate(person, groupNum, new Date(d), 'semi')
-                ) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         function getFulfilledSemiReturnSkipContext(person, groupNum, calcStartKey) {
             if (!person || !groupNum || !calcStartKey) return null;
             const ownPeriods = getMissingPeriodsForPersonNorm(groupNum, person);
@@ -1738,7 +1758,7 @@
                 const pEndKey = inputValueToDateKey(period?.end);
                 if (!pStartKey || !pEndKey) continue;
                 if (pEndKey < prevMonthStartKey || pEndKey > prevMonthEndKey) continue;
-                if (!personWasAbsentOnSemiDuringPeriod(person, groupNum, pStartKey, pEndKey)) continue;
+                if (!personMissedBaselineSemiDuringAbsence(person, groupNum, pStartKey, pEndKey)) continue;
                 if (!hasReturnFromMissingAlreadyPlacedForPeriod(person, groupNum, pEndKey, pStartKey)) continue;
                 return { absenceEndKey: pEndKey, absenceStartKey: pStartKey };
             }
