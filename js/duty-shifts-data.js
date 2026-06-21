@@ -1230,10 +1230,19 @@
             // Fast path: no manual alternate in previous month -> seed directly from previous month baseline continuity.
             // This avoids synthetic cursor drift and preserves exact baseline carry-over.
             if (!prevManualAlternate?.replacementPerson) {
+                const fromAssignments = getLastAssignmentContinuityPersonForPreviousMonth(
+                    dayTypeCategory,
+                    dateInMonth,
+                    groupNum
+                );
+                const fromBaseline = getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+                const fromStored = getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+                // Semi: prefer assignment continuity, then baseline last (matches rotationBaselineSemiAssignments),
+                // then stored lastRotationPositions (may be stale after holiday-conflict swaps).
                 const lastContinuityPerson =
-                    getLastAssignmentContinuityPersonForPreviousMonth(dayTypeCategory, dateInMonth, groupNum) ||
-                    getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum) ||
-                    getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+                    dayTypeCategory === 'semi'
+                        ? fromAssignments || fromBaseline || fromStored
+                        : fromAssignments || fromStored || fromBaseline;
                 const continuityIdx = findIdx(lastContinuityPerson);
                 if (lastContinuityPerson && continuityIdx >= 0) {
                     return (continuityIdx + 1) % len;

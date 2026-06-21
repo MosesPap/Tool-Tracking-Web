@@ -2189,6 +2189,7 @@
          * Person name to store in lastRotationPositions / month carry-over: after manual alternate (replacement for baseline),
          * use baseline (swappedWith) so the next slot is B,C,E… not the replacement's index again.
          * Manual mutual two-day swap does not alter cross-month seed (uses assigned person on that date).
+         * Semi holiday-conflict swap: continue after conflictedName (moved person), not the filler on the last Friday.
          */
         function getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, assignmentsByDate) {
             if (!assignedPerson) return null;
@@ -2207,9 +2208,18 @@
                 return reason.swappedWith;
             }
             if (reason && reason.type === 'swap' && reason.swapPairId != null && !reason.meta?.mutualTwoDaySwap) {
+                if (reason.meta?.semiConsecutiveHolidaySwap && reason.meta?.conflictedName) {
+                    const conflicted =
+                        typeof resolvePersonInGroupRotationList === 'function'
+                            ? resolvePersonInGroupRotationList(reason.meta.conflictedName, groupNum, 'semi')
+                            : reason.meta.conflictedName;
+                    if (conflicted) return conflicted;
+                }
                 const otherKey = findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey);
-                const swappedOutPerson = otherKey ? (assignmentsByDate?.[otherKey] || {})[groupNum] : null;
-                if (swappedOutPerson) return swappedOutPerson;
+                if (otherKey) {
+                    const swappedOutPerson = getSemiAssignedPersonFromStore(assignmentsByDate, otherKey, groupNum);
+                    if (swappedOutPerson) return swappedOutPerson;
+                }
             }
             return assignedPerson;
         }
