@@ -1285,6 +1285,28 @@
             return missed.length > 0;
         }
 
+        /**
+         * True when the absence fully covers at least one calendar month (day 1 through last day).
+         * Whole-month absences resume normal rotation when the person's turn comes — no return-from-missing placement.
+         */
+        function absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey) {
+            if (!pStartKey || !pEndKey || pStartKey > pEndKey) return false;
+            const start = new Date(pStartKey + 'T00:00:00');
+            const end = new Date(pEndKey + 'T00:00:00');
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+            const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+            const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+            while (cursor <= endMonth) {
+                const y = cursor.getFullYear();
+                const m = cursor.getMonth();
+                const monthFirst = formatDateKey(new Date(y, m, 1));
+                const monthLast = formatDateKey(new Date(y, m + 1, 0));
+                if (pStartKey <= monthFirst && pEndKey >= monthLast) return true;
+                cursor.setMonth(cursor.getMonth() + 1);
+            }
+            return false;
+        }
+
         /** First eligible semi on/after threshold: prefer same calendar month as threshold, then any later semi in range. */
         function pickSemiReturnFromMissingTargetKey(sortedSemi, thirdDayAfterEnd, calcStartKey, calcEndKey, occupiedMap, groupNum) {
             if (!thirdDayAfterEnd || !Array.isArray(sortedSemi) || sortedSemi.length === 0 || !calcStartKey || !calcEndKey) return null;
@@ -10112,6 +10134,22 @@
                                             (baselineHint.length
                                                 ? ` Σειρά preview: ${baselineHint.join(', ')}.`
                                                 : ' (κανένα ημιαργία στο scan window).')
+                                    });
+                                }
+                                continue;
+                            }
+                            if (absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey)) {
+                                if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
+                                    dutySemiDebug.recordAbsentPlacement({
+                                        groupNum,
+                                        personName,
+                                        absenceEndKey: pEndKey,
+                                        missingRangeStr: formatDDMMYYYYSemiRun(pStartKey) + ' - ' + formatDDMMYYYYSemiRun(pEndKey),
+                                        status: 'skipped',
+                                        reasonCode: 'RETURN_WHOLE_CALENDAR_MONTH',
+                                        message:
+                                            `Απουσία καλύπτει ολόκληρο(ους) ημερολογιακό(ύς) μήνα(ες) — χωρίς ειδική τοποθέτηση· ` +
+                                            `ημιαργία όταν ξαναέρθει η σειρά στη ροή.`
                                     });
                                 }
                                 continue;
