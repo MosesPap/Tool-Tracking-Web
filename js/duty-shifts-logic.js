@@ -516,6 +516,14 @@
                 return typeof normalizeSkipReasonText === 'function' ? normalizeSkipReasonText(reason?.reason || '') : reason?.reason || '';
             }
             const m = reason.meta;
+            if (m?.semiReturnFulfilledSkip) {
+                const rawFulfilled = String(reason.reason || '').trim();
+                if (rawFulfilled) {
+                    return typeof normalizeSkipReasonText === 'function'
+                        ? normalizeSkipReasonText(rawFulfilled)
+                        : rawFulfilled;
+                }
+            }
             if (m?.returnFromMissing && (m.insertedByShift || m.fromDeferred)) {
                 const rawReturn = String(reason.reason || '').trim();
                 if (rawReturn) {
@@ -1600,8 +1608,21 @@
             if (idx >= 0) globalPos[groupNum] = idx;
         }
 
-        /** True when person already received return-from-missing placement for this absence period (e.g. backward Friday in prior month). */
-        function hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, missingEndKey, absenceStartKey) {
+        function personOwnsMissingPeriod(person, groupNum, pStartKey, pEndKey) {
+            const periods = getMissingPeriodsForPersonNorm(groupNum, person);
+            if (!periods.length) return false;
+            const normStart = normalizeReasonDateKey(pStartKey);
+            const normEnd = normalizeReasonDateKey(pEndKey);
+            if (!normStart || !normEnd) return false;
+            return periods.some((period) => {
+                const s = inputValueToDateKey(period?.start);
+                const e = inputValueToDateKey(period?.end);
+                return s === normStart && e === normEnd;
+            });
+        }
+
+        /** Confirmed only via returnFromMissing metadata on a saved semi assignment. */
+        function hasReturnFromMissingMetadataForPeriod(personName, groupNum, missingEndKey) {
             if (!personName || !groupNum || !missingEndKey) return false;
             const normEnd = normalizeReasonDateKey(missingEndKey);
             if (!normEnd) return false;
@@ -1637,8 +1658,20 @@
                     if (reason?.meta?.returnFromMissing && metaEnd === normEnd) return true;
                 }
             }
+            return false;
+        }
 
+        /** True when person already received return-from-missing placement for this absence period (e.g. backward Friday in prior month). */
+        function hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, missingEndKey, absenceStartKey) {
+            if (!personName || !groupNum || !missingEndKey) return false;
+            const normEnd = normalizeReasonDateKey(missingEndKey);
             const normStart = absenceStartKey ? normalizeReasonDateKey(absenceStartKey) : null;
+            if (!normEnd) return false;
+            if (!personOwnsMissingPeriod(personName, groupNum, normStart, normEnd)) return false;
+            if (!personWasAbsentOnSemiDuringPeriod(personName, groupNum, normStart, normEnd)) return false;
+
+            if (hasReturnFromMissingMetadataForPeriod(personName, groupNum, normEnd)) return true;
+
             if (!normStart) return false;
 
             const sortedSemi =
@@ -1650,14 +1683,14 @@
             const backwardTarget = getBackwardSemiReturnDateKey(normStart, sortedSemi);
             if (!backwardTarget) return false;
 
+            const semiStores = [semiNormalAssignments];
+            if (typeof calculationSteps !== 'undefined' && calculationSteps?.finalSemiAssignments) {
+                semiStores.push(calculationSteps.finalSemiAssignments);
+            }
+            const pNorm = normalizePersonKey(personName);
             for (const store of semiStores) {
                 const assigned = getSemiAssignedPersonFromStore(store, backwardTarget, groupNum);
                 if (!assigned || normalizePersonKey(assigned) !== pNorm) continue;
-                const reason = getAssignmentReason(backwardTarget, groupNum, personName);
-                if (reason?.meta?.returnFromMissing) {
-                    const metaEnd = normalizeReasonDateKey(reason.meta.missingEnd);
-                    return !metaEnd || metaEnd === normEnd;
-                }
                 if (typeof buildExpectedSemiPersonMapForCalendarMonth === 'function') {
                     const dt = new Date(backwardTarget + 'T00:00:00');
                     const expectedMap = buildExpectedSemiPersonMapForCalendarMonth(
@@ -1666,11 +1699,10 @@
                         groupNum
                     );
                     const baselineExpected = expectedMap[backwardTarget];
-                    if (baselineExpected && normalizePersonKey(baselineExpected) === pNorm) {
+                    if (!baselineExpected || normalizePersonKey(baselineExpected) === pNorm) {
                         return false;
                     }
                 }
-                if (!personWasAbsentOnSemiDuringPeriod(personName, groupNum, normStart, normEnd)) return false;
                 return true;
             }
             return false;
@@ -1695,22 +1727,20 @@
 
         function getFulfilledSemiReturnSkipContext(person, groupNum, calcStartKey) {
             if (!person || !groupNum || !calcStartKey) return null;
+            const ownPeriods = getMissingPeriodsForPersonNorm(groupNum, person);
+            if (!ownPeriods.length) return null;
             const calcStartDate = new Date(calcStartKey + 'T00:00:00');
             if (isNaN(calcStartDate.getTime())) return null;
             const prevMonthStartKey = formatDateKey(new Date(calcStartDate.getFullYear(), calcStartDate.getMonth() - 1, 1));
             const prevMonthEndKey = formatDateKey(new Date(calcStartDate.getFullYear(), calcStartDate.getMonth(), 0));
-            const missingMap = (groups?.[groupNum]?.missingPeriods) || {};
-            for (const pn of Object.keys(missingMap)) {
-                if (normalizePersonKey(pn) !== normalizePersonKey(person)) continue;
-                for (const period of missingMap[pn]) {
-                    const pStartKey = inputValueToDateKey(period?.start);
-                    const pEndKey = inputValueToDateKey(period?.end);
-                    if (!pStartKey || !pEndKey) continue;
-                    if (pEndKey < prevMonthStartKey || pEndKey > prevMonthEndKey) continue;
-                    if (!personWasAbsentOnSemiDuringPeriod(person, groupNum, pStartKey, pEndKey)) continue;
-                    if (!hasReturnFromMissingAlreadyPlacedForPeriod(person, groupNum, pEndKey, pStartKey)) continue;
-                    return { absenceEndKey: pEndKey, absenceStartKey: pStartKey };
-                }
+            for (const period of ownPeriods) {
+                const pStartKey = inputValueToDateKey(period?.start);
+                const pEndKey = inputValueToDateKey(period?.end);
+                if (!pStartKey || !pEndKey) continue;
+                if (pEndKey < prevMonthStartKey || pEndKey > prevMonthEndKey) continue;
+                if (!personWasAbsentOnSemiDuringPeriod(person, groupNum, pStartKey, pEndKey)) continue;
+                if (!hasReturnFromMissingAlreadyPlacedForPeriod(person, groupNum, pEndKey, pStartKey)) continue;
+                return { absenceEndKey: pEndKey, absenceStartKey: pStartKey };
             }
             return null;
         }
@@ -5738,7 +5768,9 @@
 
                     const reasonObj = getAssignmentReason(dateKey, groupNum, comp) || null;
                     if (reasonObj && reasonObj.type === 'shift') continue;
-                    const isBaseDisabledOrMissing = isPersonDisabledForDuty(base, groupNum, 'semi') || isPersonMissingOnDate(base, groupNum, dateObj, 'semi');
+                    const isBaseDisabledOrMissing =
+                        isPersonDisabledForDuty(base, groupNum, 'semi', dateObj) ||
+                        isPersonMissingOnDate(base, groupNum, dateObj, 'semi');
                     // Same as normal: skip only if cascading shift (no reason and base missing/disabled => direct replacement has 'skip' on another row)
                     if (!reasonObj && isBaseDisabledOrMissing) {
                         continue;
@@ -5770,18 +5802,22 @@
                                   : reasonObj.reason
                           )
                         : '';
-                    // Same logic as normal: when missing or disabled use "Αντικατέστησε ..." sentence (buildUnavailableReplacementReason)
-                    let briefReason = isBaseDisabledOrMissing
-                        ? (buildUnavailableReplacementReason({
-                            skippedPersonName: base,
-                            replacementPersonName: comp,
-                            dateObj,
-                            groupNum,
-                            dutyCategory: 'semi'
-                        }) || '')
-                        : (reasonText
-                            ? (reasonObj?.type === 'swap' ? reasonText : reasonText.split('.').filter(Boolean)[0])
-                            : 'Αλλαγή');
+                    // Prefer stored reason (return-from-missing / fulfilled-skip) over fabricated absence text
+                    const storedReasonText = reasonText
+                        ? (reasonObj.type === 'swap' ? reasonText : reasonText.split('.').filter(Boolean)[0])
+                        : '';
+                    let briefReason = storedReasonText;
+                    if (!briefReason && isBaseDisabledOrMissing) {
+                        briefReason =
+                            buildUnavailableReplacementReason({
+                                skippedPersonName: base,
+                                replacementPersonName: comp,
+                                dateObj,
+                                groupNum,
+                                dutyCategory: 'semi'
+                            }) || '';
+                    }
+                    if (!briefReason) briefReason = 'Αλλαγή';
 
                     const swapDateStr = otherKey
                         ? new Date(otherKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })
