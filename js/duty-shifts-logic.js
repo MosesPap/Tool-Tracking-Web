@@ -682,7 +682,7 @@
                 (typeof isPersonMissingOnDate === 'function' &&
                     isPersonMissingOnDate(baselinePerson, groupNum, date, cat)) ||
                 (typeof isPersonDisabledForDuty === 'function' &&
-                    isPersonDisabledForDuty(baselinePerson, groupNum, cat));
+                    isPersonDisabledForDuty(baselinePerson, groupNum, cat, date));
             if (!baselineUnavailable) return;
             if (
                 existing &&
@@ -1548,6 +1548,58 @@
             return null;
         }
 
+        function getBackwardSemiReturnDateKey(absenceStartKey, sortedSemiKeys) {
+            const normStart = normalizeReasonDateKey(absenceStartKey);
+            if (!normStart || !Array.isArray(sortedSemiKeys) || sortedSemiKeys.length === 0) return null;
+            const dayBeforeStart =
+                typeof addDaysToDateKey === 'function' ? addDaysToDateKey(normStart, -1) : null;
+            let backwardTarget = null;
+            for (const dk of sortedSemiKeys) {
+                if (dk >= normStart) break;
+                backwardTarget = dk;
+            }
+            if (backwardTarget && dayBeforeStart && backwardTarget === dayBeforeStart) {
+                let prev = null;
+                for (const dk of sortedSemiKeys) {
+                    if (dk >= dayBeforeStart) break;
+                    prev = dk;
+                }
+                backwardTarget = prev;
+            }
+            return backwardTarget;
+        }
+
+        function storeSemiUnavailableReplacementIfNeeded(dateKey, groupNum, replacementPerson, skippedPerson, dateObj) {
+            if (!replacementPerson || !skippedPerson || !dateObj) return;
+            const norm = (s) => normalizePersonKey(s);
+            if (norm(replacementPerson) === norm(skippedPerson)) return;
+            const actuallyUnavailable =
+                (typeof isPersonDisabledForDuty === 'function' &&
+                    isPersonDisabledForDuty(skippedPerson, groupNum, 'semi', dateObj)) ||
+                (typeof isPersonMissingOnDate === 'function' &&
+                    isPersonMissingOnDate(skippedPerson, groupNum, dateObj, 'semi'));
+            if (!actuallyUnavailable) return;
+            storeUnavailableReplacementReason(dateKey, groupNum, replacementPerson, skippedPerson, dateObj, 'semi');
+        }
+
+        function alignSemiRotationPosToExpectedAtMonthStart(dateInMonth, groupNum, groupPeople, globalPos, sortedSemiKeys) {
+            if (!dateInMonth || !groupNum || !Array.isArray(groupPeople) || groupPeople.length === 0) return;
+            if (typeof buildExpectedSemiPersonMapForCalendarMonth !== 'function') return;
+            const y = dateInMonth.getFullYear();
+            const m = dateInMonth.getMonth();
+            const monthKey = `${y}-${String(m + 1).padStart(2, '0')}`;
+            const semiDays = (sortedSemiKeys || [])
+                .filter((dk) => /^\d{4}-\d{2}-\d{2}$/.test(dk) && dk.substring(0, 7) === monthKey)
+                .sort();
+            const firstSemi = semiDays[0];
+            if (!firstSemi) return;
+            const expectedMap = buildExpectedSemiPersonMapForCalendarMonth(y, m, groupNum);
+            const expectedPerson = expectedMap[firstSemi];
+            if (!expectedPerson) return;
+            const idx = groupPeople.findIndex((p) => normalizePersonKey(p) === normalizePersonKey(expectedPerson));
+            if (idx >= 0) globalPos[groupNum] = idx;
+        }
+
         /** True when person already received return-from-missing placement for this absence period (e.g. backward Friday in prior month). */
         function hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, missingEndKey, absenceStartKey) {
             if (!personName || !groupNum || !missingEndKey) return false;
@@ -1589,47 +1641,39 @@
             const normStart = absenceStartKey ? normalizeReasonDateKey(absenceStartKey) : null;
             if (!normStart) return false;
 
-            let latestSemiBeforeAbsence = null;
-            for (const store of semiStores) {
-                if (!store || typeof store !== 'object') continue;
-                for (const dk in store) {
-                    if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
-                    if (dk >= normStart) continue;
-                    const assigned = getSemiAssignedPersonFromStore(store, dk, groupNum);
-                    if (!assigned || normalizePersonKey(assigned) !== pNorm) continue;
-                    if (!latestSemiBeforeAbsence || dk > latestSemiBeforeAbsence) latestSemiBeforeAbsence = dk;
-                }
-            }
-            if (!latestSemiBeforeAbsence) return false;
-
-            const reasonBefore = getAssignmentReason(latestSemiBeforeAbsence, groupNum, personName);
-            if (reasonBefore?.meta?.returnFromMissing) {
-                const metaEnd = normalizeReasonDateKey(reasonBefore.meta.missingEnd);
-                return !metaEnd || metaEnd === normEnd;
-            }
-
             const sortedSemi =
                 typeof calculationSteps !== 'undefined' && Array.isArray(calculationSteps?.dayTypeLists?.semi)
                     ? [...calculationSteps.dayTypeLists.semi].sort()
                     : Object.keys(semiNormalAssignments || {})
                           .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k))
                           .sort();
-            const dayBeforeStart =
-                typeof addDaysToDateKey === 'function' ? addDaysToDateKey(normStart, -1) : null;
-            let backwardTarget = null;
-            for (const dk of sortedSemi) {
-                if (dk >= normStart) break;
-                backwardTarget = dk;
-            }
-            if (backwardTarget && dayBeforeStart && backwardTarget === dayBeforeStart) {
-                let prev = null;
-                for (const dk of sortedSemi) {
-                    if (dk >= dayBeforeStart) break;
-                    prev = dk;
+            const backwardTarget = getBackwardSemiReturnDateKey(normStart, sortedSemi);
+            if (!backwardTarget) return false;
+
+            for (const store of semiStores) {
+                const assigned = getSemiAssignedPersonFromStore(store, backwardTarget, groupNum);
+                if (!assigned || normalizePersonKey(assigned) !== pNorm) continue;
+                const reason = getAssignmentReason(backwardTarget, groupNum, personName);
+                if (reason?.meta?.returnFromMissing) {
+                    const metaEnd = normalizeReasonDateKey(reason.meta.missingEnd);
+                    return !metaEnd || metaEnd === normEnd;
                 }
-                backwardTarget = prev;
+                if (typeof buildExpectedSemiPersonMapForCalendarMonth === 'function') {
+                    const dt = new Date(backwardTarget + 'T00:00:00');
+                    const expectedMap = buildExpectedSemiPersonMapForCalendarMonth(
+                        dt.getFullYear(),
+                        dt.getMonth(),
+                        groupNum
+                    );
+                    const baselineExpected = expectedMap[backwardTarget];
+                    if (baselineExpected && normalizePersonKey(baselineExpected) === pNorm) {
+                        return false;
+                    }
+                }
+                if (!personWasAbsentOnSemiDuringPeriod(personName, groupNum, normStart, normEnd)) return false;
+                return true;
             }
-            return !!(backwardTarget && latestSemiBeforeAbsence === backwardTarget);
+            return false;
         }
 
         function personWasAbsentOnSemiDuringPeriod(person, groupNum, pStartKey, pEndKey) {
@@ -10134,6 +10178,7 @@
                         const people = gd.semi || [];
                         if (people.length) {
                             reseedGlobalRotationPositionAtMonthStart('semi', date, g, people, globalSemiPos);
+                            alignSemiRotationPosToExpectedAtMonthStart(date, g, people, globalSemiPos, sortedSemi);
                         }
                     }
                     prevCalMonthKeySemiRot = monthKey;
@@ -10258,8 +10303,8 @@
                             );
                         }
                         baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
-                        if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
-                            storeUnavailableReplacementReason(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date, 'semi');
+                        if (eligiblePerson && rotationPersonAtSlot) {
+                            storeSemiUnavailableReplacementIfNeeded(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date);
                         }
                         if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays; // next semi goes to person after the one we assigned
                     } else if (person && isPersonMissingOnDate(person, groupNum, date, 'semi')) {
@@ -10289,8 +10334,8 @@
                             );
                         }
                         baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
-                        if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
-                            storeUnavailableReplacementReason(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date, 'semi');
+                        if (eligiblePerson && rotationPersonAtSlot) {
+                            storeSemiUnavailableReplacementIfNeeded(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date);
                             if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                                 dutySemiDebug.noteMissedSemiForAbsent(
                                     groupNum,
@@ -10511,6 +10556,22 @@
             }
 
             const mergedSemiBaseline = finalizeSemiPreview(finalAssignments, baselineSemiByDate, baseline);
+
+            for (const dateKey of sortedSemi) {
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const assigned = finalAssignments[dateKey]?.[groupNum];
+                    const base = mergedSemiBaseline[dateKey]?.[groupNum];
+                    if (!assigned || !base) continue;
+                    if (normalizePersonKey(assigned) !== normalizePersonKey(base)) continue;
+                    const gmap = assignmentReasons[dateKey]?.[groupNum];
+                    if (!gmap) continue;
+                    for (const pn of Object.keys(gmap)) {
+                        if (isUnavailableReplacementReason(gmap[pn])) {
+                            clearAssignmentReasonForPersonOnDate(dateKey, groupNum, pn);
+                        }
+                    }
+                }
+            }
 
             if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                 dutySemiDebug.refreshAbsentReplacementsFromPreview(finalAssignments, mergedSemiBaseline);
