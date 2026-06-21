@@ -1067,7 +1067,9 @@
                     baselinePerson: fromCarry.baselinePerson || null
                 };
             }
-            return findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum);
+            const fromManual = findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum);
+            if (fromManual?.replacementPerson) return fromManual;
+            return findLatestUnavailableReplacementInPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum);
         }
 
         /**
@@ -1088,6 +1090,33 @@
                 };
             }
             return null;
+        }
+
+        /** Latest unavailable (missing/disabled) replacement in the calendar month before dateInCurrentMonth. */
+        function findLatestUnavailableReplacementInPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum) {
+            if (!dateInCurrentMonth || !dayTypeCategory || !groupNum) return null;
+            const prevMonthKey = getPreviousMonthKeyFromDate(dateInCurrentMonth);
+            const people = groups[groupNum]?.[dayTypeCategory] || [];
+            const norm = normRotPersonName;
+            const inRotationList = (p) => p && people.some((x) => norm(x) === norm(p));
+            let latest = null;
+            for (const dk in assignmentReasons || {}) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || dk.substring(0, 7) !== prevMonthKey) continue;
+                if (getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory) continue;
+                const gmap = getAssignmentReasonsGroupMap(dk, groupNum);
+                if (!gmap) continue;
+                for (const replKey in gmap) {
+                    const r = gmap[replKey];
+                    if (!r || r.type !== 'skip' || !r.meta?.unavailableReplacement || !r.swappedWith) continue;
+                    const replacementPerson = resolvePersonInGroupRotationList(replKey, groupNum, dayTypeCategory);
+                    const baselinePerson = resolvePersonInGroupRotationList(r.swappedWith, groupNum, dayTypeCategory);
+                    if (!inRotationList(replacementPerson) && !inRotationList(baselinePerson)) continue;
+                    if (!latest || dk > latest.dateKey) {
+                        latest = { dateKey: dk, replacementPerson, baselinePerson };
+                    }
+                }
+            }
+            return latest;
         }
 
         /** Latest manual alternate in the calendar month immediately before dateInCurrentMonth. */
@@ -1162,14 +1191,33 @@
                 const cat = getDutyCategoryForDateKeyLocal(dk);
                 for (let g = 1; g <= 4; g++) {
                     const manual = findManualAlternateReplacementForGroup(dk, g);
-                    if (!manual) continue;
+                    let replacementPerson = null;
+                    let baselinePerson = null;
+                    if (manual) {
+                        replacementPerson = manual.replacementPerson;
+                        baselinePerson = manual.baselinePerson;
+                    } else {
+                        const gmap = getAssignmentReasonsGroupMap(dk, g);
+                        if (gmap) {
+                            for (const replKey in gmap) {
+                                const r = gmap[replKey];
+                                if (!r || r.type !== 'skip' || !r.meta?.unavailableReplacement || !r.swappedWith) {
+                                    continue;
+                                }
+                                replacementPerson = resolvePersonInGroupRotationList(replKey, g, cat);
+                                baselinePerson = resolvePersonInGroupRotationList(r.swappedWith, g, cat);
+                                break;
+                            }
+                        }
+                    }
+                    if (!replacementPerson || !baselinePerson) continue;
                     const d = new Date(dk + 'T00:00:00');
                     if (isNaN(d.getTime())) continue;
                     const monthKey = getMonthKeyFromDate(d);
                     if (!rebuilt[cat][monthKey]) rebuilt[cat][monthKey] = {};
                     rebuilt[cat][monthKey][g] = {
-                        replacementPerson: manual.replacementPerson,
-                        baselinePerson: manual.baselinePerson,
+                        replacementPerson,
+                        baselinePerson,
                         sourceDateKey: dk
                     };
                 }

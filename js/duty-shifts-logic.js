@@ -630,6 +630,20 @@
                 swapPairId,
                 meta
             );
+            if (
+                typeof recordManualAlternateDeferCarry === 'function' &&
+                dutyCategory &&
+                replacementPersonName &&
+                skippedPersonName
+            ) {
+                recordManualAlternateDeferCarry(
+                    dutyCategory,
+                    dateKey,
+                    groupNum,
+                    replacementPersonName,
+                    skippedPersonName
+                );
+            }
         }
         /** Απουσία/απενεργοποίηση — όχι return-from-missing, swap, χειροκίνητη. */
         function isUnavailableReplacementReason(reason) {
@@ -2224,10 +2238,9 @@
                 const bp = String(reason.meta?.baselinePerson || '').trim();
                 if (bp) return bp;
             }
-            // Missing/disabled replacement should preserve baseline slot continuity:
-            // if A/B were unavailable and G covered, next slot remains after the skipped baseline person.
+            // Unavailable replacement (missing/disabled): replacement already served this slot — continue after them.
             if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
-                return reason.swappedWith;
+                return assignedPerson;
             }
             if (reason && reason.type === 'swap' && reason.swapPairId != null && !reason.meta?.mutualTwoDaySwap) {
                 if (reason.meta?.semiConsecutiveHolidaySwap && reason.meta?.conflictedName) {
@@ -4259,7 +4272,17 @@
                         if (lastSpecialRotationPositionsByMonth[monthKey][g] !== undefined) continue;
                         const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
                         if (assignedPerson) {
-                            lastSpecialRotationPositionsByMonth[monthKey][g] = assignedPerson;
+                            const personForRotation =
+                                typeof getPersonForRotationContinuity === 'function'
+                                    ? getPersonForRotationContinuity(
+                                          dateKey,
+                                          g,
+                                          assignedPerson,
+                                          tempSpecialAssignments
+                                      )
+                                    : assignedPerson;
+                            lastSpecialRotationPositionsByMonth[monthKey][g] =
+                                personForRotation || assignedPerson;
                         }
                     }
                 }
