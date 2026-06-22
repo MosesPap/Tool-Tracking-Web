@@ -958,7 +958,7 @@
             return getLastAssignmentContinuityPersonForPreviousMonth(dayType, date, groupNum);
         }
 
-        // Baseline-only variant for Excel "ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ": ignores swaps/final assignments.
+        // Excel "ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ": baseline chain + assignment continuity + return-from-missing targets.
         function getLastBaselineRotationPersonForDate(dayType, date, groupNum) {
             const prevMonthKey = getPreviousMonthKeyFromDate(date);
             let baselineMonth = rotationBaselineLastByType?.[dayType]?.[prevMonthKey];
@@ -4910,6 +4910,236 @@
             }
         }
 
+        function addDaysToDateKeyForExcel(dk, days) {
+            if (!dk || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
+            const d = new Date(dk + 'T00:00:00');
+            if (isNaN(d.getTime())) return null;
+            d.setDate(d.getDate() + (days || 0));
+            return formatDateKey(d);
+        }
+
+        function collectExcelDutyDayKeysBetween(rotationType, rangeStartKey, rangeEndKey) {
+            const keys = [];
+            if (!rangeStartKey || !rangeEndKey || rangeStartKey > rangeEndKey) return keys;
+            const start = new Date(rangeStartKey + 'T00:00:00');
+            const end = new Date(rangeEndKey + 'T00:00:00');
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) return keys;
+            const dayTypeFor = (rt) => {
+                if (rt === 'special') return 'special-holiday';
+                if (rt === 'weekend') return 'weekend-holiday';
+                if (rt === 'semi') return 'semi-normal-day';
+                return 'normal-day';
+            };
+            const wanted = dayTypeFor(rotationType);
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                if (getDayType(d) === wanted) keys.push(formatDateKey(d));
+            }
+            return keys;
+        }
+
+        function collectExcelReturnTargetsFromReasons(rotationType, groupNum, afterKey) {
+            const out = [];
+            if (!assignmentReasons || typeof assignmentReasons !== 'object' || !afterKey) return out;
+            const dayTypeFor = (rt) => {
+                if (rt === 'special') return 'special-holiday';
+                if (rt === 'weekend') return 'weekend-holiday';
+                if (rt === 'semi') return 'semi-normal-day';
+                return 'normal-day';
+            };
+            const wanted = dayTypeFor(rotationType);
+            for (const dk of Object.keys(assignmentReasons)) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || dk <= afterKey) continue;
+                const d = new Date(dk + 'T00:00:00');
+                if (isNaN(d.getTime()) || getDayType(d) !== wanted) continue;
+                const gmap = assignmentReasons[dk]?.[groupNum] || assignmentReasons[dk]?.[String(groupNum)];
+                if (!gmap) continue;
+                for (const pname of Object.keys(gmap)) {
+                    const r = gmap[pname];
+                    if (r?.meta?.returnFromMissing) out.push({ targetKey: dk, personName: pname });
+                }
+            }
+            return out;
+        }
+
+        function buildExcelSemiReturnTargets(groupNum, groupData, rangeStartKey, rangeEndKey) {
+            const out = [];
+            if (typeof personMissedBaselineSemiDuringAbsence !== 'function') return out;
+            const norm = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
+            const semiList = (groupData?.semi || []).filter(Boolean);
+            const missingMap = groupData?.missingPeriods || {};
+            const sortedSemi =
+                typeof getSortedSemiKeysInRange === 'function'
+                    ? getSortedSemiKeysInRange(rangeStartKey, rangeEndKey)
+                    : collectExcelDutyDayKeysBetween('semi', rangeStartKey, rangeEndKey);
+            if (!sortedSemi.length) return out;
+            const occupied = {};
+            const findLastSemiBefore = (thresholdKey) => {
+                let last = null;
+                for (const dk of sortedSemi) {
+                    if (dk >= thresholdKey) break;
+                    last = dk;
+                }
+                return last;
+            };
+            for (const personName of Object.keys(missingMap)) {
+                if (!semiList.some((p) => norm(p) === norm(personName))) continue;
+                const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
+                for (const period of periods) {
+                    const pStartKey = inputValueToDateKey(period?.start);
+                    const pEndKey = inputValueToDateKey(period?.end);
+                    if (!pStartKey || !pEndKey || pEndKey < rangeStartKey) continue;
+                    if (!personMissedBaselineSemiDuringAbsence(personName, groupNum, pStartKey, pEndKey)) continue;
+                    if (
+                        typeof absenceCoversAnyFullCalendarMonth === 'function' &&
+                        absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey)
+                    ) {
+                        continue;
+                    }
+                    if (
+                        typeof hasReturnFromMissingAlreadyPlacedForPeriod === 'function' &&
+                        hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey, pStartKey)
+                    ) {
+                        continue;
+                    }
+                    const thirdDayAfterEnd = addDaysToDateKeyForExcel(pEndKey, 3);
+                    if (!thirdDayAfterEnd) continue;
+                    let targetSemiKey =
+                        typeof pickSemiReturnFromMissingTargetKey === 'function'
+                            ? pickSemiReturnFromMissingTargetKey(
+                                  sortedSemi,
+                                  thirdDayAfterEnd,
+                                  rangeStartKey,
+                                  rangeEndKey,
+                                  occupied,
+                                  groupNum
+                              )
+                            : null;
+                    if (!targetSemiKey) {
+                        const dayBeforeStart = addDaysToDateKeyForExcel(pStartKey, -1);
+                        let backwardCandidate = findLastSemiBefore(pStartKey);
+                        if (backwardCandidate && dayBeforeStart && backwardCandidate === dayBeforeStart) {
+                            const idx = sortedSemi.indexOf(backwardCandidate);
+                            backwardCandidate = idx > 0 ? sortedSemi[idx - 1] : null;
+                        }
+                        if (
+                            backwardCandidate &&
+                            backwardCandidate >= rangeStartKey &&
+                            backwardCandidate <= rangeEndKey
+                        ) {
+                            targetSemiKey = backwardCandidate;
+                        }
+                    }
+                    if (!targetSemiKey || targetSemiKey < rangeStartKey || targetSemiKey > rangeEndKey) continue;
+                    if (!occupied[targetSemiKey]) occupied[targetSemiKey] = {};
+                    occupied[targetSemiKey][groupNum] = personName;
+                    out.push({ targetKey: targetSemiKey, personName });
+                }
+            }
+            return out;
+        }
+
+        function buildExcelNormalReturnTargets(groupNum, groupData, rangeStartKey, rangeEndKey) {
+            const out = [];
+            if (typeof resolveNormalReturnFromMissingTargetKey !== 'function') return out;
+            const norm = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
+            const normalList = (groupData?.normal || []).filter(Boolean);
+            const missingMap = groupData?.missingPeriods || {};
+            const sortedNormal = collectExcelDutyDayKeysBetween('normal', rangeStartKey, rangeEndKey);
+            if (!sortedNormal.length) return out;
+            const occupied = {};
+            const processed = new Set();
+            const getBaselinePerson = (dk, gn) => {
+                const base =
+                    typeof getRotationBaselineAssignmentForDate === 'function'
+                        ? getRotationBaselineAssignmentForDate(dk)
+                        : null;
+                if (base) {
+                    const map = extractGroupAssignmentsMap(base);
+                    return map?.[gn] || map?.[String(gn)] || '';
+                }
+                return typeof computeExpectedRotationPersonForDate === 'function'
+                    ? computeExpectedRotationPersonForDate('normal', dk, gn)
+                    : null;
+            };
+            for (const personName of Object.keys(missingMap)) {
+                if (!normalList.some((p) => norm(p) === norm(personName))) continue;
+                const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
+                for (const period of periods) {
+                    const pStartKey = inputValueToDateKey(period?.start);
+                    const pEndKey = inputValueToDateKey(period?.end);
+                    if (!pStartKey || !pEndKey || pEndKey < rangeStartKey) continue;
+                    const dedupeKey = `${groupNum}|${norm(personName)}|${pEndKey}`;
+                    if (processed.has(dedupeKey)) continue;
+                    processed.add(dedupeKey);
+                    if (
+                        typeof hasReturnFromMissingAlreadyPlacedForPeriod === 'function' &&
+                        hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey, pStartKey)
+                    ) {
+                        continue;
+                    }
+                    const overlapStartKey = pStartKey > rangeStartKey ? pStartKey : rangeStartKey;
+                    const overlapEndKey = pEndKey < rangeEndKey ? pEndKey : rangeEndKey;
+                    let firstMissedKey = null;
+                    if (overlapStartKey <= overlapEndKey) {
+                        for (const dk of sortedNormal) {
+                            if (dk < overlapStartKey) continue;
+                            if (dk > overlapEndKey) break;
+                            const base = getBaselinePerson(dk, groupNum);
+                            if (!base || norm(base) !== norm(personName)) continue;
+                            const dMiss = new Date(dk + 'T00:00:00');
+                            if (
+                                typeof isPersonMissingOnDate === 'function' &&
+                                !isPersonMissingOnDate(personName, groupNum, dMiss, 'normal')
+                            ) {
+                                continue;
+                            }
+                            firstMissedKey = dk;
+                            break;
+                        }
+                    }
+                    if (!firstMissedKey) continue;
+                    const isTargetSlotUsable = (candidateKey) => {
+                        if (!candidateKey || candidateKey < rangeStartKey || candidateKey > rangeEndKey) return false;
+                        if (occupied[candidateKey]?.[groupNum]) return false;
+                        const d = new Date(candidateKey + 'T00:00:00');
+                        if (
+                            typeof isPersonMissingOnDate === 'function' &&
+                            isPersonMissingOnDate(personName, groupNum, d, 'normal')
+                        ) {
+                            return false;
+                        }
+                        return true;
+                    };
+                    const resolved = resolveNormalReturnFromMissingTargetKey({
+                        sortedNormal,
+                        personName,
+                        groupNum,
+                        pStartKey,
+                        pEndKey,
+                        firstMissedKey,
+                        calcStartKey: rangeStartKey,
+                        calcEndKey: rangeEndKey,
+                        isTargetSlotUsable
+                    });
+                    if (!resolved?.targetKey) continue;
+                    if (!occupied[resolved.targetKey]) occupied[resolved.targetKey] = {};
+                    occupied[resolved.targetKey][groupNum] = personName;
+                    out.push({ targetKey: resolved.targetKey, personName });
+                }
+            }
+            return out;
+        }
+
+        function buildExcelComputedReturnTargets(rotationType, groupNum, groupData, rangeStartKey, rangeEndKey) {
+            if (rotationType === 'semi') {
+                return buildExcelSemiReturnTargets(groupNum, groupData, rangeStartKey, rangeEndKey);
+            }
+            if (rotationType === 'normal') {
+                return buildExcelNormalReturnTargets(groupNum, groupData, rangeStartKey, rangeEndKey);
+            }
+            return [];
+        }
+
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
             const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
@@ -4967,23 +5197,58 @@
                     : null) ?? (dutyAssignments?.[dayKey] || '');
                 const actualPerson = getAssignedPersonNameForGroupFromAssignment(actualAssignment, groupNum) || '';
                 let personName = normName(holder);
+                const dateObj = new Date(dayKey + 'T00:00:00');
+                const holderMissingOnDate =
+                    holder &&
+                    typeof isPersonMissingOnDate === 'function' &&
+                    !isNaN(dateObj.getTime()) &&
+                    isPersonMissingOnDate(holder, groupNum, dateObj, rotationType);
                 if (
                     rotationType !== 'special' &&
                     holder &&
                     actualPerson &&
                     normName(actualPerson) !== normName(holder) &&
-                    (isDisabledForType(holder, rotationType) || isMissingWholeNextMonth(holder))
+                    (isDisabledForType(holder, rotationType) || isMissingWholeNextMonth(holder) || holderMissingOnDate)
                 ) {
                     personName = normName(actualPerson);
                 }
                 return personName;
             };
 
-            const firstDayOfExportMonth = new Date(year, month, 1);
+            const resolveAlternateHolder = (dayKey, rotationType, pendingReturnByDate) => {
+                const designated = pendingReturnByDate?.get(dayKey);
+                if (designated) return normName(designated);
+                const assigned =
+                    typeof getPersonAssignedOnDateFromStore === 'function'
+                        ? getPersonAssignedOnDateFromStore(rotationType, dayKey, groupNum)
+                        : '';
+                if (assigned) {
+                    const dateObj = new Date(dayKey + 'T00:00:00');
+                    if (
+                        typeof isPersonMissingOnDate !== 'function' ||
+                        isNaN(dateObj.getTime()) ||
+                        !isPersonMissingOnDate(assigned, groupNum, dateObj, rotationType)
+                    ) {
+                        return normName(assigned);
+                    }
+                }
+                return resolveRotationSlotHolder(dayKey, rotationType);
+            };
 
-            // Seed from previous baseline month(s) only, so Excel alternates follow initial rotation order
-            // and ignore swaps/conflict replacements.
+            const firstDayOfExportMonth = new Date(year, month, 1);
+            const exportMonthStartKey = formatDateKey(firstDayOfExportMonth);
+            const exportMonthEndKey = formatDateKey(new Date(year, month, daysInMonth));
+
+            // Seed from previous month continuity (assignments + manual alternate defer), then baseline fallback.
             for (const t of ['normal', 'semi', 'weekend', 'special']) {
+                const fromContinuity =
+                    typeof getLastAssignmentContinuityPersonForPreviousMonth === 'function'
+                        ? getLastAssignmentContinuityPersonForPreviousMonth(t, firstDayOfExportMonth, groupNum)
+                        : null;
+                if (fromContinuity) {
+                    lastAssigned[t] = normName(fromContinuity);
+                    continue;
+                }
                 const fromChain = typeof getLastBaselineRotationPersonForDate === 'function'
                     ? getLastBaselineRotationPersonForDate(t, firstDayOfExportMonth, groupNum)
                     : null;
@@ -4995,9 +5260,24 @@
                 const dayKey = formatDateKey(date);
                 const dayType = getDayType(date);
                 const rotationType = mapDayTypeToRotationType(dayType);
-                const personName = resolveRotationSlotHolder(dayKey, rotationType);
-                // Last chronological duty in this month wins (do not keep only the first day of the month).
-                if (personName) lastAssigned[rotationType] = personName;
+                const assigned =
+                    typeof getPersonAssignedOnDateFromStore === 'function'
+                        ? getPersonAssignedOnDateFromStore(rotationType, dayKey, groupNum)
+                        : '';
+                if (assigned) {
+                    let continuity = assigned;
+                    if (typeof getPersonForRotationContinuity === 'function') {
+                        const store =
+                            typeof getAssignmentsForDayType === 'function'
+                                ? getAssignmentsForDayType(rotationType)
+                                : null;
+                        continuity = getPersonForRotationContinuity(dayKey, groupNum, assigned, store);
+                    }
+                    if (continuity) lastAssigned[rotationType] = normName(continuity);
+                } else {
+                    const personName = resolveRotationSlotHolder(dayKey, rotationType);
+                    if (personName) lastAssigned[rotationType] = personName;
+                }
             }
 
             const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
@@ -5019,32 +5299,80 @@
             const getMissingReasonOverNextMonth = (personName) => getMissingReasonOverRange(personName, nextMonthStartKey, nextMonthEndKey);
 
             /**
-             * Next N in rotation for Excel — follows baseline duty chronology, not current list index.
-             * List reorder (e.g. swap Γ↔Β positions) must not make Γ first alternate when Β is last in list
-             * but Γ held the last actual normal duty.
+             * Next N in rotation for Excel — baseline chronology + return-from-missing targets + assignment continuity.
              */
             const nextNFromBaselineChain = (type, count, { allowIneligible = false } = {}) => {
                 const rawList = (groupData?.[type] || []).filter(Boolean);
-                const eligible = (p) => allowIneligible || (!isDisabledForType(p, type) && !isMissingWholeNextMonth(p));
-                const eligibleCount = rawList.filter(eligible).length;
+                const monthKeys = collectDutyDayKeysInMonth(type);
+                const lastMonthKey = monthKeys.length
+                    ? monthKeys[monthKeys.length - 1]
+                    : formatDateKey(new Date(year, month, daysInMonth));
+                const scanEndKey = addDaysToDateKeyForExcel(exportMonthEndKey, 400) || exportMonthEndKey;
+
+                const fulfilledReturnInExportMonth = new Set();
+                for (const dk of monthKeys) {
+                    const assigned =
+                        typeof getPersonAssignedOnDateFromStore === 'function'
+                            ? getPersonAssignedOnDateFromStore(type, dk, groupNum)
+                            : '';
+                    if (!assigned) continue;
+                    const reason =
+                        typeof getAssignmentReason === 'function'
+                            ? getAssignmentReason(dk, groupNum, assigned)
+                            : null;
+                    if (reason?.meta?.returnFromMissing) fulfilledReturnInExportMonth.add(normName(assigned));
+                }
+
+                const pendingReturnEntries = [
+                    ...collectExcelReturnTargetsFromReasons(type, groupNum, lastMonthKey),
+                    ...buildExcelComputedReturnTargets(type, groupNum, groupData, exportMonthStartKey, scanEndKey)
+                ]
+                    .filter((e) => e?.targetKey && e.targetKey > lastMonthKey && e.personName)
+                    .sort((a, b) => a.targetKey.localeCompare(b.targetKey));
+
+                const pendingReturnByDate = new Map();
+                for (const entry of pendingReturnEntries) {
+                    if (!pendingReturnByDate.has(entry.targetKey)) {
+                        pendingReturnByDate.set(entry.targetKey, entry.personName);
+                    }
+                }
+
+                const eligible = (p, dutyDateKey) => {
+                    if (allowIneligible) return true;
+                    if (isDisabledForType(p, type)) return false;
+                    if (isMissingWholeNextMonth(p)) return false;
+                    if (dutyDateKey && typeof isPersonMissingOnDate === 'function') {
+                        const d = new Date(dutyDateKey + 'T00:00:00');
+                        if (!isNaN(d.getTime()) && isPersonMissingOnDate(p, groupNum, d, type)) return false;
+                    }
+                    return true;
+                };
+                const eligibleCount = rawList.filter((p) => eligible(p)).length;
                 const picks = [];
                 const seen = new Set();
 
-                const tryAdd = (person) => {
+                const tryAdd = (person, dutyDateKey, { fromReturnTarget = false } = {}) => {
                     if (!person || picks.length >= count) return;
                     const resolved = rawList.find((p) => normName(p) === normName(person)) || person;
-                    if (!eligible(resolved)) return;
+                    if (!eligible(resolved, dutyDateKey)) return;
                     const key = normName(resolved);
                     if (seen.has(key)) return;
+                    if (
+                        !fromReturnTarget &&
+                        fulfilledReturnInExportMonth.has(key) &&
+                        !dutyDateKey
+                    ) {
+                        return;
+                    }
                     if (picks.length === 1 && key === normName(picks[0]) && eligibleCount > 1) return;
                     seen.add(key);
                     picks.push(resolved);
                 };
 
-                const monthKeys = collectDutyDayKeysInMonth(type);
-                const lastMonthKey = monthKeys.length
-                    ? monthKeys[monthKeys.length - 1]
-                    : formatDateKey(new Date(year, month, daysInMonth));
+                for (const entry of pendingReturnEntries) {
+                    if (picks.length >= count) break;
+                    tryAdd(entry.personName, entry.targetKey, { fromReturnTarget: true });
+                }
 
                 const baselineStore = typeof getBaselineStoreForDayType === 'function'
                     ? getBaselineStoreForDayType(type)
@@ -5056,7 +5384,7 @@
 
                 for (const dk of baselineKeysAfter) {
                     if (picks.length >= count) break;
-                    tryAdd(resolveRotationSlotHolder(dk, type));
+                    tryAdd(resolveAlternateHolder(dk, type, pendingReturnByDate), dk);
                 }
 
                 if (picks.length < count) {
@@ -5070,11 +5398,11 @@
                         const dk = formatDateKey(d);
                         if (dk <= lastMonthKey) continue;
                         if (baselineKeysAfter.includes(dk)) continue;
-                        const fromBaseline = resolveRotationSlotHolder(dk, type);
-                        if (fromBaseline) {
-                            tryAdd(fromBaseline);
+                        const holder = resolveAlternateHolder(dk, type, pendingReturnByDate);
+                        if (holder) {
+                            tryAdd(holder, dk);
                         } else if (typeof computeExpectedRotationPersonForDate === 'function') {
-                            tryAdd(computeExpectedRotationPersonForDate(type, dk, groupNum));
+                            tryAdd(computeExpectedRotationPersonForDate(type, dk, groupNum), dk);
                         }
                     }
                 }
@@ -5082,13 +5410,17 @@
                 if (picks.length < count) {
                     const successor = new Map();
                     for (let i = 0; i < monthKeys.length - 1; i++) {
-                        const p1 = resolveRotationSlotHolder(monthKeys[i], type);
-                        const p2 = resolveRotationSlotHolder(monthKeys[i + 1], type);
+                        const p1 = resolveAlternateHolder(monthKeys[i], type, pendingReturnByDate);
+                        const p2 = resolveAlternateHolder(monthKeys[i + 1], type, pendingReturnByDate);
                         if (p1 && p2) successor.set(normName(p1), p2);
                     }
                     let last = lastAssigned[type];
                     if (!last && monthKeys.length) {
-                        last = resolveRotationSlotHolder(monthKeys[monthKeys.length - 1], type);
+                        last = resolveAlternateHolder(
+                            monthKeys[monthKeys.length - 1],
+                            type,
+                            pendingReturnByDate
+                        );
                     }
                     let cursor = normName(last);
                     let guard = 0;
