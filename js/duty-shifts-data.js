@@ -4918,11 +4918,22 @@
             const nextMonthStartKey = formatDateKey(firstDayOfNextMonth);
             const nextMonthEndKey = formatDateKey(lastDayOfNextMonth);
 
-            const isDisabledForType = (personName, dutyType) => {
+            const isDisabledForTypeAtDate = (personName, dutyType, dateKey) => {
+                if (!personName) return false;
+                if (typeof isPersonDisabledForDuty === 'function') {
+                    return isPersonDisabledForDuty(personName, groupNum, dutyType, dateKey);
+                }
+                if (typeof getDisabledStateAtDate === 'function' && dateKey) {
+                    const st = getDisabledStateAtDate(groupNum, personName, dateKey);
+                    if (st.all) return true;
+                    return !!st[dutyType];
+                }
                 const dp = groupData?.disabledPersons?.[personName];
                 if (!dp || typeof dp !== 'object') return false;
                 return !!(dp.all || dp[dutyType]);
             };
+            const isDisabledForNextMonth = (personName, dutyType) =>
+                isDisabledForTypeAtDate(personName, dutyType, nextMonthStartKey);
             const isMissingWholeNextMonth = (personName) => {
                 const periods = groupData?.missingPeriods?.[personName];
                 if (!Array.isArray(periods) || periods.length === 0) return false;
@@ -4940,7 +4951,7 @@
 
             const isAvailableForNextMonth = (personName, dutyType, { allowIneligible = false } = {}) => {
                 if (allowIneligible) return true;
-                if (isDisabledForType(personName, dutyType)) return false;
+                if (isDisabledForNextMonth(personName, dutyType)) return false;
                 if (isMissingWholeNextMonth(personName)) return false;
                 return true;
             };
@@ -5061,10 +5072,10 @@
                     const name = outNames[i] || '';
                     let note = '';
                     if (name) {
-                        if (isDisabledForType(name, 'special')) {
+                        const { startKey, endKey } = getMonthRangeKeys(specialDates[i]);
+                        if (isDisabledForTypeAtDate(name, 'special', startKey)) {
                             note = 'ΕΚΤΟΣ ΥΠΗΡΕΣΙΑΣ';
                         } else {
-                            const { startKey, endKey } = getMonthRangeKeys(specialDates[i]);
                             const r = getMissingReasonOverRange(name, startKey, endKey);
                             if (r) note = r;
                         }
