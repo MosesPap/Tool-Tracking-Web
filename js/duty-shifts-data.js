@@ -111,6 +111,12 @@
             if (byEff !== 0) return byEff;
             return compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
         }
+        /** Ταξινόμηση για «τελευταία αποθήκευση» (recordedAt, μετά effectiveFrom). */
+        function comparePersonStatusScheduleEntriesByRecencyDesc(a, b) {
+            const byRec = compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
+            if (byRec !== 0) return byRec;
+            return compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom);
+        }
         function upsertPersonStatusScheduleEntry(arr, matches, entry) {
             if (!Array.isArray(arr)) return;
             const idx = arr.findIndex(matches);
@@ -120,14 +126,14 @@
         /** Μία εγγραφή ανά κλειδί· κρατά την τελευταία (recordedAt / σειρά εισαγωγής). */
         function dedupePersonStatusSchedule() {
             if (!personStatusSchedule) return;
-            const collapse = (arr, keyOf) => {
+            const collapse = (arr, keyOf, compareFn = comparePersonStatusScheduleEntriesDesc) => {
                 if (!Array.isArray(arr) || !arr.length) return [];
                 const map = new Map();
                 for (const e of arr) {
                     if (!e) continue;
                     const k = keyOf(e);
                     const prev = map.get(k);
-                    if (!prev || comparePersonStatusScheduleEntriesDesc(e, prev) <= 0) {
+                    if (!prev || compareFn(e, prev) <= 0) {
                         map.set(k, e);
                     }
                 }
@@ -135,7 +141,8 @@
             };
             personStatusSchedule.disabled = collapse(
                 personStatusSchedule.disabled,
-                (e) => `${e.personKey}|${e.groupNum}|${e.effectiveFrom}`
+                (e) => `${e.personKey}|${e.groupNum}`,
+                comparePersonStatusScheduleEntriesByRecencyDesc
             );
             personStatusSchedule.membership = collapse(
                 personStatusSchedule.membership,
@@ -489,18 +496,17 @@
                 isFlexibleStatusEffectiveDatesEnabled();
             const eff = hasExplicit && flex ? raw : normalizeStatusEffectiveFromDateKey(raw);
             const recordedAt = formatDateKey(new Date());
-            upsertPersonStatusScheduleEntry(
-                personStatusSchedule.disabled,
-                (e) => e.personKey === pk && e.groupNum === groupNum && e.effectiveFrom === eff,
-                {
-                    personKey: pk,
-                    personName,
-                    groupNum,
-                    state: st,
-                    effectiveFrom: eff,
-                    recordedAt
-                }
+            personStatusSchedule.disabled = personStatusSchedule.disabled.filter(
+                (e) => !(e.personKey === pk && e.groupNum === groupNum)
             );
+            personStatusSchedule.disabled.push({
+                personKey: pk,
+                personName,
+                groupNum,
+                state: st,
+                effectiveFrom: eff,
+                recordedAt
+            });
             const g = groups[groupNum];
             if (g) {
                 if (!g.disabledPersons) g.disabledPersons = {};
