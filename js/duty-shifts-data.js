@@ -105,6 +105,47 @@
         function compareScheduleDateKeys(a, b) {
             return String(a || '').localeCompare(String(b || ''));
         }
+        /** Ταξινόμηση schedule entries: νεότερη effectiveFrom, μετά νεότερο recordedAt. */
+        function comparePersonStatusScheduleEntriesDesc(a, b) {
+            const byEff = compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom);
+            if (byEff !== 0) return byEff;
+            return compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
+        }
+        function upsertPersonStatusScheduleEntry(arr, matches, entry) {
+            if (!Array.isArray(arr)) return;
+            const idx = arr.findIndex(matches);
+            if (idx >= 0) arr[idx] = entry;
+            else arr.push(entry);
+        }
+        /** Μία εγγραφή ανά κλειδί· κρατά την τελευταία (recordedAt / σειρά εισαγωγής). */
+        function dedupePersonStatusSchedule() {
+            if (!personStatusSchedule) return;
+            const collapse = (arr, keyOf) => {
+                if (!Array.isArray(arr) || !arr.length) return [];
+                const map = new Map();
+                for (const e of arr) {
+                    if (!e) continue;
+                    const k = keyOf(e);
+                    const prev = map.get(k);
+                    if (!prev || comparePersonStatusScheduleEntriesDesc(e, prev) <= 0) {
+                        map.set(k, e);
+                    }
+                }
+                return Array.from(map.values());
+            };
+            personStatusSchedule.disabled = collapse(
+                personStatusSchedule.disabled,
+                (e) => `${e.personKey}|${e.groupNum}|${e.effectiveFrom}`
+            );
+            personStatusSchedule.membership = collapse(
+                personStatusSchedule.membership,
+                (e) => `${e.personKey}|${e.effectiveFrom}`
+            );
+            personStatusSchedule.listOrders = collapse(
+                personStatusSchedule.listOrders,
+                (e) => `${e.groupNum}|${e.listType}|${e.effectiveFrom}`
+            );
+        }
         function dateFromDateKey(dateKey) {
             const d = new Date(String(dateKey) + 'T00:00:00');
             return isNaN(d.getTime()) ? null : d;
@@ -162,6 +203,7 @@
                     }
                 }
             }
+            dedupePersonStatusSchedule();
         }
         function getScheduledStatusEffectiveFrom(recordDate) {
             const d = recordDate instanceof Date ? new Date(recordDate) : new Date();
@@ -296,7 +338,7 @@
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
             const hits = personStatusSchedule.membership
                 .filter((e) => e.personKey === pk && compareScheduleDateKeys(e.effectiveFrom, dk) <= 0)
-                .sort((a, b) => compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom));
+                .sort(comparePersonStatusScheduleEntriesDesc);
             if (hits.length) return hits[0].groupNum;
             for (let g = 1; g <= 4; g++) {
                 for (const lt of DUTY_STATUS_LIST_TYPES) {
@@ -341,11 +383,7 @@
                         e.listType === listType &&
                         compareScheduleDateKeys(e.effectiveFrom, dk) <= 0
                 )
-                .sort((a, b) => {
-                    const byEff = compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom);
-                    if (byEff !== 0) return byEff;
-                    return compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
-                });
+                .sort(comparePersonStatusScheduleEntriesDesc);
             if (hits.length && Array.isArray(hits[0].order)) {
                 const scheduled = hits[0].order.slice();
                 // Live priorities / UI reorder win over stale seeded schedule when roster is unchanged.
@@ -418,7 +456,7 @@
                         e.personKey === pk &&
                         compareScheduleDateKeys(e.effectiveFrom, dk) <= 0
                 )
-                .sort((a, b) => compareScheduleDateKeys(b.effectiveFrom, a.effectiveFrom));
+                .sort(comparePersonStatusScheduleEntriesDesc);
             if (hits.length) return normalizeDisabledState(hits[0].state);
             return legacyDisabledStateFromGroups(groupNum, personName);
         }
@@ -450,14 +488,29 @@
                 typeof isFlexibleStatusEffectiveDatesEnabled === 'function' &&
                 isFlexibleStatusEffectiveDatesEnabled();
             const eff = hasExplicit && flex ? raw : normalizeStatusEffectiveFromDateKey(raw);
-            personStatusSchedule.disabled.push({
-                personKey: pk,
-                personName,
-                groupNum,
-                state: st,
-                effectiveFrom: eff,
-                recordedAt: formatDateKey(new Date())
-            });
+            const recordedAt = formatDateKey(new Date());
+            upsertPersonStatusScheduleEntry(
+                personStatusSchedule.disabled,
+                (e) => e.personKey === pk && e.groupNum === groupNum && e.effectiveFrom === eff,
+                {
+                    personKey: pk,
+                    personName,
+                    groupNum,
+                    state: st,
+                    effectiveFrom: eff,
+                    recordedAt
+                }
+            );
+            const g = groups[groupNum];
+            if (g) {
+                if (!g.disabledPersons) g.disabledPersons = {};
+                if (disabledStateIsActive(st)) {
+                    g.disabledPersons[pk] = { ...st };
+                } else {
+                    delete g.disabledPersons[pk];
+                    delete g.disabledPersons[personName];
+                }
+            }
             return eff;
         }
         function scheduleMembershipChange(personName, toGroupNum, effectiveFromKey) {
@@ -469,13 +522,18 @@
                     : getScheduledStatusEffectiveFrom(new Date()));
             const eff = normalizeStatusEffectiveFromDateKey(raw);
             const pk = personScheduleKey(personName);
-            personStatusSchedule.membership.push({
-                personKey: pk,
-                personName,
-                groupNum: toGroupNum,
-                effectiveFrom: eff,
-                recordedAt: formatDateKey(new Date())
-            });
+            const recordedAt = formatDateKey(new Date());
+            upsertPersonStatusScheduleEntry(
+                personStatusSchedule.membership,
+                (e) => e.personKey === pk && e.effectiveFrom === eff,
+                {
+                    personKey: pk,
+                    personName,
+                    groupNum: toGroupNum,
+                    effectiveFrom: eff,
+                    recordedAt
+                }
+            );
             return eff;
         }
         function scheduleListOrdersForGroup(groupNum, effectiveFrom) {
@@ -525,7 +583,11 @@
             const parts = [];
             const dis = personStatusSchedule.disabled
                 .filter((e) => e.personKey === pk && e.groupNum === groupNum && compareScheduleDateKeys(e.effectiveFrom, todayKey) > 0)
-                .sort((a, b) => compareScheduleDateKeys(a.effectiveFrom, b.effectiveFrom));
+                .sort((a, b) => {
+                    const byEff = compareScheduleDateKeys(a.effectiveFrom, b.effectiveFrom);
+                    if (byEff !== 0) return byEff;
+                    return compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
+                });
             if (dis.length) {
                 const st = dis[0].state;
                 parts.push(
@@ -536,7 +598,11 @@
             }
             const mem = personStatusSchedule.membership
                 .filter((e) => e.personKey === pk && compareScheduleDateKeys(e.effectiveFrom, todayKey) > 0)
-                .sort((a, b) => compareScheduleDateKeys(a.effectiveFrom, b.effectiveFrom));
+                .sort((a, b) => {
+                    const byEff = compareScheduleDateKeys(a.effectiveFrom, b.effectiveFrom);
+                    if (byEff !== 0) return byEff;
+                    return compareScheduleDateKeys(b.recordedAt || '', a.recordedAt || '');
+                });
             if (mem.length) {
                 parts.push(
                     `Ομάδα ${getGroupName ? getGroupName(mem[0].groupNum) : mem[0].groupNum} από ${formatScheduledStatusEffectiveLabel(mem[0].effectiveFrom)}`
