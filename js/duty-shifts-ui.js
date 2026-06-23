@@ -737,6 +737,9 @@
                 });
             }
             for (let i = 1; i <= 4; i++) {
+                if ((i === 3 || i === 4) && typeof ensureNightListForGroup === 'function') {
+                    ensureNightListForGroup(i);
+                }
                 const container = document.getElementById(`group${i}People`);
                 container.innerHTML = '';
                 
@@ -898,13 +901,14 @@
                 return today >= start && today <= end;
             });
             const disabledTitle = (() => {
-                if (!st || (!st.all && !st.special && !st.weekend && !st.semi && !st.normal)) return '';
+                if (!st || (!st.all && !st.special && !st.weekend && !st.semi && !st.normal && !st.night)) return '';
                 if (st.all) return 'Απενεργοποίηση: Όλες οι υπηρεσίες';
                 const parts = [];
                 if (st.special) parts.push('Ειδικές Αργίες');
                 if (st.weekend) parts.push('Σαββατοκύριακα/Αργίες');
                 if (st.semi) parts.push('Ημιαργίες');
                 if (st.normal) parts.push('Καθημερινές');
+                if (st.night) parts.push('Νυχτερινές');
                 return `Απενεργοποίηση: ${parts.join(', ')}`;
             })();
             const disabledBadge = isDisabledForThisList
@@ -1116,6 +1120,13 @@
             draggedElement = null;
             dragOverElement = null;
         }
+        function getPersonListTypesForGroup(groupNum) {
+            const g = parseInt(groupNum, 10);
+            if ((g === 3 || g === 4) && typeof isNightDutiesEnabled === 'function' && isNightDutiesEnabled()) {
+                return ['special', 'weekend', 'semi', 'normal', 'night'];
+            }
+            return ['special', 'weekend', 'semi', 'normal'];
+        }
         function addPerson(groupNumber) {
             isEditingPerson = false;
             editingPersonName = null;
@@ -1181,12 +1192,18 @@
             if (!groups[currentGroup]) {
                 groups[currentGroup] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, priorities: {} };
             }
+            if ((currentGroup === 3 || currentGroup === 4) && !groups[currentGroup].night) {
+                groups[currentGroup].night = [];
+            }
             
             // Initialize lists if needed
             if (!groups[currentGroup].special) groups[currentGroup].special = [];
             if (!groups[currentGroup].weekend) groups[currentGroup].weekend = [];
             if (!groups[currentGroup].semi) groups[currentGroup].semi = [];
             if (!groups[currentGroup].normal) groups[currentGroup].normal = [];
+            if ((currentGroup === 3 || currentGroup === 4) && !groups[currentGroup].night) {
+                groups[currentGroup].night = [];
+            }
             if (!groups[currentGroup].lastDuties) groups[currentGroup].lastDuties = {};
             if (!groups[currentGroup].priorities) groups[currentGroup].priorities = {};
             
@@ -1217,7 +1234,7 @@
                 console.log(`[EDIT] Name changed from "${oldName}" to "${name}"`);
                 
                 // Update name in all 4 lists
-                const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                const listTypes = getPersonListTypesForGroup(currentGroup);
                 listTypes.forEach(listType => {
                     const index = groups[currentGroup][listType].indexOf(oldName);
                     if (index !== -1) {
@@ -1286,7 +1303,7 @@
             if (isEditingPerson) {
                 // Get old priorities before updating
                 const oldPriorities = groups[currentGroup].priorities[oldName] || {};
-                const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                const listTypes = getPersonListTypesForGroup(currentGroup);
                 const priorityInputs = {
                     special: prioritySpecial ? parseInt(prioritySpecial) : null,
                     weekend: priorityWeekend ? parseInt(priorityWeekend) : null,
@@ -1359,7 +1376,7 @@
             
             // Handle priority position shifts when adding a new person (to avoid duplicates)
             if (!isEditingPerson) {
-                const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                const listTypes = getPersonListTypesForGroup(currentGroup);
                 const priorityInputs = {
                     special: prioritySpecial ? parseInt(prioritySpecial) : null,
                     weekend: priorityWeekend ? parseInt(priorityWeekend) : null,
@@ -1420,7 +1437,16 @@
                 special: prioritySpecial ? parseInt(prioritySpecial) : 999,
                 weekend: priorityWeekend ? parseInt(priorityWeekend) : 999,
                 semi: prioritySemi ? parseInt(prioritySemi) : 999,
-                normal: priorityNormal ? parseInt(priorityNormal) : 999
+                normal: priorityNormal ? parseInt(priorityNormal) : 999,
+                ...((currentGroup === 3 || currentGroup === 4) &&
+                typeof isNightDutiesEnabled === 'function' &&
+                isNightDutiesEnabled()
+                    ? {
+                          night: priorityNormal
+                              ? parseInt(priorityNormal)
+                              : groups[currentGroup].priorities[personKey]?.night ?? 999
+                      }
+                    : {})
             };
             
             // Add last duty dates as critical assignments in the calendar (protected from recalculation)
@@ -1593,8 +1619,9 @@
                 });
             } else {
                 // Adding new person - add to all lists if not already present
-                const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                const listTypes = getPersonListTypesForGroup(currentGroup);
                 listTypes.forEach(listType => {
+                    if (!groups[currentGroup][listType]) groups[currentGroup][listType] = [];
                     if (!groups[currentGroup][listType].includes(name)) {
                         groups[currentGroup][listType].push(name);
                     }
@@ -1602,7 +1629,7 @@
             }
                 
             // Sort each list by priority (lower number = higher priority), then by last duty date
-            const listTypes = ['special', 'weekend', 'semi', 'normal'];
+            const listTypes = getPersonListTypesForGroup(currentGroup);
                 listTypes.forEach(listType => {
                     groups[currentGroup][listType].sort((a, b) => {
                     // Get priorities (default to 999 if not set)
@@ -3290,18 +3317,23 @@
                 const person = list[index];
                 list.splice(index, 1);
                 
-                // Also remove from all other lists if it exists there
-                const allListTypes = ['special', 'weekend', 'semi', 'normal'];
-                allListTypes.forEach(otherListType => {
-                    if (otherListType !== listType) {
-                        const otherList = groups[groupNumber][otherListType] || [];
-                        const otherIndex = otherList.indexOf(person);
-                        if (otherIndex !== -1) {
-                            otherList.splice(otherIndex, 1);
+                if (listType === 'night') {
+                    // Αφαίρεση μόνο από νυχτερινές — το άτομο μένει στις άλλες λίστες
+                } else {
+                    // Also remove from all other lists if it exists there
+                    const allListTypes = getPersonListTypesForGroup(groupNumber);
+                    allListTypes.forEach(otherListType => {
+                        if (otherListType !== listType) {
+                            const otherList = groups[groupNumber][otherListType] || [];
+                            const otherIndex = otherList.indexOf(person);
+                            if (otherIndex !== -1) {
+                                otherList.splice(otherIndex, 1);
+                            }
                         }
-                    }
-                });
+                    });
+                }
                 
+                const allListTypes = getPersonListTypesForGroup(groupNumber);
                 // Remove last duties entry if person is removed from all lists
                 const stillInAnyList = allListTypes.some(lt => (groups[groupNumber][lt] || []).includes(person));
                 if (!stillInAnyList && groups[groupNumber].lastDuties) {
@@ -4292,6 +4324,9 @@
             const nightCb = document.getElementById('dutyShiftsNightDutiesGroups34');
             if (nightCb && typeof saveDutyShiftsAppSettingsNightDuties === 'function') {
                 await saveDutyShiftsAppSettingsNightDuties(!!nightCb.checked);
+            }
+            if (typeof ensureNightListsForGroups34 === 'function' && ensureNightListsForGroups34()) {
+                if (typeof saveData === 'function') await saveData();
             }
             const modalEl = document.getElementById('normalSwapLogicSettingsModal');
             const m = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;

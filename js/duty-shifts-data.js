@@ -354,7 +354,11 @@
         function syncGroupListArraysFromPriorities(groupNum) {
             const g = groups[groupNum];
             if (!g) return;
-            for (const listType of DUTY_STATUS_LIST_TYPES) {
+            const types =
+                typeof getDutyListTypesForGroup === 'function'
+                    ? getDutyListTypesForGroup(groupNum)
+                    : DUTY_STATUS_LIST_TYPES;
+            for (const listType of types) {
                 g[listType] = getSortedGroupListForRotation(groupNum, listType);
             }
         }
@@ -2101,8 +2105,60 @@
                 : DUTY_STATUS_LIST_TYPES;
         }
 
+        /**
+         * Αν η λίστα νυχτερινών είναι κενή (ομάδες 3/4, ρύθμιση ON), αντιγράφει τη σειρά από καθημερινές.
+         */
+        function ensureNightListForGroup(groupNum) {
+            const g = parseInt(groupNum, 10);
+            if (g !== 3 && g !== 4) return false;
+            if (!isNightDutiesEnabled()) return false;
+            const gd = groups[g];
+            if (!gd) return false;
+            if (!Array.isArray(gd.night)) gd.night = [];
+            if (gd.night.length > 0) return false;
+
+            let source = Array.isArray(gd.normal) && gd.normal.length ? gd.normal.slice() : [];
+            if (!source.length) {
+                source = [
+                    ...new Set([
+                        ...(gd.special || []),
+                        ...(gd.weekend || []),
+                        ...(gd.semi || []),
+                        ...(gd.normal || [])
+                    ])
+                ];
+            }
+            if (!source.length) return false;
+
+            gd.night = source.slice();
+            if (!gd.priorities) gd.priorities = {};
+            gd.night.forEach((person, idx) => {
+                if (!gd.priorities[person]) gd.priorities[person] = {};
+                if (gd.priorities[person].night === undefined || gd.priorities[person].night === null) {
+                    const fromNormal = gd.priorities[person].normal;
+                    gd.priorities[person].night =
+                        fromNormal !== undefined && fromNormal !== null ? fromNormal : idx + 1;
+                }
+            });
+            if (typeof syncGroupListArraysFromPriorities === 'function') {
+                syncGroupListArraysFromPriorities(g);
+            }
+            return true;
+        }
+
+        function ensureNightListsForGroups34() {
+            let changed = false;
+            for (const g of [3, 4]) {
+                if (ensureNightListForGroup(g)) changed = true;
+            }
+            return changed;
+        }
+
         async function saveDutyShiftsAppSettingsNightDuties(enabled) {
             applyNightDutiesEnabledGroups34FromValue(enabled);
+            if (enabled && typeof ensureNightListsForGroups34 === 'function') {
+                ensureNightListsForGroups34();
+            }
             const user = window.auth?.currentUser;
             if (!user?.uid || !window.db) {
                 console.warn('saveDutyShiftsAppSettingsNightDuties: no auth/db');
@@ -2199,6 +2255,8 @@
         window.shouldSkipNormalDayForNightGroup = shouldSkipNormalDayForNightGroup;
         window.saveDutyShiftsAppSettingsNightDuties = saveDutyShiftsAppSettingsNightDuties;
         window.getDutyListTypesForGroup = getDutyListTypesForGroup;
+        window.ensureNightListForGroup = ensureNightListForGroup;
+        window.ensureNightListsForGroups34 = ensureNightListsForGroups34;
         window.saveDutyShiftsAppSettingsNormalWeekPairDisabled = saveDutyShiftsAppSettingsNormalWeekPairDisabled;
 
         // Track data loading to prevent duplicate loads
@@ -2692,6 +2750,12 @@
                 
                 // IMPORTANT: Do not auto-rebuild/restore critical assignments into the schedule.
                 // criticalAssignments are kept as history only and must not affect the current calendar.
+
+                if (isNightDutiesEnabled() && ensureNightListsForGroups34()) {
+                    if (typeof saveData === 'function') {
+                        saveData().catch((e) => console.warn('Auto-save night lists after seed:', e));
+                    }
+                }
                 
                 console.log('Data loaded from Firebase');
             } catch (error) {
@@ -3047,6 +3111,10 @@
             
             // IMPORTANT: Do not auto-rebuild/restore critical assignments into the schedule.
             // criticalAssignments are kept as history only and must not affect the current calendar.
+
+            if (isNightDutiesEnabled()) {
+                ensureNightListsForGroups34();
+            }
         }
 
         // Helper function to sanitize data for Firestore (remove undefined, functions, etc.)
