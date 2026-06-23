@@ -439,12 +439,17 @@
             ensurePersonStatusScheduleSeeded();
             const pk = personScheduleKey(personName);
             const st = normalizeDisabledState(state);
-            const raw =
-                effectiveFromKey ||
-                (typeof getSuggestedStatusEffectiveFromDateKey === 'function'
-                    ? getSuggestedStatusEffectiveFromDateKey(new Date())
-                    : getScheduledStatusEffectiveFrom(new Date()));
-            const eff = normalizeStatusEffectiveFromDateKey(raw);
+            const hasExplicit =
+                typeof effectiveFromKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(effectiveFromKey.trim());
+            const raw = hasExplicit
+                ? effectiveFromKey.trim()
+                : typeof getSuggestedStatusEffectiveFromDateKey === 'function'
+                  ? getSuggestedStatusEffectiveFromDateKey(new Date())
+                  : getScheduledStatusEffectiveFrom(new Date());
+            const flex =
+                typeof isFlexibleStatusEffectiveDatesEnabled === 'function' &&
+                isFlexibleStatusEffectiveDatesEnabled();
+            const eff = hasExplicit && flex ? raw : normalizeStatusEffectiveFromDateKey(raw);
             personStatusSchedule.disabled.push({
                 personKey: pk,
                 personName,
@@ -1951,11 +1956,7 @@
         async function saveDutyShiftsUserPreferenceFlexibleEffective(enabled) {
             const user = window.auth?.currentUser;
             const val = !!enabled;
-            dutyShiftsUserPrefsFlexibleEffectiveDates = val;
-            dutyShiftsUserPrefsLoadedForUid = user?.uid || null;
-            try {
-                localStorage.setItem(FLEXIBLE_STATUS_EFFECTIVE_LS_KEY, val ? '1' : '0');
-            } catch (_) {}
+            setFlexibleStatusEffectiveDatesLocal(val);
 
             if (!user?.uid || !window.db) return;
 
@@ -1982,7 +1983,18 @@
             }
         }
 
+        function setFlexibleStatusEffectiveDatesLocal(enabled) {
+            const val = !!enabled;
+            const uid = window.auth?.currentUser?.uid || null;
+            dutyShiftsUserPrefsFlexibleEffectiveDates = val;
+            dutyShiftsUserPrefsLoadedForUid = uid;
+            try {
+                localStorage.setItem(FLEXIBLE_STATUS_EFFECTIVE_LS_KEY, val ? '1' : '0');
+            } catch (_) {}
+        }
+
         window.isFlexibleStatusEffectiveDatesEnabled = isFlexibleStatusEffectiveDatesEnabled;
+        window.setFlexibleStatusEffectiveDatesLocal = setFlexibleStatusEffectiveDatesLocal;
         window.loadDutyShiftsUserPreferences = loadDutyShiftsUserPreferences;
         window.saveDutyShiftsUserPreferenceFlexibleEffective = saveDutyShiftsUserPreferenceFlexibleEffective;
         window.resetDutyShiftsUserPreferencesSessionCache = resetDutyShiftsUserPreferencesSessionCache;

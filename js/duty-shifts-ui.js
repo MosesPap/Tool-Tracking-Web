@@ -154,6 +154,9 @@
                 attributes: true,
                 attributeFilter: ['title', 'placeholder', 'aria-label']
             });
+            if (typeof wireFlexibleStatusEffectiveCheckbox === 'function') {
+                wireFlexibleStatusEffectiveCheckbox();
+            }
         }
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initializeControlTooltips);
@@ -282,10 +285,14 @@
                     alert('Επιλέξτε έγκυρη ημερομηνία ισχύος.');
                     return;
                 }
-                const norm =
-                    typeof normalizeStatusEffectiveFromDateKey === 'function'
-                        ? normalizeStatusEffectiveFromDateKey(raw)
-                        : raw;
+                const flex =
+                    typeof isFlexibleStatusEffectiveDatesEnabled === 'function' &&
+                    isFlexibleStatusEffectiveDatesEnabled();
+                const norm = flex
+                    ? raw
+                    : typeof normalizeStatusEffectiveFromDateKey === 'function'
+                      ? normalizeStatusEffectiveFromDateKey(raw)
+                      : raw;
                 _statusChangeEffectiveResolved = true;
                 const cb = _statusChangeEffectiveCallbacks && _statusChangeEffectiveCallbacks.onConfirm;
                 _statusChangeEffectiveCallbacks = null;
@@ -2166,7 +2173,7 @@
                         currentPersonActionsListType || 'normal'
                     );
                 };
-                if (isFlexibleStatusEffectiveDatesEnabled()) {
+                const openDisableEffectivePicker = () => {
                     openStatusChangeEffectiveModal({
                         title: 'Ισχύς αλλαγής απενεργοποίησης',
                         introHtml:
@@ -2178,10 +2185,13 @@
                         onConfirm: (effKey) => finishDisableSave(effKey),
                         onCancel: () => {}
                     });
+                };
+                if (isFlexibleStatusEffectiveDatesEnabled()) {
+                    openDisableEffectivePicker();
                     return;
                 }
                 if (!assertStatusChangeWindowOrAlert()) return;
-                finishDisableSave();
+                openDisableEffectivePicker();
                 return;
             } else {
                 const g = groups[groupNum];
@@ -4287,7 +4297,21 @@
             }
         }
 
+        let _flexStatusEffectiveCheckboxWired = false;
+        function wireFlexibleStatusEffectiveCheckbox() {
+            if (_flexStatusEffectiveCheckboxWired) return;
+            const flexCb = document.getElementById('dutyShiftsFlexibleStatusEffectiveDates');
+            if (!flexCb) return;
+            _flexStatusEffectiveCheckboxWired = true;
+            flexCb.addEventListener('change', () => {
+                if (typeof setFlexibleStatusEffectiveDatesLocal === 'function') {
+                    setFlexibleStatusEffectiveDatesLocal(!!flexCb.checked);
+                }
+            });
+        }
+
         function openNormalSwapLogicSettingsModal() {
+            wireFlexibleStatusEffectiveCheckbox();
             const flexCb = document.getElementById('dutyShiftsFlexibleStatusEffectiveDates');
             if (flexCb) flexCb.checked = isFlexibleStatusEffectiveDatesEnabled();
             const nightCb = document.getElementById('dutyShiftsNightDutiesGroups34');
