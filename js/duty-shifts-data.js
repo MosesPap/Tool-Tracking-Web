@@ -8,8 +8,8 @@
         let groups = {
             1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
             2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
-            3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
-            4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} }
+            3: { special: [], weekend: [], semi: [], normal: [], night: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
+            4: { special: [], weekend: [], semi: [], normal: [], night: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} }
         };
         // Organizational rankings - separate from priority, doesn't affect list order
         let rankings = {}; // Format: { "Person Name": rankNumber }
@@ -18,6 +18,7 @@
         let specialHolidays = []; // User-defined special holidays
         // Separate assignments by day type
         let normalDayAssignments = {};
+        let nightAssignments = {};
         let semiNormalAssignments = {};
         let weekendAssignments = {};
         let specialHolidayAssignments = {};
@@ -26,9 +27,10 @@
         let rotationBaselineWeekendAssignments = {};
         let rotationBaselineSemiAssignments = {};
         let rotationBaselineNormalAssignments = {};
+        let rotationBaselineNightAssignments = {};
         // Cached: last baseline rotation person per monthKey/group for fast seeding fallback
         // rotationBaselineLastByType[dayType][monthKey][groupNum] = personName
-        let rotationBaselineLastByType = { normal: {}, semi: {}, weekend: {}, special: {} };
+        let rotationBaselineLastByType = { normal: {}, semi: {}, weekend: {}, special: {}, night: {} };
         // Legacy: Keep dutyAssignments for backward compatibility during migration
         let dutyAssignments = {};
         
@@ -55,7 +57,8 @@
             normal: {},
             semi: {},
             weekend: {},
-            special: {}
+            special: {},
+            night: {}
         };
         /** YYYY-MM -> true: month cannot start «Υπολογισμός Υπηρεσιών» until unlocked (Firestore doc monthCalculationLocks). */
         let monthCalculationLocks = {};
@@ -81,6 +84,7 @@
         // Absences (missingPeriods) stay date-window based — unchanged.
         // ============================================================================
         const DUTY_STATUS_LIST_TYPES = ['special', 'weekend', 'semi', 'normal'];
+        const NIGHT_DUTY_LIST_TYPES = ['special', 'weekend', 'semi', 'normal', 'night'];
         const PERSON_STATUS_SCHEDULE_EPOCH = '1970-01-01';
         let personStatusSchedule = { disabled: [], membership: [], listOrders: [], _seeded: false };
         /** When set, duty calc uses list/disabled state as of this YYYY-MM-DD. */
@@ -380,7 +384,8 @@
                     special: getSortedGroupListForRotation(groupNum, 'special'),
                     weekend: getSortedGroupListForRotation(groupNum, 'weekend'),
                     semi: getSortedGroupListForRotation(groupNum, 'semi'),
-                    normal: getSortedGroupListForRotation(groupNum, 'normal')
+                    normal: getSortedGroupListForRotation(groupNum, 'normal'),
+                    night: getSortedGroupListForRotation(groupNum, 'night')
                 };
             }
             return {
@@ -388,7 +393,8 @@
                 special: getGroupRotationListAtDate(groupNum, 'special', dk),
                 weekend: getGroupRotationListAtDate(groupNum, 'weekend', dk),
                 semi: getGroupRotationListAtDate(groupNum, 'semi', dk),
-                normal: getGroupRotationListAtDate(groupNum, 'normal', dk)
+                normal: getGroupRotationListAtDate(groupNum, 'normal', dk),
+                night: getGroupRotationListAtDate(groupNum, 'night', dk)
             };
         }
         function getDisabledStateAtDate(groupNum, personName, dateKey) {
@@ -410,7 +416,7 @@
             const st = getDisabledStateAtDate(groupNum, person, dateKey);
             if (st.all) return true;
             if (!dutyCategory) {
-                return !!(st.special || st.weekend || st.semi || st.normal);
+                return !!(st.special || st.weekend || st.semi || st.normal || st.night);
             }
             let cat = dutyCategory;
             if (cat === 'special-holiday') cat = 'special';
@@ -661,6 +667,7 @@
             if (type === 'special') return rotationBaselineSpecialAssignments?.[dateKey] || null;
             if (type === 'weekend') return rotationBaselineWeekendAssignments?.[dateKey] || null;
             if (type === 'semi') return rotationBaselineSemiAssignments?.[dateKey] || null;
+            if (type === 'night') return rotationBaselineNightAssignments?.[dateKey] || null;
             return rotationBaselineNormalAssignments?.[dateKey] || null;
         }
 
@@ -668,7 +675,18 @@
             if (type === 'special') return specialHolidayAssignments?.[dateKey] || null;
             if (type === 'weekend') return weekendAssignments?.[dateKey] || null;
             if (type === 'semi') return semiNormalAssignments?.[dateKey] || null;
+            if (type === 'night') return nightAssignments?.[dateKey] || null;
             return normalDayAssignments?.[dateKey] || null;
+        }
+
+        function mergeAssignmentMapsForDate(normalVal, nightVal, nightGroupNums) {
+            const map = extractGroupAssignmentsMap(normalVal) || {};
+            const nightMap = extractGroupAssignmentsMap(nightVal) || {};
+            for (const g of nightGroupNums || [3, 4]) {
+                if (nightMap[g]) map[g] = nightMap[g];
+                else delete map[g];
+            }
+            return groupMapToAssignmentString(map) || null;
         }
 
         function findPersonBInGroupForTypeOnDate(type, dateKey, groupNum) {
@@ -1472,6 +1490,8 @@
                 return weekendAssignments;
             } else if (dayTypeCategory === 'semi') {
                 return semiNormalAssignments;
+            } else if (dayTypeCategory === 'night') {
+                return nightAssignments;
             } else { // normal
                 return normalDayAssignments;
             }
@@ -1493,7 +1513,15 @@
                 } else if (dayType === 'semi-normal-day') {
                     assignment = semiNormalAssignments[dateKey] || null;
                 } else if (dayType === 'normal-day') {
-                    assignment = normalDayAssignments[dateKey] || null;
+                    if (isNightDutiesEnabled() && isNightThursdayDateKey(dateKey)) {
+                        assignment = mergeAssignmentMapsForDate(
+                            normalDayAssignments[dateKey],
+                            nightAssignments[dateKey],
+                            [3, 4]
+                        );
+                    } else {
+                        assignment = normalDayAssignments[dateKey] || null;
+                    }
                 }
                 
                 // If assignment is an object (like { groupNum: personName }), convert to string format
@@ -1714,6 +1742,7 @@
             if (!startDate || !endDate) return null;
             const snap = {
                 normalDayAssignments: {},
+                nightAssignments: {},
                 semiNormalAssignments: {},
                 weekendAssignments: {},
                 specialHolidayAssignments: {},
@@ -1721,22 +1750,25 @@
                 rotationBaselineWeekendAssignments: {},
                 rotationBaselineSemiAssignments: {},
                 rotationBaselineNormalAssignments: {},
+                rotationBaselineNightAssignments: {},
                 assignmentReasons: {}
             };
             try {
                 snap.lastRotationPositions = JSON.parse(JSON.stringify(lastRotationPositions || {}));
             } catch (_) {
-                snap.lastRotationPositions = { normal: {}, semi: {}, weekend: {}, special: {} };
+                snap.lastRotationPositions = { normal: {}, semi: {}, weekend: {}, special: {}, night: {} };
             }
             const storeMap = {
                 normalDayAssignments,
+                nightAssignments,
                 semiNormalAssignments,
                 weekendAssignments,
                 specialHolidayAssignments,
                 rotationBaselineSpecialAssignments,
                 rotationBaselineWeekendAssignments,
                 rotationBaselineSemiAssignments,
-                rotationBaselineNormalAssignments
+                rotationBaselineNormalAssignments,
+                rotationBaselineNightAssignments
             };
             const storeNames = Object.keys(storeMap);
             const di = new Date(startDate);
@@ -1769,13 +1801,15 @@
             if (!snapshot) return;
             const pairs = [
                 [normalDayAssignments, snapshot.normalDayAssignments],
+                [nightAssignments, snapshot.nightAssignments],
                 [semiNormalAssignments, snapshot.semiNormalAssignments],
                 [weekendAssignments, snapshot.weekendAssignments],
                 [specialHolidayAssignments, snapshot.specialHolidayAssignments],
                 [rotationBaselineSpecialAssignments, snapshot.rotationBaselineSpecialAssignments],
                 [rotationBaselineWeekendAssignments, snapshot.rotationBaselineWeekendAssignments],
                 [rotationBaselineSemiAssignments, snapshot.rotationBaselineSemiAssignments],
-                [rotationBaselineNormalAssignments, snapshot.rotationBaselineNormalAssignments]
+                [rotationBaselineNormalAssignments, snapshot.rotationBaselineNormalAssignments],
+                [rotationBaselineNightAssignments, snapshot.rotationBaselineNightAssignments]
             ];
             for (const [store, frag] of pairs) {
                 if (!store || !frag) continue;
@@ -1991,6 +2025,119 @@
             return !normalWeekPairSwapDisabledGroups.includes(groupNum);
         }
 
+        /**
+         * Κοινή ρύθμιση: Εφαρμογή Νυχτερινών στη 3η και 4η Ομάδα (καθημερινές Πέμπτες).
+         */
+        const NIGHT_DUTIES_ENABLED_GROUPS34_LS_KEY = 'dutyShiftsNightDutiesEnabledGroups34';
+        let nightDutiesEnabledGroups34 = false;
+
+        function applyNightDutiesEnabledGroups34FromValue(enabled) {
+            nightDutiesEnabledGroups34 = !!enabled;
+            try {
+                localStorage.setItem(NIGHT_DUTIES_ENABLED_GROUPS34_LS_KEY, nightDutiesEnabledGroups34 ? '1' : '0');
+            } catch (_) {}
+        }
+
+        function isNightDutiesEnabled() {
+            return !!nightDutiesEnabledGroups34;
+        }
+
+        function isNightDutyGroup(groupNum) {
+            const g = parseInt(groupNum, 10);
+            return isNightDutiesEnabled() && (g === 3 || g === 4);
+        }
+
+        function isNightThursdayDateKey(dateKey) {
+            if (!dateKey || typeof dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return false;
+            const d = new Date(dateKey + 'T00:00:00');
+            if (isNaN(d.getTime())) return false;
+            return d.getDay() === 4 && getDayType(d) === 'normal-day';
+        }
+
+        function buildNightThursdayDayList(startDate, endDate) {
+            const out = [];
+            if (!startDate || !endDate) return out;
+            const d = new Date(startDate);
+            d.setHours(0, 0, 0, 0);
+            const end = new Date(endDate);
+            end.setHours(0, 0, 0, 0);
+            while (d <= end) {
+                const key = formatDateKey(d);
+                if (isNightThursdayDateKey(key)) out.push(key);
+                d.setDate(d.getDate() + 1);
+            }
+            return out;
+        }
+
+        function augmentDayTypeListsForNight(dayTypeLists) {
+            const lists = dayTypeLists || { special: [], weekend: [], semi: [], normal: [] };
+            if (!isNightDutiesEnabled()) {
+                lists.night = [];
+                return lists;
+            }
+            lists.night = (lists.normal || []).filter((dk) => isNightThursdayDateKey(dk));
+            return lists;
+        }
+
+        function getCalculationTotalSteps() {
+            return isNightDutiesEnabled() ? 5 : 4;
+        }
+
+        function isNightCalculationStep(step) {
+            return isNightDutiesEnabled() && step === 4;
+        }
+
+        function isNormalCalculationStep(step) {
+            return isNightDutiesEnabled() ? step === 5 : step === 4;
+        }
+
+        function shouldSkipNormalDayForNightGroup(dateKey, groupNum) {
+            return isNightDutyGroup(groupNum) && isNightThursdayDateKey(dateKey);
+        }
+
+        function getDutyListTypesForGroup(groupNum) {
+            return isNightDutyGroup(groupNum) || (parseInt(groupNum, 10) >= 3 && groups[groupNum]?.night?.length)
+                ? NIGHT_DUTY_LIST_TYPES
+                : DUTY_STATUS_LIST_TYPES;
+        }
+
+        async function saveDutyShiftsAppSettingsNightDuties(enabled) {
+            applyNightDutiesEnabledGroups34FromValue(enabled);
+            const user = window.auth?.currentUser;
+            if (!user?.uid || !window.db) {
+                console.warn('saveDutyShiftsAppSettingsNightDuties: no auth/db');
+                return false;
+            }
+            try {
+                const db = window.db || firebase.firestore();
+                await db
+                    .collection('dutyShifts')
+                    .doc('settings')
+                    .set(
+                        {
+                            nightDutiesEnabledGroups34: !!enabled,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedBy: user.uid
+                        },
+                        { merge: true }
+                    );
+                return true;
+            } catch (e) {
+                console.error('saveDutyShiftsAppSettingsNightDuties:', e);
+                return false;
+            }
+        }
+
+        function readNightDutiesEnabledFromLocalStorage() {
+            try {
+                const raw = localStorage.getItem(NIGHT_DUTIES_ENABLED_GROUPS34_LS_KEY);
+                if (raw === null) return false;
+                return raw === '1' || raw === 'true';
+            } catch (_) {
+                return false;
+            }
+        }
+
         async function saveDutyShiftsAppSettingsNormalWeekPairDisabled(groupsArr) {
             const safe = sanitizeNormalWeekPairSwapDisabledGroups(groupsArr);
             applyNormalWeekPairSwapDisabledGroupsFromValue(safe);
@@ -2033,9 +2180,25 @@
             await saveDutyShiftsAppSettingsNormalWeekPairDisabled(fromLs);
         }
 
+        function initNightDutiesSettingFromLocalStorage() {
+            applyNightDutiesEnabledGroups34FromValue(readNightDutiesEnabledFromLocalStorage());
+        }
+        initNightDutiesSettingFromLocalStorage();
+
         window.getNormalWeekPairSwapDisabledGroups = getNormalWeekPairSwapDisabledGroups;
         window.setNormalWeekPairSwapDisabledGroups = setNormalWeekPairSwapDisabledGroups;
         window.shouldApplyNormalWeekPairSwapLogicForGroup = shouldApplyNormalWeekPairSwapLogicForGroup;
+        window.isNightDutiesEnabled = isNightDutiesEnabled;
+        window.isNightDutyGroup = isNightDutyGroup;
+        window.isNightThursdayDateKey = isNightThursdayDateKey;
+        window.buildNightThursdayDayList = buildNightThursdayDayList;
+        window.augmentDayTypeListsForNight = augmentDayTypeListsForNight;
+        window.getCalculationTotalSteps = getCalculationTotalSteps;
+        window.isNightCalculationStep = isNightCalculationStep;
+        window.isNormalCalculationStep = isNormalCalculationStep;
+        window.shouldSkipNormalDayForNightGroup = shouldSkipNormalDayForNightGroup;
+        window.saveDutyShiftsAppSettingsNightDuties = saveDutyShiftsAppSettingsNightDuties;
+        window.getDutyListTypesForGroup = getDutyListTypesForGroup;
         window.saveDutyShiftsAppSettingsNormalWeekPairDisabled = saveDutyShiftsAppSettingsNormalWeekPairDisabled;
 
         // Track data loading to prevent duplicate loads
@@ -2160,6 +2323,8 @@
                     rotationBaselineWeekendDoc,
                     rotationBaselineSemiDoc,
                     rotationBaselineNormalDoc,
+                    nightDayDoc,
+                    rotationBaselineNightDoc,
                     criticalAssignmentsDoc,
                     assignmentReasonsDoc,
                     lastRotationPositionsDoc,
@@ -2181,6 +2346,8 @@
                     dutyShifts.doc('rotationBaselineWeekendAssignments').get(),
                     dutyShifts.doc('rotationBaselineSemiAssignments').get(),
                     dutyShifts.doc('rotationBaselineNormalAssignments').get(),
+                    dutyShifts.doc('nightAssignments').get(),
+                    dutyShifts.doc('rotationBaselineNightAssignments').get(),
                     dutyShifts.doc('criticalAssignments').get(),
                     dutyShifts.doc('assignmentReasons').get(),
                     dutyShifts.doc('lastRotationPositions').get(),
@@ -2202,7 +2369,9 @@
                     for (let i = 1; i <= 4; i++) {
                         if (!groups[i]) {
                             groups[i] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} };
+                            if (i === 3 || i === 4) groups[i].night = [];
                         }
+                        if ((i === 3 || i === 4) && !groups[i].night) groups[i].night = [];
                         if (!groups[i].priorities) {
                             groups[i].priorities = {};
                         }
@@ -2218,7 +2387,7 @@
                         }
                         
                         // Ensure all people in lists have priority entries (only if they don't already exist)
-                        const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                        const listTypes = (i === 3 || i === 4) ? ['special', 'weekend', 'semi', 'normal', 'night'] : ['special', 'weekend', 'semi', 'normal'];
                         listTypes.forEach(listType => {
                             const list = groups[i][listType] || [];
                             list.forEach(person => {
@@ -2387,6 +2556,26 @@
                 } else {
                     rotationBaselineNormalAssignments = {};
                 }
+                if (nightDayDoc && nightDayDoc.exists) {
+                    const data = nightDayDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    nightAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
+                } else {
+                    nightAssignments = {};
+                }
+                if (rotationBaselineNightDoc && rotationBaselineNightDoc.exists) {
+                    const data = rotationBaselineNightDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    delete data._migratedFrom;
+                    delete data._migrationDate;
+                    rotationBaselineNightAssignments = isMonthOrganizedDoc(data) ? flattenAssignmentsByMonth(data) : (data || {});
+                } else {
+                    rotationBaselineNightAssignments = {};
+                }
 
                 // Deprecated: legacy dutyShifts/assignments is no longer loaded or merged.
                 dutyAssignments = {};
@@ -2436,6 +2625,9 @@
                     const settingsData = settingsDoc.data() || {};
                     if (Array.isArray(settingsData.normalWeekPairSwapDisabledGroups)) {
                         applyNormalWeekPairSwapDisabledGroupsFromValue(settingsData.normalWeekPairSwapDisabledGroups);
+                    }
+                    if (typeof settingsData.nightDutiesEnabledGroups34 === 'boolean') {
+                        applyNightDutiesEnabledGroups34FromValue(settingsData.nightDutiesEnabledGroups34);
                     } else {
                         applyNormalWeekPairSwapDisabledGroupsFromValue([]);
                     }
@@ -2480,8 +2672,9 @@
                     if (data.semi) lastRotationPositions.semi = normalizeRotationType(data.semi);
                     if (data.weekend) lastRotationPositions.weekend = normalizeRotationType(data.weekend);
                     if (data.special) lastRotationPositions.special = normalizeRotationType(data.special);
+                    if (data.night) lastRotationPositions.night = normalizeRotationType(data.night);
                 } else {
-                    lastRotationPositions = { normal: {}, semi: {}, weekend: {}, special: {} };
+                    lastRotationPositions = { normal: {}, semi: {}, weekend: {}, special: {}, night: {} };
                 }
                 
                 // Load rankings
@@ -2718,6 +2911,11 @@
             const savedNormalDayAssignments = localStorage.getItem('dutyShiftsNormalDayAssignments');
             if (savedNormalDayAssignments) {
                 normalDayAssignments = JSON.parse(savedNormalDayAssignments);
+            }
+
+            const savedNightAssignments = localStorage.getItem('dutyShiftsNightAssignments');
+            if (savedNightAssignments) {
+                nightAssignments = JSON.parse(savedNightAssignments);
             }
             
             const savedSemiNormalAssignments = localStorage.getItem('dutyShiftsSemiNormalAssignments');
@@ -3071,6 +3269,19 @@
                 } catch (error) {
                     console.error('Error saving normalDayAssignments to Firestore:', error);
                 }
+
+                try {
+                    const nightCount = Object.keys(nightAssignments).filter(key =>
+                        key !== 'lastUpdated' && key !== 'updatedBy' && key !== '_migratedFrom' && key !== '_migrationDate'
+                    ).length;
+                    if (nightCount > 0) {
+                        const organizedNight = organizeAssignmentsByMonth(nightAssignments);
+                        await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'nightAssignments', organizedNight);
+                        console.log('Saved nightAssignments organized by month:', Object.keys(organizedNight).length, 'months', nightCount, 'assignments');
+                    }
+                } catch (error) {
+                    console.error('Error saving nightAssignments to Firestore:', error);
+                }
                 
                 try {
                     const assignmentCount = Object.keys(semiNormalAssignments).filter(key => 
@@ -3208,7 +3419,8 @@
                     if (Object.keys(lastRotationPositions.normal).length > 0 || 
                         Object.keys(lastRotationPositions.semi).length > 0 ||
                         Object.keys(lastRotationPositions.weekend).length > 0 ||
-                        Object.keys(lastRotationPositions.special).length > 0) {
+                        Object.keys(lastRotationPositions.special).length > 0 ||
+                        Object.keys(lastRotationPositions.night || {}).length > 0) {
                         const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
                         await db.collection('dutyShifts').doc('lastRotationPositions').set({
                             ...sanitizedPositions,
@@ -3243,6 +3455,7 @@
             localStorage.setItem('dutyShiftsSpecialHolidays', JSON.stringify(specialHolidays));
             // Save separate day-type assignments
             localStorage.setItem('dutyShiftsNormalDayAssignments', JSON.stringify(normalDayAssignments));
+            localStorage.setItem('dutyShiftsNightAssignments', JSON.stringify(nightAssignments));
             localStorage.setItem('dutyShiftsSemiNormalAssignments', JSON.stringify(semiNormalAssignments));
             localStorage.setItem('dutyShiftsWeekendAssignments', JSON.stringify(weekendAssignments));
             localStorage.setItem('dutyShiftsSpecialHolidayAssignments', JSON.stringify(specialHolidayAssignments));
@@ -3546,8 +3759,8 @@
             const migrated = {
                 1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
                 2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
-                3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
-                4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} }
+                3: { special: [], weekend: [], semi: [], normal: [], night: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
+                4: { special: [], weekend: [], semi: [], normal: [], night: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} }
             };
             
             for (let i = 1; i <= 4; i++) {
@@ -3584,6 +3797,7 @@
                         migrated[i].weekend = data[i].weekend || [];
                         migrated[i].semi = data[i].semi || [];
                         migrated[i].normal = data[i].normal || [];
+                        if (i === 3 || i === 4) migrated[i].night = data[i].night || [];
                     } else {
                         // Fallback
                         const people = data[i].people || [];
@@ -4600,10 +4814,12 @@
                 'weekendAssignments',
                 'semiNormalAssignments',
                 'normalDayAssignments',
+                'nightAssignments',
                 'rotationBaselineSpecialAssignments',
                 'rotationBaselineWeekendAssignments',
                 'rotationBaselineSemiAssignments',
-                'rotationBaselineNormalAssignments'
+                'rotationBaselineNormalAssignments',
+                'rotationBaselineNightAssignments'
             ];
 
             const docIdsToRead = [...monthOrganizedDocIds, 'assignmentReasons', 'lastRotationPositions'];
@@ -4703,7 +4919,7 @@
                     delete data.lastUpdated;
                     delete data.updatedBy;
                     const out = { normal: {}, semi: {}, weekend: {}, special: {} };
-                    for (const dayType of ['normal', 'semi', 'weekend', 'special']) {
+                    for (const dayType of ['normal', 'semi', 'weekend', 'special', 'night']) {
                         const byType = data[dayType];
                         if (!byType || typeof byType !== 'object') continue;
                         for (const k in byType) {
@@ -4760,10 +4976,12 @@
             stripFromStore(weekendAssignments);
             stripFromStore(semiNormalAssignments);
             stripFromStore(normalDayAssignments);
+            stripFromStore(nightAssignments);
             stripFromStore(rotationBaselineSpecialAssignments);
             stripFromStore(rotationBaselineWeekendAssignments);
             stripFromStore(rotationBaselineSemiAssignments);
             stripFromStore(rotationBaselineNormalAssignments);
+            stripFromStore(rotationBaselineNightAssignments);
             if (!groupSet) {
                 for (const key of Object.keys(assignmentReasons || {})) {
                     if (dateKeyInRange(key)) delete assignmentReasons[key];
@@ -4780,7 +4998,7 @@
                     if (Object.keys(frag).length === 0) delete assignmentReasons[key];
                 }
             }
-            for (const dayType of ['normal', 'semi', 'weekend', 'special']) {
+            for (const dayType of ['normal', 'semi', 'weekend', 'special', 'night']) {
                 const byType = lastRotationPositions[dayType];
                 if (!byType || typeof byType !== 'object') continue;
                 for (const mk of monthKeys) {
@@ -4911,7 +5129,7 @@
         }
 
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
-            const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
+            const lastAssigned = { normal: '', semi: '', weekend: '', special: '', night: '' };
             const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
             const firstDayOfNextMonth = new Date(year, month + 1, 1);
             const lastDayOfNextMonth = new Date(year, month + 2, 0);
@@ -4974,20 +5192,26 @@
                 const dayKey = formatDateKey(date);
                 const dayType = getDayType(date);
                 const rotationType = mapDayTypeToRotationType(dayType);
+                const isNightThu =
+                    typeof isNightDutyGroup === 'function' &&
+                    isNightDutyGroup(groupNum) &&
+                    typeof isNightThursdayDateKey === 'function' &&
+                    isNightThursdayDateKey(dayKey);
+                const storeType = isNightThu ? 'night' : rotationType;
                 const assigned =
                     typeof getPersonAssignedOnDateFromStore === 'function'
-                        ? getPersonAssignedOnDateFromStore(rotationType, dayKey, groupNum)
+                        ? getPersonAssignedOnDateFromStore(storeType, dayKey, groupNum)
                         : '';
                 if (!assigned) continue;
                 let continuity = assigned;
                 if (typeof getPersonForRotationContinuity === 'function') {
                     const store =
                         typeof getAssignmentsForDayType === 'function'
-                            ? getAssignmentsForDayType(rotationType)
+                            ? getAssignmentsForDayType(storeType)
                             : null;
                     continuity = getPersonForRotationContinuity(dayKey, groupNum, assigned, store);
                 }
-                if (continuity) lastAssigned[rotationType] = normName(continuity);
+                if (continuity) lastAssigned[storeType] = normName(continuity);
             }
 
             const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {

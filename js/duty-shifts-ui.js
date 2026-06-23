@@ -741,12 +741,14 @@
                 container.innerHTML = '';
                 
                 const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, priorities: {} };
+                if ((i === 3 || i === 4) && !groupData.night) groupData.night = [];
                 
                 // Ensure priorities exist
                 if (!groupData.priorities) groupData.priorities = {};
                 
+                const showNightList = (i === 3 || i === 4) && typeof isNightDutiesEnabled === 'function' && isNightDutiesEnabled();
                 // Sort each list by priority before rendering
-                const listTypes = ['special', 'weekend', 'semi', 'normal'];
+                const listTypes = showNightList ? ['special', 'weekend', 'semi', 'normal', 'night'] : ['special', 'weekend', 'semi', 'normal'];
                 listTypes.forEach(listType => {
                     if (groupData[listType]) {
                         groupData[listType].sort((a, b) => {
@@ -777,6 +779,7 @@
                 const weekendList = groupData.weekend || [];
                 const semiList = groupData.semi || [];
                 const normalList = groupData.normal || [];
+                const nightList = groupData.night || [];
                 
                 const allPeople = new Set([...specialList, ...weekendList, ...semiList, ...normalList]);
                 
@@ -819,6 +822,19 @@
                     `;
                     container.appendChild(semiDiv);
                     
+                    if (showNightList) {
+                        const nightDiv = document.createElement('div');
+                        nightDiv.className = 'mb-3 border rounded p-2';
+                        nightDiv.innerHTML = `
+                        <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('nightList_${i}', 'nightChevron_${i}')">
+                            <strong class="text-secondary"><i class="fas fa-moon me-1"></i>Σειρά Νυχτερινών (Πέμπτες):</strong>
+                            <i id="nightChevron_${i}" class="fas fa-chevron-down"></i>
+                        </div>
+                        <div id="nightList_${i}" class="collapse"></div>
+                    `;
+                        container.appendChild(nightDiv);
+                    }
+                    
                     // Καθημερινή order
                     const normalDiv = document.createElement('div');
                     normalDiv.className = 'mb-3 border rounded p-2';
@@ -838,6 +854,9 @@
                         { type: 'semi', list: semiList, containerId: `semiList_${i}` },
                         { type: 'normal', list: normalList, containerId: `normalList_${i}` }
                     ];
+                    if (showNightList) {
+                        lists.push({ type: 'night', list: nightList, containerId: `nightList_${i}` });
+                    }
                     
                     lists.forEach(({ type, list, containerId }) => {
                         const listContainer = document.getElementById(containerId);
@@ -4235,6 +4254,10 @@
         function openNormalSwapLogicSettingsModal() {
             const flexCb = document.getElementById('dutyShiftsFlexibleStatusEffectiveDates');
             if (flexCb) flexCb.checked = isFlexibleStatusEffectiveDatesEnabled();
+            const nightCb = document.getElementById('dutyShiftsNightDutiesGroups34');
+            if (nightCb && typeof isNightDutiesEnabled === 'function') {
+                nightCb.checked = isNightDutiesEnabled();
+            }
             const disabledGroups = typeof getNormalWeekPairSwapDisabledGroups === 'function'
                 ? getNormalWeekPairSwapDisabledGroups()
                 : [];
@@ -4266,6 +4289,10 @@
             } else if (typeof setNormalWeekPairSwapDisabledGroups === 'function') {
                 setNormalWeekPairSwapDisabledGroups(selected);
             }
+            const nightCb = document.getElementById('dutyShiftsNightDutiesGroups34');
+            if (nightCb && typeof saveDutyShiftsAppSettingsNightDuties === 'function') {
+                await saveDutyShiftsAppSettingsNightDuties(!!nightCb.checked);
+            }
             const modalEl = document.getElementById('normalSwapLogicSettingsModal');
             const m = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
             if (m) m.hide();
@@ -4275,6 +4302,7 @@
                     'Ρυθμίσεις'
                 );
             }
+            if (typeof renderGroups === 'function') renderGroups(true);
         }
 
         function renderCalendar() {
@@ -5652,6 +5680,11 @@
             installFor('calculateStartMonth');
         }
         function showStepByStepCalculation() {
+            if (typeof getCalculationTotalSteps === 'function') {
+                calculationSteps.totalSteps = getCalculationTotalSteps();
+            } else {
+                calculationSteps.totalSteps = 4;
+            }
             calculationSteps.currentStep = 1;
             renderCurrentStep();
             const modal = new bootstrap.Modal(document.getElementById('stepByStepCalculationModal'));
