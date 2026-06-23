@@ -329,10 +329,14 @@
                 titleEl.appendChild(document.createTextNode(String(options.title)));
             }
             if (introEl) {
-                const hint =
-                    typeof isInStatusChangeWindow === 'function' && isInStatusChangeWindow()
-                        ? '<strong>Σύσταση:</strong> τελευταίο δεκαπενθήμερο — προεπιλογή η 1η του <em>επόμενου</em> μήνα. '
-                        : '<strong>Σύσταση:</strong> εκτός τελευταίου δεκαπενθήμερου — προεπιλογή η 1η του <em>τρέχοντος</em> μήνα. ';
+                const flexOn =
+                    typeof isFlexibleStatusEffectiveDatesEnabled === 'function' &&
+                    isFlexibleStatusEffectiveDatesEnabled();
+                const hint = flexOn
+                    ? '<strong>Ευέλικτη ισχύ:</strong> η ημερομηνία που επιλέγετε εφαρμόζεται ακριβώς ως έχει (χωρίς μεταφορά τελευταίου δεκαημέρου). '
+                    : typeof isInStatusChangeWindow === 'function' && isInStatusChangeWindow()
+                      ? '<strong>Σύσταση:</strong> τελευταίο δεκαπενθήμερο — προεπιλογή η 1η του <em>επόμενου</em> μήνα. '
+                      : '<strong>Σύσταση:</strong> εκτός τελευταίου δεκαπενθήμερου — προεπιλογή η 1η του <em>τρέχοντος</em> μήνα. ';
                 introEl.innerHTML =
                     (options.introHtml || '') +
                     `<p class="small text-muted mb-0 mt-2">${hint}Μπορείτε να αλλάξετε την ημερομηνία για επανυπολογισμό οποιουδήποτε μήνα.</p>`;
@@ -2062,7 +2066,7 @@
             const hintEl = document.getElementById('disableSettingsEffectiveHint');
             if (hintEl) {
                 hintEl.innerHTML = isFlexibleStatusEffectiveDatesEnabled()
-                    ? 'Οι αλλαγές καταστάσεως καταχωρούνται με <strong>ημερομηνία ισχύος</strong> (επιλέγετε στο επόμενο βήμα). Προεπιλογή: τελευταίο δεκαπενθήμερο μήνα → 1η επόμενου· αλλιώς → 1η τρέχοντος. Αν η ημερομηνία ισχύος πέσει στο τελευταίο <strong>δεκαήμερο</strong> του ημερολογιακού μήνα της (κανόνας υπολογισμού), για υπολογισμούς μεταφέρεται στην 1η του επόμενου μήνα. Οι απουσίες ορίζονται με start/end.'
+                    ? 'Οι αλλαγές καταστάσεως καταχωρούνται με <strong>ημερομηνία ισχύος</strong> (επιλέγετε στο επόμενο βήμα). Η ημερομηνία που επιλέγετε εφαρμόζεται <strong>ακριβώς ως έχει</strong> (χωρίς μεταφορά τελευταίου δεκαημέρου). Προεπιλογή: τελευταίο δεκαπενθήμερο μήνα → 1η επόμενου· αλλιώς → 1η τρέχοντος. Οι απουσίες ορίζονται με start/end.'
                     : 'Οι αλλαγές καταστάσεως επιτρέπονται <strong>μόνο στο τελευταίο ημερολογιακό δεκαπενθήμερο</strong> του μήνα· η ισχύς για υπολογισμούς είναι η <strong>1η του επόμενου μήνα</strong> (κλασική λειτουργία). Για επιλογή ημερομηνίας ισχύος οποτεδήποτε, ενεργοποιήστε την «Ευέλικτη ημερομηνία ισχύος» στις Ρυθμίσεις. Οι απουσίες ορίζονται με start/end.';
             }
 

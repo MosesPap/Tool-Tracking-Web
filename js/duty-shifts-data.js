@@ -120,15 +120,21 @@
         }
         /**
          * Αν η «ισχύς από» πέσει στο τελευταίο ημερολογιακό δεκαήμερο του μήνα της,
-         * για υπολογισμούς μεταφέρεται στην 1η του επόμενου μήνα.
-         * Εξαίρεση: όταν ο χρήστης επιλέξει ρητά τη σημερινή ημερομηνία,
-         * η ισχύς παραμένει σήμερα ώστε η αλλαγή να φανεί άμεσα στο UI.
+         * για υπολογισμούς μεταφέρεται στην 1η του επόμενου μήνα (κλασική λειτουργία).
+         * Με ενεργή «Ευέλικτη ημερομηνία ισχύος» η ημερομηνία που επιλέγει ο χρήστης
+         * εφαρμόζεται ως έχει, χωρίς μεταφορά δεκαημέρου.
          */
         function normalizeStatusEffectiveFromDateKey(dateKey) {
             if (!dateKey || String(dateKey) === PERSON_STATUS_SCHEDULE_EPOCH) return dateKey;
             if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey))) return dateKey;
             const d = dateFromDateKey(dateKey);
             if (!d) return dateKey;
+            if (
+                typeof isFlexibleStatusEffectiveDatesEnabled === 'function' &&
+                isFlexibleStatusEffectiveDatesEnabled()
+            ) {
+                return dateKey;
+            }
             const todayKey = typeof formatDateKey === 'function' ? formatDateKey(new Date()) : null;
             if (todayKey && String(dateKey) === todayKey) {
                 return dateKey;
