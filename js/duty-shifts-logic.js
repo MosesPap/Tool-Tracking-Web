@@ -6543,7 +6543,7 @@
                     if (gmap) simulatedNightAssignments[dateKey] = { ...gmap };
                 }
                 const sortedNormal = [...normalDays].sort();
-                const updatedAssignments = {}; // dateKey -> { groupNum -> personName }
+                let updatedAssignments = {}; // dateKey -> { groupNum -> personName }
                 
                 // Track swap pairs for color coding: swapPairId -> { color, person1, person2, date1, date2 }
                 // Find maximum existing swapPairId to ensure unique IDs
@@ -12916,7 +12916,24 @@
                     // Calculate who will be assigned for each group
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         if (typeof shouldSkipNormalDayForNightGroup === 'function' && shouldSkipNormalDayForNightGroup(dateKey, groupNum)) {
-                            const nightPerson = (calculationSteps.finalNightAssignments || {})[dateKey]?.[groupNum];
+                            if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
+                                const preserved =
+                                    typeof getGroupAssignmentForDate === 'function'
+                                        ? getGroupAssignmentForDate(dateKey, groupNum)
+                                        : normalAssignments[dateKey]?.[groupNum];
+                                if (preserved) {
+                                    if (!normalRotationPersons[dateKey]) normalRotationPersons[dateKey] = {};
+                                    normalRotationPersons[dateKey][groupNum] = preserved;
+                                    html += `<td>${buildBaselineComputedCellHtml(preserved, preserved, '', '')}</td>`;
+                                } else {
+                                    html += '<td class="text-muted">-</td>';
+                                }
+                                continue;
+                            }
+                            let nightPerson = (calculationSteps.finalNightAssignments || {})[dateKey]?.[groupNum];
+                            if (!nightPerson && typeof getGroupAssignmentForDate === 'function') {
+                                nightPerson = getGroupAssignmentForDate(dateKey, groupNum);
+                            }
                             if (nightPerson) {
                                 html += `<td class="text-muted" title="Νυχτερινή (βήμα 4)">${nightPerson}</td>`;
                             } else {

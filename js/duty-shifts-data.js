@@ -768,14 +768,25 @@
             return normalDayAssignments?.[dateKey] || null;
         }
 
+        /**
+         * Συγχώνευση καθημερινών + νυχτερινών για Πέμπτες ομάδων 3/4.
+         * Αν υπάρχει νυχτερινή ανάθεση, υπερισχύει· αλλιώς κρατάται η καθημερινή (κλειδωμένοι μήνες / παλιά δεδομένα).
+         */
         function mergeAssignmentMapsForDate(normalVal, nightVal, nightGroupNums) {
             const map = extractGroupAssignmentsMap(normalVal) || {};
             const nightMap = extractGroupAssignmentsMap(nightVal) || {};
             for (const g of nightGroupNums || [3, 4]) {
-                if (nightMap[g]) map[g] = nightMap[g];
-                else delete map[g];
+                if (nightMap[g]) {
+                    map[g] = nightMap[g];
+                }
+                // Δεν διαγράφουμε map[g] όταν λείπει νυχτερινή — fallback στην καθημερινή ανάθεση
             }
             return groupMapToAssignmentString(map) || null;
+        }
+
+        function getGroupAssignmentForDate(dateKey, groupNum) {
+            const raw = getAssignmentForDate(dateKey);
+            return parseAssignedPersonForGroupFromAssignment(raw, groupNum);
         }
 
         function findPersonBInGroupForTypeOnDate(type, dateKey, groupNum) {
@@ -2400,7 +2411,7 @@
         window.getCalculationTotalSteps = getCalculationTotalSteps;
         window.isNightCalculationStep = isNightCalculationStep;
         window.isNormalCalculationStep = isNormalCalculationStep;
-        window.shouldSkipNormalDayForNightGroup = shouldSkipNormalDayForNightGroup;
+        window.getGroupAssignmentForDate = getGroupAssignmentForDate;
         window.saveDutyShiftsAppSettingsNightDuties = saveDutyShiftsAppSettingsNightDuties;
         window.saveDutyShiftsAppSettingsNightDutiesMode = saveDutyShiftsAppSettingsNightDutiesMode;
         window.getDutyListTypesForGroup = getDutyListTypesForGroup;
