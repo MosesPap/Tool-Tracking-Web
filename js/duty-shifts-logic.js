@@ -2353,6 +2353,9 @@
                 const isNormalLike = (t) => t === 'normal' || t === 'night';
                 if (isNormalLike(type1) && (type2 === 'semi' || type2 === 'weekend' || type2 === 'special')) return true;
                 if ((type1 === 'semi' || type1 === 'weekend' || type1 === 'special') && isNormalLike(type2)) return true;
+
+                // Συνεχόμενες καθημερινή + νυχτερινή (π.χ. Τετάρτη καθημερινή → Πέμπτη νυχτερινή)
+                if ((type1 === 'normal' && type2 === 'night') || (type1 === 'night' && type2 === 'normal')) return true;
                 
                 // Semi conflicts with: weekend, special
                 if (type1 === 'semi' && (type2 === 'weekend' || type2 === 'special')) return true;

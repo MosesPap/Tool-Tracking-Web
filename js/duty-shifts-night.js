@@ -114,8 +114,7 @@
             const cand = groupPeople[idx];
             if (!cand) continue;
             if (personHasSemiThursdayInMonth(cand, groupNum, monthKey, semiByMonth)) continue;
-            if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(cand, groupNum, date, 'night')) continue;
-            if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'night')) continue;
+            if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(cand, groupNum, date, 'normal')) continue;
             return { person: cand, nextIdx: (idx + 1) % rotationDays };
         }
         return { person: null, nextIdx: (startIdx + 1) % rotationDays };
@@ -198,8 +197,7 @@
 
         const swapCandidate = assignments[candidateKey]?.[groupNum];
         if (!swapCandidate) return null;
-        if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(swapCandidate, groupNum, d, 'night')) return null;
-        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(swapCandidate, groupNum, 'night')) return null;
+        if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(swapCandidate, groupNum, d, 'normal')) return null;
         if (typeof hasConsecutiveDuty === 'function') {
             if (hasConsecutiveDuty(candidateKey, swapCandidate, groupNum, simulated)) return null;
             if (hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulated)) return null;
@@ -214,11 +212,29 @@
         const swappedPeopleSet = new Set();
         const swappedPeople = [];
 
+        const normalForSim = {};
+        const fn = calculationSteps.finalNormalAssignments || calculationSteps.tempNormalAssignments || {};
+        for (const dk of Object.keys(fn)) {
+            if (fn[dk] && typeof fn[dk] === 'object') normalForSim[dk] = { ...fn[dk] };
+        }
+        for (const nightKey of sortedNight) {
+            const wed = new Date(nightKey + 'T00:00:00');
+            if (isNaN(wed.getTime())) continue;
+            wed.setDate(wed.getDate() - 1);
+            const wedKey = typeof formatDateKey === 'function' ? formatDateKey(wed) : null;
+            if (!wedKey || normalForSim[wedKey]) continue;
+            const gmap =
+                typeof extractGroupAssignmentsMap === 'function'
+                    ? extractGroupAssignmentsMap(normalDayAssignments?.[wedKey])
+                    : null;
+            if (gmap) normalForSim[wedKey] = { ...gmap };
+        }
+
         const simulated = {
             special: simulatedSpecial,
             weekend: simulatedWeekend,
             semi: simulatedSemi,
-            normal: {},
+            normal: normalForSim,
             night: finalAssignments
         };
 
