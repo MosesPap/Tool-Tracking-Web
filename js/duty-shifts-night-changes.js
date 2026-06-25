@@ -870,7 +870,54 @@
             row.lastDisplacement = displacementByPerson.get(`${row.groupNum}:${normPerson(row.person)}`) || null;
         }
 
-        return { thursdayEvents, personSummaries, swapPairs };
+        const thursdayCountByPerson = new Map();
+        for (const ev of thursdayEvents) {
+            const pk = `${ev.groupNum}:${normPerson(ev.assignee)}`;
+            const existing = thursdayCountByPerson.get(pk);
+            if (existing) {
+                existing.count += 1;
+            } else {
+                thursdayCountByPerson.set(pk, {
+                    groupNum: ev.groupNum,
+                    person: ev.assignee,
+                    count: 1
+                });
+            }
+        }
+
+        const personThursdayCounts = [];
+        const countSeen = new Set();
+        for (const groupNum of NIGHT_GROUPS) {
+            const list =
+                typeof getSortedGroupListForRotation === 'function'
+                    ? getSortedGroupListForRotation(groupNum, 'normal')
+                    : (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])
+                          ?.normal || [];
+            for (const person of list) {
+                if (!person) continue;
+                const pk = `${groupNum}:${normPerson(person)}`;
+                if (countSeen.has(pk)) continue;
+                countSeen.add(pk);
+                const fromEvents = thursdayCountByPerson.get(pk);
+                personThursdayCounts.push({
+                    groupNum,
+                    person,
+                    count: fromEvents?.count || 0
+                });
+            }
+        }
+        for (const [pk, entry] of thursdayCountByPerson) {
+            if (countSeen.has(pk)) continue;
+            countSeen.add(pk);
+            personThursdayCounts.push(entry);
+        }
+        personThursdayCounts.sort((a, b) => {
+            if (a.groupNum !== b.groupNum) return a.groupNum - b.groupNum;
+            if (b.count !== a.count) return b.count - a.count;
+            return String(a.person || '').localeCompare(String(b.person || ''), 'el');
+        });
+
+        return { thursdayEvents, personSummaries, swapPairs, personThursdayCounts };
     }
 
     function openThursdaySpacingHistoryModal() {
@@ -886,8 +933,9 @@
         const report = buildThursdaySpacingHistoryReport();
         const tbodyPerson = document.getElementById('thursdaySpacingHistoryPersonBody');
         const tbodyChrono = document.getElementById('thursdaySpacingHistoryChronoBody');
+        const tbodyCounts = document.getElementById('thursdaySpacingHistoryCountsBody');
         const emptyMsg = document.getElementById('thursdaySpacingHistoryEmpty');
-        if (!tbodyPerson || !tbodyChrono) return;
+        if (!tbodyPerson || !tbodyChrono || !tbodyCounts) return;
 
         const esc = typeof escapeHtml === 'function' ? escapeHtml : (s) => String(s || '');
         const groupLabel = (g) =>
@@ -930,7 +978,6 @@
                 <td>${statusBadge(row.status, row)}</td>
                 ${swapCols}
                 ${displacedCols}
-                <td><small>${esc(row.reasonText || row.lastDisplacement?.reasonText || '—')}</small></td>
             `;
             tbodyPerson.appendChild(tr);
         }
@@ -945,9 +992,20 @@
                 <td>${statusBadge(ev.status, ev)}</td>
                 <td>${esc(ev.displacedPerson || '—')}</td>
                 <td>${esc(ev.partnerDateLabel || '—')}</td>
-                <td><small>${esc(ev.reasonText || '—')}</small></td>
             `;
             tbodyChrono.appendChild(tr);
+        }
+
+        tbodyCounts.innerHTML = '';
+        for (const row of report.personThursdayCounts || []) {
+            const tr = document.createElement('tr');
+            const countClass = row.count > 0 ? 'fw-bold text-primary' : 'text-muted';
+            tr.innerHTML = `
+                <td><span class="badge bg-primary">${esc(groupLabel(row.groupNum))}</span></td>
+                <td><strong>${esc(row.person)}</strong></td>
+                <td class="text-center ${countClass}">${row.count}</td>
+            `;
+            tbodyCounts.appendChild(tr);
         }
 
         if (emptyMsg) {
