@@ -4697,13 +4697,13 @@
                                 : '';
                             let spacingIcon = '';
                             if (
-                                typeof isNightChangesMode === 'function' &&
-                                isNightChangesMode() &&
                                 (e.groupNum === 3 || e.groupNum === 4) &&
                                 typeof getThursdaySpacingMarker === 'function'
                             ) {
                                 const sp = getThursdaySpacingMarker(key, e.groupNum, e.personName);
-                                if (sp && sp.status === 'ok') {
+                                const isThursday =
+                                    typeof isNightThursdayDateKey === 'function' && isNightThursdayDateKey(key);
+                                if (sp && sp.status === 'ok' && isThursday) {
                                     const spTitle = `Πέμπτη OK — κανόνας Ν Πεμπτών (Ν=${sp.nRequired}${sp.thursdaysSince != null ? ', πέρασαν ' + sp.thursdaysSince : ''})`;
                                     spacingIcon = ` <i class="fas fa-check duty-thursday-spacing-ok" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}"></i>`;
                                 } else if (sp && sp.status === 'swap') {

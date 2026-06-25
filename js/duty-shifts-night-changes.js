@@ -426,21 +426,7 @@
         return { assignments, markers, spacingSwaps };
     }
 
-    function getThursdaySpacingMarker(dateKey, groupNum, personName) {
-        const store = typeof window !== 'undefined' ? window.thursdaySpacingMarkers : null;
-        if (!store) return null;
-        const gmap = store[dateKey]?.[groupNum] || store[dateKey]?.[String(groupNum)];
-        if (!gmap) return null;
-        const n = normPerson(personName);
-        if (gmap[n]) return gmap[n];
-        for (const k of Object.keys(gmap)) {
-            if (normPerson(k) === n) return gmap[k];
-        }
-        return null;
-    }
-
     window.runThursdaySpacingChangesPass = runThursdaySpacingChangesPass;
-    window.getThursdaySpacingMarker = getThursdaySpacingMarker;
     window.countActiveNormalListSizeForThursday = countActiveNormalListSize;
     window.countNormalThursdaysSinceLast = countNormalThursdaysSinceLast;
 })();

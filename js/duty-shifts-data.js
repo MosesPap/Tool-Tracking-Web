@@ -2227,6 +2227,41 @@
             for (const dk of Object.keys(newMarkers)) {
                 thursdaySpacingMarkers[dk] = JSON.parse(JSON.stringify(newMarkers[dk]));
             }
+            syncThursdaySpacingMarkersWindow();
+            try {
+                localStorage.setItem(
+                    'dutyShiftsAssignmentReasons',
+                    JSON.stringify({
+                        ...assignmentReasons,
+                        _manualAlternateDeferCarry: manualAlternateDeferCarry,
+                        _thursdaySpacingMarkers: thursdaySpacingMarkers
+                    })
+                );
+            } catch (_) {}
+        }
+
+        function syncThursdaySpacingMarkersWindow() {
+            if (typeof window !== 'undefined') {
+                window.thursdaySpacingMarkers = thursdaySpacingMarkers;
+            }
+        }
+
+        function getThursdaySpacingMarker(dateKey, groupNum, personName) {
+            const gmap =
+                thursdaySpacingMarkers[dateKey]?.[groupNum] ||
+                thursdaySpacingMarkers[dateKey]?.[String(groupNum)];
+            if (!gmap) return null;
+            const n =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey(personName)
+                    : String(personName || '').trim();
+            if (gmap[n]) return gmap[n];
+            for (const k of Object.keys(gmap)) {
+                const kn =
+                    typeof normalizePersonKey === 'function' ? normalizePersonKey(k) : String(k || '').trim();
+                if (kn === n) return gmap[k];
+            }
+            return null;
         }
 
         function isNightCalculationStep(step) {
@@ -2404,6 +2439,8 @@
         window.isNightDutyGroup = isNightDutyGroup;
         window.isNightChangesGroup = isNightChangesGroup;
         window.applyThursdaySpacingMarkers = applyThursdaySpacingMarkers;
+        window.getThursdaySpacingMarker = getThursdaySpacingMarker;
+        window.syncThursdaySpacingMarkersWindow = syncThursdaySpacingMarkersWindow;
         window.thursdaySpacingMarkers = thursdaySpacingMarkers;
         window.isNightThursdayDateKey = isNightThursdayDateKey;
         window.buildNightThursdayDayList = buildNightThursdayDayList;
@@ -2825,6 +2862,7 @@
                         delete data._thursdaySpacingMarkers;
                     }
                     assignmentReasons = data;
+                    syncThursdaySpacingMarkersWindow();
                 } else {
                     assignmentReasons = {};
                 }
@@ -3185,6 +3223,7 @@
                     } else {
                         assignmentReasons = {};
                     }
+                    syncThursdaySpacingMarkersWindow();
                 } catch (_) {
                     assignmentReasons = {};
                 }
