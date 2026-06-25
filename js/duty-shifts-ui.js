@@ -4639,13 +4639,43 @@
                             let underline = false;
                             let isSwap = false;
                             let isThursdaySpacingSwap = false;
+                            let thursdaySpacingPairId = null;
+                            let thursdaySpacingPairFallbackKey = null;
                             let swapStyle = '';
                             if (personName && g >= 1 && g <= 4) {
+                                const spacingMarkerEarly =
+                                    typeof getThursdaySpacingMarker === 'function'
+                                        ? getThursdaySpacingMarker(key, g, personName)
+                                        : null;
                                 const r = getAssignmentReason(key, g, personName);
                                 if (r && r.type === 'swap') {
                                     isSwap = true;
                                     if (r.meta && r.meta.thursdaySpacing) {
                                         isThursdaySpacingSwap = true;
+                                        thursdaySpacingPairId = r.swapPairId;
+                                        thursdaySpacingPairFallbackKey =
+                                            typeof buildThursdaySpacingPairFallbackKey === 'function'
+                                                ? buildThursdaySpacingPairFallbackKey(
+                                                      key,
+                                                      g,
+                                                      spacingMarkerEarly || {
+                                                          partnerDateKey: r.meta.partnerDateKey
+                                                      }
+                                                  )
+                                                : null;
+                                        if (typeof buildThursdaySpacingSwapFrameStyle === 'function') {
+                                            swapStyle = buildThursdaySpacingSwapFrameStyle(
+                                                thursdaySpacingPairId,
+                                                thursdaySpacingPairFallbackKey
+                                            );
+                                        } else {
+                                            const pid =
+                                                typeof thursdaySpacingPairId === 'number'
+                                                    ? thursdaySpacingPairId
+                                                    : parseInt(thursdaySpacingPairId, 10);
+                                            const c = swapColors[(isNaN(pid) ? 0 : pid) % swapColors.length];
+                                            swapStyle = `border: 2px solid ${c.border}; background-color: ${c.bg}; color: ${c.border};`;
+                                        }
                                     } else {
                                         const pidRaw = r.swapPairId;
                                         const pid = typeof pidRaw === 'number' ? pidRaw : parseInt(pidRaw, 10);
@@ -4657,6 +4687,24 @@
                                     personHasThursdaySpacingSwap(key, g, personName)
                                 ) {
                                     isThursdaySpacingSwap = true;
+                                    thursdaySpacingPairId =
+                                        typeof resolveThursdaySpacingSwapPairId === 'function'
+                                            ? resolveThursdaySpacingSwapPairId(key, g, personName)
+                                            : null;
+                                    thursdaySpacingPairFallbackKey =
+                                        typeof buildThursdaySpacingPairFallbackKey === 'function'
+                                            ? buildThursdaySpacingPairFallbackKey(
+                                                  key,
+                                                  g,
+                                                  spacingMarkerEarly
+                                              )
+                                            : null;
+                                    if (typeof buildThursdaySpacingSwapFrameStyle === 'function') {
+                                        swapStyle = buildThursdaySpacingSwapFrameStyle(
+                                            thursdaySpacingPairId,
+                                            thursdaySpacingPairFallbackKey
+                                        );
+                                    }
                                 }
                                 if (
                                     typeof personShouldShowReplacementUnderline === 'function' &&
@@ -4701,6 +4749,8 @@
                                 underline,
                                 isSwap,
                                 isThursdaySpacingSwap,
+                                thursdaySpacingPairId,
+                                thursdaySpacingPairFallbackKey,
                                 swapStyle,
                                 groupNum: g
                             });
@@ -4750,7 +4800,18 @@
                                         (sp.partnerPerson
                                             ? `Ανταλλαγή λόγω Ν Πεμπτών με ${sp.partnerPerson}${sp.partnerDateKey ? ' (' + sp.partnerDateKey + ')' : ''}`
                                             : sp.partnerDateKey || 'Ανταλλαγή λόγω Ν Πεμπτών');
-                                    spacingIcon = ` <span class="duty-thursday-spacing-asterisk" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}">*</span>`;
+                                    const pairId = sp.swapPairId ?? e.thursdaySpacingPairId;
+                                    const pairColor =
+                                        typeof getThursdaySpacingSwapColors === 'function'
+                                            ? getThursdaySpacingSwapColors(
+                                                  pairId,
+                                                  e.thursdaySpacingPairFallbackKey ||
+                                                      (typeof buildThursdaySpacingPairFallbackKey === 'function'
+                                                          ? buildThursdaySpacingPairFallbackKey(key, e.groupNum, sp)
+                                                          : null)
+                                              ).border
+                                            : '#E65100';
+                                    spacingIcon = ` <span class="duty-thursday-spacing-asterisk" style="color:${escapeHtml(pairColor)}" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}">*</span>`;
                                 }
                             }
                             displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${escapeHtml(e.nameOnly)}${bufferIcon}${spacingIcon}</div>`;

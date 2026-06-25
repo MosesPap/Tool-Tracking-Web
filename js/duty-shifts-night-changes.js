@@ -6,6 +6,92 @@
 (function () {
     const NIGHT_GROUPS = [3, 4];
 
+    const THURSDAY_SPACING_SWAP_COLORS = [
+        { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.12)' },
+        { border: '#00E676', bg: 'rgba(0, 230, 118, 0.12)' },
+        { border: '#FFD600', bg: 'rgba(255, 214, 0, 0.12)' },
+        { border: '#00B0FF', bg: 'rgba(0, 176, 255, 0.12)' },
+        { border: '#D500F9', bg: 'rgba(213, 0, 249, 0.12)' },
+        { border: '#FF6D00', bg: 'rgba(255, 109, 0, 0.12)' },
+        { border: '#00E5FF', bg: 'rgba(0, 229, 255, 0.12)' },
+        { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.12)' }
+    ];
+
+    function thursdaySpacingSwapColorIndex(swapPairId) {
+        const pid =
+            typeof swapPairId === 'number' ? swapPairId : parseInt(swapPairId, 10);
+        return isNaN(pid) ? 0 : Math.abs(pid) % THURSDAY_SPACING_SWAP_COLORS.length;
+    }
+
+    function hashThursdaySpacingPairKey(pairKey) {
+        const s = String(pairKey || '');
+        let h = 0;
+        for (let i = 0; i < s.length; i++) {
+            h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+        }
+        return Math.abs(h) % THURSDAY_SPACING_SWAP_COLORS.length;
+    }
+
+    function buildThursdaySpacingPairFallbackKey(dateKey, groupNum, marker) {
+        if (!dateKey || !groupNum) return null;
+        const partnerKey = marker?.partnerDateKey;
+        if (!partnerKey) return `${dateKey}|${groupNum}`;
+        const keys = [dateKey, partnerKey].sort();
+        return `${keys[0]}|${keys[1]}|${groupNum}`;
+    }
+
+    function getThursdaySpacingSwapColors(swapPairId, fallbackPairKey) {
+        if (swapPairId != null && swapPairId !== '' && !isNaN(parseInt(swapPairId, 10))) {
+            return THURSDAY_SPACING_SWAP_COLORS[thursdaySpacingSwapColorIndex(swapPairId)];
+        }
+        if (fallbackPairKey) {
+            return THURSDAY_SPACING_SWAP_COLORS[hashThursdaySpacingPairKey(fallbackPairKey)];
+        }
+        return THURSDAY_SPACING_SWAP_COLORS[0];
+    }
+
+    function buildThursdaySpacingSwapFrameStyle(swapPairId, fallbackPairKey) {
+        const c = getThursdaySpacingSwapColors(swapPairId, fallbackPairKey);
+        return `border: 2px solid ${c.border}; background-color: ${c.bg}; color: ${c.border};`;
+    }
+
+    function resolveThursdaySpacingSwapPairId(dateKey, groupNum, personName) {
+        if (!dateKey || !personName || !groupNum) return null;
+        const reason =
+            typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, personName) : null;
+        if (reason?.meta?.thursdaySpacing && reason.swapPairId != null && reason.swapPairId !== undefined) {
+            return reason.swapPairId;
+        }
+        const marker =
+            typeof getThursdaySpacingMarker === 'function'
+                ? getThursdaySpacingMarker(dateKey, groupNum, personName)
+                : null;
+        if (marker?.status === 'swap' && marker.swapPairId != null && marker.swapPairId !== undefined) {
+            return marker.swapPairId;
+        }
+        if (marker?.status === 'swap' && marker.partnerDateKey) {
+            const partnerReason =
+                typeof getAssignmentReason === 'function'
+                    ? getAssignmentReason(marker.partnerDateKey, groupNum, personName)
+                    : null;
+            if (
+                partnerReason?.meta?.thursdaySpacing &&
+                partnerReason.swapPairId != null &&
+                partnerReason.swapPairId !== undefined
+            ) {
+                return partnerReason.swapPairId;
+            }
+            const partnerMarker =
+                typeof getThursdaySpacingMarker === 'function'
+                    ? getThursdaySpacingMarker(marker.partnerDateKey, groupNum, personName)
+                    : null;
+            if (partnerMarker?.swapPairId != null && partnerMarker.swapPairId !== undefined) {
+                return partnerMarker.swapPairId;
+            }
+        }
+        return null;
+    }
+
     function normPerson(s) {
         return typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
     }
@@ -514,11 +600,11 @@
                         groupNum,
                         person
                     );
+                    const pairId =
+                        typeof getNextSwapPairIdForAssignmentReasons === 'function'
+                            ? getNextSwapPairIdForAssignmentReasons()
+                            : null;
                     if (typeof storeAssignmentReason === 'function') {
-                        const pairId =
-                            typeof getNextSwapPairIdForAssignmentReasons === 'function'
-                                ? getNextSwapPairIdForAssignmentReasons()
-                                : null;
                         storeAssignmentReason(
                             thursdayKey,
                             groupNum,
@@ -545,6 +631,7 @@
                         status: 'swap',
                         partnerDateKey: partnerKey,
                         partnerPerson: person,
+                        swapPairId: pairId,
                         nRequired: spacing.nRequired,
                         thursdaysSince: spacing.thursdaysSince,
                         reason
@@ -553,6 +640,7 @@
                         status: 'swap',
                         partnerDateKey: thursdayKey,
                         partnerPerson: partnerPerson,
+                        swapPairId: pairId,
                         nRequired: spacing.nRequired,
                         thursdaysSince: spacing.thursdaysSince,
                         reason
@@ -1030,4 +1118,8 @@
     window.shouldSkipNormalConflictSwapForThursdaySpacing = shouldSkipNormalConflictSwapForThursdaySpacing;
     window.buildThursdaySpacingHistoryReport = buildThursdaySpacingHistoryReport;
     window.openThursdaySpacingHistoryModal = openThursdaySpacingHistoryModal;
+    window.buildThursdaySpacingSwapFrameStyle = buildThursdaySpacingSwapFrameStyle;
+    window.getThursdaySpacingSwapColors = getThursdaySpacingSwapColors;
+    window.buildThursdaySpacingPairFallbackKey = buildThursdaySpacingPairFallbackKey;
+    window.resolveThursdaySpacingSwapPairId = resolveThursdaySpacingSwapPairId;
 })();
