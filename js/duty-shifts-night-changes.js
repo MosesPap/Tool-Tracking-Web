@@ -117,17 +117,90 @@
         };
     }
 
-    function getMonTueWedKeysInMonth(monthKey, normalDays) {
+    /** Δευτέρα (εβδομάδας ISO) που περιέχει την ημερομηνία. */
+    function getMondayOfWeekContaining(dateKey) {
+        const d = new Date(dateKey + 'T00:00:00');
+        if (isNaN(d.getTime())) return null;
+        const dow = d.getDay();
+        const monday = new Date(d);
+        monday.setDate(monday.getDate() - (dow === 0 ? 6 : dow - 1));
+        return monday;
+    }
+
+    function buildSpacingPartnerDateKey(thursdayKey, weekOffset, dayOfWeek) {
+        const monday = getMondayOfWeekContaining(thursdayKey);
+        if (!monday || !Number.isFinite(weekOffset) || !dayOfWeek) return null;
+        const target = new Date(monday);
+        target.setDate(target.getDate() + weekOffset * 7 + (dayOfWeek - 1));
+        return typeof formatDateKey === 'function' ? formatDateKey(target) : null;
+    }
+
+    /**
+     * Σειρά προτεραιότητας εταίρων ανταλλαγής για κανόνα Ν (μόνο Δευ/Τρι/Τετ, εντός μήνα Πέμπτης).
+     * 1–3: Τετ/Τρι/Δευ ίδιας εβδομάδας · 4: Δευ επόμενης · 5–6: Τρι/Τετ επόμενης
+     * 7–9: Τετ/Τρι/Δευ προηγούμενης
+     */
+    function getThursdaySpacingPartnerCandidates(thursdayKey, normalDays) {
+        const thuDate = new Date(thursdayKey + 'T00:00:00');
+        if (isNaN(thuDate.getTime())) return [];
+        const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(thuDate) : null;
+        const normalSet = new Set(normalDays || []);
+        const steps = [
+            [0, 3],
+            [0, 2],
+            [0, 1],
+            [1, 1],
+            [1, 2],
+            [1, 3],
+            [-1, 3],
+            [-1, 2],
+            [-1, 1]
+        ];
         const out = [];
-        for (const dk of normalDays || []) {
-            if (!dk || typeof dk !== 'string') continue;
+        const seen = new Set();
+        for (const [weekOffset, dow] of steps) {
+            const dk = buildSpacingPartnerDateKey(thursdayKey, weekOffset, dow);
+            if (!dk || seen.has(dk) || dk === thursdayKey) continue;
+            seen.add(dk);
+            if (!normalSet.has(dk)) continue;
             const d = new Date(dk + 'T00:00:00');
-            if (isNaN(d.getTime())) continue;
-            if (typeof getMonthKeyFromDate === 'function' && getMonthKeyFromDate(d) !== monthKey) continue;
-            const dow = d.getDay();
-            if (dow === 1 || dow === 2 || dow === 3) out.push(dk);
+            if (isNaN(d.getTime()) || d.getDay() !== dow) continue;
+            if (monthKey && typeof getMonthKeyFromDate === 'function' && getMonthKeyFromDate(d) !== monthKey) {
+                continue;
+            }
+            if (typeof getDayType === 'function' && getDayType(d) !== 'normal-day') continue;
+            out.push(dk);
         }
-        return out.sort();
+        return out;
+    }
+
+    /** Runtime τελευταίων Πεμπτών πριν την τρέχουσα (για έλεγχο Ν πριν το πέρασμα ανταλλαγών). */
+    function buildRuntimeLastThuBefore(thursdayKey, assignments, normalDays) {
+        const runtimeLastThu = {};
+        const thursdays = (normalDays || [])
+            .filter((dk) => typeof isNightThursdayDateKey === 'function' && isNightThursdayDateKey(dk))
+            .sort();
+        for (const dk of thursdays) {
+            if (dk >= thursdayKey) break;
+            for (const groupNum of NIGHT_GROUPS) {
+                const p = assignments?.[dk]?.[groupNum] ?? assignments?.[dk]?.[String(groupNum)];
+                if (p) runtimeLastThu[`${groupNum}:${normPerson(p)}`] = dk;
+            }
+        }
+        return runtimeLastThu;
+    }
+
+    /**
+     * Παράλειψη ανταλλαγής σύγκρουσης σε Πέμπτη — ο κανόνας Ν θα αφαιρέσει τον/την από την Πέμπτη.
+     */
+    function shouldSkipNormalConflictSwapForThursdaySpacing(dateKey, groupNum, person, assignments, normalDays) {
+        if (typeof isNightChangesMode !== 'function' || !isNightChangesMode()) return false;
+        if (typeof isNightChangesGroup === 'function' && !isNightChangesGroup(groupNum)) return false;
+        if (typeof isNightThursdayDateKey === 'function' && !isNightThursdayDateKey(dateKey)) return false;
+        if (!person) return false;
+        const runtimeLastThu = buildRuntimeLastThuBefore(dateKey, assignments, normalDays);
+        const spacing = personPassesThursdaySpacing(person, groupNum, dateKey, assignments, runtimeLastThu);
+        return !spacing.eligible;
     }
 
     function formatDateKeyElGR(dateKey) {
@@ -292,7 +365,6 @@
             if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(thursdayKey);
             const thuDate = new Date(thursdayKey + 'T00:00:00');
             if (isNaN(thuDate.getTime())) continue;
-            const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(thuDate) : null;
 
             for (const groupNum of NIGHT_GROUPS) {
                 if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
@@ -333,7 +405,7 @@
                     continue;
                 }
 
-                const partnerDays = getMonTueWedKeysInMonth(monthKey, normalDays);
+                const partnerDays = getThursdaySpacingPartnerCandidates(thursdayKey, normalDays);
                 let swapped = false;
 
                 for (const partnerKey of partnerDays) {
@@ -490,4 +562,7 @@
     window.buildThursdaySpacingSwapReason = buildThursdaySpacingSwapReason;
     window.countActiveNormalListSizeForThursday = countActiveNormalListSize;
     window.countNormalThursdaysSinceLast = countNormalThursdaysSinceLast;
+    window.personPassesThursdaySpacing = personPassesThursdaySpacing;
+    window.getThursdaySpacingPartnerCandidates = getThursdaySpacingPartnerCandidates;
+    window.shouldSkipNormalConflictSwapForThursdaySpacing = shouldSkipNormalConflictSwapForThursdaySpacing;
 })();

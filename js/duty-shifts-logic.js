@@ -7227,6 +7227,18 @@
                             if (typeof shouldSkipNormalDayForNightGroup === 'function' && shouldSkipNormalDayForNightGroup(dateKey, groupNum)) {
                                 continue;
                             }
+                            if (
+                                typeof shouldSkipNormalConflictSwapForThursdaySpacing === 'function' &&
+                                shouldSkipNormalConflictSwapForThursdaySpacing(
+                                    dateKey,
+                                    groupNum,
+                                    currentPerson,
+                                    updatedAssignments,
+                                    sortedNormal
+                                )
+                            ) {
+                                continue;
+                            }
                             const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                             const month = date.getMonth();
                             const year = date.getFullYear();
@@ -13576,6 +13588,18 @@
                     const hasConsecutiveConflict = hasConsecutiveDuty(dateKey, currentPerson, groupNum, simulatedAssignments);
                     
                     if (hasConsecutiveConflict) {
+                        if (
+                            typeof shouldSkipNormalConflictSwapForThursdaySpacing === 'function' &&
+                            shouldSkipNormalConflictSwapForThursdaySpacing(
+                                dateKey,
+                                groupNum,
+                                currentPerson,
+                                normalAssignments,
+                                sortedNormal
+                            )
+                        ) {
+                            continue;
+                        }
                         const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
                         const month = date.getMonth();
                         const year = date.getFullYear();
