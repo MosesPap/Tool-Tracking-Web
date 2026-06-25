@@ -329,6 +329,24 @@
         return true;
     }
 
+    function captureSkipReasonForSpacingPreserve(dateKey, groupNum, personName) {
+        if (typeof getAssignmentReason !== 'function') return null;
+        const existing = getAssignmentReason(dateKey, groupNum, personName);
+        if (!existing || existing.type !== 'skip' || existing.meta?.thursdaySpacing) return null;
+        return {
+            type: existing.type,
+            reason: existing.reason,
+            swappedWith: existing.swappedWith,
+            meta: existing.meta ? { ...existing.meta } : null
+        };
+    }
+
+    function spacingMetaWithPreservedSkip(spacingMeta, fromDateKey, groupNum, fromPerson) {
+        const preserved = captureSkipReasonForSpacingPreserve(fromDateKey, groupNum, fromPerson);
+        if (!preserved) return spacingMeta;
+        return { ...spacingMeta, preservedSkipReason: preserved };
+    }
+
     function clearSpacingMarkersForDateKeys(dateKeys) {
         const store = typeof window !== 'undefined' ? window.thursdaySpacingMarkers : null;
         if (!store || typeof store !== 'object') return;
@@ -474,7 +492,7 @@
                         partnerKey,
                         spacing
                     );
-                    const spacingMeta = {
+                    const spacingMetaBase = {
                         thursdaySpacing: true,
                         displacedPerson: person,
                         replacementPerson: partnerPerson,
@@ -484,6 +502,18 @@
                         thursdaysSince: spacing.thursdaysSince,
                         lastThursday: spacing.lastThursday || null
                     };
+                    const spacingMetaForThursday = spacingMetaWithPreservedSkip(
+                        spacingMetaBase,
+                        partnerKey,
+                        groupNum,
+                        partnerPerson
+                    );
+                    const spacingMetaForPartner = spacingMetaWithPreservedSkip(
+                        spacingMetaBase,
+                        thursdayKey,
+                        groupNum,
+                        person
+                    );
                     if (typeof storeAssignmentReason === 'function') {
                         const pairId =
                             typeof getNextSwapPairIdForAssignmentReasons === 'function'
@@ -497,7 +527,7 @@
                             reason,
                             person,
                             pairId,
-                            spacingMeta
+                            spacingMetaForThursday
                         );
                         storeAssignmentReason(
                             partnerKey,
@@ -507,7 +537,7 @@
                             reason,
                             partnerPerson,
                             pairId,
-                            spacingMeta
+                            spacingMetaForPartner
                         );
                     }
 

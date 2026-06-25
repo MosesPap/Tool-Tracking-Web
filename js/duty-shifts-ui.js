@@ -4653,7 +4653,10 @@
                                         swapStyle = `border: 2px solid ${c.border}; background-color: ${c.bg};`;
                                     }
                                 }
-                                if (r && r.type === 'skip') {
+                                if (
+                                    typeof personHasReplacementUnderlineReason === 'function' &&
+                                    personHasReplacementUnderlineReason(r)
+                                ) {
                                     underline = true;
                                 } else if (r && r.type === 'shift') {
                                     underline = false;
@@ -4731,7 +4734,7 @@
                                         (sp.partnerPerson
                                             ? `Ανταλλαγή λόγω Ν Πεμπτών με ${sp.partnerPerson}${sp.partnerDateKey ? ' (' + sp.partnerDateKey + ')' : ''}`
                                             : sp.partnerDateKey || 'Ανταλλαγή λόγω Ν Πεμπτών');
-                                    spacingIcon = ` <i class="fas fa-check duty-thursday-spacing-swap" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}"></i>`;
+                                    spacingIcon = ` <span class="duty-thursday-spacing-asterisk" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}">*</span>`;
                                 }
                             }
                             displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${escapeHtml(e.nameOnly)}${bufferIcon}${spacingIcon}</div>`;
@@ -6852,12 +6855,20 @@
                     if (reason.type === 'skip' && reason.meta?.preserveBaseline) {
                         const displayReason = normalizeSkipReasonText(reason.reason);
                         reasonBadge = `<span class="badge bg-primary ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-user-edit me-1"></i>Χειροκίνητη ανάθεση</span>`;
-                    } else if (reason.type === 'skip') {
-                        const displayReason = normalizeSkipReasonText(reason.reason);
+                    } else if (reason.type === 'skip' || reason.meta?.preservedSkipReason) {
+                        const displayReason =
+                            reason.meta?.preservedSkipReason && typeof buildCombinedAssignmentReasonDisplayText === 'function'
+                                ? buildCombinedAssignmentReasonDisplayText(reason, key, person.group, person.name, dayTypeCategory)
+                                : normalizeSkipReasonText(reason.reason);
                         reasonBadge = `<span class="badge bg-warning ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-user-check me-1"></i>Αντικατάσταση</span>`;
-                    } else if (reason.type === 'swap') {
-                        const displayReason = normalizeSwapReasonText(reason.reason);
-                        reasonBadge = `<span class="badge bg-info ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-exchange-alt me-1"></i>Αμοιβαία Αλλαγή${reason.swappedWith ? ` με ${escapeHtml(String(reason.swappedWith))}` : ''}</span>`;
+                    }
+                    if (reason.type === 'swap') {
+                        const displayReason =
+                            reason.meta?.preservedSkipReason && typeof buildCombinedAssignmentReasonDisplayText === 'function'
+                                ? buildCombinedAssignmentReasonDisplayText(reason, key, person.group, person.name, dayTypeCategory)
+                                : normalizeSwapReasonText(reason.reason);
+                        const swapBadge = `<span class="badge bg-info ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-exchange-alt me-1"></i>Αμοιβαία Αλλαγή${reason.swappedWith ? ` με ${escapeHtml(String(reason.swappedWith))}` : ''}</span>`;
+                        reasonBadge = reasonBadge ? reasonBadge + swapBadge : swapBadge;
                     }
                 }
                 const defaultChangeMode =
@@ -7063,6 +7074,19 @@
                         (reason.type === 'skip' ? normalizeSkipReasonText(reason.reason) : reason.reason);
                 } else if (reason && reason.type === 'swap' && dayTypeCategory === 'semi' && typeof resolveSemiHolidayConflictSwapDisplayText === 'function') {
                     reasonDisplayText = resolveSemiHolidayConflictSwapDisplayText(reason);
+                } else if (
+                    reason &&
+                    reason.type === 'swap' &&
+                    reason.meta?.preservedSkipReason &&
+                    typeof buildCombinedAssignmentReasonDisplayText === 'function'
+                ) {
+                    reasonDisplayText = buildCombinedAssignmentReasonDisplayText(
+                        reason,
+                        key,
+                        person.group,
+                        person.name,
+                        dayTypeCategory
+                    );
                 } else if (reason && reason.type === 'swap' && dayTypeCategory === 'normal' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function') {
                     reasonDisplayText = resolveNormalConsecutiveDutySwapDisplayText(reason);
                 } else if (reason && reason.type === 'skip' && typeof resolveUnavailableReplacementDisplayText === 'function') {

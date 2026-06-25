@@ -511,6 +511,61 @@
                 dutyCategory: dutyCategory || null
             };
         }
+        function resolveSkipReasonDisplayText(reason, dateKey, groupNum, assignedPerson, dutyCategory) {
+            if (!reason || reason.type !== 'skip') return '';
+            if (typeof resolveUnavailableReplacementDisplayText === 'function') {
+                return resolveUnavailableReplacementDisplayText(reason, dateKey, groupNum, assignedPerson, dutyCategory);
+            }
+            return typeof normalizeSkipReasonText === 'function' ? normalizeSkipReasonText(reason.reason) : reason.reason || '';
+        }
+        function personHasReplacementUnderlineReason(reason) {
+            if (!reason || reason.type === 'shift') return false;
+            if (reason.type === 'skip') return true;
+            if (reason.meta?.preservedSkipReason?.type === 'skip') return true;
+            return false;
+        }
+        function buildCombinedAssignmentReasonDisplayText(reason, dateKey, groupNum, personName, dayTypeCategory) {
+            if (!reason) return '';
+            const parts = [];
+            const skipReason =
+                reason.type === 'skip' ? reason : reason.meta?.preservedSkipReason || null;
+            if (skipReason && skipReason.type === 'skip') {
+                const skipText = resolveSkipReasonDisplayText(
+                    skipReason,
+                    dateKey,
+                    groupNum,
+                    personName,
+                    dayTypeCategory
+                );
+                if (skipText) parts.push(skipText);
+            }
+            if (reason.type === 'swap') {
+                let swapText = '';
+                if (reason.meta?.thursdaySpacing) {
+                    swapText =
+                        typeof normalizeSwapReasonText === 'function'
+                            ? normalizeSwapReasonText(reason.reason)
+                            : reason.reason || '';
+                } else if (dayTypeCategory === 'semi' && typeof resolveSemiHolidayConflictSwapDisplayText === 'function') {
+                    swapText = resolveSemiHolidayConflictSwapDisplayText(reason);
+                } else if (dayTypeCategory === 'normal' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function') {
+                    swapText = resolveNormalConsecutiveDutySwapDisplayText(reason);
+                } else {
+                    swapText =
+                        typeof normalizeSwapReasonText === 'function'
+                            ? normalizeSwapReasonText(reason.reason)
+                            : reason.reason || '';
+                }
+                if (swapText) parts.push(swapText);
+            } else if (!parts.length && reason.reason) {
+                parts.push(
+                    reason.type === 'skip' && typeof normalizeSkipReasonText === 'function'
+                        ? normalizeSkipReasonText(reason.reason)
+                        : reason.reason
+                );
+            }
+            return parts.join(' ');
+        }
         function resolveUnavailableReplacementDisplayText(reason, dateKey, groupNum, assignedPerson, dutyCategory) {
             if (!reason || reason.type !== 'skip') {
                 return typeof normalizeSkipReasonText === 'function' ? normalizeSkipReasonText(reason?.reason || '') : reason?.reason || '';
