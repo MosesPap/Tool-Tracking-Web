@@ -2120,7 +2120,7 @@
         }
 
         /**
-         * Κοινή ρύθμιση: Εφαρμογή Νυχτερινών στη 3η και 4η Ομάδα (καθημερινές Πέμπτες).
+         * Κοινή ρύθμιση: Εφαρμογή λίστας Νυχτερινών στη 3η & 4ή Ομάδα (καθημερινές Πέμπτες).
          */
         const NIGHT_DUTIES_ENABLED_GROUPS34_LS_KEY = 'dutyShiftsNightDutiesEnabledGroups34';
         let nightDutiesEnabledGroups34 = false;
