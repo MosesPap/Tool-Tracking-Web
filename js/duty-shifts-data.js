@@ -1473,26 +1473,25 @@
             const prevMonthKey = getPreviousMonthKeyFromDate(dateInMonth);
             const prevManualAlternate = findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInMonth, groupNum);
 
-            // Fast path: no manual alternate in previous month -> seed directly from previous month baseline continuity.
-            // This avoids synthetic cursor drift and preserves exact baseline carry-over.
+            // Prefer actual last assignment / baseline continuity from previous month whenever available.
+            const fromAssignments = getLastAssignmentContinuityPersonForPreviousMonth(
+                dayTypeCategory,
+                dateInMonth,
+                groupNum
+            );
+            const fromBaseline = getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+            const fromStored = getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+            const lastContinuityPerson =
+                dayTypeCategory === 'semi'
+                    ? fromAssignments || fromBaseline || fromStored
+                    : fromAssignments || fromBaseline || fromStored;
+            const continuityIdx = findIdx(lastContinuityPerson);
+            if (lastContinuityPerson && continuityIdx >= 0) {
+                return (continuityIdx + 1) % len;
+            }
+
+            // Fast path: no manual alternate in previous month -> nothing else to simulate.
             if (!prevManualAlternate?.replacementPerson) {
-                const fromAssignments = getLastAssignmentContinuityPersonForPreviousMonth(
-                    dayTypeCategory,
-                    dateInMonth,
-                    groupNum
-                );
-                const fromBaseline = getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-                const fromStored = getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-                // Semi: prefer assignment continuity, then baseline last (matches rotationBaselineSemiAssignments),
-                // then stored lastRotationPositions (may be stale after holiday-conflict swaps).
-                const lastContinuityPerson =
-                    dayTypeCategory === 'semi'
-                        ? fromAssignments || fromBaseline || fromStored
-                        : fromAssignments || fromStored || fromBaseline;
-                const continuityIdx = findIdx(lastContinuityPerson);
-                if (lastContinuityPerson && continuityIdx >= 0) {
-                    return (continuityIdx + 1) % len;
-                }
                 return 0;
             }
 
@@ -1566,7 +1565,12 @@
 
         /** Month-start seed person: last baseline slot holder before the next assignee. */
         function getRotationSeedPersonForMonthStart(dayTypeCategory, monthStartDate, groupNum) {
-            const groupData = typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum];
+            const monthSeedKey =
+                monthStartDate && typeof formatDateKey === 'function' ? formatDateKey(monthStartDate) : null;
+            const groupData =
+                typeof groupsForDuty === 'function'
+                    ? groupsForDuty(groupNum, monthSeedKey)
+                    : groups[groupNum];
             const groupPeople = groupData?.[dayTypeCategory] || groups[groupNum]?.[dayTypeCategory] || [];
             if (groupPeople.length > 0) {
                 const cursor = computeRotationPositionAtMonthStart(dayTypeCategory, monthStartDate, groupNum, groupPeople);

@@ -2263,6 +2263,50 @@
             return getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, normalAssignmentsByDate);
         }
 
+        /** Rotation cursor at the start of a calendar month (index of next assignee in groupPeople). */
+        function resolveNormalRotationStartPosition(date, groupNum, groupPeople, sortedNormalKeys) {
+            const rotationDays = groupPeople.length;
+            if (!rotationDays) return 0;
+            const isFebruary2026 =
+                calculationSteps.startDate &&
+                calculationSteps.startDate.getFullYear() === 2026 &&
+                calculationSteps.startDate.getMonth() === 1;
+            const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3;
+            if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
+                return 0;
+            }
+            const lastPersonName =
+                typeof getRotationSeedPersonForMonthStart === 'function'
+                    ? getRotationSeedPersonForMonthStart('normal', date, groupNum)
+                    : getLastRotationPersonForDate('normal', date, groupNum);
+            const norm =
+                typeof normRotPersonName === 'function'
+                    ? normRotPersonName
+                    : (n) => String(n || '').trim();
+            let lastPersonIndex = groupPeople.indexOf(lastPersonName);
+            if (lastPersonName && lastPersonIndex < 0) {
+                lastPersonIndex = groupPeople.findIndex((p) => norm(p) === norm(lastPersonName));
+            }
+            if (lastPersonName && lastPersonIndex >= 0) {
+                console.log(
+                    `[NORMAL ROTATION] Month-start seed for group ${groupNum}: after ${lastPersonName} (index ${lastPersonIndex}) → position ${(lastPersonIndex + 1) % rotationDays}`
+                );
+                return (lastPersonIndex + 1) % rotationDays;
+            }
+            const keys = sortedNormalKeys || [];
+            if (keys.length > 0) {
+                const firstDate = new Date(keys[0] + 'T00:00:00');
+                const daysSinceStart = getRotationPosition(firstDate, 'normal', groupNum);
+                if (lastPersonName) {
+                    console.log(
+                        `[NORMAL ROTATION] Seed person ${lastPersonName} not in group ${groupNum} list — fallback position ${daysSinceStart % rotationDays}`
+                    );
+                }
+                return daysSinceStart % rotationDays;
+            }
+            return 0;
+        }
+
         function hasDutyOnDay(dayKey, person, groupNum) {
             // Determine which document to check based on day type
             const date = new Date(dayKey + 'T00:00:00');
@@ -12373,6 +12417,7 @@
             // After "Αντικατάσταση Επιλαχών", skip the replacement's next natural turn in this month (D then B,C,E…).
             let deferManualAlternateSkipNormal = {};
             let prevMonthKeyNormalAlternateDefer = null;
+            let prevNormalSeedMonthKey = null;
             
             // Track baseline assignments for this preview to detect cascading shifts
             const baselineNormalByDate = {}; // dateKey -> { groupNum -> personName }
@@ -12539,20 +12584,20 @@
                             if (assignedPerson) {
                                 if (wasReplaced && replacementIndex !== null) {
                                     // Person was replaced - advance from replacement's position
-                                    globalNormalRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
+                                    globalWeekendRotationPosition[groupNum] = (replacementIndex + 1) % rotationDays;
                                 } else {
                                     // No replacement - advance from assigned person's position
                                     const assignedIndex = groupPeople.indexOf(assignedPerson);
                                     if (assignedIndex !== -1) {
-                                        globalNormalRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
+                                        globalWeekendRotationPosition[groupNum] = (assignedIndex + 1) % rotationDays;
                                     } else {
                                         // Fallback: advance from rotation position
-                                        globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                        globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                     }
                                 }
                             } else {
                                 // No person found, still advance rotation position
-                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                             }
                         
                             // Store assignment for saving
@@ -12919,6 +12964,10 @@
                         }
                         prevMonthKeyNormalAlternateDefer = calMonthKey;
                     }
+                    const isNormalMonthStartInRange = prevNormalSeedMonthKey !== calMonthKey;
+                    if (isNormalMonthStartInRange) {
+                        prevNormalSeedMonthKey = calMonthKey;
+                    }
                     
                     if (!pendingNormalSwaps[monthKey]) {
                         pendingNormalSwaps[monthKey] = {};
@@ -12972,45 +13021,16 @@
                             html += '<td class="text-muted">-</td>';
                         } else {
                             const rotationDays = groupPeople.length;
-                            if (globalNormalRotationPosition[groupNum] === undefined) {
-                                // If start date is February 2026, always start from first person (position 0)
-                                const isFebruary2026 = calculationSteps.startDate && 
-                                    calculationSteps.startDate.getFullYear() === 2026 && 
-                                    calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
-                                const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
-                                
-                                if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
-                                    // Always start from first person for February 2026
-                                    globalNormalRotationPosition[groupNum] = 0;
-                                    console.log(
-                                        `[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} - ${
-                                            isAprilStart ? 'April start' : 'February 2026'
-                                        }`
-                                    );
-                                } else {
-                                    // Continue from last person assigned in previous month (month-scoped; falls back to legacy)
-                                    const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
-                                        ? getRotationSeedPersonForMonthStart('normal', date, groupNum)
-                                        : getLastRotationPersonForDate('normal', date, groupNum);
-                                    const lastPersonIndex = groupPeople.indexOf(lastPersonName);
-                                    if (lastPersonName && lastPersonIndex >= 0) {
-                                        // Found last person - start from next person
-                                        globalNormalRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
-                                        console.log(`[NORMAL ROTATION] Continuing from last person ${lastPersonName} (index ${lastPersonIndex}) for group ${groupNum}, starting at position ${globalNormalRotationPosition[groupNum]}`);
-                                } else {
-                                        // Last person not found in list - use rotation calculation from first date
-                                        if (sortedNormal.length > 0) {
-                                            const firstDate = new Date(sortedNormal[0] + 'T00:00:00');
-                                            const daysSinceStart = getRotationPosition(firstDate, 'normal', groupNum);
-                                            globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
-                                            if (lastPersonName) {
-                                                console.log(`[NORMAL ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalNormalRotationPosition[groupNum]}`);
-                                            }
-                                        } else {
-                                            globalNormalRotationPosition[groupNum] = 0;
-                                        }
-                                    }
-                                }
+                            const shouldSeedNormalRotation =
+                                (typeof shouldRecalculateDutyGroup !== 'function' || shouldRecalculateDutyGroup(groupNum)) &&
+                                (isNormalMonthStartInRange || globalNormalRotationPosition[groupNum] === undefined);
+                            if (shouldSeedNormalRotation) {
+                                globalNormalRotationPosition[groupNum] = resolveNormalRotationStartPosition(
+                                    date,
+                                    groupNum,
+                                    groupPeople,
+                                    sortedNormal
+                                );
                             }
                             
                             let assignedPerson = null;
@@ -13019,31 +13039,12 @@
                             // Ensure globalNormalRotationPosition is initialized
                             if (globalNormalRotationPosition[groupNum] === undefined) {
                                 console.error(`[ERROR] globalNormalRotationPosition[${groupNum}] is undefined! This should have been initialized above.`);
-                                // Fallback: initialize now
-                                const isFebruary2026 = calculationSteps.startDate && 
-                                    calculationSteps.startDate.getFullYear() === 2026 && 
-                                    calculationSteps.startDate.getMonth() === 1;
-                                const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
-                                if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
-                                    globalNormalRotationPosition[groupNum] = 0;
-                                } else {
-                                    const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
-                                        ? getRotationSeedPersonForMonthStart('normal', date, groupNum)
-                                        : getLastRotationPersonForDate('normal', date, groupNum);
-                                    const lastPersonIndex = groupPeople.indexOf(lastPersonName);
-                                    if (lastPersonName && lastPersonIndex >= 0) {
-                                        globalNormalRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
-                                } else {
-                                    // Last person not found in list - use rotation calculation from first date
-                                    if (sortedNormal.length > 0) {
-                                        const firstDate = new Date(sortedNormal[0] + 'T00:00:00');
-                                        const daysSinceStart = getRotationPosition(firstDate, 'normal', groupNum);
-                                        globalNormalRotationPosition[groupNum] = daysSinceStart % rotationDays;
-                                    } else {
-                                        globalNormalRotationPosition[groupNum] = 0;
-                                    }
-                                    }
-                                }
+                                globalNormalRotationPosition[groupNum] = resolveNormalRotationStartPosition(
+                                    date,
+                                    groupNum,
+                                    groupPeople,
+                                    sortedNormal
+                                );
                             }
                             
                             let existingManualAlternate = findExistingManualAlternateOnDateGroup(dateKey, groupNum);
