@@ -37,6 +37,8 @@
         // Track skip/swap reasons for each assignment
         // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap'|'shift', reason: '...', swappedWith: '...', swapPairId, meta? }
         let assignmentReasons = {};
+        /** Πράσινο/κίτρινο τικ ημερολογίου — κανόνας Ν Πεμπτών (changes mode). */
+        let thursdaySpacingMarkers = {};
         /** Carry-over: replacement skipped once in month after manual alternate (per duty category). */
         let manualAlternateDeferCarry = { normal: {}, semi: {}, weekend: {}, special: {} };
         // Track critical assignments from last duties - these must NEVER be deleted
@@ -1284,7 +1286,8 @@
         function buildAssignmentReasonsSavePayload() {
             return {
                 ...assignmentReasons,
-                _manualAlternateDeferCarry: manualAlternateDeferCarry
+                _manualAlternateDeferCarry: manualAlternateDeferCarry,
+                _thursdaySpacingMarkers: thursdaySpacingMarkers
             };
         }
 
@@ -2120,25 +2123,53 @@
         }
 
         /**
-         * Κοινή ρύθμιση: Εφαρμογή λίστας Νυχτερινών στη 3η & 4ή Ομάδα (καθημερινές Πέμπτες).
+         * Νυχτερινές ομάδες 3 & 4: off | list (ξεχωριστή λίστα) | changes (Ν Πεμπτών + ανταλλαγές).
          */
         const NIGHT_DUTIES_ENABLED_GROUPS34_LS_KEY = 'dutyShiftsNightDutiesEnabledGroups34';
-        let nightDutiesEnabledGroups34 = false;
+        const NIGHT_DUTIES_MODE_LS_KEY = 'dutyShiftsNightDutiesMode';
+        let nightDutiesMode = 'off';
 
-        function applyNightDutiesEnabledGroups34FromValue(enabled) {
-            nightDutiesEnabledGroups34 = !!enabled;
+        function resolveNightDutiesModeFromSettings(settingsData) {
+            const data = settingsData || {};
+            const mode = data.nightDutiesMode;
+            if (mode === 'list' || mode === 'changes' || mode === 'off') return mode;
+            if (data.nightDutiesEnabledGroups34 === true) return 'list';
+            return 'off';
+        }
+
+        function applyNightDutiesModeFromValue(mode) {
+            const m = mode === 'list' || mode === 'changes' ? mode : 'off';
+            nightDutiesMode = m;
             try {
-                localStorage.setItem(NIGHT_DUTIES_ENABLED_GROUPS34_LS_KEY, nightDutiesEnabledGroups34 ? '1' : '0');
+                localStorage.setItem(NIGHT_DUTIES_MODE_LS_KEY, m);
+                localStorage.setItem(NIGHT_DUTIES_ENABLED_GROUPS34_LS_KEY, m === 'list' ? '1' : '0');
             } catch (_) {}
         }
 
+        function applyNightDutiesEnabledGroups34FromValue(enabled) {
+            applyNightDutiesModeFromValue(enabled ? 'list' : 'off');
+        }
+
+        function getNightDutiesMode() {
+            return nightDutiesMode;
+        }
+
         function isNightDutiesEnabled() {
-            return !!nightDutiesEnabledGroups34;
+            return nightDutiesMode === 'list';
+        }
+
+        function isNightChangesMode() {
+            return nightDutiesMode === 'changes';
         }
 
         function isNightDutyGroup(groupNum) {
             const g = parseInt(groupNum, 10);
             return isNightDutiesEnabled() && (g === 3 || g === 4);
+        }
+
+        function isNightChangesGroup(groupNum) {
+            const g = parseInt(groupNum, 10);
+            return isNightChangesMode() && (g === 3 || g === 4);
         }
 
         function isNightThursdayDateKey(dateKey) {
@@ -2175,6 +2206,16 @@
 
         function getCalculationTotalSteps() {
             return isNightDutiesEnabled() ? 5 : 4;
+        }
+
+        function applyThursdaySpacingMarkers(newMarkers, dateKeysInCalc) {
+            if (!newMarkers || typeof newMarkers !== 'object') return;
+            for (const dk of dateKeysInCalc || []) {
+                delete thursdaySpacingMarkers[dk];
+            }
+            for (const dk of Object.keys(newMarkers)) {
+                thursdaySpacingMarkers[dk] = JSON.parse(JSON.stringify(newMarkers[dk]));
+            }
         }
 
         function isNightCalculationStep(step) {
@@ -2244,14 +2285,15 @@
             return changed;
         }
 
-        async function saveDutyShiftsAppSettingsNightDuties(enabled) {
-            applyNightDutiesEnabledGroups34FromValue(enabled);
-            if (enabled && typeof ensureNightListsForGroups34 === 'function') {
+        async function saveDutyShiftsAppSettingsNightDutiesMode(mode) {
+            const m = mode === 'list' || mode === 'changes' ? mode : 'off';
+            applyNightDutiesModeFromValue(m);
+            if (m === 'list' && typeof ensureNightListsForGroups34 === 'function') {
                 ensureNightListsForGroups34();
             }
             const user = window.auth?.currentUser;
             if (!user?.uid || !window.db) {
-                console.warn('saveDutyShiftsAppSettingsNightDuties: no auth/db');
+                console.warn('saveDutyShiftsAppSettingsNightDutiesMode: no auth/db');
                 return false;
             }
             try {
@@ -2261,7 +2303,8 @@
                     .doc('settings')
                     .set(
                         {
-                            nightDutiesEnabledGroups34: !!enabled,
+                            nightDutiesMode: m,
+                            nightDutiesEnabledGroups34: m === 'list',
                             lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                             updatedBy: user.uid
                         },
@@ -2269,19 +2312,29 @@
                     );
                 return true;
             } catch (e) {
-                console.error('saveDutyShiftsAppSettingsNightDuties:', e);
+                console.error('saveDutyShiftsAppSettingsNightDutiesMode:', e);
                 return false;
             }
         }
 
-        function readNightDutiesEnabledFromLocalStorage() {
+        async function saveDutyShiftsAppSettingsNightDuties(enabled) {
+            return saveDutyShiftsAppSettingsNightDutiesMode(enabled ? 'list' : 'off');
+        }
+
+        function readNightDutiesModeFromLocalStorage() {
             try {
+                const rawMode = localStorage.getItem(NIGHT_DUTIES_MODE_LS_KEY);
+                if (rawMode === 'list' || rawMode === 'changes' || rawMode === 'off') return rawMode;
                 const raw = localStorage.getItem(NIGHT_DUTIES_ENABLED_GROUPS34_LS_KEY);
-                if (raw === null) return false;
-                return raw === '1' || raw === 'true';
+                if (raw === '1' || raw === 'true') return 'list';
+                return 'off';
             } catch (_) {
-                return false;
+                return 'off';
             }
+        }
+
+        function readNightDutiesEnabledFromLocalStorage() {
+            return readNightDutiesModeFromLocalStorage() === 'list';
         }
 
         async function saveDutyShiftsAppSettingsNormalWeekPairDisabled(groupsArr) {
@@ -2327,15 +2380,20 @@
         }
 
         function initNightDutiesSettingFromLocalStorage() {
-            applyNightDutiesEnabledGroups34FromValue(readNightDutiesEnabledFromLocalStorage());
+            applyNightDutiesModeFromValue(readNightDutiesModeFromLocalStorage());
         }
         initNightDutiesSettingFromLocalStorage();
 
         window.getNormalWeekPairSwapDisabledGroups = getNormalWeekPairSwapDisabledGroups;
         window.setNormalWeekPairSwapDisabledGroups = setNormalWeekPairSwapDisabledGroups;
         window.shouldApplyNormalWeekPairSwapLogicForGroup = shouldApplyNormalWeekPairSwapLogicForGroup;
+        window.getNightDutiesMode = getNightDutiesMode;
         window.isNightDutiesEnabled = isNightDutiesEnabled;
+        window.isNightChangesMode = isNightChangesMode;
         window.isNightDutyGroup = isNightDutyGroup;
+        window.isNightChangesGroup = isNightChangesGroup;
+        window.applyThursdaySpacingMarkers = applyThursdaySpacingMarkers;
+        window.thursdaySpacingMarkers = thursdaySpacingMarkers;
         window.isNightThursdayDateKey = isNightThursdayDateKey;
         window.buildNightThursdayDayList = buildNightThursdayDayList;
         window.augmentDayTypeListsForNight = augmentDayTypeListsForNight;
@@ -2344,6 +2402,7 @@
         window.isNormalCalculationStep = isNormalCalculationStep;
         window.shouldSkipNormalDayForNightGroup = shouldSkipNormalDayForNightGroup;
         window.saveDutyShiftsAppSettingsNightDuties = saveDutyShiftsAppSettingsNightDuties;
+        window.saveDutyShiftsAppSettingsNightDutiesMode = saveDutyShiftsAppSettingsNightDutiesMode;
         window.getDutyListTypesForGroup = getDutyListTypesForGroup;
         window.ensureNightListForGroup = ensureNightListForGroup;
         window.ensureNightListsForGroups34 = ensureNightListsForGroups34;
@@ -2750,6 +2809,10 @@
                         manualAlternateDeferCarry = data._manualAlternateDeferCarry;
                         delete data._manualAlternateDeferCarry;
                     }
+                    if (data._thursdaySpacingMarkers && typeof data._thursdaySpacingMarkers === 'object') {
+                        thursdaySpacingMarkers = data._thursdaySpacingMarkers;
+                        delete data._thursdaySpacingMarkers;
+                    }
                     assignmentReasons = data;
                 } else {
                     assignmentReasons = {};
@@ -2774,13 +2837,10 @@
                     if (Array.isArray(settingsData.normalWeekPairSwapDisabledGroups)) {
                         applyNormalWeekPairSwapDisabledGroupsFromValue(settingsData.normalWeekPairSwapDisabledGroups);
                     }
-                    if (typeof settingsData.nightDutiesEnabledGroups34 === 'boolean') {
-                        applyNightDutiesEnabledGroups34FromValue(settingsData.nightDutiesEnabledGroups34);
-                    } else {
-                        applyNormalWeekPairSwapDisabledGroupsFromValue([]);
-                    }
+                    applyNightDutiesModeFromValue(resolveNightDutiesModeFromSettings(settingsData));
                 } else {
                     applyNormalWeekPairSwapDisabledGroupsFromValue(readNormalWeekPairSwapDisabledGroupsFromLocalStorage());
+                    applyNightDutiesModeFromValue(readNightDutiesModeFromLocalStorage());
                     migrateNormalWeekPairSwapDisabledGroupsFromLocalStorageIfNeeded().catch((e) => {
                         console.warn('migrateNormalWeekPairSwapDisabledGroupsFromLocalStorageIfNeeded:', e);
                     });
@@ -3105,6 +3165,10 @@
                         if (parsed._manualAlternateDeferCarry && typeof parsed._manualAlternateDeferCarry === 'object') {
                             manualAlternateDeferCarry = parsed._manualAlternateDeferCarry;
                             delete parsed._manualAlternateDeferCarry;
+                        }
+                        if (parsed._thursdaySpacingMarkers && typeof parsed._thursdaySpacingMarkers === 'object') {
+                            thursdaySpacingMarkers = parsed._thursdaySpacingMarkers;
+                            delete parsed._thursdaySpacingMarkers;
                         }
                         assignmentReasons = parsed;
                     } else {
@@ -3505,20 +3569,27 @@
                 // Save assignment reasons (swap/skip indicators) separately
                 try {
                     console.log('Saving assignmentReasons to Firestore:', Object.keys(assignmentReasons).length, 'dates');
-                    if (Object.keys(assignmentReasons).length > 0) {
-                        console.log('Sample assignmentReasons being saved:', Object.entries(assignmentReasons).slice(0, 3));
+                    const hasSpacingMarkers = Object.keys(thursdaySpacingMarkers || {}).length > 0;
+                    if (Object.keys(assignmentReasons).length > 0 || hasSpacingMarkers) {
+                        if (Object.keys(assignmentReasons).length > 0) {
+                            console.log('Sample assignmentReasons being saved:', Object.entries(assignmentReasons).slice(0, 3));
+                        }
+                        const reasonsPayload =
+                            typeof buildAssignmentReasonsSavePayload === 'function'
+                                ? buildAssignmentReasonsSavePayload()
+                                : {
+                                      ...assignmentReasons,
+                                      _manualAlternateDeferCarry: manualAlternateDeferCarry,
+                                      _thursdaySpacingMarkers: thursdaySpacingMarkers
+                                  };
+                        const sanitizedReasons = sanitizeForFirestore(reasonsPayload);
+                        await db.collection('dutyShifts').doc('assignmentReasons').set({
+                            ...sanitizedReasons,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedBy: user.uid
+                        });
+                        console.log('Assignment reasons saved to Firestore successfully');
                     }
-                    const reasonsPayload = {
-                        ...assignmentReasons,
-                        _manualAlternateDeferCarry: manualAlternateDeferCarry
-                    };
-                    const sanitizedReasons = sanitizeForFirestore(reasonsPayload);
-                    await db.collection('dutyShifts').doc('assignmentReasons').set({
-                        ...sanitizedReasons,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedBy: user.uid
-                    });
-                    console.log('Assignment reasons saved to Firestore successfully');
                 } catch (error) {
                     console.error('Error saving assignmentReasons to Firestore:', error);
                 }
@@ -3621,7 +3692,8 @@
             localStorage.setItem('dutyShiftsCriticalAssignments', JSON.stringify(criticalAssignments));
             localStorage.setItem('dutyShiftsAssignmentReasons', JSON.stringify({
                 ...assignmentReasons,
-                _manualAlternateDeferCarry: manualAlternateDeferCarry
+                _manualAlternateDeferCarry: manualAlternateDeferCarry,
+                _thursdaySpacingMarkers: thursdaySpacingMarkers
             }));
             localStorage.setItem('dutyShiftsManualAlternateDeferCarry', JSON.stringify(manualAlternateDeferCarry));
             localStorage.setItem('dutyShiftsLastRotationPositions', JSON.stringify(lastRotationPositions));

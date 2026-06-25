@@ -4310,14 +4310,29 @@
             });
         }
 
+        function wireNightDutiesModeCheckboxes() {
+            const listCb = document.getElementById('dutyShiftsNightDutiesGroups34');
+            const changesCb = document.getElementById('dutyShiftsNightDutiesChangesGroups34');
+            if (!listCb || !changesCb || listCb.dataset.nightModeWired === '1') return;
+            listCb.dataset.nightModeWired = '1';
+            listCb.addEventListener('change', () => {
+                if (listCb.checked) changesCb.checked = false;
+            });
+            changesCb.addEventListener('change', () => {
+                if (changesCb.checked) listCb.checked = false;
+            });
+        }
+
         function openNormalSwapLogicSettingsModal() {
             wireFlexibleStatusEffectiveCheckbox();
+            wireNightDutiesModeCheckboxes();
             const flexCb = document.getElementById('dutyShiftsFlexibleStatusEffectiveDates');
             if (flexCb) flexCb.checked = isFlexibleStatusEffectiveDatesEnabled();
             const nightCb = document.getElementById('dutyShiftsNightDutiesGroups34');
-            if (nightCb && typeof isNightDutiesEnabled === 'function') {
-                nightCb.checked = isNightDutiesEnabled();
-            }
+            const changesCb = document.getElementById('dutyShiftsNightDutiesChangesGroups34');
+            const mode = typeof getNightDutiesMode === 'function' ? getNightDutiesMode() : 'off';
+            if (nightCb) nightCb.checked = mode === 'list';
+            if (changesCb) changesCb.checked = mode === 'changes';
             const disabledGroups = typeof getNormalWeekPairSwapDisabledGroups === 'function'
                 ? getNormalWeekPairSwapDisabledGroups()
                 : [];
@@ -4350,10 +4365,16 @@
                 setNormalWeekPairSwapDisabledGroups(selected);
             }
             const nightCb = document.getElementById('dutyShiftsNightDutiesGroups34');
-            if (nightCb && typeof saveDutyShiftsAppSettingsNightDuties === 'function') {
-                await saveDutyShiftsAppSettingsNightDuties(!!nightCb.checked);
+            const changesCb = document.getElementById('dutyShiftsNightDutiesChangesGroups34');
+            let nightMode = 'off';
+            if (changesCb && changesCb.checked) nightMode = 'changes';
+            else if (nightCb && nightCb.checked) nightMode = 'list';
+            if (typeof saveDutyShiftsAppSettingsNightDutiesMode === 'function') {
+                await saveDutyShiftsAppSettingsNightDutiesMode(nightMode);
+            } else if (nightCb && typeof saveDutyShiftsAppSettingsNightDuties === 'function') {
+                await saveDutyShiftsAppSettingsNightDuties(nightMode === 'list');
             }
-            if (typeof ensureNightListsForGroups34 === 'function' && ensureNightListsForGroups34()) {
+            if (nightMode === 'list' && typeof ensureNightListsForGroups34 === 'function' && ensureNightListsForGroups34()) {
                 if (typeof saveData === 'function') await saveData();
             }
             const modalEl = document.getElementById('normalSwapLogicSettingsModal');
@@ -4674,7 +4695,26 @@
                             const bufferIcon = showBufferWarn
                                 ? ` <i class="fas fa-exclamation-triangle duty-missing-buffer-warn" title="${escapeHtml(missingBufferTitle)}" aria-label="${escapeHtml(missingBufferTitle)}"></i>`
                                 : '';
-                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${escapeHtml(e.nameOnly)}${bufferIcon}</div>`;
+                            let spacingIcon = '';
+                            if (
+                                typeof isNightChangesMode === 'function' &&
+                                isNightChangesMode() &&
+                                (e.groupNum === 3 || e.groupNum === 4) &&
+                                typeof getThursdaySpacingMarker === 'function'
+                            ) {
+                                const sp = getThursdaySpacingMarker(key, e.groupNum, e.personName);
+                                if (sp && sp.status === 'ok') {
+                                    const spTitle = `Πέμπτη OK — κανόνας Ν Πεμπτών (Ν=${sp.nRequired}${sp.thursdaysSince != null ? ', πέρασαν ' + sp.thursdaysSince : ''})`;
+                                    spacingIcon = ` <i class="fas fa-check duty-thursday-spacing-ok" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}"></i>`;
+                                } else if (sp && sp.status === 'swap') {
+                                    const partnerLabel = sp.partnerPerson
+                                        ? `${sp.partnerPerson}${sp.partnerDateKey ? ' (' + sp.partnerDateKey + ')' : ''}`
+                                        : (sp.partnerDateKey || '');
+                                    const spTitle = `Ανταλλαγή λόγω Ν Πεμπτών με ${partnerLabel}`;
+                                    spacingIcon = ` <i class="fas fa-check duty-thursday-spacing-swap" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}"></i>`;
+                                }
+                            }
+                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${escapeHtml(e.nameOnly)}${bufferIcon}${spacingIcon}</div>`;
                         });
                         if (shouldShowHeavyIndicators && assignmentReasons[key]) {
                             displayAssignmentHtml += `<div class="duty-person-swapped" title="Υπάρχουν λόγοι αλλαγής/παράλειψης">*</div>`;

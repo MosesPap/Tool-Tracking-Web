@@ -7808,6 +7808,19 @@
                     }
                 });
                 
+                // Νυχτερινές με αλλαγές: πέρασμα Ν Πεμπτών μετά τις υπάρχουσες ανταλλαγές
+                let spacingSwaps = [];
+                if (typeof isNightChangesMode === 'function' && isNightChangesMode() && typeof runThursdaySpacingChangesPass === 'function') {
+                    const spacingResult = runThursdaySpacingChangesPass(updatedAssignments, dayTypeLists);
+                    if (spacingResult && spacingResult.assignments) {
+                        updatedAssignments = spacingResult.assignments;
+                        spacingSwaps = spacingResult.spacingSwaps || [];
+                        if (spacingSwaps.length > 0) {
+                            console.log('[STEP 4] Thursday spacing swaps:', spacingSwaps.length);
+                        }
+                    }
+                }
+
                 // Store final assignments (after swap logic) for saving when OK is pressed.
                 // Use a deep copy so nothing can mutate the saved state before the user clicks OK.
                 calculationSteps.finalNormalAssignments = JSON.parse(JSON.stringify(updatedAssignments));
@@ -7837,6 +7850,17 @@
                 // Merge preview swaps with actual swaps (remove duplicates)
                 const previewSwaps = calculationSteps.previewNormalSwaps || [];
                 const allSwappedPeople = [...swappedPeople];
+
+                spacingSwaps.forEach((s) => {
+                    allSwappedPeople.push({
+                        date: s.thursdayKey,
+                        groupNum: s.groupNum,
+                        skippedPerson: s.displacedFromThursday,
+                        swappedPerson: s.thursdayPerson,
+                        swapDate: s.partnerKey,
+                        thursdaySpacing: true
+                    });
+                });
                 
                 // Add preview swaps that aren't already in swappedPeople
                 previewSwaps.forEach(previewSwap => {
@@ -8214,7 +8238,11 @@
                     
                     // Save assignment reasons to Firestore
                     try {
-                        if (Object.keys(assignmentReasons).length > 0) {
+                        const hasSpacingMarkers =
+                            typeof thursdaySpacingMarkers === 'object' &&
+                            thursdaySpacingMarkers &&
+                            Object.keys(thursdaySpacingMarkers).length > 0;
+                        if (Object.keys(assignmentReasons).length > 0 || hasSpacingMarkers) {
                             const payload = typeof buildAssignmentReasonsSavePayload === 'function'
                                 ? buildAssignmentReasonsSavePayload()
                                 : assignmentReasons;
