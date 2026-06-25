@@ -518,53 +518,134 @@
             }
             return typeof normalizeSkipReasonText === 'function' ? normalizeSkipReasonText(reason.reason) : reason.reason || '';
         }
-        function personHasReplacementUnderlineReason(reason) {
-            if (!reason || reason.type === 'shift') return false;
-            if (reason.type === 'skip') return true;
-            if (reason.meta?.preservedSkipReason?.type === 'skip') return true;
-            return false;
+        function getBaselineRotationPersonForDate(dayTypeCategory, dateKey, groupNum) {
+            if (typeof getRotationBaselineAssignmentForType !== 'function') return null;
+            const raw = getRotationBaselineAssignmentForType(dayTypeCategory, dateKey);
+            return typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                ? parseAssignedPersonForGroupFromAssignment(raw, groupNum)
+                : null;
         }
-        function buildCombinedAssignmentReasonDisplayText(reason, dateKey, groupNum, personName, dayTypeCategory) {
-            if (!reason) return '';
+        /** Τελική ανάθεση στη θέση βασικής σειράς όπου ο baseline ήταν απών/απενεργοποιημένος. */
+        function personIsReplacementInDisabledBaselineSlot(dateKey, groupNum, personName, dayTypeCategory, dateObj) {
+            if (!dateKey || !personName || !groupNum) return false;
+            const baseline = getBaselineRotationPersonForDate(dayTypeCategory, dateKey, groupNum);
+            if (!baseline) return false;
+            const norm = typeof normalizePersonKey === 'function' ? normalizePersonKey : (s) => String(s || '').trim();
+            if (norm(baseline) === norm(personName)) return false;
+            const date =
+                dateObj instanceof Date && !isNaN(dateObj.getTime())
+                    ? dateObj
+                    : new Date(dateKey + 'T00:00:00');
+            const disabled =
+                typeof isPersonDisabledForDuty === 'function' &&
+                isPersonDisabledForDuty(baseline, groupNum, dayTypeCategory, dateKey);
+            const missing =
+                typeof isPersonMissingOnDate === 'function' &&
+                isPersonMissingOnDate(baseline, groupNum, date, dayTypeCategory);
+            return !!(disabled || missing);
+        }
+        function personShouldShowReplacementUnderline(dateKey, groupNum, personName, reason, dayTypeCategory, dateObj) {
+            if (!personIsReplacementInDisabledBaselineSlot(dateKey, groupNum, personName, dayTypeCategory, dateObj)) {
+                return false;
+            }
+            if (reason?.type === 'shift') return false;
+            if (reason?.type === 'skip' && reason.meta?.preserveBaseline) return false;
+            return true;
+        }
+        /** @deprecated — χρησιμοποιήστε personShouldShowReplacementUnderline */
+        function personHasReplacementUnderlineReason(reason) {
+            return !!(reason && reason.type === 'skip' && !reason.meta?.preserveBaseline);
+        }
+        function buildSwapReasonDisplayText(reason, dayTypeCategory) {
+            if (!reason || reason.type !== 'swap') return '';
+            if (reason.meta?.thursdaySpacing) {
+                return typeof normalizeSwapReasonText === 'function'
+                    ? normalizeSwapReasonText(reason.reason)
+                    : reason.reason || '';
+            }
+            if (dayTypeCategory === 'semi' && typeof resolveSemiHolidayConflictSwapDisplayText === 'function') {
+                return resolveSemiHolidayConflictSwapDisplayText(reason);
+            }
+            if (dayTypeCategory === 'normal' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function') {
+                return resolveNormalConsecutiveDutySwapDisplayText(reason);
+            }
+            return typeof normalizeSwapReasonText === 'function'
+                ? normalizeSwapReasonText(reason.reason)
+                : reason.reason || '';
+        }
+        function buildCombinedAssignmentReasonParts(reason, dateKey, groupNum, personName, dayTypeCategory) {
             const parts = [];
-            const skipReason =
-                reason.type === 'skip' ? reason : reason.meta?.preservedSkipReason || null;
-            if (skipReason && skipReason.type === 'skip') {
-                const skipText = resolveSkipReasonDisplayText(
-                    skipReason,
+            if (!personName || !dateKey) return parts;
+            const dateObj = new Date(dateKey + 'T00:00:00');
+            const inDisabledSlot = personIsReplacementInDisabledBaselineSlot(
+                dateKey,
+                groupNum,
+                personName,
+                dayTypeCategory,
+                dateObj
+            );
+            if (inDisabledSlot) {
+                const baseline = getBaselineRotationPersonForDate(dayTypeCategory, dateKey, groupNum);
+                let skipText = '';
+                if (reason?.type === 'skip' && !reason.meta?.preserveBaseline) {
+                    skipText = resolveSkipReasonDisplayText(
+                        reason,
+                        dateKey,
+                        groupNum,
+                        personName,
+                        dayTypeCategory
+                    );
+                } else if (baseline && typeof buildUnavailableReplacementReason === 'function') {
+                    skipText = buildUnavailableReplacementReason({
+                        skippedPersonName: baseline,
+                        replacementPersonName: personName,
+                        dateObj,
+                        groupNum,
+                        dutyCategory: dayTypeCategory
+                    });
+                }
+                if (skipText) parts.push(skipText);
+            }
+            if (reason?.type === 'swap') {
+                const swapText = buildSwapReasonDisplayText(reason, dayTypeCategory);
+                if (swapText) parts.push(swapText);
+            } else if (!parts.length && reason?.type === 'skip' && !reason.meta?.preserveBaseline) {
+                const skipOnly = resolveSkipReasonDisplayText(
+                    reason,
                     dateKey,
                     groupNum,
                     personName,
                     dayTypeCategory
                 );
-                if (skipText) parts.push(skipText);
-            }
-            if (reason.type === 'swap') {
-                let swapText = '';
-                if (reason.meta?.thursdaySpacing) {
-                    swapText =
-                        typeof normalizeSwapReasonText === 'function'
-                            ? normalizeSwapReasonText(reason.reason)
-                            : reason.reason || '';
-                } else if (dayTypeCategory === 'semi' && typeof resolveSemiHolidayConflictSwapDisplayText === 'function') {
-                    swapText = resolveSemiHolidayConflictSwapDisplayText(reason);
-                } else if (dayTypeCategory === 'normal' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function') {
-                    swapText = resolveNormalConsecutiveDutySwapDisplayText(reason);
-                } else {
-                    swapText =
-                        typeof normalizeSwapReasonText === 'function'
-                            ? normalizeSwapReasonText(reason.reason)
-                            : reason.reason || '';
-                }
-                if (swapText) parts.push(swapText);
-            } else if (!parts.length && reason.reason) {
+                if (skipOnly) parts.push(skipOnly);
+            } else if (!parts.length && reason?.reason) {
                 parts.push(
                     reason.type === 'skip' && typeof normalizeSkipReasonText === 'function'
                         ? normalizeSkipReasonText(reason.reason)
                         : reason.reason
                 );
             }
-            return parts.join(' ');
+            return parts;
+        }
+        function buildCombinedAssignmentReasonDisplayText(reason, dateKey, groupNum, personName, dayTypeCategory) {
+            const parts = buildCombinedAssignmentReasonParts(reason, dateKey, groupNum, personName, dayTypeCategory);
+            if (!parts.length) return '';
+            if (parts.length === 1) return parts[0];
+            return parts.map((p, i) => `${i + 1}. ${p}`).join('\n');
+        }
+        function buildCombinedAssignmentReasonHtml(parts) {
+            if (!Array.isArray(parts) || !parts.length) return '';
+            if (parts.length === 1) {
+                const esc =
+                    typeof escapeHtml === 'function' ? escapeHtml(parts[0]) : String(parts[0] || '');
+                return esc;
+            }
+            const esc = typeof escapeHtml === 'function' ? escapeHtml : (s) => String(s || '');
+            return (
+                '<ol class="mb-0 ps-3 mt-1">' +
+                parts.map((p) => `<li>${esc(p)}</li>`).join('') +
+                '</ol>'
+            );
         }
         function resolveUnavailableReplacementDisplayText(reason, dateKey, groupNum, assignedPerson, dutyCategory) {
             if (!reason || reason.type !== 'skip') {

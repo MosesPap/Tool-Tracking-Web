@@ -4654,8 +4654,15 @@
                                     }
                                 }
                                 if (
-                                    typeof personHasReplacementUnderlineReason === 'function' &&
-                                    personHasReplacementUnderlineReason(r)
+                                    typeof personShouldShowReplacementUnderline === 'function' &&
+                                    personShouldShowReplacementUnderline(
+                                        key,
+                                        g,
+                                        personName,
+                                        r,
+                                        dayTypeCategory,
+                                        dateObjCal
+                                    )
                                 ) {
                                     underline = true;
                                 } else if (r && r.type === 'shift') {
@@ -4667,13 +4674,17 @@
                                         const shiftCheck = getAssignmentReason(key, g, personName);
                                         if (shiftCheck && shiftCheck.type === 'shift') {
                                             underline = false;
-                                        } else {
-                                            const isBaselineDisabledOrMissing =
-                                                (typeof isPersonDisabledForDuty === 'function' &&
-                                                    isPersonDisabledForDuty(baselinePerson, g, dayTypeCategory)) ||
-                                                (typeof isPersonMissingOnDate === 'function' &&
-                                                    isPersonMissingOnDate(baselinePerson, g, dateObjCal, dayTypeCategory));
-                                            underline = !!isBaselineDisabledOrMissing;
+                                        } else if (
+                                            typeof personIsReplacementInDisabledBaselineSlot === 'function' &&
+                                            personIsReplacementInDisabledBaselineSlot(
+                                                key,
+                                                g,
+                                                personName,
+                                                dayTypeCategory,
+                                                dateObjCal
+                                            )
+                                        ) {
+                                            underline = true;
                                         }
                                     }
                                 }
@@ -6851,23 +6862,46 @@
                     reason = null;
                 }
                 let reasonBadge = '';
+                const showReplacementSlot =
+                    person.name &&
+                    person.group &&
+                    typeof personIsReplacementInDisabledBaselineSlot === 'function' &&
+                    personIsReplacementInDisabledBaselineSlot(key, person.group, person.name, dayTypeCategory, date);
                 if (reason) {
                     if (reason.type === 'skip' && reason.meta?.preserveBaseline) {
                         const displayReason = normalizeSkipReasonText(reason.reason);
                         reasonBadge = `<span class="badge bg-primary ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-user-edit me-1"></i>Χειροκίνητη ανάθεση</span>`;
-                    } else if (reason.type === 'skip' || reason.meta?.preservedSkipReason) {
+                    } else if (reason.type === 'skip' && showReplacementSlot) {
                         const displayReason =
-                            reason.meta?.preservedSkipReason && typeof buildCombinedAssignmentReasonDisplayText === 'function'
-                                ? buildCombinedAssignmentReasonDisplayText(reason, key, person.group, person.name, dayTypeCategory)
+                            typeof buildCombinedAssignmentReasonDisplayText === 'function'
+                                ? buildCombinedAssignmentReasonDisplayText(
+                                      reason,
+                                      key,
+                                      person.group,
+                                      person.name,
+                                      dayTypeCategory
+                                  )
                                 : normalizeSkipReasonText(reason.reason);
+                        reasonBadge = `<span class="badge bg-warning ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-user-check me-1"></i>Αντικατάσταση</span>`;
+                    } else if (showReplacementSlot && reason.type === 'swap') {
+                        const displayReason =
+                            typeof buildCombinedAssignmentReasonDisplayText === 'function'
+                                ? buildCombinedAssignmentReasonDisplayText(
+                                      reason,
+                                      key,
+                                      person.group,
+                                      person.name,
+                                      dayTypeCategory
+                                  )
+                                : '';
                         reasonBadge = `<span class="badge bg-warning ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-user-check me-1"></i>Αντικατάσταση</span>`;
                     }
                     if (reason.type === 'swap') {
-                        const displayReason =
-                            reason.meta?.preservedSkipReason && typeof buildCombinedAssignmentReasonDisplayText === 'function'
-                                ? buildCombinedAssignmentReasonDisplayText(reason, key, person.group, person.name, dayTypeCategory)
+                        const swapOnly =
+                            typeof buildSwapReasonDisplayText === 'function'
+                                ? buildSwapReasonDisplayText(reason, dayTypeCategory)
                                 : normalizeSwapReasonText(reason.reason);
-                        const swapBadge = `<span class="badge bg-info ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-exchange-alt me-1"></i>Αμοιβαία Αλλαγή${reason.swappedWith ? ` με ${escapeHtml(String(reason.swappedWith))}` : ''}</span>`;
+                        const swapBadge = `<span class="badge bg-info ms-2" title="${escapeHtml(swapOnly)}"><i class="fas fa-exchange-alt me-1"></i>Αμοιβαία Αλλαγή${reason.swappedWith ? ` με ${escapeHtml(String(reason.swappedWith))}` : ''}</span>`;
                         reasonBadge = reasonBadge ? reasonBadge + swapBadge : swapBadge;
                     }
                 }
@@ -7026,6 +7060,7 @@
                     }
                 }
                 let reasonDisplayText;
+                let reasonDisplayHtml = null;
                 if (reason && reason.type === 'skip' && reason.meta?.preserveBaseline) {
                     const rawManual = String(reason.reason || '').trim();
                     if (rawManual) {
@@ -7076,17 +7111,38 @@
                     reasonDisplayText = resolveSemiHolidayConflictSwapDisplayText(reason);
                 } else if (
                     reason &&
-                    reason.type === 'swap' &&
-                    reason.meta?.preservedSkipReason &&
-                    typeof buildCombinedAssignmentReasonDisplayText === 'function'
+                    typeof buildCombinedAssignmentReasonParts === 'function'
                 ) {
-                    reasonDisplayText = buildCombinedAssignmentReasonDisplayText(
+                    const combinedParts = buildCombinedAssignmentReasonParts(
                         reason,
                         key,
                         person.group,
                         person.name,
                         dayTypeCategory
                     );
+                    if (combinedParts.length > 1 && typeof buildCombinedAssignmentReasonHtml === 'function') {
+                        reasonDisplayText = null;
+                        reasonDisplayHtml = buildCombinedAssignmentReasonHtml(combinedParts);
+                    } else if (combinedParts.length === 1) {
+                        reasonDisplayText = combinedParts[0];
+                    } else if (reason.type === 'swap' && dayTypeCategory === 'normal' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function') {
+                        reasonDisplayText = resolveNormalConsecutiveDutySwapDisplayText(reason);
+                    } else if (reason.type === 'skip' && typeof resolveUnavailableReplacementDisplayText === 'function') {
+                        reasonDisplayText = resolveUnavailableReplacementDisplayText(
+                            reason,
+                            key,
+                            person.group,
+                            person.name,
+                            dayTypeCategory
+                        );
+                    } else if (reason) {
+                        reasonDisplayText =
+                            reason.type === 'skip'
+                                ? normalizeSkipReasonText(reason.reason)
+                                : reason.type === 'swap'
+                                  ? normalizeSwapReasonText(reason.reason)
+                                  : reason.reason;
+                    }
                 } else if (reason && reason.type === 'swap' && dayTypeCategory === 'normal' && typeof resolveNormalConsecutiveDutySwapDisplayText === 'function') {
                     reasonDisplayText = resolveNormalConsecutiveDutySwapDisplayText(reason);
                 } else if (reason && reason.type === 'skip' && typeof resolveUnavailableReplacementDisplayText === 'function') {
@@ -7108,7 +7164,11 @@
                     reasonDisplayText = derivedReasonText;
                 }
                 const reasonDisplay = (reason || derivedReasonText)
-                    ? `<div class="mt-1 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${escapeHtml(reasonDisplayText)}</div>`
+                    ? `<div class="mt-1 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${
+                          reasonDisplayHtml != null
+                              ? reasonDisplayHtml
+                              : escapeHtml(reasonDisplayText || '')
+                      }</div>`
                     : '';
                 
                 const curNameNorm = person.name ? normPick(person.name) : '';
