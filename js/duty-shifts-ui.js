@@ -4652,6 +4652,11 @@
                                         const c = swapColors[(isNaN(pid) ? 0 : pid) % swapColors.length];
                                         swapStyle = `border: 2px solid ${c.border}; background-color: ${c.bg};`;
                                     }
+                                } else if (
+                                    typeof personHasThursdaySpacingSwap === 'function' &&
+                                    personHasThursdaySpacingSwap(key, g, personName)
+                                ) {
+                                    isThursdaySpacingSwap = true;
                                 }
                                 if (
                                     typeof personShouldShowReplacementUnderline === 'function' &&

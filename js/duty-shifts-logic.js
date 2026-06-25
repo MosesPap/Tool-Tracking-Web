@@ -573,6 +573,37 @@
                 ? normalizeSwapReasonText(reason.reason)
                 : reason.reason || '';
         }
+        function buildThursdaySpacingSwapReasonText(dateKey, groupNum, personName, dayTypeCategory) {
+            if (!dateKey || !personName || !groupNum) return '';
+            const reason =
+                typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, personName) : null;
+            if (reason?.type === 'swap' && reason.meta?.thursdaySpacing) {
+                return buildSwapReasonDisplayText(reason, dayTypeCategory);
+            }
+            if (typeof getThursdaySpacingMarker !== 'function') return '';
+            const sp = getThursdaySpacingMarker(dateKey, groupNum, personName);
+            if (!sp || sp.status !== 'swap') return '';
+            if (sp.reason) return sp.reason;
+            if (sp.partnerPerson) {
+                const partnerDate = sp.partnerDateKey
+                    ? new Date(sp.partnerDateKey + 'T00:00:00').toLocaleDateString('el-GR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric'
+                      })
+                    : '';
+                return `Ανταλλαγή λόγω Ν Πεμπτών με ${sp.partnerPerson}${partnerDate ? ' (' + partnerDate + ')' : ''}`;
+            }
+            return 'Ανταλλαγή λόγω κανόνα Ν Πεμπτών';
+        }
+        function personHasThursdaySpacingSwap(dateKey, groupNum, personName) {
+            const reason =
+                typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, personName) : null;
+            if (reason?.type === 'swap' && reason.meta?.thursdaySpacing) return true;
+            if (typeof getThursdaySpacingMarker !== 'function') return false;
+            const sp = getThursdaySpacingMarker(dateKey, groupNum, personName);
+            return !!(sp && sp.status === 'swap');
+        }
         function buildCombinedAssignmentReasonParts(reason, dateKey, groupNum, personName, dayTypeCategory) {
             const parts = [];
             if (!personName || !dateKey) return parts;
@@ -587,7 +618,15 @@
             if (inDisabledSlot) {
                 const baseline = getBaselineRotationPersonForDate(dayTypeCategory, dateKey, groupNum);
                 let skipText = '';
-                if (reason?.type === 'skip' && !reason.meta?.preserveBaseline) {
+                if (reason?.meta?.preservedSkipReason?.type === 'skip') {
+                    skipText = resolveSkipReasonDisplayText(
+                        reason.meta.preservedSkipReason,
+                        dateKey,
+                        groupNum,
+                        personName,
+                        dayTypeCategory
+                    );
+                } else if (reason?.type === 'skip' && !reason.meta?.preserveBaseline) {
                     skipText = resolveSkipReasonDisplayText(
                         reason,
                         dateKey,
@@ -606,7 +645,15 @@
                 }
                 if (skipText) parts.push(skipText);
             }
-            if (reason?.type === 'swap') {
+            const spacingSwapText = buildThursdaySpacingSwapReasonText(
+                dateKey,
+                groupNum,
+                personName,
+                dayTypeCategory
+            );
+            if (spacingSwapText) {
+                parts.push(spacingSwapText);
+            } else if (reason?.type === 'swap') {
                 const swapText = buildSwapReasonDisplayText(reason, dayTypeCategory);
                 if (swapText) parts.push(swapText);
             } else if (!parts.length && reason?.type === 'skip' && !reason.meta?.preserveBaseline) {
@@ -834,6 +881,9 @@
                 existing?.meta?.manualAlternateDeferFulfillment ||
                 existing?.meta?.semiReturnFulfilledSkip
             ) {
+                return;
+            }
+            if (existing?.type === 'swap') {
                 return;
             }
             const baselineUnavailable =
