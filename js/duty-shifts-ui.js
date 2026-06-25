@@ -4638,15 +4638,20 @@
                             const rank = Number.isFinite(parseInt(rankings?.[personName], 10)) ? parseInt(rankings[personName], 10) : 9999;
                             let underline = false;
                             let isSwap = false;
+                            let isThursdaySpacingSwap = false;
                             let swapStyle = '';
                             if (personName && g >= 1 && g <= 4) {
                                 const r = getAssignmentReason(key, g, personName);
                                 if (r && r.type === 'swap') {
                                     isSwap = true;
-                                    const pidRaw = r.swapPairId;
-                                    const pid = typeof pidRaw === 'number' ? pidRaw : parseInt(pidRaw, 10);
-                                    const c = swapColors[(isNaN(pid) ? 0 : pid) % swapColors.length];
-                                    swapStyle = `border: 2px solid ${c.border}; background-color: ${c.bg};`;
+                                    if (r.meta && r.meta.thursdaySpacing) {
+                                        isThursdaySpacingSwap = true;
+                                    } else {
+                                        const pidRaw = r.swapPairId;
+                                        const pid = typeof pidRaw === 'number' ? pidRaw : parseInt(pidRaw, 10);
+                                        const c = swapColors[(isNaN(pid) ? 0 : pid) % swapColors.length];
+                                        swapStyle = `border: 2px solid ${c.border}; background-color: ${c.bg};`;
+                                    }
                                 }
                                 if (r && r.type === 'skip') {
                                     underline = true;
@@ -4670,7 +4675,16 @@
                                     }
                                 }
                             }
-                            entries.push({ personName, nameOnly, rank, underline, isSwap, swapStyle, groupNum: g });
+                            entries.push({
+                                personName,
+                                nameOnly,
+                                rank,
+                                underline,
+                                isSwap,
+                                isThursdaySpacingSwap,
+                                swapStyle,
+                                groupNum: g
+                            });
                         }
                         // Store hierarchy-ordered entries for popup (sorted by rank) - do this BEFORE sorting by group
                         const hierarchyOrderedEntries = [...entries].sort((a, b) => (a.rank - b.rank) || (a.personName || '').localeCompare(b.personName || ''));
@@ -4689,7 +4703,12 @@
                         displayAssignmentHtml = '<div class="duty-person-container" data-hierarchy-order="' + escapeHtml(hierarchyData) + '">';
                         const missingBufferTitle = 'Προειδοποίηση: Η ημέρα είναι αμέσως πριν την έναρξη ή αμέσως μετά το τέλος περιόδου απουσίας.';
                         entriesByGroup.forEach((e, idx) => {
-                            const cls = e.isSwap ? 'duty-person-swapped' : 'duty-person';
+                            let cls = 'duty-person';
+                            if (e.isThursdaySpacingSwap) {
+                                cls = 'duty-person duty-person-thursday-spacing-swap';
+                            } else if (e.isSwap) {
+                                cls = 'duty-person-swapped';
+                            }
                             const groupDisplay = e.groupNum && e.groupNum >= 1 && e.groupNum <= 4 ? e.groupNum : '';
                             const showBufferWarn = e.personName && e.groupNum >= 1 && e.groupNum <= 4 && typeof isPersonOnMissingBufferDay === 'function' && isPersonOnMissingBufferDay(e.personName, e.groupNum, key);
                             const bufferIcon = showBufferWarn
@@ -4707,10 +4726,11 @@
                                     const spTitle = `Πέμπτη OK — κανόνας Ν Πεμπτών (Ν=${sp.nRequired}${sp.thursdaysSince != null ? ', πέρασαν ' + sp.thursdaysSince : ''})`;
                                     spacingIcon = ` <i class="fas fa-check duty-thursday-spacing-ok" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}"></i>`;
                                 } else if (sp && sp.status === 'swap') {
-                                    const partnerLabel = sp.partnerPerson
-                                        ? `${sp.partnerPerson}${sp.partnerDateKey ? ' (' + sp.partnerDateKey + ')' : ''}`
-                                        : (sp.partnerDateKey || '');
-                                    const spTitle = `Ανταλλαγή λόγω Ν Πεμπτών με ${partnerLabel}`;
+                                    const spTitle =
+                                        sp.reason ||
+                                        (sp.partnerPerson
+                                            ? `Ανταλλαγή λόγω Ν Πεμπτών με ${sp.partnerPerson}${sp.partnerDateKey ? ' (' + sp.partnerDateKey + ')' : ''}`
+                                            : sp.partnerDateKey || 'Ανταλλαγή λόγω Ν Πεμπτών');
                                     spacingIcon = ` <i class="fas fa-check duty-thursday-spacing-swap" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}"></i>`;
                                 }
                             }

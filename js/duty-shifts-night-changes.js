@@ -130,6 +130,48 @@
         return out.sort();
     }
 
+    function formatDateKeyElGR(dateKey) {
+        if (!dateKey) return '—';
+        const d = new Date(dateKey + 'T00:00:00');
+        if (isNaN(d.getTime())) return String(dateKey);
+        return d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
+    function dayNameForDateKey(dateKey) {
+        if (!dateKey) return '';
+        const d = new Date(dateKey + 'T00:00:00');
+        if (isNaN(d.getTime())) return '';
+        return typeof getGreekDayName === 'function' ? getGreekDayName(d) : '';
+    }
+
+    /**
+     * Λεπτομερής λόγος ανταλλαγής Πέμπτης (κανόνας Ν).
+     * @param displacedPerson — αυτός που θα έβγαινε Πέμπτη (σειρά) αλλά δεν περνούσε Ν
+     * @param replacementPerson — αυτός που μπήκε στην Πέμπτη
+     */
+    function buildThursdaySpacingSwapReason(
+        displacedPerson,
+        replacementPerson,
+        thursdayKey,
+        partnerKey,
+        spacing
+    ) {
+        const thuDate = formatDateKeyElGR(thursdayKey);
+        const partnerDate = formatDateKeyElGR(partnerKey);
+        const partnerDay = dayNameForDateKey(partnerKey);
+        const lastThu = spacing?.lastThursday ? formatDateKeyElGR(spacing.lastThursday) : '—';
+        const nReq = spacing?.nRequired ?? '?';
+        const since = spacing?.thursdaysSince ?? '?';
+        const partnerDayPart = partnerDay ? `${partnerDay} ` : '';
+        return (
+            `Κανόνας Ν Πεμπτών (Ν=${nReq}): Ο/Η ${displacedPerson} θα έβγαινε την Πέμπτη ${thuDate} ` +
+            `(σειρά καθημερινών), αλλά από την τελευταία του/της Πέμπτη (${lastThu}) ` +
+            `είχαν περάσει μόνο ${since} καθημερινές Πέμπτες (απαιτούνται ${nReq}). ` +
+            `Αντικαταστάστηκε από τον/την ${replacementPerson} (Πέμπτη ${thuDate})· ` +
+            `ο/η ${displacedPerson} τοποθετήθηκε ${partnerDayPart}${partnerDate}.`
+        );
+    }
+
     function setSpacingMarker(markers, dateKey, groupNum, personName, data) {
         const name = normPerson(personName);
         if (!name) return;
@@ -353,7 +395,23 @@
                     simulated.normal[thursdayKey][groupNum] = partnerPerson;
                     simulated.normal[partnerKey][groupNum] = person;
 
-                    const reason = `Ανταλλαγή Πέμπτης λόγω κανόνα Ν Πεμπτών (Ν=${spacing.nRequired}, από τελευταία: ${spacing.thursdaysSince}).`;
+                    const reason = buildThursdaySpacingSwapReason(
+                        person,
+                        partnerPerson,
+                        thursdayKey,
+                        partnerKey,
+                        spacing
+                    );
+                    const spacingMeta = {
+                        thursdaySpacing: true,
+                        displacedPerson: person,
+                        replacementPerson: partnerPerson,
+                        thursdayDateKey: thursdayKey,
+                        partnerDateKey: partnerKey,
+                        nRequired: spacing.nRequired,
+                        thursdaysSince: spacing.thursdaysSince,
+                        lastThursday: spacing.lastThursday || null
+                    };
                     if (typeof storeAssignmentReason === 'function') {
                         const pairId =
                             typeof getNextSwapPairIdForAssignmentReasons === 'function'
@@ -367,7 +425,7 @@
                             reason,
                             person,
                             pairId,
-                            { thursdaySpacing: true }
+                            spacingMeta
                         );
                         storeAssignmentReason(
                             partnerKey,
@@ -377,7 +435,7 @@
                             reason,
                             partnerPerson,
                             pairId,
-                            { thursdaySpacing: true }
+                            spacingMeta
                         );
                     }
 
@@ -386,14 +444,16 @@
                         partnerDateKey: partnerKey,
                         partnerPerson: person,
                         nRequired: spacing.nRequired,
-                        thursdaysSince: spacing.thursdaysSince
+                        thursdaysSince: spacing.thursdaysSince,
+                        reason
                     });
                     setSpacingMarker(markers, partnerKey, groupNum, person, {
                         status: 'swap',
                         partnerDateKey: thursdayKey,
                         partnerPerson: partnerPerson,
                         nRequired: spacing.nRequired,
-                        thursdaysSince: spacing.thursdaysSince
+                        thursdaysSince: spacing.thursdaysSince,
+                        reason
                     });
 
                     spacingSwaps.push({
@@ -427,6 +487,7 @@
     }
 
     window.runThursdaySpacingChangesPass = runThursdaySpacingChangesPass;
+    window.buildThursdaySpacingSwapReason = buildThursdaySpacingSwapReason;
     window.countActiveNormalListSizeForThursday = countActiveNormalListSize;
     window.countNormalThursdaysSinceLast = countNormalThursdaysSinceLast;
 })();

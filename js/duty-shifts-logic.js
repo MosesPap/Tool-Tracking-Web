@@ -8193,16 +8193,33 @@
                     // When the person on a date got there by SWAP (conflict swap-in), use the SWAPPED-OUT person as "last"
                     // so next month we continue from the next person after the swapped-out person in rotation (still checking conflicts/missing/disabled).
                     const sortedDateKeys = Object.keys(updatedAssignments).sort();
+                    const slotAssigneesByDate = calculationSteps.pureNormalRotationSlotAssigneeByDate || {};
+                    const baselineByDateForRotation = calculationSteps.tempNormalBaselineAssignments || {};
+                    const allRotationDateKeys = new Set([
+                        ...sortedDateKeys,
+                        ...Object.keys(slotAssigneesByDate),
+                        ...Object.keys(baselineByDateForRotation)
+                    ]);
                     const lastNormalRotationPositionsFromFinal = {};
                     const lastNormalRotationPositionsByMonthFromFinal = {};
-                    for (const dateKey of sortedDateKeys) {
+                    for (const dateKey of [...allRotationDateKeys].sort()) {
                         const d = new Date(dateKey + 'T00:00:00');
                         if (isNaN(d.getTime())) continue;
                         const monthKey = getMonthKeyFromDate(d);
                         const groups = updatedAssignments[dateKey];
-                        if (!groups) continue;
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            const assignedPerson = groups[groupNum];
+                            let assignedPerson = groups?.[groupNum];
+                            if (!assignedPerson) {
+                                assignedPerson = slotAssigneesByDate[dateKey]?.[groupNum] || null;
+                            }
+                            if (
+                                !assignedPerson &&
+                                typeof shouldSkipNormalDayForNightGroup === 'function' &&
+                                shouldSkipNormalDayForNightGroup(dateKey, groupNum)
+                            ) {
+                                const baseMap = baselineByDateForRotation[dateKey];
+                                assignedPerson = baseMap?.[groupNum] || baseMap?.[String(groupNum)] || null;
+                            }
                             if (!assignedPerson) continue;
                             const personForRotation = getPersonForNormalRotationContinuity(dateKey, groupNum, assignedPerson, updatedAssignments);
                             lastNormalRotationPositionsFromFinal[groupNum] = personForRotation;
@@ -12614,6 +12631,7 @@
             const normalRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
             /** Καθαρή σειρά πριν αντικαταστάσεις/skip — για return-from-missing και sync λόγων. */
             const pureNormalRotationByDate = {}; // dateKey -> { groupNum -> originalRotationPerson }
+            const pureNormalRotationSlotAssigneeByDate = {}; // skipped night Thu: slot assignee for continuity
             
             if (normalDays.length === 0) {
                 html += '<div class="alert alert-info">';
@@ -12915,33 +12933,25 @@
                     
                     // Calculate who will be assigned for each group
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        if (typeof shouldSkipNormalDayForNightGroup === 'function' && shouldSkipNormalDayForNightGroup(dateKey, groupNum)) {
-                            if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
-                                const preserved =
-                                    typeof getGroupAssignmentForDate === 'function'
-                                        ? getGroupAssignmentForDate(dateKey, groupNum)
-                                        : normalAssignments[dateKey]?.[groupNum];
-                                if (preserved) {
-                                    if (!normalRotationPersons[dateKey]) normalRotationPersons[dateKey] = {};
-                                    normalRotationPersons[dateKey][groupNum] = preserved;
-                                    html += `<td>${buildBaselineComputedCellHtml(preserved, preserved, '', '')}</td>`;
-                                } else {
-                                    html += '<td class="text-muted">-</td>';
-                                }
-                                continue;
-                            }
-                            let nightPerson = (calculationSteps.finalNightAssignments || {})[dateKey]?.[groupNum];
-                            if (!nightPerson && typeof getGroupAssignmentForDate === 'function') {
-                                nightPerson = getGroupAssignmentForDate(dateKey, groupNum);
-                            }
-                            if (nightPerson) {
-                                html += `<td class="text-muted" title="Νυχτερινή (βήμα 4)">${nightPerson}</td>`;
+                        const skipNormalWrite =
+                            typeof shouldSkipNormalDayForNightGroup === 'function' &&
+                            shouldSkipNormalDayForNightGroup(dateKey, groupNum);
+
+                        if (skipNormalWrite && typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
+                            const preserved =
+                                typeof getGroupAssignmentForDate === 'function'
+                                    ? getGroupAssignmentForDate(dateKey, groupNum)
+                                    : normalAssignments[dateKey]?.[groupNum];
+                            if (preserved) {
+                                if (!normalRotationPersons[dateKey]) normalRotationPersons[dateKey] = {};
+                                normalRotationPersons[dateKey][groupNum] = preserved;
+                                html += `<td>${buildBaselineComputedCellHtml(preserved, preserved, '', '')}</td>`;
                             } else {
-                                html += '<td class="text-muted">—</td>';
+                                html += '<td class="text-muted">-</td>';
                             }
                             continue;
                         }
-                        if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
+                        if (!skipNormalWrite && typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
                             const preserved = normalAssignments[dateKey]?.[groupNum];
                             if (preserved) {
                                 if (!normalRotationPersons[dateKey]) normalRotationPersons[dateKey] = {};
@@ -13366,11 +13376,13 @@
                             // So we store it separately in normalRotationPersons (which is already done above)
                             // and use originalRotationPerson for baseline display
                             
-                            // Store assignment (before swap logic)
-                            if (!normalAssignments[dateKey]) {
-                                normalAssignments[dateKey] = {};
+                            // Store assignment (before swap logic) — skip normal store on night-list Thursdays (rotation still advances)
+                            if (!skipNormalWrite) {
+                                if (!normalAssignments[dateKey]) {
+                                    normalAssignments[dateKey] = {};
+                                }
+                                normalAssignments[dateKey][groupNum] = assignedPerson;
                             }
-                            normalAssignments[dateKey][groupNum] = assignedPerson;
                             
                             if (
                                 assignedPerson &&
@@ -13395,7 +13407,7 @@
                             // CRITICAL: If assigned person differs from baseline (rotationPerson), check if this is a cascading shift
                             // Store a 'shift' reason to prevent this from showing as a swap in results/calendar
                             // Skip when wasDisabledOnlySkippedInBaseline (no replacement line – rotation just continued from next person)
-                            if (!wasDisabledOnlySkippedInBaseline && assignedPerson && assignedPerson !== rotationPerson) {
+                            if (!skipNormalWrite && !wasDisabledOnlySkippedInBaseline && assignedPerson && assignedPerson !== rotationPerson) {
                                 const currentReason = getAssignmentReason(dateKey, groupNum, assignedPerson);
                                 // Only store shift reason if there's no existing reason (skip/swap already handled)
                                 if (!currentReason) {
@@ -13442,6 +13454,14 @@
                                 }
                             }
                             
+                            if (skipNormalWrite) {
+                                if (!pureNormalRotationSlotAssigneeByDate[dateKey]) {
+                                    pureNormalRotationSlotAssigneeByDate[dateKey] = {};
+                                }
+                                pureNormalRotationSlotAssigneeByDate[dateKey][groupNum] =
+                                    assignedPerson || originalRotationPerson || null;
+                            }
+
                             // Get last duty date and days since for display
                             let lastDutyInfo = '';
                             let daysCountInfo = '';
@@ -13463,7 +13483,20 @@
                             if (baselinePersonForDisplay !== assignedPerson && assignedPerson && isPersonDisabledForDuty(baselinePersonForDisplay, groupNum, 'normal')) {
                                 baselinePersonForDisplay = assignedPerson;
                             }
-                            html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            if (skipNormalWrite) {
+                                let nightPerson = (calculationSteps.finalNightAssignments || {})[dateKey]?.[groupNum];
+                                if (!nightPerson && typeof getGroupAssignmentForDate === 'function') {
+                                    nightPerson = getGroupAssignmentForDate(dateKey, groupNum);
+                                }
+                                if (nightPerson) {
+                                    html += `<td class="text-muted" title="Νυχτερινή (βήμα 4)">${nightPerson}</td>`;
+                                } else {
+                                    const rotHint = baselinePersonForDisplay || assignedPerson || '—';
+                                    html += `<td class="text-muted" title="Νυχτερινή Πέμπτη — σειρά καθημερινών συνεχίζει">${rotHint}</td>`;
+                                }
+                            } else {
+                                html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                            }
                         }
                     }
                     
@@ -14019,6 +14052,7 @@
             // Store normal assignments and rotation positions for saving when Next is pressed
             calculationSteps.tempNormalAssignments = normalAssignments;
             calculationSteps.tempNormalBaselineDisplay = normalRotationPersons;
+            calculationSteps.pureNormalRotationSlotAssigneeByDate = pureNormalRotationSlotAssigneeByDate;
             finalizeNormalPreview(normalAssignments, pureNormalRotationByDate, normalRotationPersons);
             if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
                 dutyNormalDebug.finalizeMissedNormalAbsences({
@@ -14037,8 +14071,10 @@
                 for (let i = sortedNormalKeys.length - 1; i >= 0; i--) {
                     const dk = sortedNormalKeys[i];
                     const ap = normalAssignments[dk]?.[g];
-                    if (!ap) continue;
-                    lastPersonForRotation = getPersonForNormalRotationContinuity(dk, g, ap, normalAssignments);
+                    const slotAp = pureNormalRotationSlotAssigneeByDate[dk]?.[g];
+                    const personAtSlot = ap || slotAp;
+                    if (!personAtSlot) continue;
+                    lastPersonForRotation = getPersonForNormalRotationContinuity(dk, g, personAtSlot, normalAssignments);
                     break;
                 }
                 if (lastPersonForRotation) {
@@ -14056,8 +14092,10 @@
                 const monthKey = getMonthKeyFromDate(d);
                 for (let g = 1; g <= 4; g++) {
                     const assignedPerson = normalAssignments[dateKey]?.[g];
-                    if (assignedPerson) {
-                        const personForRotation = getPersonForNormalRotationContinuity(dateKey, g, assignedPerson, normalAssignments);
+                    const slotAssignee = pureNormalRotationSlotAssigneeByDate[dateKey]?.[g];
+                    const personAtSlot = assignedPerson || slotAssignee;
+                    if (personAtSlot) {
+                        const personForRotation = getPersonForNormalRotationContinuity(dateKey, g, personAtSlot, normalAssignments);
                         if (!lastNormalRotationPositionsByMonth[monthKey]) {
                             lastNormalRotationPositionsByMonth[monthKey] = {};
                         }

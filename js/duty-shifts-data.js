@@ -972,20 +972,99 @@
             return map[groupNum] || map[String(groupNum)] || null;
         }
 
+        /**
+         * Person on a normal-day slot for cross-month rotation continuity.
+         * List-mode night Thursdays (groups 3/4): night assignment or rotation baseline when normal store is empty.
+         */
+        function getPersonOnDateForNormalRotationContinuityLookup(dateKey, groupNum) {
+            const g = parseInt(groupNum, 10);
+            const fromNormal = getPersonAssignedOnDateFromStore('normal', dateKey, groupNum);
+            if (fromNormal) return fromNormal;
+            if (!isNightDutiesEnabled() || (g !== 3 && g !== 4) || !isNightThursdayDateKey(dateKey)) {
+                return null;
+            }
+            const fromNight = getPersonAssignedOnDateFromStore('night', dateKey, groupNum);
+            if (fromNight) return fromNight;
+            const rawBaseline = getRotationBaselineAssignmentForType('normal', dateKey);
+            if (rawBaseline) {
+                return parseAssignedPersonForGroupFromAssignment(rawBaseline, groupNum);
+            }
+            return null;
+        }
+
+        /** Merged normal + night Thursday map for rotation-continuity helpers. */
+        function buildNormalRotationContinuityStore() {
+            const out = {};
+            const mergeDay = (dateKey, map) => {
+                if (!map || typeof map !== 'object') return;
+                if (!out[dateKey]) out[dateKey] = {};
+                for (const k in map) {
+                    if (map[k]) out[dateKey][k] = map[k];
+                }
+            };
+            for (const dk in normalDayAssignments || {}) {
+                mergeDay(dk, extractGroupAssignmentsMap(normalDayAssignments[dk]));
+            }
+            if (isNightDutiesEnabled()) {
+                for (const dk in nightAssignments || {}) {
+                    if (!isNightThursdayDateKey(dk)) continue;
+                    const nightMap = extractGroupAssignmentsMap(nightAssignments[dk]);
+                    if (nightMap) mergeDay(dk, { 3: nightMap[3] || nightMap['3'], 4: nightMap[4] || nightMap['4'] });
+                }
+                for (const dk in rotationBaselineNormalAssignments || {}) {
+                    if (!isNightThursdayDateKey(dk)) continue;
+                    const baseMap = extractGroupAssignmentsMap(rotationBaselineNormalAssignments[dk]);
+                    if (!baseMap) continue;
+                    if (!out[dk]) out[dk] = {};
+                    for (const g of [3, 4]) {
+                        if (!out[dk][g] && !out[dk][String(g)] && baseMap[g]) {
+                            out[dk][g] = baseMap[g];
+                        }
+                    }
+                }
+            }
+            return out;
+        }
+
+        function getPersonOnDateForRotationContinuityLookup(dayTypeCategory, dateKey, groupNum) {
+            if (dayTypeCategory === 'normal') {
+                return getPersonOnDateForNormalRotationContinuityLookup(dateKey, groupNum);
+            }
+            return getPersonAssignedOnDateFromStore(dayTypeCategory, dateKey, groupNum);
+        }
+
+        function collectDateKeysForRotationContinuityScan(dayTypeCategory, monthKey) {
+            const keys = new Set();
+            const stores =
+                dayTypeCategory === 'normal' && isNightDutiesEnabled()
+                    ? [normalDayAssignments, nightAssignments, rotationBaselineNormalAssignments]
+                    : [getAssignmentsForDayType(dayTypeCategory)];
+            for (const store of stores) {
+                if (!store || typeof store !== 'object') continue;
+                for (const dk in store) {
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || dk.substring(0, 7) !== monthKey) continue;
+                    keys.add(dk);
+                }
+            }
+            return keys;
+        }
+
         /** Last person in previous month for continuity (baseline after manual alternate, not replacement). */
         function getLastAssignmentContinuityPersonForPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum) {
             const prevMonthKey = getPreviousMonthKeyFromDate(dateInCurrentMonth);
-            const store = getAssignmentsForDayType(dayTypeCategory);
-            if (!store || typeof store !== 'object') return null;
+            const dateKeys = collectDateKeysForRotationContinuityScan(dayTypeCategory, prevMonthKey);
+            if (!dateKeys.size) return null;
             let lastKey = null;
-            for (const dk in store) {
-                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || dk.substring(0, 7) !== prevMonthKey) continue;
-                const assigned = getPersonAssignedOnDateFromStore(dayTypeCategory, dk, groupNum);
+            for (const dk of dateKeys) {
+                if (dayTypeCategory !== 'normal' && getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory) continue;
+                const assigned = getPersonOnDateForRotationContinuityLookup(dayTypeCategory, dk, groupNum);
                 if (!assigned) continue;
                 if (!lastKey || dk > lastKey) lastKey = dk;
             }
             if (!lastKey) return null;
-            const assigned = getPersonAssignedOnDateFromStore(dayTypeCategory, lastKey, groupNum);
+            const assigned = getPersonOnDateForRotationContinuityLookup(dayTypeCategory, lastKey, groupNum);
+            const store =
+                dayTypeCategory === 'normal' ? buildNormalRotationContinuityStore() : getAssignmentsForDayType(dayTypeCategory);
             if (typeof getPersonForRotationContinuity === 'function') {
                 return getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
             }
@@ -1448,16 +1527,19 @@
         /** Refresh lastRotationPositions for a month/group from assignments (baseline continuity after manual alternate). */
         function refreshLastRotationContinuityForMonth(dayTypeCategory, monthKey, groupNum) {
             if (!monthKey || !groupNum) return;
-            const store = getAssignmentsForDayType(dayTypeCategory);
+            const dateKeys = collectDateKeysForRotationContinuityScan(dayTypeCategory, monthKey);
             let lastKey = null;
-            for (const dk in store || {}) {
-                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || dk.substring(0, 7) !== monthKey) continue;
-                if (getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory) continue;
-                if (!getPersonAssignedOnDateFromStore(dayTypeCategory, dk, groupNum)) continue;
+            for (const dk of dateKeys) {
+                if (dayTypeCategory !== 'normal' && getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory) continue;
+                if (!getPersonOnDateForRotationContinuityLookup(dayTypeCategory, dk, groupNum)) continue;
                 if (!lastKey || dk > lastKey) lastKey = dk;
             }
             if (lastKey) {
-                const assigned = getPersonAssignedOnDateFromStore(dayTypeCategory, lastKey, groupNum);
+                const store =
+                    dayTypeCategory === 'normal'
+                        ? buildNormalRotationContinuityStore()
+                        : getAssignmentsForDayType(dayTypeCategory);
+                const assigned = getPersonOnDateForRotationContinuityLookup(dayTypeCategory, lastKey, groupNum);
                 let continuity = assigned;
                 if (typeof getPersonForRotationContinuity === 'function') {
                     continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
