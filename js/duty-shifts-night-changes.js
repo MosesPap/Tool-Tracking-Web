@@ -588,6 +588,381 @@
         return { assignments, markers, spacingSwaps };
     }
 
+    function formatThursdayHistoryDateLabel(dateKey) {
+        if (!dateKey) return '—';
+        const d = new Date(dateKey + 'T00:00:00');
+        if (isNaN(d.getTime())) return String(dateKey);
+        const dayName = typeof getGreekDayName === 'function' ? getGreekDayName(d) : '';
+        const dateStr = d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        return dayName ? `${dayName} ${dateStr}` : dateStr;
+    }
+
+    function extractNormalGroupAssignee(dateKey, groupNum) {
+        if (typeof extractGroupAssignmentsMap !== 'function') return null;
+        const gmap = extractGroupAssignmentsMap(
+            typeof normalDayAssignments !== 'undefined' ? normalDayAssignments[dateKey] : null
+        );
+        return gmap?.[groupNum] || gmap?.[String(groupNum)] || null;
+    }
+
+    function resolveThursdaySpacingEventDetails(dateKey, groupNum, assignee) {
+        if (!dateKey || !assignee || !groupNum) return { status: 'unknown' };
+        const reason =
+            typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, assignee) : null;
+        const marker =
+            typeof getThursdaySpacingMarker === 'function'
+                ? getThursdaySpacingMarker(dateKey, groupNum, assignee)
+                : null;
+
+        if (reason?.type === 'swap' && reason.meta?.thursdaySpacing) {
+            const partnerDateKey = reason.meta.partnerDateKey || null;
+            const displaced =
+                reason.meta.displacedPerson ||
+                (reason.meta.replacementPerson && normPerson(reason.meta.replacementPerson) === normPerson(assignee)
+                    ? reason.swappedWith
+                    : reason.swappedWith) ||
+                null;
+            return {
+                status: 'swap',
+                displacedPerson: displaced,
+                partnerPerson: reason.swappedWith || displaced,
+                partnerDateKey,
+                reasonText: reason.reason || marker?.reason || ''
+            };
+        }
+
+        if (marker?.status === 'swap') {
+            return {
+                status: 'swap',
+                displacedPerson: marker.partnerPerson || null,
+                partnerPerson: marker.partnerPerson || null,
+                partnerDateKey: marker.partnerDateKey || null,
+                reasonText: marker.reason || ''
+            };
+        }
+
+        if (marker?.status === 'ok') {
+            return {
+                status: 'ok',
+                nRequired: marker.nRequired,
+                thursdaysSince: marker.thursdaysSince,
+                reasonText: ''
+            };
+        }
+
+        if (reason?.meta?.thursdaySpacing) {
+            return {
+                status: 'swap',
+                displacedPerson: reason.meta.displacedPerson || reason.swappedWith || null,
+                partnerPerson: reason.swappedWith || null,
+                partnerDateKey: reason.meta.partnerDateKey || null,
+                reasonText: reason.reason || ''
+            };
+        }
+
+        return { status: marker?.status === 'ok' ? 'ok' : 'plain' };
+    }
+
+    function collectThursdaySpacingSwapPairsFromStores() {
+        const pairs = new Map();
+        const addPair = (thursdayKey, groupNum, finalPerson, displacedPerson, partnerDateKey, reasonText) => {
+            if (!thursdayKey || !groupNum || !finalPerson) return;
+            const key = `${thursdayKey}|${groupNum}`;
+            if (pairs.has(key)) return;
+            pairs.set(key, {
+                thursdayKey,
+                groupNum,
+                finalThursdayPerson: finalPerson,
+                displacedFromThursday: displacedPerson || null,
+                partnerDateKey: partnerDateKey || null,
+                reasonText: reasonText || ''
+            });
+        };
+
+        const markersStore =
+            typeof thursdaySpacingMarkers !== 'undefined'
+                ? thursdaySpacingMarkers
+                : typeof window !== 'undefined'
+                  ? window.thursdaySpacingMarkers
+                  : null;
+        if (markersStore && typeof markersStore === 'object') {
+            for (const dateKey of Object.keys(markersStore)) {
+                if (typeof isNightThursdayDateKey === 'function' && !isNightThursdayDateKey(dateKey)) continue;
+                for (const groupStr of [3, 4, '3', '4']) {
+                    const groupNum = parseInt(groupStr, 10);
+                    const gmap = markersStore[dateKey]?.[groupNum] || markersStore[dateKey]?.[groupStr];
+                    if (!gmap) continue;
+                    for (const personName of Object.keys(gmap)) {
+                        const m = gmap[personName];
+                        if (!m || m.status !== 'swap') continue;
+                        const assignee = extractNormalGroupAssignee(dateKey, groupNum) || personName;
+                        addPair(
+                            dateKey,
+                            groupNum,
+                            assignee,
+                            m.partnerPerson || null,
+                            m.partnerDateKey || null,
+                            m.reason || ''
+                        );
+                    }
+                }
+            }
+        }
+
+        const reasonsStore = typeof assignmentReasons !== 'undefined' ? assignmentReasons : null;
+        if (reasonsStore && typeof reasonsStore === 'object') {
+            for (const dateKey of Object.keys(reasonsStore)) {
+                if (typeof isNightThursdayDateKey === 'function' && !isNightThursdayDateKey(dateKey)) continue;
+                for (const groupStr of Object.keys(reasonsStore[dateKey] || {})) {
+                    const groupNum = parseInt(groupStr, 10);
+                    if (groupNum !== 3 && groupNum !== 4) continue;
+                    const gmap = reasonsStore[dateKey][groupStr];
+                    for (const personName of Object.keys(gmap || {})) {
+                        const r = gmap[personName];
+                        if (!r?.meta?.thursdaySpacing) continue;
+                        const assignee = extractNormalGroupAssignee(dateKey, groupNum) || personName;
+                        addPair(
+                            dateKey,
+                            groupNum,
+                            assignee,
+                            r.meta.displacedPerson || r.swappedWith || null,
+                            r.meta.partnerDateKey || null,
+                            r.reason || ''
+                        );
+                    }
+                }
+            }
+        }
+
+        return [...pairs.values()].sort((a, b) => a.thursdayKey.localeCompare(b.thursdayKey));
+    }
+
+    /**
+     * Ιστορικό καθημερινών Πεμπτών ομάδων 3 & 4 (μετά τις αλλαγές Ν Πεμπτών).
+     * @returns {{ thursdayEvents: Array, personSummaries: Array, swapPairs: Array }}
+     */
+    function buildThursdaySpacingHistoryReport() {
+        const thursdayEvents = [];
+        const dateKeys = Object.keys(
+            typeof normalDayAssignments !== 'undefined' ? normalDayAssignments : {}
+        ).sort();
+
+        for (const dateKey of dateKeys) {
+            if (typeof isNightThursdayDateKey === 'function' && !isNightThursdayDateKey(dateKey)) continue;
+            for (const groupNum of NIGHT_GROUPS) {
+                const assignee = extractNormalGroupAssignee(dateKey, groupNum);
+                if (!assignee) continue;
+                const details = resolveThursdaySpacingEventDetails(dateKey, groupNum, assignee);
+                thursdayEvents.push({
+                    dateKey,
+                    dateLabel: formatThursdayHistoryDateLabel(dateKey),
+                    groupNum,
+                    assignee,
+                    status: details.status,
+                    displacedPerson: details.displacedPerson || null,
+                    partnerPerson: details.partnerPerson || null,
+                    partnerDateKey: details.partnerDateKey || null,
+                    partnerDateLabel: details.partnerDateKey
+                        ? formatThursdayHistoryDateLabel(details.partnerDateKey)
+                        : null,
+                    nRequired: details.nRequired,
+                    thursdaysSince: details.thursdaysSince,
+                    reasonText: details.reasonText || ''
+                });
+            }
+        }
+
+        const swapPairs = collectThursdaySpacingSwapPairsFromStores();
+
+        for (const sp of swapPairs) {
+            const exists = thursdayEvents.some(
+                (e) => e.dateKey === sp.thursdayKey && e.groupNum === sp.groupNum
+            );
+            if (exists) continue;
+            const assignee = extractNormalGroupAssignee(sp.thursdayKey, sp.groupNum) || sp.finalThursdayPerson;
+            thursdayEvents.push({
+                dateKey: sp.thursdayKey,
+                dateLabel: formatThursdayHistoryDateLabel(sp.thursdayKey),
+                groupNum: sp.groupNum,
+                assignee,
+                status: 'swap',
+                displacedPerson: sp.displacedFromThursday,
+                partnerPerson: sp.displacedFromThursday,
+                partnerDateKey: sp.partnerDateKey,
+                partnerDateLabel: sp.partnerDateKey
+                    ? formatThursdayHistoryDateLabel(sp.partnerDateKey)
+                    : null,
+                nRequired: null,
+                thursdaysSince: null,
+                reasonText: sp.reasonText || ''
+            });
+        }
+
+        thursdayEvents.sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+
+        const lastByPerson = new Map();
+        for (const ev of thursdayEvents) {
+            const pk = `${ev.groupNum}:${normPerson(ev.assignee)}`;
+            lastByPerson.set(pk, ev);
+        }
+
+        const personSummaries = [];
+        for (const groupNum of NIGHT_GROUPS) {
+            const list =
+                typeof getSortedGroupListForRotation === 'function'
+                    ? getSortedGroupListForRotation(groupNum, 'normal')
+                    : (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])
+                          ?.normal || [];
+            const seen = new Set();
+            for (const person of list) {
+                if (!person) continue;
+                const pk = `${groupNum}:${normPerson(person)}`;
+                if (seen.has(pk)) continue;
+                seen.add(pk);
+                const last = lastByPerson.get(pk) || null;
+                personSummaries.push({
+                    groupNum,
+                    person,
+                    lastThursdayKey: last?.dateKey || null,
+                    lastThursdayLabel: last?.dateLabel || '—',
+                    status: last?.status || 'none',
+                    displacedPerson: last?.displacedPerson || null,
+                    partnerDateKey: last?.partnerDateKey || null,
+                    partnerDateLabel: last?.partnerDateLabel || null,
+                    reasonText: last?.reasonText || '',
+                    nRequired: last?.nRequired,
+                    thursdaysSince: last?.thursdaysSince
+                });
+            }
+        }
+
+        personSummaries.sort((a, b) => {
+            if (a.groupNum !== b.groupNum) return a.groupNum - b.groupNum;
+            const listA =
+                typeof getSortedGroupListForRotation === 'function'
+                    ? getSortedGroupListForRotation(a.groupNum, 'normal')
+                    : [];
+            const ia = listA.indexOf(a.person);
+            const ib = listA.indexOf(b.person);
+            if (ia >= 0 && ib >= 0 && ia !== ib) return ia - ib;
+            return String(a.person || '').localeCompare(String(b.person || ''), 'el');
+        });
+
+        const displacementByPerson = new Map();
+        for (const sp of swapPairs) {
+            if (!sp.displacedFromThursday) continue;
+            const pk = `${sp.groupNum}:${normPerson(sp.displacedFromThursday)}`;
+            const prev = displacementByPerson.get(pk);
+            if (!prev || sp.thursdayKey > prev.thursdayKey) {
+                displacementByPerson.set(pk, {
+                    thursdayKey: sp.thursdayKey,
+                    thursdayLabel: formatThursdayHistoryDateLabel(sp.thursdayKey),
+                    replacedBy: sp.finalThursdayPerson || null,
+                    partnerDateKey: sp.partnerDateKey || null,
+                    partnerDateLabel: sp.partnerDateKey
+                        ? formatThursdayHistoryDateLabel(sp.partnerDateKey)
+                        : null,
+                    reasonText: sp.reasonText || ''
+                });
+            }
+        }
+        for (const row of personSummaries) {
+            row.lastDisplacement = displacementByPerson.get(`${row.groupNum}:${normPerson(row.person)}`) || null;
+        }
+
+        return { thursdayEvents, personSummaries, swapPairs };
+    }
+
+    function openThursdaySpacingHistoryModal() {
+        if (typeof isNightChangesMode === 'function' && !isNightChangesMode()) {
+            if (
+                !confirm(
+                    'Η λειτουργία «Νυχτερινές με αλλαγές» δεν είναι ενεργή. Να εμφανιστεί το ιστορικό από τα αποθηκευμένα δεδομένα οπωσδήποτε;'
+                )
+            ) {
+                return;
+            }
+        }
+        const report = buildThursdaySpacingHistoryReport();
+        const tbodyPerson = document.getElementById('thursdaySpacingHistoryPersonBody');
+        const tbodyChrono = document.getElementById('thursdaySpacingHistoryChronoBody');
+        const emptyMsg = document.getElementById('thursdaySpacingHistoryEmpty');
+        if (!tbodyPerson || !tbodyChrono) return;
+
+        const esc = typeof escapeHtml === 'function' ? escapeHtml : (s) => String(s || '');
+        const groupLabel = (g) =>
+            typeof getGroupName === 'function' ? getGroupName(g) : `Ομάδα ${g}`;
+
+        const statusBadge = (status, ev) => {
+            if (status === 'ok') {
+                const extra =
+                    ev?.nRequired != null
+                        ? ` (Ν=${ev.nRequired}${ev.thursdaysSince != null ? ', πέρασαν ' + ev.thursdaysSince : ''})`
+                        : '';
+                return `<span class="badge bg-success">OK${esc(extra)}</span>`;
+            }
+            if (status === 'swap') {
+                return '<span class="badge bg-warning text-dark">Ανταλλαγή Ν</span>';
+            }
+            if (status === 'none') {
+                return '<span class="badge bg-secondary">—</span>';
+            }
+            return '<span class="badge bg-light text-dark">Χωρίς σήμανση</span>';
+        };
+
+        tbodyPerson.innerHTML = '';
+        for (const row of report.personSummaries) {
+            const tr = document.createElement('tr');
+            const swapCols =
+                row.status === 'swap'
+                    ? `<td>${esc(row.displacedPerson ? row.displacedPerson : '—')}</td>
+                       <td>${esc(row.partnerDateLabel || '—')}</td>`
+                    : `<td>—</td><td>—</td>`;
+            const displacedCols = row.lastDisplacement
+                ? `<td>${esc(row.lastDisplacement.thursdayLabel)}</td>
+                   <td>${esc(row.lastDisplacement.replacedBy || '—')}</td>
+                   <td>${esc(row.lastDisplacement.partnerDateLabel || '—')}</td>`
+                : `<td>—</td><td>—</td><td>—</td>`;
+            tr.innerHTML = `
+                <td><span class="badge bg-primary">${esc(groupLabel(row.groupNum))}</span></td>
+                <td><strong>${esc(row.person)}</strong></td>
+                <td>${esc(row.lastThursdayLabel)}</td>
+                <td>${statusBadge(row.status, row)}</td>
+                ${swapCols}
+                ${displacedCols}
+                <td><small>${esc(row.reasonText || row.lastDisplacement?.reasonText || '—')}</small></td>
+            `;
+            tbodyPerson.appendChild(tr);
+        }
+
+        tbodyChrono.innerHTML = '';
+        for (const ev of report.thursdayEvents) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${esc(ev.dateLabel)}</td>
+                <td><span class="badge bg-primary">${esc(groupLabel(ev.groupNum))}</span></td>
+                <td><strong>${esc(ev.assignee)}</strong></td>
+                <td>${statusBadge(ev.status, ev)}</td>
+                <td>${esc(ev.displacedPerson || '—')}</td>
+                <td>${esc(ev.partnerDateLabel || '—')}</td>
+                <td><small>${esc(ev.reasonText || '—')}</small></td>
+            `;
+            tbodyChrono.appendChild(tr);
+        }
+
+        if (emptyMsg) {
+            emptyMsg.style.display =
+                report.thursdayEvents.length === 0 && report.personSummaries.every((p) => p.status === 'none')
+                    ? 'block'
+                    : 'none';
+        }
+
+        const modalEl = document.getElementById('thursdaySpacingHistoryModal');
+        if (modalEl && typeof bootstrap !== 'undefined') {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+    }
+
     window.runThursdaySpacingChangesPass = runThursdaySpacingChangesPass;
     window.buildThursdaySpacingSwapReason = buildThursdaySpacingSwapReason;
     window.countActiveNormalListSizeForThursday = countActiveNormalListSize;
@@ -595,4 +970,6 @@
     window.personPassesThursdaySpacing = personPassesThursdaySpacing;
     window.getThursdaySpacingPartnerCandidates = getThursdaySpacingPartnerCandidates;
     window.shouldSkipNormalConflictSwapForThursdaySpacing = shouldSkipNormalConflictSwapForThursdaySpacing;
+    window.buildThursdaySpacingHistoryReport = buildThursdaySpacingHistoryReport;
+    window.openThursdaySpacingHistoryModal = openThursdaySpacingHistoryModal;
 })();
