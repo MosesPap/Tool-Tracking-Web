@@ -1457,6 +1457,28 @@
                 .sort();
         }
 
+        /** All calendar normal-duty date keys in a month (Mon–Fri incl. night Thursdays). */
+        function getSortedNormalCalendarDateKeysInMonth(year, month) {
+            const keys = [];
+            const cur = new Date(year, month, 1);
+            const endM = new Date(year, month + 1, 0);
+            while (cur <= endM) {
+                const dk = formatDateKey(cur);
+                if (getDutyCategoryForDateKeyLocal(dk) === 'normal') keys.push(dk);
+                cur.setDate(cur.getDate() + 1);
+            }
+            return keys;
+        }
+
+        /** Consecutive/conflict swaps — do not advance Excel alternate anchor (e.g. Mon↔Wed after holiday). */
+        function isExcelAlternateConsecutiveSwapReason(reason) {
+            if (!reason || reason.type !== 'swap') return false;
+            if (reason.meta?.thursdaySpacing) return false;
+            if (reason.meta?.mutualTwoDaySwap) return false;
+            if (reason.meta?.semiConsecutiveHolidaySwap) return false;
+            return true;
+        }
+
         /**
          * Rotation cursor (index of next assignee) at the start of dateInMonth's calendar month.
          * Simulates previous month baseline slots; manual alternate advances from baseline+1, not replacement.
@@ -5543,46 +5565,63 @@
             const exportMonthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
             /**
-             * Τελευταίος στη σειρά περιστροφής στο τέλος του μήνα export (ίδια λογική με υπολογισμό υπηρεσιών).
-             * Ομάδες 3/4 με νυχτερινές Πέμπτες: baseline σειρά (αγνοεί ανταλλαγές Ν Πεμπτών στο τελικό night store).
+             * Τελευταίος στη σειρά περιστροφής στο τέλος του μήνα export.
+             * Καθημερινές: χρονολογική σάρωση baseline· ανταλλαγές συγκρούσεων (π.χ. 31/08) δεν αλλάζουν anchor.
              */
             const resolveLastRotationAnchorForType = (type) => {
-                const useBaselineNormalForNightGroup =
-                    type === 'normal' &&
-                    typeof isNightDutyGroup === 'function' &&
-                    isNightDutyGroup(groupNum);
-
-                if (useBaselineNormalForNightGroup) {
+                if (type === 'normal') {
                     let anchor = null;
-                    let lastKey = null;
-                    const baselineStore = rotationBaselineNormalAssignments || {};
-                    for (const dk of Object.keys(baselineStore).sort()) {
-                        if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || dk.substring(0, 7) !== exportMonthKey) continue;
-                        if (getDutyCategoryForDateKeyLocal(dk) !== 'normal') continue;
-                        const baselinePerson = parseAssignedPersonForGroupFromAssignment(baselineStore[dk], groupNum);
-                        if (!baselinePerson) continue;
-                        lastKey = dk;
-                        anchor = baselinePerson;
-                    }
-                    if (lastKey && anchor) {
-                        const finalAssigned = getPersonOnDateForNormalRotationContinuityLookup(lastKey, groupNum);
-                        const finalReason =
-                            finalAssigned && typeof getAssignmentReason === 'function'
-                                ? getAssignmentReason(lastKey, groupNum, finalAssigned)
+                    const sortedDays = getSortedNormalCalendarDateKeysInMonth(year, month);
+                    const store = buildNormalRotationContinuityStore();
+                    const isNightGroup =
+                        typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum);
+
+                    for (const dk of sortedDays) {
+                        const baselineRaw = rotationBaselineNormalAssignments?.[dk];
+                        const baselinePerson = baselineRaw
+                            ? parseAssignedPersonForGroupFromAssignment(baselineRaw, groupNum)
+                            : null;
+                        const finalAssigned = getPersonOnDateForNormalRotationContinuityLookup(dk, groupNum);
+                        if (!baselinePerson && !finalAssigned) continue;
+
+                        const personForReason = finalAssigned || baselinePerson;
+                        const reason =
+                            personForReason && typeof getAssignmentReason === 'function'
+                                ? getAssignmentReason(dk, groupNum, personForReason)
                                 : null;
-                        const isThursdaySpacingFinal =
-                            finalReason?.type === 'swap' && finalReason.meta?.thursdaySpacing;
-                        if (finalAssigned && !isThursdaySpacingFinal && typeof getPersonForRotationContinuity === 'function') {
-                            const store = buildNormalRotationContinuityStore();
-                            const continuity = getPersonForRotationContinuity(
-                                lastKey,
-                                groupNum,
-                                finalAssigned,
-                                store
-                            );
+
+                        if (isExcelAlternateConsecutiveSwapReason(reason)) {
+                            continue;
+                        }
+
+                        if (
+                            isNightGroup &&
+                            reason?.type === 'swap' &&
+                            reason.meta?.thursdaySpacing
+                        ) {
+                            if (dk === reason.meta.thursdayDateKey && finalAssigned) {
+                                anchor = finalAssigned;
+                            } else if (typeof getPersonForRotationContinuity === 'function') {
+                                const continuity = getPersonForRotationContinuity(
+                                    dk,
+                                    groupNum,
+                                    finalAssigned || baselinePerson,
+                                    store
+                                );
+                                if (continuity) anchor = continuity;
+                            }
+                            continue;
+                        }
+
+                        const assigned = finalAssigned || baselinePerson;
+                        if (typeof getPersonForRotationContinuity === 'function') {
+                            const continuity = getPersonForRotationContinuity(dk, groupNum, assigned, store);
                             if (continuity) anchor = continuity;
+                        } else if (baselinePerson) {
+                            anchor = baselinePerson;
                         }
                     }
+
                     if (!anchor) {
                         anchor =
                             getLastBaselineRotationPersonForDate('normal', firstDayOfNextMonth, groupNum) ||
