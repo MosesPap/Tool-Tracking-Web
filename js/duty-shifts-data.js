@@ -6402,19 +6402,131 @@
 <meta charset="UTF-8">
 <title>Τελικές vs Βασική Σειρά</title>
 <style>
-body { font-family: Arial, sans-serif; font-size: 11px; padding: 12px; color: #212529; }
-h4, h5 { color: #0d6efd; }
-table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
-th, td { border: 1px solid #ccc; padding: 4px; vertical-align: top; }
-.compare-diff-row td { background-color: rgba(255, 193, 7, 0.18) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.compare-baseline-unavailable { text-decoration: line-through; text-decoration-thickness: 2px; opacity: 0.75; }
-.compare-baseline-next { color: #495057; font-weight: 600; }
-@media print { @page { margin: 1cm; } }
+* { box-sizing: border-box; }
+body.assignments-compare-print-body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 8pt;
+    margin: 0;
+    padding: 0;
+    color: #212529;
+}
+.assignments-compare-print-doc-title {
+    text-align: center;
+    font-size: 11pt;
+    margin: 0 0 2mm;
+    padding: 4mm 6mm 0;
+}
+.assignments-compare-print-doc-meta {
+    text-align: center;
+    color: #666;
+    font-size: 7pt;
+    margin: 0 0 3mm;
+    padding: 0 6mm;
+}
+.assignments-compare-month-block {
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+.assignments-compare-print-page {
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    padding: 4mm 6mm 5mm;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: #fff;
+    height: 190mm;
+    max-height: 190mm;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.assignments-compare-print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+}
+.assignments-compare-print-header {
+    flex: 0 0 auto;
+    margin-bottom: 2mm;
+}
+.assignments-compare-print-title {
+    font-size: 10pt;
+    font-weight: bold;
+    color: #0d6efd;
+    margin: 0;
+    line-height: 1.2;
+}
+.assignments-compare-print-table-wrap {
+    flex: 1 1 auto;
+    overflow: hidden;
+    max-height: calc(190mm - 10mm);
+}
+.assignments-compare-print-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 6.8pt;
+    line-height: 1.08;
+}
+.assignments-compare-print-table th,
+.assignments-compare-print-table td {
+    border: 0.4pt solid #999;
+    padding: 0.6mm 1mm;
+    vertical-align: middle;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+}
+.assignments-compare-print-table thead th {
+    font-size: 6.5pt;
+    padding: 0.8mm 1mm;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+.assignments-compare-print-table tbody tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+.compare-diff-row td {
+    background-color: rgba(255, 193, 7, 0.22) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+.compare-baseline-unavailable {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
+.compare-baseline-next {
+    color: #495057;
+    font-weight: 600;
+}
+.border, .rounded, .bg-white, .p-3, .mb-4 {
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+}
+@page {
+    size: A4 landscape;
+    margin: 6mm 8mm;
+}
+@media print {
+    body.assignments-compare-print-body {
+        padding: 0;
+    }
+    .assignments-compare-print-doc-title,
+    .assignments-compare-print-doc-meta {
+        display: none;
+    }
+}
 </style>
 </head>
 <body class="assignments-compare-print-body">
-<h2 style="text-align:center;margin-top:0;">Τελικές αναθέσεις vs Βασική σειρά</h2>
-<p style="text-align:center;color:#666;">Εκτύπωση: ${escapeHtml(printedAt)}</p>
+<p class="assignments-compare-print-doc-title">Τελικές αναθέσεις vs Βασική σειρά</p>
+<p class="assignments-compare-print-doc-meta">Εκτύπωση: ${escapeHtml(printedAt)} — κάθε σελίδα: ένας μήνας × μία ομάδα (A4 οριζόντια)</p>
 ${content.innerHTML}
 </body>
 </html>`);
@@ -6423,7 +6535,7 @@ ${content.innerHTML}
                 setTimeout(() => {
                     printWindow.focus();
                     printWindow.print();
-                }, 300);
+                }, 400);
             };
         }
 
@@ -6582,8 +6694,7 @@ ${content.innerHTML}
                 };
 
                 const monthSection = document.createElement('div');
-                monthSection.className = 'mb-4 pb-3 border-bottom';
-                monthSection.innerHTML = `<h4 class="mb-3 text-primary"><i class="fas fa-calendar-alt me-2"></i>${escapeHtml(monthName)} ${year}</h4>`;
+                monthSection.className = 'assignments-compare-month-block mb-4';
                 previewContent.appendChild(monthSection);
 
                 for (const groupNum of selectedGroups) {
@@ -6601,21 +6712,25 @@ ${content.innerHTML}
                     hasAnyGroup = true;
 
                     const groupBlock = document.createElement('div');
-                    groupBlock.className = 'mb-4 p-3 border rounded bg-white';
+                    groupBlock.className = 'assignments-compare-print-page mb-4 p-3 border rounded bg-white';
                     groupBlock.innerHTML = `
-                        <h5 class="mb-3" style="color:#428BCA;"><i class="fas fa-users me-2"></i>${escapeHtml(groupName)}</h5>
-                        <div class="table-responsive">
-                            <table class="table table-bordered table-sm mb-0" style="font-size:12px;">
+                        <div class="assignments-compare-print-header mb-2">
+                            <h5 class="mb-0 assignments-compare-print-title" style="color:#428BCA;">
+                                ${escapeHtml(monthName)} ${year} — ${escapeHtml(groupName)}
+                            </h5>
+                        </div>
+                        <div class="table-responsive assignments-compare-print-table-wrap">
+                            <table class="table table-bordered table-sm mb-0 assignments-compare-print-table">
                                 <thead>
                                     <tr style="background-color:#428BCA;color:white;">
-                                        <th rowspan="2" style="width:11%;text-align:center;vertical-align:middle;">ΗΜΕΡ.</th>
-                                        <th rowspan="2" style="width:10%;text-align:center;vertical-align:middle;">ΗΜΕΡΑ</th>
+                                        <th rowspan="2" style="width:10%;text-align:center;vertical-align:middle;">ΗΜΕΡ.</th>
+                                        <th rowspan="2" style="width:9%;text-align:center;vertical-align:middle;">ΗΜΕΡΑ</th>
                                         <th colspan="2" style="text-align:center;">Τελικές αναθέσεις (μετά αλλαγές)</th>
-                                        <th style="width:22%;text-align:center;vertical-align:middle;background:#5a6268;">Βασική σειρά</th>
+                                        <th style="width:24%;text-align:center;vertical-align:middle;background:#5a6268;">Βασική σειρά</th>
                                     </tr>
                                     <tr style="background-color:#5a9fd4;color:white;">
-                                        <th style="width:32%;text-align:center;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
-                                        <th style="width:15%;text-align:center;">ΑΛΛΑΓΗ</th>
+                                        <th style="width:30%;text-align:center;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
+                                        <th style="width:12%;text-align:center;">ΑΛΛΑΓΗ</th>
                                         <th style="text-align:center;background:#6c757d;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
                                     </tr>
                                 </thead>
