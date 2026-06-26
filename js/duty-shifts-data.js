@@ -5540,44 +5540,61 @@
                 return true;
             };
 
-            const firstDayOfExportMonth = new Date(year, month, 1);
+            const exportMonthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-            // Anchor = last assignee in export month (continuity after manual alternate / swap / replacement).
-            for (const t of ['normal', 'semi', 'weekend', 'special']) {
-                const fromContinuity =
-                    typeof getLastAssignmentContinuityPersonForPreviousMonth === 'function'
-                        ? getLastAssignmentContinuityPersonForPreviousMonth(t, firstDayOfExportMonth, groupNum)
-                        : null;
-                if (fromContinuity) {
-                    lastAssigned[t] = normName(fromContinuity);
+            /**
+             * Τελευταίος στη σειρά περιστροφής στο τέλος του μήνα export (ίδια λογική με υπολογισμό υπηρεσιών).
+             * Χρησιμοποιεί getRotationSeedPersonForMonthStart για τον επόμενο μήνα + τελευταία ανάθεση στον export μήνα.
+             */
+            const resolveLastRotationAnchorForType = (type) => {
+                let anchor = null;
+
+                if (typeof getRotationSeedPersonForMonthStart === 'function') {
+                    anchor = getRotationSeedPersonForMonthStart(type, firstDayOfNextMonth, groupNum);
                 }
-            }
 
-            for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(year, month, day);
-                const dayKey = formatDateKey(date);
-                const dayType = getDayType(date);
-                const rotationType = mapDayTypeToRotationType(dayType);
-                const isNightThu =
-                    typeof isNightDutyGroup === 'function' &&
-                    isNightDutyGroup(groupNum) &&
-                    typeof isNightThursdayDateKey === 'function' &&
-                    isNightThursdayDateKey(dayKey);
-                const storeType = isNightThu ? 'night' : rotationType;
-                const assigned =
-                    typeof getPersonAssignedOnDateFromStore === 'function'
-                        ? getPersonAssignedOnDateFromStore(storeType, dayKey, groupNum)
-                        : '';
-                if (!assigned) continue;
-                let continuity = assigned;
-                if (typeof getPersonForRotationContinuity === 'function') {
+                const dateKeys = collectDateKeysForRotationContinuityScan(type, exportMonthKey);
+                let lastKey = null;
+                for (const dk of dateKeys) {
+                    if (type !== 'normal' && getDutyCategoryForDateKeyLocal(dk) !== type) continue;
+                    const assigned = getPersonOnDateForRotationContinuityLookup(type, dk, groupNum);
+                    if (!assigned) continue;
+                    if (!lastKey || dk > lastKey) lastKey = dk;
+                }
+                if (lastKey) {
                     const store =
-                        typeof getAssignmentsForDayType === 'function'
-                            ? getAssignmentsForDayType(storeType)
-                            : null;
-                    continuity = getPersonForRotationContinuity(dayKey, groupNum, assigned, store);
+                        type === 'normal' ? buildNormalRotationContinuityStore() : getAssignmentsForDayType(type);
+                    const assigned = getPersonOnDateForRotationContinuityLookup(type, lastKey, groupNum);
+                    let continuity = assigned;
+                    if (typeof getPersonForRotationContinuity === 'function') {
+                        continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
+                    } else {
+                        const manual = findManualAlternateReplacementForGroup(lastKey, groupNum);
+                        if (
+                            manual?.baselinePerson &&
+                            manual?.replacementPerson &&
+                            normName(assigned) === normName(manual.replacementPerson)
+                        ) {
+                            continuity = resolvePersonInGroupRotationList(manual.baselinePerson, groupNum, type);
+                        }
+                    }
+                    if (continuity) anchor = continuity;
                 }
-                if (continuity) lastAssigned[storeType] = normName(continuity);
+
+                if (!anchor) {
+                    anchor =
+                        (typeof getLastAssignmentContinuityPersonForPreviousMonth === 'function'
+                            ? getLastAssignmentContinuityPersonForPreviousMonth(type, firstDayOfNextMonth, groupNum)
+                            : null) ||
+                        getLastRotationPersonForDate(type, firstDayOfNextMonth, groupNum) ||
+                        getLastBaselineRotationPersonForDate(type, firstDayOfNextMonth, groupNum);
+                }
+
+                return anchor ? normName(resolvePersonInGroupRotationList(anchor, groupNum, type)) : '';
+            };
+
+            for (const t of ['normal', 'semi', 'weekend', 'special']) {
+                lastAssigned[t] = resolveLastRotationAnchorForType(t);
             }
 
             const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
@@ -5604,7 +5621,10 @@
                 const rawList = (groupData?.[type] || []).filter(Boolean);
                 if (rawList.length === 0) return Array(count).fill('');
 
-                const anchor = lastAssigned[type] || '';
+                const anchorRaw = lastAssigned[type] || '';
+                const anchor = anchorRaw
+                    ? resolvePersonInGroupRotationList(anchorRaw, groupNum, type)
+                    : '';
                 let startIdx = 0;
                 if (anchor) {
                     const lastIdx = rawList.findIndex((p) => normName(p) === normName(anchor));
