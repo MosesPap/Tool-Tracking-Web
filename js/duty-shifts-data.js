@@ -6116,7 +6116,8 @@
             afterPerson,
             groupNum,
             monthStartKey,
-            monthEndKey
+            monthEndKey,
+            skipNormSet
         ) {
             const list = (groupData?.[typeKey] || []).filter(Boolean);
             if (!list.length) return '';
@@ -6126,6 +6127,7 @@
                     .replace(/^,+\s*/, '')
                     .replace(/\s*,+$/, '')
                     .replace(/\s+/g, ' ');
+            const skip = skipNormSet instanceof Set ? skipNormSet : new Set();
             let startIdx = 0;
             if (afterPerson) {
                 const idx = list.findIndex((p) => norm(p) === norm(afterPerson));
@@ -6135,8 +6137,10 @@
             let checked = 0;
             while (checked < list.length) {
                 const candidate = list[cursor];
+                const candidateNorm = norm(candidate);
                 if (
                     candidate &&
+                    !skip.has(candidateNorm) &&
                     !isPersonUnavailableWholeMonth(
                         candidate,
                         groupNum,
@@ -6498,9 +6502,11 @@ ${content.innerHTML}
                 groupNum,
                 typeKey,
                 monthStartKey,
-                monthEndKey
+                monthEndKey,
+                consumedSubstitutes
             ) => {
                 if (!personName) return '<span class="text-muted">—</span>';
+                const personNorm = normName(personName);
                 const unavailable = isPersonUnavailableWholeMonth(
                     personName,
                     groupNum,
@@ -6509,7 +6515,9 @@ ${content.innerHTML}
                     monthEndKey,
                     groupData
                 );
-                if (!unavailable) {
+                const alreadyUsedAsSubstitute =
+                    consumedSubstitutes instanceof Set && consumedSubstitutes.has(personNorm);
+                if (!unavailable && !alreadyUsedAsSubstitute) {
                     return formatPersonCell(personName, orderNo);
                 }
                 const nextPerson = findNextAvailableInRotationList(
@@ -6518,8 +6526,12 @@ ${content.innerHTML}
                     personName,
                     groupNum,
                     monthStartKey,
-                    monthEndKey
+                    monthEndKey,
+                    consumedSubstitutes
                 );
+                if (nextPerson && consumedSubstitutes instanceof Set) {
+                    consumedSubstitutes.add(normName(nextPerson));
+                }
                 const nextOrder = nextPerson ? getOrderNo(groupData, typeKey, nextPerson) : null;
                 const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
                 if (!nextPerson) return struck;
@@ -6613,6 +6625,13 @@ ${content.innerHTML}
                     `;
                     monthSection.appendChild(groupBlock);
 
+                    const consumedBaselineSubstitutes = {
+                        normal: new Set(),
+                        semi: new Set(),
+                        weekend: new Set(),
+                        special: new Set()
+                    };
+
                     const tbody = groupBlock.querySelector('tbody');
                     for (let day = 1; day <= daysInMonth; day++) {
                         const date = new Date(year, month, day);
@@ -6654,7 +6673,7 @@ ${content.innerHTML}
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dayName}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;${change.style}">${formatPersonCell(finalPerson, finalOrder)}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey])}</td>
                         `;
                         tbody.appendChild(row);
                     }
