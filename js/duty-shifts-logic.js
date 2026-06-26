@@ -3699,7 +3699,9 @@
                 calculationSteps.currentStep = 1;
                 calculationSteps.cancelRestoreSnapshot = null;
                 calculationSteps.dutyProtectionSnapshot = null;
-                calculationSteps.normalPreviewSwapPassComplete = false;
+                delete calculationSteps.normalStep4PreviewProcessed;
+                delete calculationSteps.tempNormalAssignments;
+                delete calculationSteps.finalNormalAssignments;
                 
                 // Preserve manual modal / mutual swap / alternate-replacement for selected groups only
                 if (typeof captureManualDutyProtectionSnapshot === 'function') {
@@ -6477,6 +6479,92 @@
             }
             if (saveError) throw saveError;
         }
+
+        /**
+         * Τελικοποίηση καθημερινών μετά swaps/return-from-missing: Ν Πεμπτών (αν ισχύει) → finalNormalAssignments → popup.
+         */
+        function finalizeNormalAssignmentsAfterSwapPass(updatedAssignments, dayTypeLists, swappedPeople) {
+            let assignments = updatedAssignments;
+            let spacingSwaps = [];
+            if (
+                typeof isNightChangesMode === 'function' &&
+                isNightChangesMode() &&
+                typeof runThursdaySpacingChangesPass === 'function'
+            ) {
+                const spacingResult = runThursdaySpacingChangesPass(assignments, dayTypeLists);
+                if (spacingResult && spacingResult.assignments) {
+                    assignments = spacingResult.assignments;
+                    spacingSwaps = spacingResult.spacingSwaps || [];
+                    if (spacingSwaps.length > 0) {
+                        console.log('[STEP 4] Thursday spacing swaps:', spacingSwaps.length);
+                    }
+                }
+            }
+
+            calculationSteps.finalNormalAssignments = JSON.parse(JSON.stringify(assignments));
+
+            try {
+                if (!calculationSteps.tempAssignments || typeof calculationSteps.tempAssignments !== 'object') {
+                    calculationSteps.tempAssignments = {
+                        special: calculationSteps.tempAssignments?.special || calculationSteps.tempSpecialAssignments || {},
+                        weekend: calculationSteps.tempAssignments?.weekend || calculationSteps.tempWeekendAssignments || {},
+                        semi: calculationSteps.tempAssignments?.semi || calculationSteps.tempSemiAssignments || {},
+                        normal: calculationSteps.finalNormalAssignments,
+                        startDate: calculationSteps.startDate ? new Date(calculationSteps.startDate).toISOString() : null,
+                        endDate: calculationSteps.endDate ? new Date(calculationSteps.endDate).toISOString() : null
+                    };
+                } else {
+                    calculationSteps.tempAssignments.normal = calculationSteps.finalNormalAssignments;
+                }
+                if (typeof saveTempAssignmentsToFirestore === 'function') {
+                    saveTempAssignmentsToFirestore(calculationSteps.tempAssignments).catch(() => {});
+                }
+            } catch (_) {}
+
+            const previewSwaps = calculationSteps.previewNormalSwaps || [];
+            const allSwappedPeople = [...(swappedPeople || [])];
+            spacingSwaps.forEach((s) => {
+                allSwappedPeople.push({
+                    date: s.thursdayKey,
+                    groupNum: s.groupNum,
+                    skippedPerson: s.displacedFromThursday,
+                    swappedPerson: s.thursdayPerson,
+                    swapDate: s.partnerKey,
+                    thursdaySpacing: true
+                });
+            });
+            previewSwaps.forEach((previewSwap) => {
+                const exists = allSwappedPeople.some(
+                    (swap) =>
+                        swap.date === previewSwap.date &&
+                        swap.groupNum === previewSwap.groupNum &&
+                        swap.skippedPerson === previewSwap.skippedPerson
+                );
+                if (!exists) {
+                    allSwappedPeople.push(previewSwap);
+                }
+            });
+
+            console.log(
+                '[STEP 4] Swap logic completed. Swapped people:',
+                allSwappedPeople.length,
+                '(Preview:',
+                previewSwaps.length,
+                ', Actual:',
+                (swappedPeople || []).length,
+                ')'
+            );
+            refreshDutyReplacementReasons(
+                calculationSteps.finalNormalAssignments || assignments,
+                calculationSteps.tempNormalBaselineAssignments || {},
+                'normal'
+            );
+            if (typeof renderCalendar === 'function') renderCalendar();
+            console.log('[STEP 4] Calling showNormalSwapResults()');
+            showNormalSwapResults(allSwappedPeople, calculationSteps.finalNormalAssignments);
+            return assignments;
+        }
+
         async function runNormalSwapLogic() {
             console.log('[STEP 4] runNormalSwapLogic() called');
             try {
@@ -6829,6 +6917,15 @@
                     updatedAssignments[dateKey] = { ...groups };
                 }
 
+                // Preview (βήμα 4) έχει ήδη εφαρμόσει conflict swaps + return-from-missing — μην τα ξανατρέξεις.
+                if (calculationSteps.normalStep4PreviewProcessed) {
+                    console.log(
+                        '[STEP 4] Preview finalized — skipping duplicate return-from-missing and conflict swap passes'
+                    );
+                    finalizeNormalAssignmentsAfterSwapPass(updatedAssignments, dayTypeLists, []);
+                    return;
+                }
+
                 // Manual alternate defer guard:
                 // If D replaced A on date X, D must not be reintroduced by swap logic later in the same month-cycle.
                 const manualAlternateEntriesByGroup = {}; // groupNum -> [{ replacement, dateKey }]
@@ -6865,13 +6962,9 @@
                 // Get global normal rotation positions
                 const globalNormalRotationPosition = calculationSteps.lastNormalRotationPositions || {};
 
-                // renderStep4_Normal already applied swap + return-from-missing on tempNormalAssignments.
-                // Re-running here changes assignments vs the preview table (e.g. wrong person on calendar).
-                const previewSwapPassComplete = !!calculationSteps.normalPreviewSwapPassComplete;
-
                 // Apply "return-from-missing" reinsertion BEFORE swap logic, so swap logic can still resolve any new conflicts.
                 // This modifies ONLY updatedAssignments (final schedule), not baseline rotation persons.
-                if (!previewSwapPassComplete) try {
+                try {
                     if (calcStartDate && calcEndDate && Array.isArray(sortedNormal) && sortedNormal.length > 0) {
                         const calcStartKey = formatDateKey(calcStartDate);
                         const calcEndKey = formatDateKey(calcEndDate);
@@ -7389,7 +7482,7 @@
                 const normalSwapInvolvedPersons = new Set();
                 
                 // Run swap logic (check for consecutive conflicts)
-                if (!previewSwapPassComplete) sortedNormal.forEach((dateKey) => {
+                sortedNormal.forEach((dateKey) => {
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     
@@ -8070,84 +8163,7 @@
                     }
                 });
                 
-                // Νυχτερινές με αλλαγές: πέρασμα Ν Πεμπτών μετά τις υπάρχουσες ανταλλαγές
-                let spacingSwaps = [];
-                if (typeof isNightChangesMode === 'function' && isNightChangesMode() && typeof runThursdaySpacingChangesPass === 'function') {
-                    const spacingResult = runThursdaySpacingChangesPass(updatedAssignments, dayTypeLists);
-                    if (spacingResult && spacingResult.assignments) {
-                        updatedAssignments = spacingResult.assignments;
-                        spacingSwaps = spacingResult.spacingSwaps || [];
-                        if (spacingSwaps.length > 0) {
-                            console.log('[STEP 4] Thursday spacing swaps:', spacingSwaps.length);
-                        }
-                    }
-                }
-
-                // Store final assignments (after swap logic) for saving when OK is pressed.
-                // Use a deep copy so nothing can mutate the saved state before the user clicks OK.
-                calculationSteps.finalNormalAssignments = JSON.parse(JSON.stringify(updatedAssignments));
-
-                // CRITICAL for multi-month ranges:
-                // The "executeCalculation()" flow persists assignments from calculationSteps.tempAssignments (or Firestore tempAssignments),
-                // so ensure tempAssignments.normal reflects the FINAL normal schedule (including reinsertion + swaps).
-                try {
-                    if (!calculationSteps.tempAssignments || typeof calculationSteps.tempAssignments !== 'object') {
-                        calculationSteps.tempAssignments = {
-                            special: calculationSteps.tempAssignments?.special || calculationSteps.tempSpecialAssignments || {},
-                            weekend: calculationSteps.tempAssignments?.weekend || calculationSteps.tempWeekendAssignments || {},
-                            semi: calculationSteps.tempAssignments?.semi || calculationSteps.tempSemiAssignments || {},
-                            normal: calculationSteps.finalNormalAssignments,
-                            startDate: calculationSteps.startDate ? new Date(calculationSteps.startDate).toISOString() : null,
-                            endDate: calculationSteps.endDate ? new Date(calculationSteps.endDate).toISOString() : null
-                        };
-                    } else {
-                        calculationSteps.tempAssignments.normal = calculationSteps.finalNormalAssignments;
-                    }
-                    // Best-effort: persist updated temp assignments so range-save uses the correct final normal schedule.
-                    if (typeof saveTempAssignmentsToFirestore === 'function') {
-                        saveTempAssignmentsToFirestore(calculationSteps.tempAssignments).catch(() => {});
-                    }
-                } catch (_) {}
-                
-                // Merge preview swaps with actual swaps (remove duplicates)
-                const previewSwaps = calculationSteps.previewNormalSwaps || [];
-                const allSwappedPeople = [...swappedPeople];
-
-                spacingSwaps.forEach((s) => {
-                    allSwappedPeople.push({
-                        date: s.thursdayKey,
-                        groupNum: s.groupNum,
-                        skippedPerson: s.displacedFromThursday,
-                        swappedPerson: s.thursdayPerson,
-                        swapDate: s.partnerKey,
-                        thursdaySpacing: true
-                    });
-                });
-                
-                // Add preview swaps that aren't already in swappedPeople
-                previewSwaps.forEach(previewSwap => {
-                    const exists = allSwappedPeople.some(swap => 
-                        swap.date === previewSwap.date && 
-                        swap.groupNum === previewSwap.groupNum && 
-                        swap.skippedPerson === previewSwap.skippedPerson
-                    );
-                    if (!exists) {
-                        allSwappedPeople.push(previewSwap);
-                    }
-                });
-                
-                console.log('[STEP 4] Swap logic completed. Swapped people:', allSwappedPeople.length, '(Preview:', previewSwaps.length, ', Actual:', swappedPeople.length, ')');
-                refreshDutyReplacementReasons(
-                    calculationSteps.finalNormalAssignments || updatedAssignments,
-                    calculationSteps.tempNormalBaselineAssignments || {},
-                    'normal'
-                );
-                if (typeof renderCalendar === 'function') renderCalendar();
-
-                console.log('[STEP 4] Calling showNormalSwapResults()');
-                
-                // Show popup with results (will save when OK is pressed). Pass finalNormalAssignments so table and save use same frozen data.
-                showNormalSwapResults(allSwappedPeople, calculationSteps.finalNormalAssignments);
+                finalizeNormalAssignmentsAfterSwapPass(updatedAssignments, dayTypeLists, swappedPeople);
             } catch (error) {
                 console.error('[STEP 4] Error running normal swap logic:', error);
             }
@@ -8779,25 +8795,24 @@
                 const normalSource = (calculationSteps && calculationSteps.finalNormalAssignments)
                     ? calculationSteps.finalNormalAssignments
                     : (tempAssignments.normal || {});
-                const recalcSetForNormal =
+                const recalcSet =
                     typeof getCalculationRecalcGroupSet === 'function' ? getCalculationRecalcGroupSet() : null;
-                if (recalcSetForNormal && recalcSetForNormal.size > 0) {
-                    if (typeof mergeTempGroupAssignmentsIntoAssignmentStore === 'function') {
-                        mergeTempGroupAssignmentsIntoAssignmentStore(normalSource, normalDayAssignments);
-                    }
+                if (
+                    recalcSet &&
+                    typeof mergeTempGroupAssignmentsIntoAssignmentStore === 'function'
+                ) {
+                    mergeTempGroupAssignmentsIntoAssignmentStore(normalSource, normalDayAssignments);
                 } else {
                     for (const dateKey in normalSource) {
-                        const groups = normalSource[dateKey];
-                        if (!groups || typeof groups !== 'object') continue;
                         const parts = [];
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                            const person = groups[groupNum] || groups[String(groupNum)];
-                            if (person) parts.push(`${person} (Ομάδα ${groupNum})`);
+                            const person = normalSource[dateKey]?.[groupNum];
+                            if (person) {
+                                parts.push(`${person} (Ομάδα ${groupNum})`);
+                            }
                         }
                         if (parts.length > 0) {
                             normalDayAssignments[dateKey] = parts.join(', ');
-                        } else {
-                            delete normalDayAssignments[dateKey];
                         }
                     }
                 }
@@ -14288,6 +14303,7 @@
             
             // Store normal assignments and rotation positions for saving when Next is pressed
             calculationSteps.tempNormalAssignments = normalAssignments;
+            calculationSteps.normalStep4PreviewProcessed = true;
             calculationSteps.tempNormalBaselineDisplay = normalRotationPersons;
             calculationSteps.pureNormalRotationSlotAssigneeByDate = pureNormalRotationSlotAssigneeByDate;
             finalizeNormalPreview(normalAssignments, pureNormalRotationByDate, normalRotationPersons);
@@ -14344,7 +14360,6 @@
             
             // Store preview swaps so they can be shown in popup (will be merged with runNormalSwapLogic results)
             calculationSteps.previewNormalSwaps = previewSwappedPeople;
-            calculationSteps.normalPreviewSwapPassComplete = true;
             
             console.log('[PREVIEW DEBUG] Stored temp assignments in calculationSteps.tempAssignments');
             console.log('[PREVIEW DEBUG] Sample normal assignments:', Object.keys(normalAssignments).slice(0, 5).map(key => ({ date: key, groups: Object.keys(normalAssignments[key] || {}) })));
