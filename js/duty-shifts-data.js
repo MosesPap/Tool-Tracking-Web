@@ -6051,6 +6051,359 @@
             modal.show();
         }
 
+        function getBaselinePersonForGroup(dateKey, groupNum) {
+            try {
+                const date = new Date(dateKey + 'T00:00:00');
+                if (isNaN(date.getTime())) return '';
+                const dayType = getDayType(date);
+                let raw = null;
+                if (dayType === 'special-holiday') {
+                    raw = rotationBaselineSpecialAssignments?.[dateKey];
+                } else if (dayType === 'weekend-holiday') {
+                    raw = rotationBaselineWeekendAssignments?.[dateKey];
+                } else if (dayType === 'semi-normal-day') {
+                    raw = rotationBaselineSemiAssignments?.[dateKey];
+                } else {
+                    raw = rotationBaselineNormalAssignments?.[dateKey];
+                }
+                return getAssignedPersonNameForGroupFromAssignment(raw, groupNum);
+            } catch (_) {
+                return '';
+            }
+        }
+
+        const _assignmentsCompareSelectedMonths = new Set();
+
+        function updateAssignmentsComparePickerSummary() {
+            const el = document.getElementById('assignmentsCompareSelectionSummary');
+            if (!el) return;
+            const n = _assignmentsCompareSelectedMonths.size;
+            if (n === 0) {
+                el.innerHTML =
+                    '<i class="fas fa-info-circle me-1"></i>Δεν έχει επιλεγεί μήνας. Κάντε κλικ σε έναν ή περισσότερους μήνες.';
+                return;
+            }
+            const sorted = [..._assignmentsCompareSelectedMonths].sort();
+            const labels = sorted.map((mk) => {
+                const [y, m] = mk.split('-');
+                const d = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+                return getGreekMonthName(d) + ' ' + y;
+            });
+            el.innerHTML = `<i class="fas fa-check-circle me-1"></i><strong>${n}</strong> επιλεγμένοι μήνες: ${escapeHtml(labels.join(', '))}`;
+        }
+
+        function openAssignmentsCompareMonthPicker() {
+            const modalEl = document.getElementById('assignmentsCompareMonthPickerModal');
+            const yearEl = document.getElementById('assignmentsCompareMonthPickerYear');
+            const monthsEl = document.getElementById('assignmentsCompareMonthPickerMonths');
+            if (!modalEl || !yearEl || !monthsEl) return;
+
+            const greekMonthNames = (() => {
+                const names = [];
+                for (let m = 0; m < 12; m++) {
+                    names.push(new Date(2024, m, 1).toLocaleDateString('el-GR', { month: 'long' }));
+                }
+                return names;
+            })();
+
+            const base =
+                currentDate instanceof Date && !isNaN(currentDate.getTime()) ? currentDate : new Date();
+            let pickerYear = base.getFullYear();
+
+            const renderPickerMonths = () => {
+                yearEl.textContent = pickerYear;
+                monthsEl.innerHTML = '';
+                greekMonthNames.forEach((name, index) => {
+                    const monthKey = `${pickerYear}-${String(index + 1).padStart(2, '0')}`;
+                    const col = document.createElement('div');
+                    col.className = 'col-4';
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    const selected = _assignmentsCompareSelectedMonths.has(monthKey);
+                    btn.className = selected ? 'btn btn-primary w-100' : 'btn btn-outline-primary w-100';
+                    btn.textContent = name;
+                    btn.addEventListener('click', () => {
+                        if (_assignmentsCompareSelectedMonths.has(monthKey)) {
+                            _assignmentsCompareSelectedMonths.delete(monthKey);
+                            btn.className = 'btn btn-outline-primary w-100';
+                        } else {
+                            _assignmentsCompareSelectedMonths.add(monthKey);
+                            btn.className = 'btn btn-primary w-100';
+                        }
+                        updateAssignmentsComparePickerSummary();
+                    });
+                    col.appendChild(btn);
+                    monthsEl.appendChild(col);
+                });
+            };
+
+            const prevBtn = document.getElementById('assignmentsCompareMonthPickerPrevYear');
+            const nextBtn = document.getElementById('assignmentsCompareMonthPickerNextYear');
+            if (prevBtn) {
+                prevBtn.onclick = () => {
+                    pickerYear--;
+                    renderPickerMonths();
+                };
+            }
+            if (nextBtn) {
+                nextBtn.onclick = () => {
+                    pickerYear++;
+                    renderPickerMonths();
+                };
+            }
+
+            const selectAllBtn = document.getElementById('assignmentsCompareSelectAllYear');
+            const clearBtn = document.getElementById('assignmentsCompareClearSelection');
+            if (selectAllBtn) {
+                selectAllBtn.onclick = () => {
+                    for (let i = 0; i < 12; i++) {
+                        _assignmentsCompareSelectedMonths.add(
+                            `${pickerYear}-${String(i + 1).padStart(2, '0')}`
+                        );
+                    }
+                    renderPickerMonths();
+                    updateAssignmentsComparePickerSummary();
+                };
+            }
+            if (clearBtn) {
+                clearBtn.onclick = () => {
+                    _assignmentsCompareSelectedMonths.clear();
+                    renderPickerMonths();
+                    updateAssignmentsComparePickerSummary();
+                };
+            }
+
+            const showBtn = document.getElementById('assignmentsCompareShowBtn');
+            if (showBtn) {
+                showBtn.onclick = () => {
+                    if (_assignmentsCompareSelectedMonths.size === 0) {
+                        alert('Επιλέξτε τουλάχιστον έναν μήνα.');
+                        return;
+                    }
+                    const pickerModal = bootstrap.Modal.getInstance(modalEl);
+                    const monthKeys = [..._assignmentsCompareSelectedMonths].sort();
+                    const openCompare = () => showAssignmentsComparePreview(monthKeys);
+                    if (pickerModal) {
+                        modalEl.addEventListener('hidden.bs.modal', openCompare, { once: true });
+                        pickerModal.hide();
+                    } else {
+                        openCompare();
+                    }
+                };
+            }
+
+            updateAssignmentsComparePickerSummary();
+            renderPickerMonths();
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+
+        function showAssignmentsComparePreview(monthKeys) {
+            const previewContent = document.getElementById('assignmentsCompareContent');
+            const modalEl = document.getElementById('assignmentsCompareModal');
+            if (!previewContent || !modalEl) return;
+
+            const keys = (Array.isArray(monthKeys) ? monthKeys : [])
+                .filter((k) => /^\d{4}-\d{2}$/.test(String(k)))
+                .sort();
+            previewContent.innerHTML = '';
+
+            if (!keys.length) {
+                previewContent.innerHTML =
+                    '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>Δεν επιλέχθηκαν έγκυροι μήνες.</div>';
+                bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                return;
+            }
+
+            const normName = (s) =>
+                String(s || '')
+                    .trim()
+                    .replace(/^,+\s*/, '')
+                    .replace(/\s*,+$/, '')
+                    .replace(/\s+/g, ' ');
+            const toTypeKey = (dayType) =>
+                dayType === 'special-holiday'
+                    ? 'special'
+                    : dayType === 'weekend-holiday'
+                      ? 'weekend'
+                      : dayType === 'semi-normal-day'
+                        ? 'semi'
+                        : 'normal';
+            const hashColor = (seed) => {
+                let h = 0;
+                const str = String(seed || '');
+                for (let i = 0; i < str.length; i++) h = (h << 5) - h + str.charCodeAt(i);
+                const palette = [
+                    '#8e44ad',
+                    '#d35400',
+                    '#2980b9',
+                    '#16a085',
+                    '#c0392b',
+                    '#2c3e50',
+                    '#7f8c8d',
+                    '#27ae60'
+                ];
+                return palette[Math.abs(h) % palette.length];
+            };
+            const getOrderNo = (groupData, type, personName) => {
+                const list = (groupData?.[type] || []).map(normName);
+                const idx = list.findIndex((n) => n === normName(personName));
+                return idx >= 0 ? idx + 1 : null;
+            };
+            const getReasonForAssigned = (dateKey, groupNum, personName) => {
+                const gmap = assignmentReasons?.[dateKey]?.[groupNum];
+                if (!gmap || typeof gmap !== 'object') return null;
+                const target = normName(personName);
+                for (const p of Object.keys(gmap)) {
+                    if (normName(p) === target) return gmap[p];
+                }
+                return null;
+            };
+            const formatPersonCell = (personName, orderNo) =>
+                personName
+                    ? `<span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}`
+                    : '<span class="text-muted">—</span>';
+            const buildChangeMarker = (reasonObj, pairKey, getSwapPairLabelNo) => {
+                if (!reasonObj) return { text: '', color: null, style: '' };
+                const swapNo = reasonObj.type === 'swap' ? getSwapPairLabelNo(pairKey) : null;
+                const text =
+                    reasonObj.type === 'swap'
+                        ? `Ανταλλαγή #${swapNo || '-'}`
+                        : reasonObj.type === 'skip'
+                          ? 'Αντικατάσταση'
+                          : reasonObj.type === 'shift'
+                            ? 'Μετακίνηση'
+                            : 'Χειροκίνητη αλλαγή';
+                const color = hashColor(pairKey);
+                const style =
+                    reasonObj.type === 'swap'
+                        ? `border-left: 4px solid ${color}; border-right: 4px solid ${color};`
+                        : '';
+                return { text, color: reasonObj.type === 'swap' ? color : '#6c757d', style };
+            };
+
+            let hasAnyGroup = false;
+
+            for (const monthKey of keys) {
+                const [yearStr, monthStr] = monthKey.split('-');
+                const year = parseInt(yearStr, 10);
+                const month = parseInt(monthStr, 10) - 1;
+                if (!Number.isFinite(year) || !Number.isFinite(month) || month < 0 || month > 11) continue;
+
+                const monthDate = new Date(year, month, 1);
+                const monthName = getGreekMonthName(monthDate);
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+                const swapPairLabelByKey = new Map();
+                let nextSwapPairLabelNo = 1;
+                const getSwapPairLabelNo = (pairKey) => {
+                    const k = String(pairKey || '').trim();
+                    if (!k) return null;
+                    if (!swapPairLabelByKey.has(k)) {
+                        swapPairLabelByKey.set(k, nextSwapPairLabelNo++);
+                    }
+                    return swapPairLabelByKey.get(k);
+                };
+
+                const monthSection = document.createElement('div');
+                monthSection.className = 'mb-4 pb-3 border-bottom';
+                monthSection.innerHTML = `<h4 class="mb-3 text-primary"><i class="fas fa-calendar-alt me-2"></i>${escapeHtml(monthName)} ${year}</h4>`;
+                previewContent.appendChild(monthSection);
+
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const groupName = getGroupName(groupNum);
+                    const groupData = groups[groupNum];
+                    if (
+                        !groupData ||
+                        (!groupData.special?.length &&
+                            !groupData.weekend?.length &&
+                            !groupData.semi?.length &&
+                            !groupData.normal?.length)
+                    ) {
+                        continue;
+                    }
+                    hasAnyGroup = true;
+
+                    const groupBlock = document.createElement('div');
+                    groupBlock.className = 'mb-4 p-3 border rounded bg-white';
+                    groupBlock.innerHTML = `
+                        <h5 class="mb-3" style="color:#428BCA;"><i class="fas fa-users me-2"></i>${escapeHtml(groupName)}</h5>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm mb-0" style="font-size:12px;">
+                                <thead>
+                                    <tr style="background-color:#428BCA;color:white;">
+                                        <th rowspan="2" style="width:11%;text-align:center;vertical-align:middle;">ΗΜΕΡ.</th>
+                                        <th rowspan="2" style="width:10%;text-align:center;vertical-align:middle;">ΗΜΕΡΑ</th>
+                                        <th colspan="2" style="text-align:center;">Τελικές αναθέσεις (μετά αλλαγές)</th>
+                                        <th style="width:22%;text-align:center;vertical-align:middle;background:#5a6268;">Βασική σειρά</th>
+                                    </tr>
+                                    <tr style="background-color:#5a9fd4;color:white;">
+                                        <th style="width:32%;text-align:center;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
+                                        <th style="width:15%;text-align:center;">ΑΛΛΑΓΗ</th>
+                                        <th style="text-align:center;background:#6c757d;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="assignmentsCompare_${monthKey.replace(/-/g, '')}_g${groupNum}"></tbody>
+                            </table>
+                        </div>
+                    `;
+                    monthSection.appendChild(groupBlock);
+
+                    const tbody = groupBlock.querySelector('tbody');
+                    for (let day = 1; day <= daysInMonth; day++) {
+                        const date = new Date(year, month, day);
+                        const dayKey = formatDateKey(date);
+                        const dayType = getDayType(date);
+                        const dayName = getGreekDayNameUppercase(date);
+                        const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
+                        const rgbColor = `rgb(${getDayTypeColor(dayType).join(', ')})`;
+
+                        const finalPerson =
+                            getAssignedPersonNameForGroupFromAssignment(
+                                (typeof getAssignmentForDate === 'function'
+                                    ? getAssignmentForDate(dayKey)
+                                    : null) ?? dutyAssignments?.[dayKey],
+                                groupNum
+                            );
+                        const baselinePerson = getBaselinePersonForGroup(dayKey, groupNum);
+                        const typeKey = toTypeKey(dayType);
+                        const finalOrder = finalPerson ? getOrderNo(groupData, typeKey, finalPerson) : null;
+                        const baselineOrder = baselinePerson
+                            ? getOrderNo(groupData, typeKey, baselinePerson)
+                            : null;
+                        const reasonObj = finalPerson
+                            ? getReasonForAssigned(dayKey, groupNum, finalPerson)
+                            : null;
+                        const pairKey =
+                            reasonObj?.swapPairId ||
+                            `${reasonObj?.type || ''}:${reasonObj?.swappedWith || ''}:${dayKey}:${groupNum}`;
+                        const change = buildChangeMarker(reasonObj, pairKey, getSwapPairLabelNo);
+                        const differs =
+                            normName(finalPerson) !== normName(baselinePerson) &&
+                            (finalPerson || baselinePerson);
+                        const diffClass = differs ? ' compare-diff-row' : '';
+
+                        const row = document.createElement('tr');
+                        row.className = diffClass;
+                        row.innerHTML = `
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dateStr}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dayName}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;${change.style}">${formatPersonCell(finalPerson, finalOrder)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatPersonCell(baselinePerson, baselineOrder)}</td>
+                        `;
+                        tbody.appendChild(row);
+                    }
+                }
+            }
+
+            if (!hasAnyGroup) {
+                previewContent.innerHTML =
+                    '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>Δεν υπάρχουν ομάδες με δεδομένα για τους επιλεγμένους μήνες.</div>';
+            }
+
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+
         // Generate Excel files for current month for all groups
         async function generateExcelFilesForCurrentMonth(skipPreview = false) {
             try {
