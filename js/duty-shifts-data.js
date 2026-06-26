@@ -5573,8 +5573,25 @@
                     let anchor = null;
                     const sortedDays = getSortedNormalCalendarDateKeysInMonth(year, month);
                     const store = buildNormalRotationContinuityStore();
+                    const rawList = (groupData?.normal || []).filter(Boolean);
                     const isNightGroup =
                         typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum);
+
+                    const listIndexOf = (personName) => {
+                        if (!personName || rawList.length === 0) return -1;
+                        const resolved = resolvePersonInGroupRotationList(personName, groupNum, 'normal');
+                        return rawList.findIndex((p) => normName(p) === normName(resolved));
+                    };
+
+                    const trySetAnchor = (candidate, { allowBackward = false } = {}) => {
+                        if (!candidate) return;
+                        const resolved = resolvePersonInGroupRotationList(candidate, groupNum, 'normal');
+                        const newIdx = listIndexOf(resolved);
+                        const curIdx = anchor ? listIndexOf(anchor) : -1;
+                        if (!anchor || allowBackward || newIdx < 0 || curIdx < 0 || newIdx >= curIdx) {
+                            anchor = resolved;
+                        }
+                    };
 
                     for (const dk of sortedDays) {
                         const baselineRaw = rotationBaselineNormalAssignments?.[dk];
@@ -5599,31 +5616,38 @@
                             reason?.type === 'swap' &&
                             reason.meta?.thursdaySpacing
                         ) {
+                            if (dk === reason.meta.partnerDateKey) {
+                                continue;
+                            }
                             if (dk === reason.meta.thursdayDateKey && finalAssigned) {
-                                anchor = finalAssigned;
-                            } else if (typeof getPersonForRotationContinuity === 'function') {
-                                const continuity = getPersonForRotationContinuity(
-                                    dk,
-                                    groupNum,
-                                    finalAssigned || baselinePerson,
-                                    store
-                                );
-                                if (continuity) anchor = continuity;
+                                trySetAnchor(finalAssigned, false);
                             }
                             continue;
                         }
 
-                        const assigned = finalAssigned || baselinePerson;
-                        if (typeof getPersonForRotationContinuity === 'function') {
-                            const continuity = getPersonForRotationContinuity(dk, groupNum, assigned, store);
-                            if (continuity) anchor = continuity;
-                        } else if (baselinePerson) {
-                            anchor = baselinePerson;
+                        if (reason?.type === 'skip') {
+                            const assigned = finalAssigned || baselinePerson;
+                            let continuity = assigned;
+                            if (typeof getPersonForRotationContinuity === 'function') {
+                                continuity =
+                                    getPersonForRotationContinuity(dk, groupNum, assigned, store) || assigned;
+                            }
+                            trySetAnchor(continuity, false);
+                            continue;
                         }
+
+                        const assigned = finalAssigned || baselinePerson;
+                        let continuity = assigned;
+                        if (typeof getPersonForRotationContinuity === 'function') {
+                            continuity = getPersonForRotationContinuity(dk, groupNum, assigned, store) || assigned;
+                        }
+                        trySetAnchor(continuity, true);
                     }
 
                     if (!anchor) {
                         anchor =
+                            rotationBaselineLastByType?.normal?.[exportMonthKey]?.[groupNum] ||
+                            rotationBaselineLastByType?.normal?.[exportMonthKey]?.[String(groupNum)] ||
                             getLastBaselineRotationPersonForDate('normal', firstDayOfNextMonth, groupNum) ||
                             (typeof getRotationSeedPersonForMonthStart === 'function'
                                 ? getRotationSeedPersonForMonthStart('normal', firstDayOfNextMonth, groupNum)
@@ -5716,7 +5740,14 @@
                     : '';
                 let startIdx = 0;
                 if (anchor) {
-                    const lastIdx = rawList.findIndex((p) => normName(p) === normName(anchor));
+                    let lastIdx = rawList.findIndex((p) => normName(p) === normName(anchor));
+                    if (lastIdx < 0) {
+                        const anchorNorm = normName(anchor);
+                        lastIdx = rawList.findIndex((p) => {
+                            const pn = normName(p);
+                            return pn === anchorNorm || pn.includes(anchorNorm) || anchorNorm.includes(pn);
+                        });
+                    }
                     if (lastIdx >= 0) startIdx = (lastIdx + 1) % rawList.length;
                 }
 
