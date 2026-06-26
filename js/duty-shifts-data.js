@@ -2019,7 +2019,7 @@
                     else delete existingMap[g];
                 }
                 const str = groupMapToAssignmentString(existingMap);
-                if (str) targetStore[dateKey] = existingMap;
+                if (str) targetStore[dateKey] = str;
                 else delete targetStore[dateKey];
             }
         }

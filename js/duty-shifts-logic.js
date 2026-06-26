@@ -3699,6 +3699,7 @@
                 calculationSteps.currentStep = 1;
                 calculationSteps.cancelRestoreSnapshot = null;
                 calculationSteps.dutyProtectionSnapshot = null;
+                calculationSteps.normalPreviewSwapPassComplete = false;
                 
                 // Preserve manual modal / mutual swap / alternate-replacement for selected groups only
                 if (typeof captureManualDutyProtectionSnapshot === 'function') {
@@ -6864,9 +6865,13 @@
                 // Get global normal rotation positions
                 const globalNormalRotationPosition = calculationSteps.lastNormalRotationPositions || {};
 
+                // renderStep4_Normal already applied swap + return-from-missing on tempNormalAssignments.
+                // Re-running here changes assignments vs the preview table (e.g. wrong person on calendar).
+                const previewSwapPassComplete = !!calculationSteps.normalPreviewSwapPassComplete;
+
                 // Apply "return-from-missing" reinsertion BEFORE swap logic, so swap logic can still resolve any new conflicts.
                 // This modifies ONLY updatedAssignments (final schedule), not baseline rotation persons.
-                try {
+                if (!previewSwapPassComplete) try {
                     if (calcStartDate && calcEndDate && Array.isArray(sortedNormal) && sortedNormal.length > 0) {
                         const calcStartKey = formatDateKey(calcStartDate);
                         const calcEndKey = formatDateKey(calcEndDate);
@@ -7384,7 +7389,7 @@
                 const normalSwapInvolvedPersons = new Set();
                 
                 // Run swap logic (check for consecutive conflicts)
-                sortedNormal.forEach((dateKey) => {
+                if (!previewSwapPassComplete) sortedNormal.forEach((dateKey) => {
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     
@@ -8774,19 +8779,25 @@
                 const normalSource = (calculationSteps && calculationSteps.finalNormalAssignments)
                     ? calculationSteps.finalNormalAssignments
                     : (tempAssignments.normal || {});
-                for (const dateKey in normalSource) {
-                    for (const groupNum in normalSource[dateKey] || {}) {
-                        const person = normalSource[dateKey]?.[groupNum];
-                        if (person) {
-                            if (!normalDayAssignments[dateKey]) {
-                                normalDayAssignments[dateKey] = '';
-                            }
-                            const assignment = `${person} (Ομάδα ${groupNum})`;
-                            if (!normalDayAssignments[dateKey].includes(assignment)) {
-                                normalDayAssignments[dateKey] = normalDayAssignments[dateKey]
-                                    ? `${normalDayAssignments[dateKey]}, ${assignment}`
-                                    : assignment;
-                            }
+                const recalcSetForNormal =
+                    typeof getCalculationRecalcGroupSet === 'function' ? getCalculationRecalcGroupSet() : null;
+                if (recalcSetForNormal && recalcSetForNormal.size > 0) {
+                    if (typeof mergeTempGroupAssignmentsIntoAssignmentStore === 'function') {
+                        mergeTempGroupAssignmentsIntoAssignmentStore(normalSource, normalDayAssignments);
+                    }
+                } else {
+                    for (const dateKey in normalSource) {
+                        const groups = normalSource[dateKey];
+                        if (!groups || typeof groups !== 'object') continue;
+                        const parts = [];
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            const person = groups[groupNum] || groups[String(groupNum)];
+                            if (person) parts.push(`${person} (Ομάδα ${groupNum})`);
+                        }
+                        if (parts.length > 0) {
+                            normalDayAssignments[dateKey] = parts.join(', ');
+                        } else {
+                            delete normalDayAssignments[dateKey];
                         }
                     }
                 }
@@ -14333,6 +14344,7 @@
             
             // Store preview swaps so they can be shown in popup (will be merged with runNormalSwapLogic results)
             calculationSteps.previewNormalSwaps = previewSwappedPeople;
+            calculationSteps.normalPreviewSwapPassComplete = true;
             
             console.log('[PREVIEW DEBUG] Stored temp assignments in calculationSteps.tempAssignments');
             console.log('[PREVIEW DEBUG] Sample normal assignments:', Object.keys(normalAssignments).slice(0, 5).map(key => ({ date: key, groups: Object.keys(normalAssignments[key] || {}) })));
