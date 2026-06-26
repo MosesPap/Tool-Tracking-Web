@@ -1479,6 +1479,111 @@
             return true;
         }
 
+        /** Partner weekday of an N-Thursdays spacing swap — does not advance rotation for Excel alternates. */
+        function isExcelAlternateThursdaySpacingPartnerDay(reason, dateKey) {
+            return !!(
+                reason?.type === 'swap' &&
+                reason.meta?.thursdaySpacing &&
+                reason.meta.partnerDateKey &&
+                dateKey === reason.meta.partnerDateKey
+            );
+        }
+
+        function getAssignmentReasonForGroupOnDate(dateKey, groupNum, preferredPerson) {
+            if (preferredPerson && typeof getAssignmentReason === 'function') {
+                const direct = getAssignmentReason(dateKey, groupNum, preferredPerson);
+                if (direct) return direct;
+            }
+            const root = assignmentReasons?.[dateKey];
+            if (!root || typeof root !== 'object') return null;
+            const gmap = root[groupNum] || root[String(groupNum)];
+            if (!gmap || typeof gmap !== 'object') return null;
+            for (const pn in gmap) {
+                const r = gmap[pn];
+                if (r) return r;
+            }
+            return null;
+        }
+
+        /**
+         * Ομάδες 3/4 καθημερινές: baseline περιστροφή χρονολογικά· αγνοεί ανταλλαγές συγκρούσεων και μέρες-ζεύγη Ν Πεμπτών.
+         */
+        function resolveNormalExcelAnchorForNightGroup(year, month, groupNum) {
+            let anchor = null;
+            const sortedDays = getSortedNormalCalendarDateKeysInMonth(year, month);
+            const store = buildNormalRotationContinuityStore();
+            const firstDayOfNextMonth = new Date(year, month + 1, 1);
+
+            for (const dk of sortedDays) {
+                const baselineRaw =
+                    typeof getRotationBaselineAssignmentForDate === 'function'
+                        ? getRotationBaselineAssignmentForDate(dk)
+                        : rotationBaselineNormalAssignments?.[dk];
+                const baselinePerson = baselineRaw
+                    ? parseAssignedPersonForGroupFromAssignment(baselineRaw, groupNum)
+                    : null;
+                const finalAssigned = getPersonOnDateForNormalRotationContinuityLookup(dk, groupNum);
+                if (!baselinePerson && !finalAssigned) continue;
+
+                const reason = getAssignmentReasonForGroupOnDate(
+                    dk,
+                    groupNum,
+                    finalAssigned || baselinePerson
+                );
+
+                if (isExcelAlternateConsecutiveSwapReason(reason)) {
+                    continue;
+                }
+
+                if (isExcelAlternateThursdaySpacingPartnerDay(reason, dk)) {
+                    continue;
+                }
+
+                if (
+                    reason?.type === 'swap' &&
+                    reason.meta?.thursdaySpacing &&
+                    dk === reason.meta.thursdayDateKey
+                ) {
+                    const thuPerson = finalAssigned || baselinePerson;
+                    if (thuPerson) anchor = thuPerson;
+                    continue;
+                }
+
+                if (reason?.type === 'swap') {
+                    continue;
+                }
+
+                if (reason?.type === 'shift') {
+                    continue;
+                }
+
+                if (reason?.type === 'skip' && finalAssigned && typeof getPersonForRotationContinuity === 'function') {
+                    const continuity = getPersonForRotationContinuity(dk, groupNum, finalAssigned, store);
+                    if (continuity) anchor = continuity;
+                } else if (baselinePerson) {
+                    anchor = baselinePerson;
+                } else if (finalAssigned) {
+                    anchor = finalAssigned;
+                }
+            }
+
+            if (!anchor) {
+                anchor =
+                    getLastBaselineRotationPersonForDate('normal', firstDayOfNextMonth, groupNum) ||
+                    (typeof getRotationSeedPersonForMonthStart === 'function'
+                        ? getRotationSeedPersonForMonthStart('normal', firstDayOfNextMonth, groupNum)
+                        : null) ||
+                    (typeof getLastAssignmentContinuityPersonForPreviousMonth === 'function'
+                        ? getLastAssignmentContinuityPersonForPreviousMonth('normal', firstDayOfNextMonth, groupNum)
+                        : null) ||
+                    getLastRotationPersonForDate('normal', firstDayOfNextMonth, groupNum);
+            }
+
+            return anchor
+                ? normRotPersonName(resolvePersonInGroupRotationList(anchor, groupNum, 'normal'))
+                : '';
+        }
+
         /**
          * Rotation cursor (index of next assignee) at the start of dateInMonth's calendar month.
          * Simulates previous month baseline slots; manual alternate advances from baseline+1, not replacement.
@@ -5570,28 +5675,15 @@
              */
             const resolveLastRotationAnchorForType = (type) => {
                 if (type === 'normal') {
+                    const isNightGroup =
+                        typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum);
+                    if (isNightGroup) {
+                        return resolveNormalExcelAnchorForNightGroup(year, month, groupNum);
+                    }
+
                     let anchor = null;
                     const sortedDays = getSortedNormalCalendarDateKeysInMonth(year, month);
                     const store = buildNormalRotationContinuityStore();
-                    const rawList = (groupData?.normal || []).filter(Boolean);
-                    const isNightGroup =
-                        typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum);
-
-                    const listIndexOf = (personName) => {
-                        if (!personName || rawList.length === 0) return -1;
-                        const resolved = resolvePersonInGroupRotationList(personName, groupNum, 'normal');
-                        return rawList.findIndex((p) => normName(p) === normName(resolved));
-                    };
-
-                    const trySetAnchor = (candidate, { allowBackward = false } = {}) => {
-                        if (!candidate) return;
-                        const resolved = resolvePersonInGroupRotationList(candidate, groupNum, 'normal');
-                        const newIdx = listIndexOf(resolved);
-                        const curIdx = anchor ? listIndexOf(anchor) : -1;
-                        if (!anchor || allowBackward || newIdx < 0 || curIdx < 0 || newIdx >= curIdx) {
-                            anchor = resolved;
-                        }
-                    };
 
                     for (const dk of sortedDays) {
                         const baselineRaw = rotationBaselineNormalAssignments?.[dk];
@@ -5601,53 +5693,27 @@
                         const finalAssigned = getPersonOnDateForNormalRotationContinuityLookup(dk, groupNum);
                         if (!baselinePerson && !finalAssigned) continue;
 
-                        const personForReason = finalAssigned || baselinePerson;
-                        const reason =
-                            personForReason && typeof getAssignmentReason === 'function'
-                                ? getAssignmentReason(dk, groupNum, personForReason)
-                                : null;
+                        const reason = getAssignmentReasonForGroupOnDate(
+                            dk,
+                            groupNum,
+                            finalAssigned || baselinePerson
+                        );
 
                         if (isExcelAlternateConsecutiveSwapReason(reason)) {
                             continue;
                         }
 
-                        if (
-                            isNightGroup &&
-                            reason?.type === 'swap' &&
-                            reason.meta?.thursdaySpacing
-                        ) {
-                            if (dk === reason.meta.partnerDateKey) {
-                                continue;
-                            }
-                            if (dk === reason.meta.thursdayDateKey && finalAssigned) {
-                                trySetAnchor(finalAssigned, false);
-                            }
-                            continue;
-                        }
-
-                        if (reason?.type === 'skip') {
-                            const assigned = finalAssigned || baselinePerson;
-                            let continuity = assigned;
-                            if (typeof getPersonForRotationContinuity === 'function') {
-                                continuity =
-                                    getPersonForRotationContinuity(dk, groupNum, assigned, store) || assigned;
-                            }
-                            trySetAnchor(continuity, false);
-                            continue;
-                        }
-
                         const assigned = finalAssigned || baselinePerson;
-                        let continuity = assigned;
                         if (typeof getPersonForRotationContinuity === 'function') {
-                            continuity = getPersonForRotationContinuity(dk, groupNum, assigned, store) || assigned;
+                            const continuity = getPersonForRotationContinuity(dk, groupNum, assigned, store);
+                            if (continuity) anchor = continuity;
+                        } else if (baselinePerson) {
+                            anchor = baselinePerson;
                         }
-                        trySetAnchor(continuity, true);
                     }
 
                     if (!anchor) {
                         anchor =
-                            rotationBaselineLastByType?.normal?.[exportMonthKey]?.[groupNum] ||
-                            rotationBaselineLastByType?.normal?.[exportMonthKey]?.[String(groupNum)] ||
                             getLastBaselineRotationPersonForDate('normal', firstDayOfNextMonth, groupNum) ||
                             (typeof getRotationSeedPersonForMonthStart === 'function'
                                 ? getRotationSeedPersonForMonthStart('normal', firstDayOfNextMonth, groupNum)
@@ -5740,14 +5806,7 @@
                     : '';
                 let startIdx = 0;
                 if (anchor) {
-                    let lastIdx = rawList.findIndex((p) => normName(p) === normName(anchor));
-                    if (lastIdx < 0) {
-                        const anchorNorm = normName(anchor);
-                        lastIdx = rawList.findIndex((p) => {
-                            const pn = normName(p);
-                            return pn === anchorNorm || pn.includes(anchorNorm) || anchorNorm.includes(pn);
-                        });
-                    }
+                    const lastIdx = rawList.findIndex((p) => normName(p) === normName(anchor));
                     if (lastIdx >= 0) startIdx = (lastIdx + 1) % rawList.length;
                 }
 
