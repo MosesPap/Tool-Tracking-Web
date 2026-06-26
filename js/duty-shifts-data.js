@@ -6073,6 +6073,86 @@
         }
 
         const _assignmentsCompareSelectedMonths = new Set();
+        const _assignmentsCompareSelectedGroups = new Set([1, 2, 3, 4]);
+        let _assignmentsComparePendingMonthKeys = [];
+
+        function isPersonUnavailableWholeMonth(personName, groupNum, dutyType, monthStartKey, monthEndKey, groupData) {
+            if (!personName || !monthStartKey || !monthEndKey) return false;
+            if (typeof isPersonDisabledForDuty === 'function') {
+                let disabledEveryDay = true;
+                const d = new Date(monthStartKey + 'T00:00:00');
+                const end = new Date(monthEndKey + 'T00:00:00');
+                if (!isNaN(d.getTime()) && !isNaN(end.getTime())) {
+                    while (d <= end) {
+                        const dk = formatDateKey(d);
+                        if (!isPersonDisabledForDuty(personName, groupNum, dutyType, dk)) {
+                            disabledEveryDay = false;
+                            break;
+                        }
+                        d.setDate(d.getDate() + 1);
+                    }
+                    if (disabledEveryDay) return true;
+                }
+            } else {
+                const dp = groupData?.disabledPersons?.[personName];
+                if (dp && (dp.all || dp[dutyType])) return true;
+            }
+            const periods = groupData?.missingPeriods?.[personName];
+            if (Array.isArray(periods)) {
+                for (const p of periods) {
+                    const pStartKey = inputValueToDateKey(p?.start);
+                    const pEndKey = inputValueToDateKey(p?.end);
+                    if (pStartKey && pEndKey && pStartKey <= monthStartKey && pEndKey >= monthEndKey) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function findNextAvailableInRotationList(
+            groupData,
+            typeKey,
+            afterPerson,
+            groupNum,
+            monthStartKey,
+            monthEndKey
+        ) {
+            const list = (groupData?.[typeKey] || []).filter(Boolean);
+            if (!list.length) return '';
+            const norm = (s) =>
+                String(s || '')
+                    .trim()
+                    .replace(/^,+\s*/, '')
+                    .replace(/\s*,+$/, '')
+                    .replace(/\s+/g, ' ');
+            let startIdx = 0;
+            if (afterPerson) {
+                const idx = list.findIndex((p) => norm(p) === norm(afterPerson));
+                if (idx >= 0) startIdx = (idx + 1) % list.length;
+            }
+            let cursor = startIdx;
+            let checked = 0;
+            while (checked < list.length) {
+                const candidate = list[cursor];
+                if (
+                    candidate &&
+                    !isPersonUnavailableWholeMonth(
+                        candidate,
+                        groupNum,
+                        typeKey,
+                        monthStartKey,
+                        monthEndKey,
+                        groupData
+                    )
+                ) {
+                    return candidate;
+                }
+                cursor = (cursor + 1) % list.length;
+                checked++;
+            }
+            return '';
+        }
 
         function updateAssignmentsComparePickerSummary() {
             const el = document.getElementById('assignmentsCompareSelectionSummary');
@@ -6180,14 +6260,14 @@
                         alert('Επιλέξτε τουλάχιστον έναν μήνα.');
                         return;
                     }
+                    _assignmentsComparePendingMonthKeys = [..._assignmentsCompareSelectedMonths].sort();
                     const pickerModal = bootstrap.Modal.getInstance(modalEl);
-                    const monthKeys = [..._assignmentsCompareSelectedMonths].sort();
-                    const openCompare = () => showAssignmentsComparePreview(monthKeys);
+                    const openGroups = () => openAssignmentsCompareGroupPicker(_assignmentsComparePendingMonthKeys);
                     if (pickerModal) {
-                        modalEl.addEventListener('hidden.bs.modal', openCompare, { once: true });
+                        modalEl.addEventListener('hidden.bs.modal', openGroups, { once: true });
                         pickerModal.hide();
                     } else {
-                        openCompare();
+                        openGroups();
                     }
                 };
             }
@@ -6197,7 +6277,153 @@
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
         }
 
-        function showAssignmentsComparePreview(monthKeys) {
+        function renderAssignmentsCompareGroupChecks() {
+            const container = document.getElementById('assignmentsCompareGroupPickerChecks');
+            if (!container) return;
+            container.innerHTML = '';
+            for (let g = 1; g <= 4; g++) {
+                const id = `assignmentsCompareGroupCb${g}`;
+                const label =
+                    typeof getGroupName === 'function' ? getGroupName(g) : `Ομάδα ${g}`;
+                const checked = _assignmentsCompareSelectedGroups.has(g);
+                const wrap = document.createElement('div');
+                wrap.className = 'form-check';
+                wrap.innerHTML = `
+                    <input class="form-check-input" type="checkbox" id="${id}" ${checked ? 'checked' : ''}>
+                    <label class="form-check-label" for="${id}">${escapeHtml(label)}</label>
+                `;
+                const cb = wrap.querySelector('input');
+                cb.addEventListener('change', () => {
+                    if (cb.checked) _assignmentsCompareSelectedGroups.add(g);
+                    else _assignmentsCompareSelectedGroups.delete(g);
+                });
+                container.appendChild(wrap);
+            }
+        }
+
+        function openAssignmentsCompareGroupPicker(monthKeys) {
+            const modalEl = document.getElementById('assignmentsCompareGroupPickerModal');
+            if (!modalEl) return;
+            _assignmentsComparePendingMonthKeys = (monthKeys || []).filter((k) =>
+                /^\d{4}-\d{2}$/.test(String(k))
+            );
+            const monthsLabel = document.getElementById('assignmentsCompareGroupPickerMonthsLabel');
+            if (monthsLabel) {
+                const labels = _assignmentsComparePendingMonthKeys.map((mk) => {
+                    const [y, m] = mk.split('-');
+                    const d = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+                    return getGreekMonthName(d) + ' ' + y;
+                });
+                monthsLabel.textContent =
+                    labels.length > 0
+                        ? 'Επιλεγμένοι μήνες: ' + labels.join(', ')
+                        : 'Δεν έχουν επιλεγεί μήνες.';
+            }
+            if (_assignmentsCompareSelectedGroups.size === 0) {
+                [1, 2, 3, 4].forEach((g) => _assignmentsCompareSelectedGroups.add(g));
+            }
+            renderAssignmentsCompareGroupChecks();
+
+            const allBtn = document.getElementById('assignmentsCompareSelectAllGroups');
+            const clearBtn = document.getElementById('assignmentsCompareClearGroups');
+            if (allBtn) {
+                allBtn.onclick = () => {
+                    [1, 2, 3, 4].forEach((g) => _assignmentsCompareSelectedGroups.add(g));
+                    renderAssignmentsCompareGroupChecks();
+                };
+            }
+            if (clearBtn) {
+                clearBtn.onclick = () => {
+                    _assignmentsCompareSelectedGroups.clear();
+                    renderAssignmentsCompareGroupChecks();
+                };
+            }
+
+            const backBtn = document.getElementById('assignmentsCompareBackToMonthsBtn');
+            if (backBtn) {
+                backBtn.onclick = () => {
+                    const groupModal = bootstrap.Modal.getInstance(modalEl);
+                    const reopenMonths = () => openAssignmentsCompareMonthPicker();
+                    if (groupModal) {
+                        modalEl.addEventListener('hidden.bs.modal', reopenMonths, { once: true });
+                        groupModal.hide();
+                    } else {
+                        reopenMonths();
+                    }
+                };
+            }
+
+            const previewBtn = document.getElementById('assignmentsCompareShowPreviewBtn');
+            if (previewBtn) {
+                previewBtn.onclick = () => {
+                    if (_assignmentsCompareSelectedGroups.size === 0) {
+                        alert('Επιλέξτε τουλάχιστον μία ομάδα.');
+                        return;
+                    }
+                    if (!_assignmentsComparePendingMonthKeys.length) {
+                        alert('Δεν έχουν επιλεγεί μήνες.');
+                        return;
+                    }
+                    const groupModal = bootstrap.Modal.getInstance(modalEl);
+                    const monthKeys = [..._assignmentsComparePendingMonthKeys];
+                    const groupNums = [..._assignmentsCompareSelectedGroups].sort((a, b) => a - b);
+                    const openPreview = () => showAssignmentsComparePreview(monthKeys, groupNums);
+                    if (groupModal) {
+                        modalEl.addEventListener('hidden.bs.modal', openPreview, { once: true });
+                        groupModal.hide();
+                    } else {
+                        openPreview();
+                    }
+                };
+            }
+
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+
+        function printAssignmentsComparePreview() {
+            const content = document.getElementById('assignmentsCompareContent');
+            if (!content || !content.innerHTML.trim()) {
+                alert('Δεν υπάρχει προεπισκόπηση για εκτύπωση.');
+                return;
+            }
+            const printWindow = window.open('', '_blank', 'width=1100,height=800');
+            if (!printWindow) {
+                alert('Ο browser μπλόκαρε το παράθυρο εκτύπωσης.');
+                return;
+            }
+            const printedAt = new Date().toLocaleString('el-GR');
+            printWindow.document.write(`<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<title>Τελικές vs Βασική Σειρά</title>
+<style>
+body { font-family: Arial, sans-serif; font-size: 11px; padding: 12px; color: #212529; }
+h4, h5 { color: #0d6efd; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+th, td { border: 1px solid #ccc; padding: 4px; vertical-align: top; }
+.compare-diff-row td { background-color: rgba(255, 193, 7, 0.18) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.compare-baseline-unavailable { text-decoration: line-through; text-decoration-thickness: 2px; opacity: 0.75; }
+.compare-baseline-next { color: #495057; font-weight: 600; }
+@media print { @page { margin: 1cm; } }
+</style>
+</head>
+<body class="assignments-compare-print-body">
+<h2 style="text-align:center;margin-top:0;">Τελικές αναθέσεις vs Βασική σειρά</h2>
+<p style="text-align:center;color:#666;">Εκτύπωση: ${escapeHtml(printedAt)}</p>
+${content.innerHTML}
+</body>
+</html>`);
+            printWindow.document.close();
+            printWindow.onload = function () {
+                setTimeout(() => {
+                    printWindow.focus();
+                    printWindow.print();
+                }, 300);
+            };
+        }
+
+        function showAssignmentsComparePreview(monthKeys, groupNums) {
             const previewContent = document.getElementById('assignmentsCompareContent');
             const modalEl = document.getElementById('assignmentsCompareModal');
             if (!previewContent || !modalEl) return;
@@ -6205,6 +6431,9 @@
             const keys = (Array.isArray(monthKeys) ? monthKeys : [])
                 .filter((k) => /^\d{4}-\d{2}$/.test(String(k)))
                 .sort();
+            const selectedGroups = (Array.isArray(groupNums) ? groupNums : [1, 2, 3, 4])
+                .map((g) => parseInt(g, 10))
+                .filter((g) => g >= 1 && g <= 4);
             previewContent.innerHTML = '';
 
             if (!keys.length) {
@@ -6262,6 +6491,40 @@
                 personName
                     ? `<span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}`
                     : '<span class="text-muted">—</span>';
+            const formatBaselinePersonCell = (
+                personName,
+                orderNo,
+                groupData,
+                groupNum,
+                typeKey,
+                monthStartKey,
+                monthEndKey
+            ) => {
+                if (!personName) return '<span class="text-muted">—</span>';
+                const unavailable = isPersonUnavailableWholeMonth(
+                    personName,
+                    groupNum,
+                    typeKey,
+                    monthStartKey,
+                    monthEndKey,
+                    groupData
+                );
+                if (!unavailable) {
+                    return formatPersonCell(personName, orderNo);
+                }
+                const nextPerson = findNextAvailableInRotationList(
+                    groupData,
+                    typeKey,
+                    personName,
+                    groupNum,
+                    monthStartKey,
+                    monthEndKey
+                );
+                const nextOrder = nextPerson ? getOrderNo(groupData, typeKey, nextPerson) : null;
+                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
+                if (!nextPerson) return struck;
+                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${nextOrder || '-'}</span>${escapeHtml(nextPerson)})</span>`;
+            };
             const buildChangeMarker = (reasonObj, pairKey, getSwapPairLabelNo) => {
                 if (!reasonObj) return { text: '', color: null, style: '' };
                 const swapNo = reasonObj.type === 'swap' ? getSwapPairLabelNo(pairKey) : null;
@@ -6292,6 +6555,8 @@
                 const monthDate = new Date(year, month, 1);
                 const monthName = getGreekMonthName(monthDate);
                 const daysInMonth = new Date(year, month + 1, 0).getDate();
+                const monthStartKey = formatDateKey(monthDate);
+                const monthEndKey = formatDateKey(new Date(year, month, daysInMonth));
 
                 const swapPairLabelByKey = new Map();
                 let nextSwapPairLabelNo = 1;
@@ -6309,7 +6574,7 @@
                 monthSection.innerHTML = `<h4 class="mb-3 text-primary"><i class="fas fa-calendar-alt me-2"></i>${escapeHtml(monthName)} ${year}</h4>`;
                 previewContent.appendChild(monthSection);
 
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (const groupNum of selectedGroups) {
                     const groupName = getGroupName(groupNum);
                     const groupData = groups[groupNum];
                     if (
@@ -6389,7 +6654,7 @@
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dayName}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;${change.style}">${formatPersonCell(finalPerson, finalOrder)}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatPersonCell(baselinePerson, baselineOrder)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey)}</td>
                         `;
                         tbody.appendChild(row);
                     }
@@ -6398,7 +6663,12 @@
 
             if (!hasAnyGroup) {
                 previewContent.innerHTML =
-                    '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>Δεν υπάρχουν ομάδες με δεδομένα για τους επιλεγμένους μήνες.</div>';
+                    '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>Δεν υπάρχουν δεδομένα για τους επιλεγμένους μήνες και ομάδες.</div>';
+            }
+
+            if (!selectedGroups.length) {
+                previewContent.innerHTML =
+                    '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>Δεν επιλέχθηκαν ομάδες.</div>';
             }
 
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
