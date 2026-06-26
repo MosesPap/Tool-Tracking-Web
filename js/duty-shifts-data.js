@@ -5676,7 +5676,8 @@
             const resolveLastRotationAnchorForType = (type) => {
                 if (type === 'normal') {
                     const isNightGroup =
-                        typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum);
+                        (typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum)) ||
+                        (typeof isNightChangesGroup === 'function' && isNightChangesGroup(groupNum));
                     if (isNightGroup) {
                         return resolveNormalExcelAnchorForNightGroup(year, month, groupNum);
                     }
