@@ -2429,6 +2429,21 @@
                 return assignedPerson;
             }
             if (reason && reason.type === 'swap' && reason.swapPairId != null && !reason.meta?.mutualTwoDaySwap) {
+                if (reason.meta?.thursdaySpacing) {
+                    if (dateKey === reason.meta.thursdayDateKey) {
+                        const displaced = reason.meta.displacedPerson || reason.swappedWith;
+                        if (displaced) {
+                            return typeof resolvePersonInGroupRotationList === 'function'
+                                ? resolvePersonInGroupRotationList(displaced, groupNum, 'normal')
+                                : displaced;
+                        }
+                    }
+                    if (dateKey === reason.meta.partnerDateKey && reason.swappedWith) {
+                        return typeof resolvePersonInGroupRotationList === 'function'
+                            ? resolvePersonInGroupRotationList(reason.swappedWith, groupNum, 'normal')
+                            : reason.swappedWith;
+                    }
+                }
                 if (reason.meta?.semiConsecutiveHolidaySwap && reason.meta?.conflictedName) {
                     const conflicted =
                         typeof resolvePersonInGroupRotationList === 'function'

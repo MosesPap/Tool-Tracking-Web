@@ -494,7 +494,7 @@
                     continue;
                 }
 
-                let person = assignments[thursdayKey]?.[groupNum];
+                let person = getAssigneeOnDate(thursdayKey, groupNum, assignments);
                 if (!person) continue;
 
                 let spacing = personPassesThursdaySpacing(person, groupNum, thursdayKey, assignments, runtimeLastThu);

@@ -5544,9 +5544,59 @@
 
             /**
              * Τελευταίος στη σειρά περιστροφής στο τέλος του μήνα export (ίδια λογική με υπολογισμό υπηρεσιών).
-             * Χρησιμοποιεί getRotationSeedPersonForMonthStart για τον επόμενο μήνα + τελευταία ανάθεση στον export μήνα.
+             * Ομάδες 3/4 με νυχτερινές Πέμπτες: baseline σειρά (αγνοεί ανταλλαγές Ν Πεμπτών στο τελικό night store).
              */
             const resolveLastRotationAnchorForType = (type) => {
+                const useBaselineNormalForNightGroup =
+                    type === 'normal' &&
+                    typeof isNightDutyGroup === 'function' &&
+                    isNightDutyGroup(groupNum);
+
+                if (useBaselineNormalForNightGroup) {
+                    let anchor = null;
+                    let lastKey = null;
+                    const baselineStore = rotationBaselineNormalAssignments || {};
+                    for (const dk of Object.keys(baselineStore).sort()) {
+                        if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || dk.substring(0, 7) !== exportMonthKey) continue;
+                        if (getDutyCategoryForDateKeyLocal(dk) !== 'normal') continue;
+                        const baselinePerson = parseAssignedPersonForGroupFromAssignment(baselineStore[dk], groupNum);
+                        if (!baselinePerson) continue;
+                        lastKey = dk;
+                        anchor = baselinePerson;
+                    }
+                    if (lastKey && anchor) {
+                        const finalAssigned = getPersonOnDateForNormalRotationContinuityLookup(lastKey, groupNum);
+                        const finalReason =
+                            finalAssigned && typeof getAssignmentReason === 'function'
+                                ? getAssignmentReason(lastKey, groupNum, finalAssigned)
+                                : null;
+                        const isThursdaySpacingFinal =
+                            finalReason?.type === 'swap' && finalReason.meta?.thursdaySpacing;
+                        if (finalAssigned && !isThursdaySpacingFinal && typeof getPersonForRotationContinuity === 'function') {
+                            const store = buildNormalRotationContinuityStore();
+                            const continuity = getPersonForRotationContinuity(
+                                lastKey,
+                                groupNum,
+                                finalAssigned,
+                                store
+                            );
+                            if (continuity) anchor = continuity;
+                        }
+                    }
+                    if (!anchor) {
+                        anchor =
+                            getLastBaselineRotationPersonForDate('normal', firstDayOfNextMonth, groupNum) ||
+                            (typeof getRotationSeedPersonForMonthStart === 'function'
+                                ? getRotationSeedPersonForMonthStart('normal', firstDayOfNextMonth, groupNum)
+                                : null) ||
+                            (typeof getLastAssignmentContinuityPersonForPreviousMonth === 'function'
+                                ? getLastAssignmentContinuityPersonForPreviousMonth('normal', firstDayOfNextMonth, groupNum)
+                                : null) ||
+                            getLastRotationPersonForDate('normal', firstDayOfNextMonth, groupNum);
+                    }
+                    return anchor ? normName(resolvePersonInGroupRotationList(anchor, groupNum, type)) : '';
+                }
+
                 let anchor = null;
 
                 if (typeof getRotationSeedPersonForMonthStart === 'function') {
