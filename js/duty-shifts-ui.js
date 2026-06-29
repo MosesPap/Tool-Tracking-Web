@@ -4318,6 +4318,46 @@
             if (typeof renderGroups === 'function') renderGroups(true);
         }
 
+        const DUTY_LIST_TYPE_LABELS = {
+            special: 'Ειδικών Αργιών',
+            weekend: 'Σαββατοκύριακων/Αργιών',
+            semi: 'Ημιαργιών',
+            normal: 'Καθημερινών'
+        };
+
+        function getDutyRotationListForCalendar(groupNum, listType, dateKey) {
+            if (typeof getGroupRotationListAtDate === 'function') {
+                return getGroupRotationListAtDate(groupNum, listType, dateKey) || [];
+            }
+            if (typeof getSortedGroupListForRotation === 'function') {
+                return getSortedGroupListForRotation(groupNum, listType) || [];
+            }
+            return (groups[groupNum] || {})[listType] || [];
+        }
+
+        function getPersonDutyListPosition(groupNum, personName, listType, dateKey) {
+            if (!personName || !groupNum) return null;
+            const list = getDutyRotationListForCalendar(groupNum, listType, dateKey);
+            if (!Array.isArray(list) || list.length === 0) return null;
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) => String(s || '').trim();
+            const target = norm(personName);
+            for (let i = 0; i < list.length; i++) {
+                if (norm(list[i]) === target) return i + 1;
+            }
+            const exactIdx = list.indexOf(personName);
+            return exactIdx >= 0 ? exactIdx + 1 : null;
+        }
+
+        function formatDutyListOrderSuffix(groupNum, personName, listType, dateKey) {
+            const pos = getPersonDutyListPosition(groupNum, personName, listType, dateKey);
+            if (!pos) return '';
+            const label = DUTY_LIST_TYPE_LABELS[listType] || listType;
+            return ` <span class="duty-list-order" title="Σειρά στη λίστα ${label}">(${pos})</span>`;
+        }
+
         function renderCalendar() {
             const calendarGrid = document.getElementById('calendarGrid');
             const currentMonthYear = document.getElementById('currentMonthYear');
@@ -4540,7 +4580,13 @@
                             const tit = `${row.tag} · Ομάδα ${row.groupNum}`;
                             const badgeClass =
                                 row.tag === 'Απενεργοπ.' ? 'bg-secondary' : 'bg-warning text-dark';
-                            displayAssignmentHtml += `<div class="duty-person duty-missing-disabled-cell text-dark" title="${escapeHtml(tit)}">${row.groupNum}. ${escapeHtml(row.personName)} <span class="badge ${badgeClass}" style="font-size:0.58rem;vertical-align:middle;">${escapeHtml(row.tag)}</span></div>`;
+                            const listOrderSuffix = formatDutyListOrderSuffix(
+                                row.groupNum,
+                                row.personName,
+                                dayTypeCategory,
+                                key
+                            );
+                            displayAssignmentHtml += `<div class="duty-person duty-missing-disabled-cell text-dark" title="${escapeHtml(tit)}">${row.groupNum}. ${escapeHtml(row.personName)}${listOrderSuffix} <span class="badge ${badgeClass}" style="font-size:0.58rem;vertical-align:middle;">${escapeHtml(row.tag)}</span></div>`;
                         }
                     }
                     displayAssignmentHtml += '</div></div>';
@@ -4675,6 +4721,10 @@
                                 personName,
                                 nameOnly,
                                 rank,
+                                listOrder:
+                                    personName && g >= 1 && g <= 4
+                                        ? getPersonDutyListPosition(g, personName, dayTypeCategory, key)
+                                        : null,
                                 underline,
                                 isSwap,
                                 isThursdaySpacingSwap,
@@ -4743,7 +4793,11 @@
                                     spacingIcon = ` <span class="duty-thursday-spacing-asterisk" style="color:${escapeHtml(pairColor)}" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}">*</span>`;
                                 }
                             }
-                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${escapeHtml(e.nameOnly)}${bufferIcon}${spacingIcon}</div>`;
+                            const listOrderSuffix =
+                                e.listOrder != null
+                                    ? ` <span class="duty-list-order" title="Σειρά στη λίστα ${escapeHtml(DUTY_LIST_TYPE_LABELS[dayTypeCategory] || dayTypeCategory)}">(${e.listOrder})</span>`
+                                    : '';
+                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${escapeHtml(e.nameOnly)}${listOrderSuffix}${bufferIcon}${spacingIcon}</div>`;
                         });
                         if (shouldShowHeavyIndicators && assignmentReasons[key]) {
                             displayAssignmentHtml += `<div class="duty-person-swapped" title="Υπάρχουν λόγοι αλλαγής/παράλειψης">*</div>`;
