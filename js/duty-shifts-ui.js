@@ -748,21 +748,15 @@
                 });
             }
             for (let i = 1; i <= 4; i++) {
-                if ((i === 3 || i === 4) && typeof ensureNightListForGroup === 'function') {
-                    ensureNightListForGroup(i);
-                }
                 const container = document.getElementById(`group${i}People`);
                 container.innerHTML = '';
                 
                 const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, priorities: {} };
-                if ((i === 3 || i === 4) && !groupData.night) groupData.night = [];
                 
                 // Ensure priorities exist
                 if (!groupData.priorities) groupData.priorities = {};
                 
-                const showNightList = (i === 3 || i === 4) && typeof isNightDutiesEnabled === 'function' && isNightDutiesEnabled();
-                // Sort each list by priority before rendering
-                const listTypes = showNightList ? ['special', 'weekend', 'semi', 'normal', 'night'] : ['special', 'weekend', 'semi', 'normal'];
+                const listTypes = ['special', 'weekend', 'semi', 'normal'];
                 listTypes.forEach(listType => {
                     if (groupData[listType]) {
                         groupData[listType].sort((a, b) => {
@@ -793,7 +787,6 @@
                 const weekendList = groupData.weekend || [];
                 const semiList = groupData.semi || [];
                 const normalList = groupData.normal || [];
-                const nightList = groupData.night || [];
                 
                 const allPeople = new Set([...specialList, ...weekendList, ...semiList, ...normalList]);
                 
@@ -836,19 +829,6 @@
                     `;
                     container.appendChild(semiDiv);
                     
-                    if (showNightList) {
-                        const nightDiv = document.createElement('div');
-                        nightDiv.className = 'mb-3 border rounded p-2';
-                        nightDiv.innerHTML = `
-                        <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('nightList_${i}', 'nightChevron_${i}')">
-                            <strong class="text-secondary"><i class="fas fa-moon me-1"></i>Σειρά Νυχτερινών (Πέμπτες):</strong>
-                            <i id="nightChevron_${i}" class="fas fa-chevron-down"></i>
-                        </div>
-                        <div id="nightList_${i}" class="collapse"></div>
-                    `;
-                        container.appendChild(nightDiv);
-                    }
-                    
                     // Καθημερινή order
                     const normalDiv = document.createElement('div');
                     normalDiv.className = 'mb-3 border rounded p-2';
@@ -868,9 +848,6 @@
                         { type: 'semi', list: semiList, containerId: `semiList_${i}` },
                         { type: 'normal', list: normalList, containerId: `normalList_${i}` }
                     ];
-                    if (showNightList) {
-                        lists.push({ type: 'night', list: nightList, containerId: `nightList_${i}` });
-                    }
                     
                     lists.forEach(({ type, list, containerId }) => {
                         const listContainer = document.getElementById(containerId);
@@ -1131,11 +1108,7 @@
             draggedElement = null;
             dragOverElement = null;
         }
-        function getPersonListTypesForGroup(groupNum) {
-            const g = parseInt(groupNum, 10);
-            if ((g === 3 || g === 4) && typeof isNightDutiesEnabled === 'function' && isNightDutiesEnabled()) {
-                return ['special', 'weekend', 'semi', 'normal', 'night'];
-            }
+        function getPersonListTypesForGroup(_groupNum) {
             return ['special', 'weekend', 'semi', 'normal'];
         }
         function addPerson(groupNumber) {
@@ -1203,18 +1176,12 @@
             if (!groups[currentGroup]) {
                 groups[currentGroup] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, priorities: {} };
             }
-            if ((currentGroup === 3 || currentGroup === 4) && !groups[currentGroup].night) {
-                groups[currentGroup].night = [];
-            }
             
             // Initialize lists if needed
             if (!groups[currentGroup].special) groups[currentGroup].special = [];
             if (!groups[currentGroup].weekend) groups[currentGroup].weekend = [];
             if (!groups[currentGroup].semi) groups[currentGroup].semi = [];
             if (!groups[currentGroup].normal) groups[currentGroup].normal = [];
-            if ((currentGroup === 3 || currentGroup === 4) && !groups[currentGroup].night) {
-                groups[currentGroup].night = [];
-            }
             if (!groups[currentGroup].lastDuties) groups[currentGroup].lastDuties = {};
             if (!groups[currentGroup].priorities) groups[currentGroup].priorities = {};
             
@@ -1448,16 +1415,7 @@
                 special: prioritySpecial ? parseInt(prioritySpecial) : 999,
                 weekend: priorityWeekend ? parseInt(priorityWeekend) : 999,
                 semi: prioritySemi ? parseInt(prioritySemi) : 999,
-                normal: priorityNormal ? parseInt(priorityNormal) : 999,
-                ...((currentGroup === 3 || currentGroup === 4) &&
-                typeof isNightDutiesEnabled === 'function' &&
-                isNightDutiesEnabled()
-                    ? {
-                          night: priorityNormal
-                              ? parseInt(priorityNormal)
-                              : groups[currentGroup].priorities[personKey]?.night ?? 999
-                      }
-                    : {})
+                normal: priorityNormal ? parseInt(priorityNormal) : 999
             };
             
             // Add last duty dates as critical assignments in the calendar (protected from recalculation)
@@ -3331,23 +3289,18 @@
                 const person = list[index];
                 list.splice(index, 1);
                 
-                if (listType === 'night') {
-                    // Αφαίρεση μόνο από νυχτερινές — το άτομο μένει στις άλλες λίστες
-                } else {
-                    // Also remove from all other lists if it exists there
-                    const allListTypes = getPersonListTypesForGroup(groupNumber);
-                    allListTypes.forEach(otherListType => {
-                        if (otherListType !== listType) {
-                            const otherList = groups[groupNumber][otherListType] || [];
-                            const otherIndex = otherList.indexOf(person);
-                            if (otherIndex !== -1) {
-                                otherList.splice(otherIndex, 1);
-                            }
-                        }
-                    });
-                }
-                
+                // Also remove from all other lists if it exists there
                 const allListTypes = getPersonListTypesForGroup(groupNumber);
+                allListTypes.forEach(otherListType => {
+                    if (otherListType !== listType) {
+                        const otherList = groups[groupNumber][otherListType] || [];
+                        const otherIndex = otherList.indexOf(person);
+                        if (otherIndex !== -1) {
+                            otherList.splice(otherIndex, 1);
+                        }
+                    }
+                });
+                
                 // Remove last duties entry if person is removed from all lists
                 const stillInAnyList = allListTypes.some(lt => (groups[groupNumber][lt] || []).includes(person));
                 if (!stillInAnyList && groups[groupNumber].lastDuties) {
@@ -4310,28 +4263,12 @@
             });
         }
 
-        function wireNightDutiesModeCheckboxes() {
-            const listCb = document.getElementById('dutyShiftsNightDutiesGroups34');
-            const changesCb = document.getElementById('dutyShiftsNightDutiesChangesGroups34');
-            if (!listCb || !changesCb || listCb.dataset.nightModeWired === '1') return;
-            listCb.dataset.nightModeWired = '1';
-            listCb.addEventListener('change', () => {
-                if (listCb.checked) changesCb.checked = false;
-            });
-            changesCb.addEventListener('change', () => {
-                if (changesCb.checked) listCb.checked = false;
-            });
-        }
-
         function openNormalSwapLogicSettingsModal() {
             wireFlexibleStatusEffectiveCheckbox();
-            wireNightDutiesModeCheckboxes();
             const flexCb = document.getElementById('dutyShiftsFlexibleStatusEffectiveDates');
             if (flexCb) flexCb.checked = isFlexibleStatusEffectiveDatesEnabled();
-            const nightCb = document.getElementById('dutyShiftsNightDutiesGroups34');
             const changesCb = document.getElementById('dutyShiftsNightDutiesChangesGroups34');
             const mode = typeof getNightDutiesMode === 'function' ? getNightDutiesMode() : 'off';
-            if (nightCb) nightCb.checked = mode === 'list';
             if (changesCb) changesCb.checked = mode === 'changes';
             const disabledGroups = typeof getNormalWeekPairSwapDisabledGroups === 'function'
                 ? getNormalWeekPairSwapDisabledGroups()
@@ -4364,18 +4301,10 @@
             } else if (typeof setNormalWeekPairSwapDisabledGroups === 'function') {
                 setNormalWeekPairSwapDisabledGroups(selected);
             }
-            const nightCb = document.getElementById('dutyShiftsNightDutiesGroups34');
             const changesCb = document.getElementById('dutyShiftsNightDutiesChangesGroups34');
-            let nightMode = 'off';
-            if (changesCb && changesCb.checked) nightMode = 'changes';
-            else if (nightCb && nightCb.checked) nightMode = 'list';
+            const nightMode = changesCb && changesCb.checked ? 'changes' : 'off';
             if (typeof saveDutyShiftsAppSettingsNightDutiesMode === 'function') {
                 await saveDutyShiftsAppSettingsNightDutiesMode(nightMode);
-            } else if (nightCb && typeof saveDutyShiftsAppSettingsNightDuties === 'function') {
-                await saveDutyShiftsAppSettingsNightDuties(nightMode === 'list');
-            }
-            if (nightMode === 'list' && typeof ensureNightListsForGroups34 === 'function' && ensureNightListsForGroups34()) {
-                if (typeof saveData === 'function') await saveData();
             }
             const modalEl = document.getElementById('normalSwapLogicSettingsModal');
             const m = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
@@ -5883,11 +5812,7 @@
             installFor('calculateStartMonth');
         }
         function showStepByStepCalculation() {
-            if (typeof getCalculationTotalSteps === 'function') {
-                calculationSteps.totalSteps = getCalculationTotalSteps();
-            } else {
-                calculationSteps.totalSteps = 4;
-            }
+            calculationSteps.totalSteps = 4;
             calculationSteps.currentStep = 1;
             renderCurrentStep();
             const modal = new bootstrap.Modal(document.getElementById('stepByStepCalculationModal'));

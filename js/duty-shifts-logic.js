@@ -2586,21 +2586,10 @@
                 currentTypeCategory = 'weekend';
             }
             
-            if (currentDayType === 'normal-day' &&
-                typeof isNightThursdayDateKey === 'function' && isNightThursdayDateKey(dayKey) &&
-                typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum)) {
-                currentTypeCategory = 'night';
-            }
-            
             // Helper function to check if two day types conflict
             const hasConflict = (type1, type2) => {
-                // Normal / night conflicts with: semi, weekend, special
-                const isNormalLike = (t) => t === 'normal' || t === 'night';
-                if (isNormalLike(type1) && (type2 === 'semi' || type2 === 'weekend' || type2 === 'special')) return true;
-                if ((type1 === 'semi' || type1 === 'weekend' || type1 === 'special') && isNormalLike(type2)) return true;
-
-                // Συνεχόμενες καθημερινή + νυχτερινή (π.χ. Τετάρτη καθημερινή → Πέμπτη νυχτερινή)
-                if ((type1 === 'normal' && type2 === 'night') || (type1 === 'night' && type2 === 'normal')) return true;
+                if (type1 === 'normal' && (type2 === 'semi' || type2 === 'weekend' || type2 === 'special')) return true;
+                if ((type1 === 'semi' || type1 === 'weekend' || type1 === 'special') && type2 === 'normal') return true;
                 
                 // Semi conflicts with: weekend, special
                 if (type1 === 'semi' && (type2 === 'weekend' || type2 === 'special')) return true;
@@ -2632,14 +2621,7 @@
                     hasDutyBefore = simulatedAssignments.weekend?.[dayBeforeKey]?.[groupNum] === person;
                 } else {
                     beforeTypeCategory = 'normal';
-                    if (typeof isNightThursdayDateKey === 'function' && isNightThursdayDateKey(dayBeforeKey) &&
-                        typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum) &&
-                        simulatedAssignments.night?.[dayBeforeKey]?.[groupNum] === person) {
-                        beforeTypeCategory = 'night';
-                        hasDutyBefore = true;
-                    } else {
-                        hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === person;
-                    }
+                    hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === person;
                 }
             } else {
                 // Check permanent assignments
@@ -2691,17 +2673,7 @@
                     hasDutyAfter = simulatedAssignments.weekend?.[dayAfterKey]?.[groupNum] === person;
                 } else {
                     afterTypeCategory = 'normal';
-                    if (typeof isNightThursdayDateKey === 'function' && isNightThursdayDateKey(dayAfterKey) &&
-                        typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum)) {
-                        const nightHit = simulatedAssignments.night?.[dayAfterKey]?.[groupNum] === person;
-                        if (nightHit) {
-                            hasDutyAfter = true;
-                            afterTypeCategory = 'night';
-                        }
-                    }
-                    if (!hasDutyAfter) {
-                        hasDutyAfter = simulatedAssignments.normal?.[dayAfterKey]?.[groupNum] === person;
-                    }
+                    hasDutyAfter = simulatedAssignments.normal?.[dayAfterKey]?.[groupNum] === person;
                     
                     // If not assigned yet, check if person will be assigned based on rotation
                     // This is important for preview mode when processing days in chronological order
@@ -3774,9 +3746,7 @@
         }
         
         function renderCurrentStep() {
-            if (typeof getCalculationTotalSteps === 'function') {
-                calculationSteps.totalSteps = getCalculationTotalSteps();
-            }
+            calculationSteps.totalSteps = 4;
             const stepContent = document.getElementById('stepContent');
             const stepNumber = document.getElementById('currentStepNumber');
             const stepTitleText = document.getElementById('stepByStepModalTitleText');
@@ -3792,28 +3762,17 @@
                 if (calculationSteps.currentStep === 1) stepTitleText.textContent = 'Υπολογισμός Υπηρεσιών Ειδικών Αργιών';
                 else if (calculationSteps.currentStep === 2) stepTitleText.textContent = 'Υπολογισμός Υπηρεσιών Αργιών';
                 else if (calculationSteps.currentStep === 3) stepTitleText.textContent = 'Υπολογισμός Υπηρεσιών Ημιαργιών';
-                else if (typeof isNightCalculationStep === 'function' && isNightCalculationStep(calculationSteps.currentStep)) {
-                    stepTitleText.textContent = 'Υπολογισμός Νυχτερινών (Ομάδες 3 & 4)';
-                } else if (typeof isNormalCalculationStep === 'function' && isNormalCalculationStep(calculationSteps.currentStep)) {
-                    stepTitleText.textContent = 'Υπολογισμός Υπηρεσιών Καθημερινών';
-                } else if (calculationSteps.currentStep === 4) stepTitleText.textContent = 'Υπολογισμός Υπηρεσιών Καθημερινών';
+                else if (calculationSteps.currentStep === 4) stepTitleText.textContent = 'Υπολογισμός Υπηρεσιών Καθημερινών';
                 else stepTitleText.textContent = 'Υπολογισμός Υπηρεσιών';
             }
 
-            // Apply per-step theme (Special/Weekend/Semi/Night/Normal) to title bar, alerts, and table header fills.
+            // Apply per-step theme (Special/Weekend/Semi/Normal) to title bar, alerts, and table header fills.
             if (stepModalEl) {
-                stepModalEl.classList.remove('calc-theme-special', 'calc-theme-weekend', 'calc-theme-semi', 'calc-theme-normal', 'calc-theme-night');
+                stepModalEl.classList.remove('calc-theme-special', 'calc-theme-weekend', 'calc-theme-semi', 'calc-theme-normal');
                 if (calculationSteps.currentStep === 1) stepModalEl.classList.add('calc-theme-special');
                 else if (calculationSteps.currentStep === 2) stepModalEl.classList.add('calc-theme-weekend');
                 else if (calculationSteps.currentStep === 3) stepModalEl.classList.add('calc-theme-semi');
-                else if (typeof isNightCalculationStep === 'function' && isNightCalculationStep(calculationSteps.currentStep)) {
-                    stepModalEl.classList.add('calc-theme-semi');
-                } else if (
-                    (typeof isNormalCalculationStep === 'function' && isNormalCalculationStep(calculationSteps.currentStep)) ||
-                    calculationSteps.currentStep === 4
-                ) {
-                    stepModalEl.classList.add('calc-theme-normal');
-                }
+                else if (calculationSteps.currentStep === 4) stepModalEl.classList.add('calc-theme-normal');
             }
             
             // Show/hide navigation buttons
@@ -3834,13 +3793,6 @@
                     renderStep3_SemiNormal();
                     break;
                 case 4:
-                    if (typeof isNightCalculationStep === 'function' && isNightCalculationStep(4)) {
-                        renderStep4_Night();
-                    } else {
-                        renderStep4_Normal();
-                    }
-                    break;
-                case 5:
                     renderStep4_Normal();
                     break;
             }
@@ -3877,9 +3829,6 @@
             }
             
             calculationSteps.dayTypeLists = dayTypeLists;
-            if (typeof augmentDayTypeListsForNight === 'function') {
-                augmentDayTypeListsForNight(calculationSteps.dayTypeLists);
-            }
             
             // Check for special holidays
             const specialHolidays = dayTypeLists.special;
@@ -4767,32 +4716,14 @@
                 return;
             }
             
-            // If moving from Step 4 (Night or Normal), save assignments and run swap logic
+            // If moving from Step 4 (Normal), save assignments and run swap logic
             if (calculationSteps.currentStep === 4) {
-                if (typeof isNightCalculationStep === 'function' && isNightCalculationStep(4)) {
-                    try {
-                        await saveStep4_Night();
-                    } catch (error) {
-                        console.error('[STEP 4 NIGHT] Error in saveStep4_Night():', error);
-                    }
-                    return;
-                }
                 console.log('[STEP 4] Next button pressed, calling saveStep4_Normal()');
                 try {
                     await saveStep4_Normal();
                     console.log('[STEP 4] saveStep4_Normal() completed');
                 } catch (error) {
                     console.error('[STEP 4] Error in saveStep4_Normal():', error);
-                }
-                return;
-            }
-
-            if (calculationSteps.currentStep === 5) {
-                console.log('[STEP 5] Next button pressed, calling saveStep4_Normal()');
-                try {
-                    await saveStep4_Normal();
-                } catch (error) {
-                    console.error('[STEP 5] Error in saveStep4_Normal():', error);
                 }
                 return;
             }
@@ -6866,16 +6797,6 @@
                 
                 // Track swapped people and replacements
                 const swappedPeople = []; // Array of { date, groupNum, skippedPerson, swappedPerson }
-                const simulatedNightAssignments = {};
-                const finalNightAssignments = calculationSteps.finalNightAssignments || {};
-                for (const dateKey in finalNightAssignments) {
-                    if (finalNightAssignments[dateKey]) simulatedNightAssignments[dateKey] = { ...finalNightAssignments[dateKey] };
-                }
-                for (const dateKey of (dayTypeLists.night || [])) {
-                    if (simulatedNightAssignments[dateKey]) continue;
-                    const gmap = extractGroupAssignmentsMap(nightAssignments?.[dateKey]);
-                    if (gmap) simulatedNightAssignments[dateKey] = { ...gmap };
-                }
                 const sortedNormal = [...normalDays].sort();
                 let updatedAssignments = {}; // dateKey -> { groupNum -> personName }
                 
@@ -7511,7 +7432,6 @@
                             weekend: simulatedWeekendAssignments,
                             semi: simulatedSemiAssignments,
                             normal: updatedAssignments,
-                            night: simulatedNightAssignments,
                             normalRotationPositions: globalNormalRotationPosition // For cross-month conflict detection
                         };
                         
@@ -7523,9 +7443,6 @@
                         let swapFound = false;
                         
                         if (hasConsecutiveConflict) {
-                            if (typeof shouldSkipNormalDayForNightGroup === 'function' && shouldSkipNormalDayForNightGroup(dateKey, groupNum)) {
-                                continue;
-                            }
                             if (
                                 typeof shouldSkipNormalConflictSwapForThursdaySpacing === 'function' &&
                                 shouldSkipNormalConflictSwapForThursdaySpacing(
@@ -7735,7 +7652,7 @@
                                 // MONDAY/WEDNESDAY - Step 2b: Try BACKWARD in same fixed order as Tue/Thu: previous same day 7d, alternative 2d, 9d, same 14d, alternative 16d, same 21d (same month only)
                                 if (!swapFound) {
                                     const backwardOffsets =
-                                        (typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum) && dayOfWeek === 2)
+                                        (typeof isNightChangesGroup === 'function' && isNightChangesGroup(groupNum) && dayOfWeek === 2)
                                             ? [7, 14, 21]
                                             : [7, 2, 9, 14, 16, 21];
                                     for (const offset of backwardOffsets) {
@@ -7783,9 +7700,9 @@
                                 }
                             }
                             // TUESDAY/THURSDAY - Separate logic block (ομάδες 3/4 με νυχτερινές: Τρίτη μόνο με Τρίτη)
-                            else if (!swapFound && applyWeekPairLogic && (dayOfWeek === 2 || (dayOfWeek === 4 && !(typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum))))) {
+                            else if (!swapFound && applyWeekPairLogic && (dayOfWeek === 2 || (dayOfWeek === 4 && !(typeof isNightChangesGroup === 'function' && isNightChangesGroup(groupNum))))) {
                                 const alternativeDayOfWeek =
-                                    (typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum) && dayOfWeek === 2)
+                                    (typeof isNightChangesGroup === 'function' && isNightChangesGroup(groupNum) && dayOfWeek === 2)
                                         ? 2
                                         : (dayOfWeek === 2 ? 4 : 2);
                                 // TUESDAY/THURSDAY - Step 1a: Try next same day of week (can be in same month or next month)
@@ -7861,7 +7778,7 @@
                                 // TUESDAY/THURSDAY - Step 1b: Try BACKWARD in fixed order: previous Thu 7d, Tue 2d, Tue 9d, Thu 14d, Tue 16d, Thu 21d (same month only)
                                 if (!swapFound) {
                                     const backwardOffsets =
-                                        (typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum) && dayOfWeek === 2)
+                                        (typeof isNightChangesGroup === 'function' && isNightChangesGroup(groupNum) && dayOfWeek === 2)
                                             ? [7, 14, 21]
                                             : [7, 2, 9, 14, 16, 21];
                                     for (const offset of backwardOffsets) {
@@ -8471,11 +8388,9 @@
                     // When the person on a date got there by SWAP (conflict swap-in), use the SWAPPED-OUT person as "last"
                     // so next month we continue from the next person after the swapped-out person in rotation (still checking conflicts/missing/disabled).
                     const sortedDateKeys = Object.keys(updatedAssignments).sort();
-                    const slotAssigneesByDate = calculationSteps.pureNormalRotationSlotAssigneeByDate || {};
                     const baselineByDateForRotation = calculationSteps.tempNormalBaselineAssignments || {};
                     const allRotationDateKeys = new Set([
                         ...sortedDateKeys,
-                        ...Object.keys(slotAssigneesByDate),
                         ...Object.keys(baselineByDateForRotation)
                     ]);
                     const lastNormalRotationPositionsFromFinal = {};
@@ -8488,15 +8403,9 @@
                         for (let groupNum = 1; groupNum <= 4; groupNum++) {
                             let assignedPerson = groups?.[groupNum];
                             if (!assignedPerson) {
-                                assignedPerson = slotAssigneesByDate[dateKey]?.[groupNum] || null;
-                            }
-                            if (
-                                !assignedPerson &&
-                                typeof shouldSkipNormalDayForNightGroup === 'function' &&
-                                shouldSkipNormalDayForNightGroup(dateKey, groupNum)
-                            ) {
-                                const baseMap = baselineByDateForRotation[dateKey];
-                                assignedPerson = baseMap?.[groupNum] || baseMap?.[String(groupNum)] || null;
+                                assignedPerson = baselineByDateForRotation[dateKey]?.[groupNum] ||
+                                    baselineByDateForRotation[dateKey]?.[String(groupNum)] ||
+                                    null;
                             }
                             if (!assignedPerson) continue;
                             const personForRotation = getPersonForNormalRotationContinuity(dateKey, groupNum, assignedPerson, updatedAssignments);
@@ -12879,17 +12788,6 @@
                 }
             });
 
-            const simulatedNightAssignments = {};
-            const finalNight = calculationSteps.finalNightAssignments || {};
-            for (const dateKey of Object.keys(finalNight)) {
-                simulatedNightAssignments[dateKey] = { ...finalNight[dateKey] };
-            }
-            for (const dateKey of (dayTypeLists.night || [])) {
-                if (simulatedNightAssignments[dateKey]) continue;
-                const gmap = extractGroupAssignmentsMap(nightAssignments?.[dateKey]);
-                if (gmap) simulatedNightAssignments[dateKey] = { ...gmap };
-            }
-            
             const periodLabel = buildPeriodLabel(startDate, endDate);
             if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
                 dutyNormalDebug.clear();
@@ -12915,7 +12813,6 @@
             const normalRotationPersons = {}; // dateKey -> { groupNum -> rotationPerson }
             /** Καθαρή σειρά πριν αντικαταστάσεις/skip — για return-from-missing και sync λόγων. */
             const pureNormalRotationByDate = {}; // dateKey -> { groupNum -> originalRotationPerson }
-            const pureNormalRotationSlotAssigneeByDate = {}; // skipped night Thu: slot assignee for continuity
             
             if (normalDays.length === 0) {
                 html += '<div class="alert alert-info">';
@@ -13221,25 +13118,7 @@
                     
                     // Calculate who will be assigned for each group
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                        const skipNormalWrite =
-                            typeof shouldSkipNormalDayForNightGroup === 'function' &&
-                            shouldSkipNormalDayForNightGroup(dateKey, groupNum);
-
-                        if (skipNormalWrite && typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
-                            const preserved =
-                                typeof getGroupAssignmentForDate === 'function'
-                                    ? getGroupAssignmentForDate(dateKey, groupNum)
-                                    : normalAssignments[dateKey]?.[groupNum];
-                            if (preserved) {
-                                if (!normalRotationPersons[dateKey]) normalRotationPersons[dateKey] = {};
-                                normalRotationPersons[dateKey][groupNum] = preserved;
-                                html += `<td>${buildBaselineComputedCellHtml(preserved, preserved, '', '')}</td>`;
-                            } else {
-                                html += '<td class="text-muted">-</td>';
-                            }
-                            continue;
-                        }
-                        if (!skipNormalWrite && typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
+                        if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
                             const preserved = normalAssignments[dateKey]?.[groupNum];
                             if (preserved) {
                                 if (!normalRotationPersons[dateKey]) normalRotationPersons[dateKey] = {};
@@ -13616,13 +13495,11 @@
                             // So we store it separately in normalRotationPersons (which is already done above)
                             // and use originalRotationPerson for baseline display
                             
-                            // Store assignment (before swap logic) — skip normal store on night-list Thursdays (rotation still advances)
-                            if (!skipNormalWrite) {
-                                if (!normalAssignments[dateKey]) {
-                                    normalAssignments[dateKey] = {};
-                                }
-                                normalAssignments[dateKey][groupNum] = assignedPerson;
+                            // Store assignment (before swap logic)
+                            if (!normalAssignments[dateKey]) {
+                                normalAssignments[dateKey] = {};
                             }
+                            normalAssignments[dateKey][groupNum] = assignedPerson;
                             
                             if (
                                 assignedPerson &&
@@ -13647,7 +13524,7 @@
                             // CRITICAL: If assigned person differs from baseline (rotationPerson), check if this is a cascading shift
                             // Store a 'shift' reason to prevent this from showing as a swap in results/calendar
                             // Skip when wasDisabledOnlySkippedInBaseline (no replacement line – rotation just continued from next person)
-                            if (!skipNormalWrite && !wasDisabledOnlySkippedInBaseline && assignedPerson && assignedPerson !== rotationPerson) {
+                            if (!wasDisabledOnlySkippedInBaseline && assignedPerson && assignedPerson !== rotationPerson) {
                                 const currentReason = getAssignmentReason(dateKey, groupNum, assignedPerson);
                                 // Only store shift reason if there's no existing reason (skip/swap already handled)
                                 if (!currentReason) {
@@ -13694,14 +13571,6 @@
                                 }
                             }
                             
-                            if (skipNormalWrite) {
-                                if (!pureNormalRotationSlotAssigneeByDate[dateKey]) {
-                                    pureNormalRotationSlotAssigneeByDate[dateKey] = {};
-                                }
-                                pureNormalRotationSlotAssigneeByDate[dateKey][groupNum] =
-                                    assignedPerson || originalRotationPerson || null;
-                            }
-
                             // Get last duty date and days since for display
                             let lastDutyInfo = '';
                             let daysCountInfo = '';
@@ -13723,20 +13592,7 @@
                             if (baselinePersonForDisplay !== assignedPerson && assignedPerson && isPersonDisabledForDuty(baselinePersonForDisplay, groupNum, 'normal')) {
                                 baselinePersonForDisplay = assignedPerson;
                             }
-                            if (skipNormalWrite) {
-                                let nightPerson = (calculationSteps.finalNightAssignments || {})[dateKey]?.[groupNum];
-                                if (!nightPerson && typeof getGroupAssignmentForDate === 'function') {
-                                    nightPerson = getGroupAssignmentForDate(dateKey, groupNum);
-                                }
-                                if (nightPerson) {
-                                    html += `<td class="text-muted" title="Νυχτερινή (βήμα 4)">${nightPerson}</td>`;
-                                } else {
-                                    const rotHint = baselinePersonForDisplay || assignedPerson || '—';
-                                    html += `<td class="text-muted" title="Νυχτερινή Πέμπτη — σειρά καθημερινών συνεχίζει">${rotHint}</td>`;
-                                }
-                            } else {
-                                html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
-                            }
+                            html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                         }
                     }
                     
@@ -13785,9 +13641,6 @@
                     if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
                         continue;
                     }
-                    if (typeof shouldSkipNormalDayForNightGroup === 'function' && shouldSkipNormalDayForNightGroup(dateKey, groupNum)) {
-                        continue;
-                    }
                     const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { normal: [] };
                     const groupPeople = groupData.normal || [];
                     
@@ -13808,7 +13661,6 @@
                                                 weekend: simulatedWeekendAssignments,
                                                 semi: simulatedSemiAssignments,
                                                 normal: normalAssignments,
-                                                night: simulatedNightAssignments,
                                                 normalRotationPositions: globalNormalRotationPosition // Pass current rotation positions for conflict checking
                                             };
                                             
@@ -13988,9 +13840,9 @@
                             }
                         }
                         // TUESDAY/THURSDAY - Separate logic block (ομάδες 3/4 με νυχτερινές: Τρίτη μόνο με Τρίτη)
-                        else if (!swapFound && applyWeekPairLogic && (dayOfWeek === 2 || (dayOfWeek === 4 && !(typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum))))) {
+                        else if (!swapFound && applyWeekPairLogic && (dayOfWeek === 2 || (dayOfWeek === 4 && !(typeof isNightChangesGroup === 'function' && isNightChangesGroup(groupNum))))) {
                             const alternativeDayOfWeek =
-                                (typeof isNightDutyGroup === 'function' && isNightDutyGroup(groupNum) && dayOfWeek === 2)
+                                (typeof isNightChangesGroup === 'function' && isNightChangesGroup(groupNum) && dayOfWeek === 2)
                                     ? 2
                                     : (dayOfWeek === 2 ? 4 : 2);
                             
@@ -14305,7 +14157,6 @@
             calculationSteps.tempNormalAssignments = normalAssignments;
             calculationSteps.normalStep4PreviewProcessed = true;
             calculationSteps.tempNormalBaselineDisplay = normalRotationPersons;
-            calculationSteps.pureNormalRotationSlotAssigneeByDate = pureNormalRotationSlotAssigneeByDate;
             finalizeNormalPreview(normalAssignments, pureNormalRotationByDate, normalRotationPersons);
             if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
                 dutyNormalDebug.finalizeMissedNormalAbsences({
@@ -14324,10 +14175,8 @@
                 for (let i = sortedNormalKeys.length - 1; i >= 0; i--) {
                     const dk = sortedNormalKeys[i];
                     const ap = normalAssignments[dk]?.[g];
-                    const slotAp = pureNormalRotationSlotAssigneeByDate[dk]?.[g];
-                    const personAtSlot = ap || slotAp;
-                    if (!personAtSlot) continue;
-                    lastPersonForRotation = getPersonForNormalRotationContinuity(dk, g, personAtSlot, normalAssignments);
+                    if (!ap) continue;
+                    lastPersonForRotation = getPersonForNormalRotationContinuity(dk, g, ap, normalAssignments);
                     break;
                 }
                 if (lastPersonForRotation) {
@@ -14345,10 +14194,8 @@
                 const monthKey = getMonthKeyFromDate(d);
                 for (let g = 1; g <= 4; g++) {
                     const assignedPerson = normalAssignments[dateKey]?.[g];
-                    const slotAssignee = pureNormalRotationSlotAssigneeByDate[dateKey]?.[g];
-                    const personAtSlot = assignedPerson || slotAssignee;
-                    if (personAtSlot) {
-                        const personForRotation = getPersonForNormalRotationContinuity(dateKey, g, personAtSlot, normalAssignments);
+                    if (assignedPerson) {
+                        const personForRotation = getPersonForNormalRotationContinuity(dateKey, g, assignedPerson, normalAssignments);
                         if (!lastNormalRotationPositionsByMonth[monthKey]) {
                             lastNormalRotationPositionsByMonth[monthKey] = {};
                         }

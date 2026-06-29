@@ -122,18 +122,13 @@
         const fromCurrent = currentAssignments?.[dateKey]?.[groupNum] ?? currentAssignments?.[dateKey]?.[String(groupNum)];
         if (fromCurrent) return fromCurrent;
 
-        let merged = null;
         if (typeof extractGroupAssignmentsMap === 'function') {
             const normalMap = extractGroupAssignmentsMap(
                 typeof normalDayAssignments !== 'undefined' ? normalDayAssignments[dateKey] : null
             );
-            const nightMap = extractGroupAssignmentsMap(
-                typeof nightAssignments !== 'undefined' ? nightAssignments[dateKey] : null
-            );
-            if (normalMap && normalMap[groupNum]) merged = normalMap[groupNum];
-            else if (nightMap && nightMap[groupNum]) merged = nightMap[groupNum];
+            if (normalMap && normalMap[groupNum]) return normalMap[groupNum];
         }
-        return merged || null;
+        return null;
     }
 
     function collectHistoricalThursdayDateKeys(beforeDateKey, currentAssignments) {
@@ -148,7 +143,6 @@
             }
         };
         addFrom(typeof normalDayAssignments !== 'undefined' ? normalDayAssignments : null);
-        addFrom(typeof nightAssignments !== 'undefined' ? nightAssignments : null);
         addFrom(currentAssignments);
         return [...keys].sort();
     }
@@ -396,8 +390,7 @@
             special: simulatedSpecial,
             weekend: simulatedWeekend,
             semi: simulatedSemi,
-            normal: assignments,
-            night: {}
+            normal: assignments
         };
     }
 
