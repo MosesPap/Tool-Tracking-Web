@@ -1377,6 +1377,25 @@
             }
         }
 
+        const personThursdayCounts = buildPersonThursdayCountsFromMap(thursdayCountByPerson);
+
+        return { thursdayEvents, personSummaries, swapPairs, personThursdayCounts };
+    }
+
+    function monthKeyFromDateKey(dateKey) {
+        if (!dateKey || typeof dateKey !== 'string') return null;
+        const m = dateKey.match(/^(\d{4}-\d{2})/);
+        return m ? m[1] : null;
+    }
+
+    function formatMonthKeyEl(monthKey) {
+        if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) return String(monthKey || '—');
+        const d = new Date(`${monthKey}-01T00:00:00`);
+        if (isNaN(d.getTime())) return monthKey;
+        return d.toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
+    }
+
+    function buildPersonThursdayCountsFromMap(thursdayCountByPerson) {
         const personThursdayCounts = [];
         const countSeen = new Set();
         for (const groupNum of NIGHT_GROUPS) {
@@ -1408,8 +1427,156 @@
             if (b.count !== a.count) return b.count - a.count;
             return String(a.person || '').localeCompare(String(b.person || ''), 'el');
         });
+        return personThursdayCounts;
+    }
 
-        return { thursdayEvents, personSummaries, swapPairs, personThursdayCounts };
+    /**
+     * Μετράει Πέμπτες ανά άτομο, προαιρετικά φιλτραρισμένες σε μήνα ή περίοδο μηνών (YYYY-MM).
+     */
+    function buildPersonThursdayCountsForPeriod(thursdayEvents, fromMonth, toMonth) {
+        let from = fromMonth && /^\d{4}-\d{2}$/.test(fromMonth) ? fromMonth : null;
+        let to = toMonth && /^\d{4}-\d{2}$/.test(toMonth) ? toMonth : null;
+        if (from && to && from > to) {
+            const tmp = from;
+            from = to;
+            to = tmp;
+        }
+        if (from && !to) to = from;
+        if (to && !from) from = to;
+
+        const thursdayCountByPerson = new Map();
+        let matchedEvents = 0;
+        for (const ev of thursdayEvents || []) {
+            const mk = monthKeyFromDateKey(ev.dateKey);
+            if (from && to) {
+                if (!mk || mk < from || mk > to) continue;
+            }
+            matchedEvents += 1;
+            const pk = `${ev.groupNum}:${normPerson(ev.assignee)}`;
+            const existing = thursdayCountByPerson.get(pk);
+            if (existing) {
+                existing.count += 1;
+            } else {
+                thursdayCountByPerson.set(pk, {
+                    groupNum: ev.groupNum,
+                    person: ev.assignee,
+                    count: 1
+                });
+            }
+        }
+
+        return {
+            rows: buildPersonThursdayCountsFromMap(thursdayCountByPerson),
+            matchedEvents,
+            fromMonth: from,
+            toMonth: to
+        };
+    }
+
+    function getAvailableMonthKeysFromThursdayEvents(thursdayEvents) {
+        const set = new Set();
+        for (const ev of thursdayEvents || []) {
+            const mk = monthKeyFromDateKey(ev.dateKey);
+            if (mk) set.add(mk);
+        }
+        return [...set].sort();
+    }
+
+    function renderThursdaySpacingHistoryCountsTable(rows) {
+        const tbodyCounts = document.getElementById('thursdaySpacingHistoryCountsBody');
+        if (!tbodyCounts) return;
+        const esc = typeof escapeHtml === 'function' ? escapeHtml : (s) => String(s || '');
+        const groupLabel = (g) =>
+            typeof getGroupName === 'function' ? getGroupName(g) : `Ομάδα ${g}`;
+
+        tbodyCounts.innerHTML = '';
+        for (const row of rows || []) {
+            const tr = document.createElement('tr');
+            const countClass = row.count > 0 ? 'fw-bold text-primary' : 'text-muted';
+            tr.innerHTML = `
+                <td><span class="badge bg-primary">${esc(groupLabel(row.groupNum))}</span></td>
+                <td><strong>${esc(row.person)}</strong></td>
+                <td class="text-center ${countClass}">${row.count}</td>
+            `;
+            tbodyCounts.appendChild(tr);
+        }
+    }
+
+    function applyThursdaySpacingHistoryCountsFilter() {
+        const report = window._thursdaySpacingHistoryReportCache;
+        if (!report) return;
+        const fromEl = document.getElementById('thursdayCountsFromMonth');
+        const toEl = document.getElementById('thursdayCountsToMonth');
+        const hintEl = document.getElementById('thursdayCountsFilterHint');
+        const from = fromEl?.value || '';
+        const to = toEl?.value || '';
+        const result = buildPersonThursdayCountsForPeriod(report.thursdayEvents, from, to);
+        renderThursdaySpacingHistoryCountsTable(result.rows);
+
+        if (hintEl) {
+            if (!result.fromMonth && !result.toMonth) {
+                hintEl.textContent = `Όλη η περίοδος · ${result.matchedEvents} Πέμπτες`;
+            } else if (result.fromMonth === result.toMonth) {
+                hintEl.textContent = `${formatMonthKeyEl(result.fromMonth)} · ${result.matchedEvents} Πέμπτες`;
+            } else {
+                hintEl.textContent =
+                    `${formatMonthKeyEl(result.fromMonth)} – ${formatMonthKeyEl(result.toMonth)} · ` +
+                    `${result.matchedEvents} Πέμπτες`;
+            }
+        }
+    }
+
+    function setupThursdaySpacingHistoryCountsFilter(report) {
+        const fromEl = document.getElementById('thursdayCountsFromMonth');
+        const toEl = document.getElementById('thursdayCountsToMonth');
+        const applyBtn = document.getElementById('thursdayCountsApplyFilterBtn');
+        const clearBtn = document.getElementById('thursdayCountsClearFilterBtn');
+        if (!fromEl || !toEl) return;
+
+        const months = getAvailableMonthKeysFromThursdayEvents(report?.thursdayEvents);
+        const minMonth = months[0] || '';
+        const maxMonth = months.length ? months[months.length - 1] : '';
+        if (minMonth) {
+            fromEl.min = minMonth;
+            toEl.min = minMonth;
+        } else {
+            fromEl.removeAttribute('min');
+            toEl.removeAttribute('min');
+        }
+        if (maxMonth) {
+            fromEl.max = maxMonth;
+            toEl.max = maxMonth;
+        } else {
+            fromEl.removeAttribute('max');
+            toEl.removeAttribute('max');
+        }
+
+        if (!fromEl.dataset.bound) {
+            fromEl.dataset.bound = '1';
+            toEl.dataset.bound = '1';
+            const onEnter = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    applyThursdaySpacingHistoryCountsFilter();
+                }
+            };
+            fromEl.addEventListener('keydown', onEnter);
+            toEl.addEventListener('keydown', onEnter);
+            fromEl.addEventListener('change', applyThursdaySpacingHistoryCountsFilter);
+            toEl.addEventListener('change', applyThursdaySpacingHistoryCountsFilter);
+            if (applyBtn) {
+                applyBtn.addEventListener('click', applyThursdaySpacingHistoryCountsFilter);
+            }
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    fromEl.value = '';
+                    toEl.value = '';
+                    applyThursdaySpacingHistoryCountsFilter();
+                });
+            }
+        }
+
+        applyThursdaySpacingHistoryCountsFilter();
     }
 
     function openThursdaySpacingHistoryModal() {
@@ -1423,6 +1590,7 @@
             }
         }
         const report = buildThursdaySpacingHistoryReport();
+        window._thursdaySpacingHistoryReportCache = report;
         const tbodyPerson = document.getElementById('thursdaySpacingHistoryPersonBody');
         const tbodyChrono = document.getElementById('thursdaySpacingHistoryChronoBody');
         const tbodyCounts = document.getElementById('thursdaySpacingHistoryCountsBody');
@@ -1499,17 +1667,7 @@
             tbodyChrono.appendChild(tr);
         }
 
-        tbodyCounts.innerHTML = '';
-        for (const row of report.personThursdayCounts || []) {
-            const tr = document.createElement('tr');
-            const countClass = row.count > 0 ? 'fw-bold text-primary' : 'text-muted';
-            tr.innerHTML = `
-                <td><span class="badge bg-primary">${esc(groupLabel(row.groupNum))}</span></td>
-                <td><strong>${esc(row.person)}</strong></td>
-                <td class="text-center ${countClass}">${row.count}</td>
-            `;
-            tbodyCounts.appendChild(tr);
-        }
+        setupThursdaySpacingHistoryCountsFilter(report);
 
         if (emptyMsg) {
             emptyMsg.style.display =
