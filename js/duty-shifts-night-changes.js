@@ -448,6 +448,164 @@
         }
     }
 
+    function formatPartnerCandidateDateLabel(dateKey) {
+        if (!dateKey) return '—';
+        const d = new Date(dateKey + 'T00:00:00');
+        if (isNaN(d.getTime())) return String(dateKey);
+        const dayName = typeof getGreekDayName === 'function' ? getGreekDayName(d) : '';
+        const dateStr = d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        return dayName ? `${dayName} ${dateStr}` : dateStr;
+    }
+
+    /**
+     * Ελέγχει όλους τους υποψήφιους εταίρους (Δευ/Τρι/Τετ) και επιστρέφει γιατί απορρίφθηκε καθένας.
+     */
+    function diagnoseThursdaySpacingPartnerCandidates(
+        thursdayKey,
+        groupNum,
+        person,
+        assignments,
+        normalDays,
+        runtimeLastThu,
+        simulated
+    ) {
+        const partnerDays = getThursdaySpacingPartnerCandidates(thursdayKey, normalDays);
+        const diagnostics = [];
+        const thuDate = new Date(thursdayKey + 'T00:00:00');
+
+        if (partnerDays.length === 0) {
+            diagnostics.push({
+                partnerKey: null,
+                partnerDateLabel: '—',
+                partnerPerson: null,
+                rejected: true,
+                reasonCode: 'no_candidates',
+                reasonLabel:
+                    'Δεν υπήρχαν υποψήφιες καθημερινές Δευτέρα/Τρίτη/Τετάρτη εντός του ίδιου μήνα με την Πέμπτη (ή δεν είναι στην περίοδο υπολογισμού).'
+            });
+            return { partnerDays, diagnostics, selected: null };
+        }
+
+        for (let i = 0; i < partnerDays.length; i++) {
+            const partnerKey = partnerDays[i];
+            const partnerPerson = assignments[partnerKey]?.[groupNum] ?? assignments[partnerKey]?.[String(groupNum)];
+            const entry = {
+                order: i + 1,
+                partnerKey,
+                partnerDateLabel: formatPartnerCandidateDateLabel(partnerKey),
+                partnerPerson: partnerPerson || null,
+                rejected: true,
+                reasonCode: '',
+                reasonLabel: ''
+            };
+
+            if (!partnerPerson) {
+                entry.reasonCode = 'no_assignee';
+                entry.reasonLabel = 'Δεν υπάρχει ανάθεση στην ομάδα αυτή την ημέρα.';
+                diagnostics.push(entry);
+                continue;
+            }
+
+            if (normPerson(partnerPerson) === normPerson(person)) {
+                entry.reasonCode = 'same_person';
+                entry.reasonLabel = 'Ίδιο άτομο με αυτόν/αυτήν που είναι στην Πέμπτη.';
+                diagnostics.push(entry);
+                continue;
+            }
+
+            const partnerSpacing = personPassesThursdaySpacing(
+                partnerPerson,
+                groupNum,
+                thursdayKey,
+                assignments,
+                runtimeLastThu
+            );
+            if (!partnerSpacing.eligible) {
+                const lastThu = partnerSpacing.lastThursday
+                    ? formatDateKeyElGR(partnerSpacing.lastThursday)
+                    : '—';
+                entry.reasonCode = 'partner_fails_n';
+                entry.reasonLabel =
+                    `Ο/Η ${partnerPerson} δεν περνάει τον κανόνα Ν για την Πέμπτη ` +
+                    `(Ν=${partnerSpacing.nRequired}, πέρασαν ${partnerSpacing.thursdaysSince}, τελευταία Πέμπτη ${lastThu}).`;
+                entry.partnerNRequired = partnerSpacing.nRequired;
+                entry.partnerThursdaysSince = partnerSpacing.thursdaysSince;
+                entry.partnerLastThursday = partnerSpacing.lastThursday || null;
+                diagnostics.push(entry);
+                continue;
+            }
+
+            if (
+                typeof isPersonMissingOnDate === 'function' &&
+                !isNaN(thuDate.getTime()) &&
+                isPersonMissingOnDate(partnerPerson, groupNum, thuDate, 'normal')
+            ) {
+                entry.reasonCode = 'partner_missing_on_thursday';
+                entry.reasonLabel = `Ο/Η ${partnerPerson} απουσιάζει την Πέμπτη ${formatDateKeyElGR(thursdayKey)}.`;
+                diagnostics.push(entry);
+                continue;
+            }
+
+            const partnerDate = new Date(partnerKey + 'T00:00:00');
+            if (
+                typeof isPersonMissingOnDate === 'function' &&
+                !isNaN(partnerDate.getTime()) &&
+                isPersonMissingOnDate(person, groupNum, partnerDate, 'normal')
+            ) {
+                entry.reasonCode = 'person_missing_on_partner';
+                entry.reasonLabel = `Ο/Η ${person} απουσιάζει την ${entry.partnerDateLabel}.`;
+                diagnostics.push(entry);
+                continue;
+            }
+
+            if (
+                typeof isPersonDisabledForDuty === 'function' &&
+                isPersonDisabledForDuty(person, groupNum, 'normal', partnerKey)
+            ) {
+                entry.reasonCode = 'person_disabled_on_partner';
+                entry.reasonLabel = `Ο/Η ${person} είναι απενεργοποιημένος/η για καθημερινές την ${entry.partnerDateLabel}.`;
+                diagnostics.push(entry);
+                continue;
+            }
+
+            if (
+                typeof isPersonDisabledForDuty === 'function' &&
+                isPersonDisabledForDuty(partnerPerson, groupNum, 'normal', thursdayKey)
+            ) {
+                entry.reasonCode = 'partner_disabled_on_thursday';
+                entry.reasonLabel = `Ο/Η ${partnerPerson} είναι απενεργοποιημένος/η για καθημερινές την Πέμπτη.`;
+                diagnostics.push(entry);
+                continue;
+            }
+
+            if (
+                !swapPassesConsecutiveChecks(
+                    thursdayKey,
+                    partnerKey,
+                    groupNum,
+                    person,
+                    partnerPerson,
+                    simulated
+                )
+            ) {
+                entry.reasonCode = 'consecutive_conflict';
+                entry.reasonLabel =
+                    `Η ανταλλαγή θα δημιουργούσε συνεχόμενη υπηρεσία ` +
+                    `(έλεγχος για ${person} / ${partnerPerson} στις δύο ημερομηνίες).`;
+                diagnostics.push(entry);
+                continue;
+            }
+
+            entry.rejected = false;
+            entry.reasonCode = 'ok';
+            entry.reasonLabel = 'Κατάλληλος εταίρος — γίνεται ανταλλαγή.';
+            diagnostics.push(entry);
+            return { partnerDays, diagnostics, selected: entry };
+        }
+
+        return { partnerDays, diagnostics, selected: null };
+    }
+
     /**
      * Πέρασμα Ν Πεμπτών — τρέχει ΜΕΤΑ την αρχική ανάθεση και τις υπάρχουσες ανταλλαγές.
      */
@@ -456,13 +614,15 @@
             return {
                 assignments: finalNormalAssignments,
                 markers: {},
-                spacingSwaps: []
+                spacingSwaps: [],
+                spacingFails: []
             };
         }
 
         const assignments = JSON.parse(JSON.stringify(finalNormalAssignments || {}));
         const markers = {};
         const spacingSwaps = [];
+        const spacingFails = [];
         const normalDays = [...(dayTypeLists?.normal || [])].sort();
         const thursdayKeys = normalDays.filter(
             (dk) => typeof isNightThursdayDateKey === 'function' && isNightThursdayDateKey(dk)
@@ -516,57 +676,20 @@
                     continue;
                 }
 
-                const partnerDays = getThursdaySpacingPartnerCandidates(thursdayKey, normalDays);
-                let swapped = false;
+                const diagnosis = diagnoseThursdaySpacingPartnerCandidates(
+                    thursdayKey,
+                    groupNum,
+                    person,
+                    assignments,
+                    normalDays,
+                    runtimeLastThu,
+                    simulated
+                );
+                const selected = diagnosis.selected;
 
-                for (const partnerKey of partnerDays) {
-                    const partnerPerson = assignments[partnerKey]?.[groupNum];
-                    if (!partnerPerson || normPerson(partnerPerson) === normPerson(person)) continue;
-
-                    const partnerSpacing = personPassesThursdaySpacing(
-                        partnerPerson,
-                        groupNum,
-                        thursdayKey,
-                        assignments,
-                        runtimeLastThu
-                    );
-                    if (!partnerSpacing.eligible) continue;
-
-                    if (
-                        typeof isPersonMissingOnDate === 'function' &&
-                        isPersonMissingOnDate(partnerPerson, groupNum, thuDate, 'normal')
-                    ) {
-                        continue;
-                    }
-
-                    const partnerDate = new Date(partnerKey + 'T00:00:00');
-                    if (
-                        typeof isPersonMissingOnDate === 'function' &&
-                        isPersonMissingOnDate(person, groupNum, partnerDate, 'normal')
-                    ) {
-                        continue;
-                    }
-
-                    if (
-                        typeof isPersonDisabledForDuty === 'function' &&
-                        (isPersonDisabledForDuty(person, groupNum, 'normal', partnerKey) ||
-                            isPersonDisabledForDuty(partnerPerson, groupNum, 'normal', thursdayKey))
-                    ) {
-                        continue;
-                    }
-
-                    if (
-                        !swapPassesConsecutiveChecks(
-                            thursdayKey,
-                            partnerKey,
-                            groupNum,
-                            person,
-                            partnerPerson,
-                            simulated
-                        )
-                    ) {
-                        continue;
-                    }
+                if (selected && selected.partnerKey && selected.partnerPerson) {
+                    const partnerKey = selected.partnerKey;
+                    const partnerPerson = selected.partnerPerson;
 
                     if (!assignments[thursdayKey]) assignments[thursdayKey] = {};
                     if (!assignments[partnerKey]) assignments[partnerKey] = {};
@@ -663,58 +786,72 @@
                     });
 
                     runtimeLastThu[`${groupNum}:${normPerson(partnerPerson)}`] = thursdayKey;
-                    swapped = true;
-                    break;
+                    continue;
                 }
 
-                if (!swapped) {
-                    const failReason = buildThursdaySpacingFailReason(person, thursdayKey, spacing);
-                    console.warn(
-                        `[THURSDAY SPACING] Δεν βρέθηκε ανταλλαγή για ${person} την ${thursdayKey} (Ομάδα ${groupNum}, Ν=${spacing.nRequired}, πέρασαν ${spacing.thursdaysSince})`
-                    );
-                    setSpacingMarker(markers, thursdayKey, groupNum, person, {
-                        status: 'fail',
-                        nRequired: spacing.nRequired,
-                        thursdaysSince: spacing.thursdaysSince,
-                        lastThursday: spacing.lastThursday || null,
-                        reason: failReason
-                    });
-                    if (typeof storeAssignmentReason === 'function') {
-                        const existing =
-                            typeof getAssignmentReason === 'function'
-                                ? getAssignmentReason(thursdayKey, groupNum, person)
-                                : null;
-                        // Μην αντικαθιστάς υπάρχουσα ανταλλαγή· για skip κράτα το παλιό στο meta.
-                        if (!(existing && existing.type === 'swap')) {
-                            const failMeta = {
-                                thursdaySpacing: true,
-                                thursdaySpacingFail: true,
-                                nRequired: spacing.nRequired,
-                                thursdaysSince: spacing.thursdaysSince,
-                                lastThursday: spacing.lastThursday || null
+                const failReason = buildThursdaySpacingFailReason(person, thursdayKey, spacing);
+                const candidateDiagnostics = diagnosis.diagnostics || [];
+                console.warn(
+                    `[THURSDAY SPACING] Δεν βρέθηκε ανταλλαγή για ${person} την ${thursdayKey} (Ομάδα ${groupNum}, Ν=${spacing.nRequired}, πέρασαν ${spacing.thursdaysSince})`,
+                    candidateDiagnostics
+                );
+                setSpacingMarker(markers, thursdayKey, groupNum, person, {
+                    status: 'fail',
+                    nRequired: spacing.nRequired,
+                    thursdaysSince: spacing.thursdaysSince,
+                    lastThursday: spacing.lastThursday || null,
+                    reason: failReason,
+                    candidateDiagnostics
+                });
+                if (typeof storeAssignmentReason === 'function') {
+                    const existing =
+                        typeof getAssignmentReason === 'function'
+                            ? getAssignmentReason(thursdayKey, groupNum, person)
+                            : null;
+                    if (!(existing && existing.type === 'swap')) {
+                        const failMeta = {
+                            thursdaySpacing: true,
+                            thursdaySpacingFail: true,
+                            nRequired: spacing.nRequired,
+                            thursdaysSince: spacing.thursdaysSince,
+                            lastThursday: spacing.lastThursday || null,
+                            candidateDiagnostics
+                        };
+                        if (existing && existing.type === 'skip' && !existing.meta?.thursdaySpacingFail) {
+                            failMeta.preservedSkipReason = {
+                                type: existing.type,
+                                reason: existing.reason,
+                                swappedWith: existing.swappedWith,
+                                meta: existing.meta ? { ...existing.meta } : null
                             };
-                            if (existing && existing.type === 'skip' && !existing.meta?.thursdaySpacingFail) {
-                                failMeta.preservedSkipReason = {
-                                    type: existing.type,
-                                    reason: existing.reason,
-                                    swappedWith: existing.swappedWith,
-                                    meta: existing.meta ? { ...existing.meta } : null
-                                };
-                            }
-                            storeAssignmentReason(
-                                thursdayKey,
-                                groupNum,
-                                person,
-                                'skip',
-                                failReason,
-                                null,
-                                null,
-                                failMeta
-                            );
                         }
+                        storeAssignmentReason(
+                            thursdayKey,
+                            groupNum,
+                            person,
+                            'skip',
+                            failReason,
+                            null,
+                            null,
+                            failMeta
+                        );
                     }
-                    runtimeLastThu[`${groupNum}:${normPerson(person)}`] = thursdayKey;
                 }
+                spacingFails.push({
+                    thursdayKey,
+                    thursdayLabel: formatPartnerCandidateDateLabel(thursdayKey),
+                    groupNum,
+                    person,
+                    nRequired: spacing.nRequired,
+                    thursdaysSince: spacing.thursdaysSince,
+                    lastThursday: spacing.lastThursday || null,
+                    lastThursdayLabel: spacing.lastThursday
+                        ? formatPartnerCandidateDateLabel(spacing.lastThursday)
+                        : '—',
+                    reason: failReason,
+                    candidateDiagnostics
+                });
+                runtimeLastThu[`${groupNum}:${normPerson(person)}`] = thursdayKey;
             }
         }
 
@@ -722,7 +859,11 @@
             applyThursdaySpacingMarkers(markers, normalDays);
         }
 
-        return { assignments, markers, spacingSwaps };
+        if (typeof calculationSteps !== 'undefined' && calculationSteps) {
+            calculationSteps.thursdaySpacingFails = spacingFails;
+        }
+
+        return { assignments, markers, spacingSwaps, spacingFails };
     }
 
     function formatThursdayHistoryDateLabel(dateKey) {
@@ -793,7 +934,9 @@
                 nRequired: marker?.nRequired ?? reason?.meta?.nRequired ?? null,
                 thursdaysSince: marker?.thursdaysSince ?? reason?.meta?.thursdaysSince ?? null,
                 lastThursday: marker?.lastThursday || reason?.meta?.lastThursday || null,
-                reasonText: marker?.reason || reason?.reason || ''
+                reasonText: marker?.reason || reason?.reason || '',
+                candidateDiagnostics:
+                    marker?.candidateDiagnostics || reason?.meta?.candidateDiagnostics || []
             };
         }
 
@@ -1176,6 +1319,201 @@
         }
     }
 
+    /**
+     * Συλλογή αποτυχιών Ν Πεμπτών (από τελευταίο υπολογισμό ή από αποθηκευμένα markers/reasons).
+     */
+    function collectThursdaySpacingFailReports() {
+        if (
+            typeof calculationSteps !== 'undefined' &&
+            Array.isArray(calculationSteps?.thursdaySpacingFails) &&
+            calculationSteps.thursdaySpacingFails.length > 0
+        ) {
+            return calculationSteps.thursdaySpacingFails.slice();
+        }
+
+        const fails = [];
+        const markersStore =
+            typeof thursdaySpacingMarkers !== 'undefined'
+                ? thursdaySpacingMarkers
+                : typeof window !== 'undefined'
+                  ? window.thursdaySpacingMarkers
+                  : null;
+        const seen = new Set();
+
+        const pushFail = (row) => {
+            if (!row?.thursdayKey || !row?.groupNum || !row?.person) return;
+            const key = `${row.thursdayKey}|${row.groupNum}|${normPerson(row.person)}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            fails.push(row);
+        };
+
+        if (markersStore && typeof markersStore === 'object') {
+            for (const dateKey of Object.keys(markersStore)) {
+                if (typeof isNightThursdayDateKey === 'function' && !isNightThursdayDateKey(dateKey)) continue;
+                for (const groupStr of [3, 4, '3', '4']) {
+                    const groupNum = parseInt(groupStr, 10);
+                    const gmap = markersStore[dateKey]?.[groupNum] || markersStore[dateKey]?.[groupStr];
+                    if (!gmap) continue;
+                    for (const personName of Object.keys(gmap)) {
+                        const m = gmap[personName];
+                        if (!m || m.status !== 'fail') continue;
+                        pushFail({
+                            thursdayKey: dateKey,
+                            thursdayLabel: formatPartnerCandidateDateLabel(dateKey),
+                            groupNum,
+                            person: personName,
+                            nRequired: m.nRequired,
+                            thursdaysSince: m.thursdaysSince,
+                            lastThursday: m.lastThursday || null,
+                            lastThursdayLabel: m.lastThursday
+                                ? formatPartnerCandidateDateLabel(m.lastThursday)
+                                : '—',
+                            reason: m.reason || '',
+                            candidateDiagnostics: Array.isArray(m.candidateDiagnostics)
+                                ? m.candidateDiagnostics
+                                : []
+                        });
+                    }
+                }
+            }
+        }
+
+        const reasonsStore = typeof assignmentReasons !== 'undefined' ? assignmentReasons : null;
+        if (reasonsStore && typeof reasonsStore === 'object') {
+            for (const dateKey of Object.keys(reasonsStore)) {
+                if (typeof isNightThursdayDateKey === 'function' && !isNightThursdayDateKey(dateKey)) continue;
+                for (const groupStr of Object.keys(reasonsStore[dateKey] || {})) {
+                    const groupNum = parseInt(groupStr, 10);
+                    if (groupNum !== 3 && groupNum !== 4) continue;
+                    const gmap = reasonsStore[dateKey][groupStr];
+                    for (const personName of Object.keys(gmap || {})) {
+                        const r = gmap[personName];
+                        if (!r?.meta?.thursdaySpacingFail) continue;
+                        pushFail({
+                            thursdayKey: dateKey,
+                            thursdayLabel: formatPartnerCandidateDateLabel(dateKey),
+                            groupNum,
+                            person: personName,
+                            nRequired: r.meta.nRequired,
+                            thursdaysSince: r.meta.thursdaysSince,
+                            lastThursday: r.meta.lastThursday || null,
+                            lastThursdayLabel: r.meta.lastThursday
+                                ? formatPartnerCandidateDateLabel(r.meta.lastThursday)
+                                : '—',
+                            reason: r.reason || '',
+                            candidateDiagnostics: Array.isArray(r.meta.candidateDiagnostics)
+                                ? r.meta.candidateDiagnostics
+                                : []
+                        });
+                    }
+                }
+            }
+        }
+
+        fails.sort((a, b) => {
+            const byDate = String(a.thursdayKey || '').localeCompare(String(b.thursdayKey || ''));
+            if (byDate !== 0) return byDate;
+            return (a.groupNum || 0) - (b.groupNum || 0);
+        });
+        return fails;
+    }
+
+    function openThursdaySpacingFailReportModal() {
+        const fails = collectThursdaySpacingFailReports();
+        const body = document.getElementById('thursdaySpacingFailReportBody');
+        const emptyMsg = document.getElementById('thursdaySpacingFailReportEmpty');
+        const countBadge = document.getElementById('thursdaySpacingFailReportCount');
+        if (!body) return;
+
+        const esc = typeof escapeHtml === 'function' ? escapeHtml : (s) => String(s || '');
+        const groupLabel = (g) =>
+            typeof getGroupName === 'function' ? getGroupName(g) : `Ομάδα ${g}`;
+
+        if (countBadge) {
+            countBadge.textContent = String(fails.length);
+            countBadge.className =
+                fails.length > 0 ? 'badge bg-danger ms-2' : 'badge bg-secondary ms-2';
+        }
+
+        if (emptyMsg) {
+            emptyMsg.style.display = fails.length === 0 ? 'block' : 'none';
+        }
+
+        body.innerHTML = '';
+        if (fails.length === 0) {
+            body.innerHTML =
+                '<div class="alert alert-success mb-0"><i class="fas fa-check-circle me-2"></i>Δεν υπάρχουν αποθηκευμένες αποτυχίες εύρεσης εταίρου για κανόνα Ν Πεμπτών.</div>';
+        } else {
+            for (const fail of fails) {
+                const card = document.createElement('div');
+                card.className = 'card mb-3 border-danger';
+                const diagRows = (fail.candidateDiagnostics || [])
+                    .map((d) => {
+                        const who = d.partnerPerson
+                            ? esc(d.partnerPerson)
+                            : '<span class="text-muted">—</span>';
+                        const badge = d.rejected
+                            ? '<span class="badge bg-danger">Απορρίφθηκε</span>'
+                            : '<span class="badge bg-success">OK</span>';
+                        const ord = d.order != null ? `#${d.order}` : '';
+                        return `<tr>
+                            <td class="text-nowrap">${esc(ord)}</td>
+                            <td>${esc(d.partnerDateLabel || d.partnerKey || '—')}</td>
+                            <td>${who}</td>
+                            <td>${badge}</td>
+                            <td>${esc(d.reasonLabel || d.reasonCode || '—')}</td>
+                        </tr>`;
+                    })
+                    .join('');
+                const diagTable =
+                    (fail.candidateDiagnostics || []).length > 0
+                        ? `<div class="table-responsive mt-2">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Σειρά</th>
+                                        <th>Υποψήφια ημέρα</th>
+                                        <th>Άτομο εκεί</th>
+                                        <th>Αποτέλεσμα</th>
+                                        <th>Γιατί</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${diagRows}</tbody>
+                            </table>
+                           </div>`
+                        : `<div class="alert alert-warning small mt-2 mb-0">
+                            Δεν υπάρχουν λεπτομέρειες υποψηφίων για αυτή την αποτυχία
+                            (παλιότερος υπολογισμός πριν την αποθήκευση διάγνωσης).
+                           </div>`;
+
+                card.innerHTML = `
+                    <div class="card-header bg-danger text-white py-2">
+                        <strong>${esc(fail.person)}</strong>
+                        <span class="badge bg-light text-dark ms-2">${esc(groupLabel(fail.groupNum))}</span>
+                        <span class="ms-2">${esc(fail.thursdayLabel || fail.thursdayKey)}</span>
+                    </div>
+                    <div class="card-body py-2">
+                        <div class="small mb-2">
+                            <div><strong>Ν απαιτούμενο:</strong> ${esc(String(fail.nRequired ?? '—'))}</div>
+                            <div><strong>Πέμπτες που πέρασαν:</strong> ${esc(String(fail.thursdaysSince ?? '—'))}</div>
+                            <div><strong>Τελευταία Πέμπτη ατόμου:</strong> ${esc(fail.lastThursdayLabel || '—')}</div>
+                        </div>
+                        <div class="small text-muted mb-2">${esc(fail.reason || '')}</div>
+                        <div class="fw-semibold small mb-1">Έλεγχος υποψηφίων εταίρων (κατά σειρά προτεραιότητας)</div>
+                        ${diagTable}
+                    </div>
+                `;
+                body.appendChild(card);
+            }
+        }
+
+        const modalEl = document.getElementById('thursdaySpacingFailReportModal');
+        if (modalEl && typeof bootstrap !== 'undefined') {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+    }
+
     window.runThursdaySpacingChangesPass = runThursdaySpacingChangesPass;
     window.buildThursdaySpacingSwapReason = buildThursdaySpacingSwapReason;
     window.countActiveNormalListSizeForThursday = countActiveNormalListSize;
@@ -1185,6 +1523,9 @@
     window.shouldSkipNormalConflictSwapForThursdaySpacing = shouldSkipNormalConflictSwapForThursdaySpacing;
     window.buildThursdaySpacingHistoryReport = buildThursdaySpacingHistoryReport;
     window.openThursdaySpacingHistoryModal = openThursdaySpacingHistoryModal;
+    window.collectThursdaySpacingFailReports = collectThursdaySpacingFailReports;
+    window.openThursdaySpacingFailReportModal = openThursdaySpacingFailReportModal;
+    window.diagnoseThursdaySpacingPartnerCandidates = diagnoseThursdaySpacingPartnerCandidates;
     window.buildThursdaySpacingSwapFrameStyle = buildThursdaySpacingSwapFrameStyle;
     window.getThursdaySpacingSwapColors = getThursdaySpacingSwapColors;
     window.buildThursdaySpacingPairFallbackKey = buildThursdaySpacingPairFallbackKey;

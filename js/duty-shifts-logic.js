@@ -6445,6 +6445,11 @@
                     if (spacingSwaps.length > 0) {
                         console.log('[STEP 4] Thursday spacing swaps:', spacingSwaps.length);
                     }
+                    const spacingFails = spacingResult.spacingFails || [];
+                    calculationSteps.thursdaySpacingFails = spacingFails;
+                    if (spacingFails.length > 0) {
+                        console.warn('[STEP 4] Thursday spacing FAILS (no partner):', spacingFails.length);
+                    }
                 }
             }
 
@@ -8278,6 +8283,23 @@
                 });
                 message += '</tbody></table></div>';
             }
+
+            const spacingFailCount =
+                (typeof calculationSteps !== 'undefined' &&
+                    Array.isArray(calculationSteps.thursdaySpacingFails) &&
+                    calculationSteps.thursdaySpacingFails.length) ||
+                (typeof collectThursdaySpacingFailReports === 'function'
+                    ? collectThursdaySpacingFailReports().length
+                    : 0);
+            if (spacingFailCount > 0) {
+                message +=
+                    `<div class="alert alert-danger mt-3 mb-0">` +
+                    `<i class="fas fa-exclamation-triangle me-2"></i>` +
+                    `<strong>Αποτυχίες κανόνα Ν Πεμπτών: ${spacingFailCount}</strong> — ` +
+                    `άτομα που δεν πέρασαν το Ν και δεν βρέθηκε εταίρος για ανταλλαγή. ` +
+                    `<button type="button" class="btn btn-sm btn-outline-danger ms-2" id="openThursdaySpacingFailFromResultsBtn">` +
+                    `<i class="fas fa-search me-1"></i>Λεπτομερής αναφορά</button></div>`;
+            }
             
             // Create and show modal
             const modalHtml = `
@@ -8292,6 +8314,11 @@
                                 ${message}
                             </div>
                             <div class="modal-footer">
+                                ${
+                                    spacingFailCount > 0
+                                        ? `<button type="button" class="btn btn-outline-danger me-auto" id="openThursdaySpacingFailFromResultsFooterBtn"><i class="fas fa-search me-1"></i>Αναφορά αποτυχιών Ν (${spacingFailCount})</button>`
+                                        : ''
+                                }
                                 <button type="button" class="btn btn-primary" id="normalSwapOkButton">OK</button>
                             </div>
                         </div>
@@ -8311,6 +8338,18 @@
             // Show modal
             const modal = new bootstrap.Modal(document.getElementById('normalSwapResultsModal'));
             modal.show();
+
+            const openFailReport = () => {
+                if (typeof openThursdaySpacingFailReportModal === 'function') {
+                    openThursdaySpacingFailReportModal();
+                }
+            };
+            document
+                .getElementById('openThursdaySpacingFailFromResultsBtn')
+                ?.addEventListener('click', openFailReport);
+            document
+                .getElementById('openThursdaySpacingFailFromResultsFooterBtn')
+                ?.addEventListener('click', openFailReport);
             
             // When OK is pressed, save final assignments and close modal
             const okButton = document.getElementById('normalSwapOkButton');
