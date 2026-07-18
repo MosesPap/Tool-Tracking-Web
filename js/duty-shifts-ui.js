@@ -6953,6 +6953,18 @@
                                   )
                                 : String(reason.reason || '').trim();
                         reasonBadge = `<span class="badge bg-danger ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-exclamation-triangle me-1"></i>Αποτυχία Ν Πεμπτών</span>`;
+                    } else if (reason.meta?.thursdaySpacingProximity) {
+                        const displayReason =
+                            typeof buildCombinedAssignmentReasonDisplayText === 'function'
+                                ? buildCombinedAssignmentReasonDisplayText(
+                                      reason,
+                                      key,
+                                      person.group,
+                                      person.name,
+                                      dayTypeCategory
+                                  )
+                                : String(reason.reason || '').trim();
+                        reasonBadge = `<span class="badge bg-warning text-dark ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-exchange-alt me-1"></i>Ν · κοντινότερος</span>`;
                     } else if (reason.type === 'skip' && reason.meta?.preserveBaseline) {
                         const displayReason = normalizeSkipReasonText(reason.reason);
                         reasonBadge = `<span class="badge bg-primary ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-user-edit me-1"></i>Χειροκίνητη ανάθεση</span>`;
