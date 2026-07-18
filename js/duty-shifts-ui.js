@@ -4614,6 +4614,7 @@
                             let underline = false;
                             let isSwap = false;
                             let isThursdaySpacingSwap = false;
+                            let isThursdaySpacingFail = false;
                             let thursdaySpacingPairId = null;
                             let thursdaySpacingPairFallbackKey = null;
                             let swapStyle = '';
@@ -4623,9 +4624,17 @@
                                         ? getThursdaySpacingMarker(key, g, personName)
                                         : null;
                                 const r = getAssignmentReason(key, g, personName);
+                                if (
+                                    (r && r.meta && r.meta.thursdaySpacingFail) ||
+                                    (spacingMarkerEarly && spacingMarkerEarly.status === 'fail') ||
+                                    (typeof personHasThursdaySpacingFail === 'function' &&
+                                        personHasThursdaySpacingFail(key, g, personName))
+                                ) {
+                                    isThursdaySpacingFail = true;
+                                }
                                 if (r && r.type === 'swap') {
                                     isSwap = true;
-                                    if (r.meta && r.meta.thursdaySpacing) {
+                                    if (r.meta && r.meta.thursdaySpacing && !r.meta.thursdaySpacingFail) {
                                         isThursdaySpacingSwap = true;
                                         thursdaySpacingPairId = r.swapPairId;
                                         thursdaySpacingPairFallbackKey =
@@ -4728,6 +4737,7 @@
                                 underline,
                                 isSwap,
                                 isThursdaySpacingSwap,
+                                isThursdaySpacingFail,
                                 thursdaySpacingPairId,
                                 thursdaySpacingPairFallbackKey,
                                 swapStyle,
@@ -4752,7 +4762,9 @@
                         const missingBufferTitle = 'Προειδοποίηση: Η ημέρα είναι αμέσως πριν την έναρξη ή αμέσως μετά το τέλος περιόδου απουσίας.';
                         entriesByGroup.forEach((e, idx) => {
                             let cls = 'duty-person';
-                            if (e.isThursdaySpacingSwap) {
+                            if (e.isThursdaySpacingFail) {
+                                cls = 'duty-person duty-person-thursday-spacing-fail';
+                            } else if (e.isThursdaySpacingSwap) {
                                 cls = 'duty-person duty-person-thursday-spacing-swap';
                             } else if (e.isSwap) {
                                 cls = 'duty-person-swapped';
@@ -4773,6 +4785,11 @@
                                 if (sp && sp.status === 'ok' && isThursday) {
                                     const spTitle = `Πέμπτη OK — κανόνας Ν Πεμπτών (Ν=${sp.nRequired}${sp.thursdaysSince != null ? ', πέρασαν ' + sp.thursdaysSince : ''})`;
                                     spacingIcon = ` <i class="fas fa-check duty-thursday-spacing-ok" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}"></i>`;
+                                } else if (sp && sp.status === 'fail' && isThursday) {
+                                    const spTitle =
+                                        sp.reason ||
+                                        `Κανόνας Ν Πεμπτών: δεν βρέθηκε ανταλλαγή (Ν=${sp.nRequired ?? '?'}${sp.thursdaysSince != null ? ', πέρασαν ' + sp.thursdaysSince : ''})`;
+                                    spacingIcon = ` <i class="fas fa-exclamation-triangle duty-thursday-spacing-fail" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}"></i>`;
                                 } else if (sp && sp.status === 'swap') {
                                     const spTitle =
                                         sp.reason ||
@@ -4791,6 +4808,17 @@
                                               ).border
                                             : '#E65100';
                                     spacingIcon = ` <span class="duty-thursday-spacing-asterisk" style="color:${escapeHtml(pairColor)}" title="${escapeHtml(spTitle)}" aria-label="${escapeHtml(spTitle)}">*</span>`;
+                                } else if (e.isThursdaySpacingFail && isThursday) {
+                                    const failText =
+                                        typeof buildThursdaySpacingSwapReasonText === 'function'
+                                            ? buildThursdaySpacingSwapReasonText(
+                                                  key,
+                                                  e.groupNum,
+                                                  e.personName,
+                                                  dayTypeCategory
+                                              )
+                                            : 'Κανόνας Ν Πεμπτών: δεν βρέθηκε ανταλλαγή.';
+                                    spacingIcon = ` <i class="fas fa-exclamation-triangle duty-thursday-spacing-fail" title="${escapeHtml(failText)}" aria-label="${escapeHtml(failText)}"></i>`;
                                 }
                             }
                             const listOrderSuffix =
@@ -6913,7 +6941,19 @@
                     typeof personIsReplacementInDisabledBaselineSlot === 'function' &&
                     personIsReplacementInDisabledBaselineSlot(key, person.group, person.name, dayTypeCategory, date);
                 if (reason) {
-                    if (reason.type === 'skip' && reason.meta?.preserveBaseline) {
+                    if (reason.meta?.thursdaySpacingFail) {
+                        const displayReason =
+                            typeof buildCombinedAssignmentReasonDisplayText === 'function'
+                                ? buildCombinedAssignmentReasonDisplayText(
+                                      reason,
+                                      key,
+                                      person.group,
+                                      person.name,
+                                      dayTypeCategory
+                                  )
+                                : String(reason.reason || '').trim();
+                        reasonBadge = `<span class="badge bg-danger ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-exclamation-triangle me-1"></i>Αποτυχία Ν Πεμπτών</span>`;
+                    } else if (reason.type === 'skip' && reason.meta?.preserveBaseline) {
                         const displayReason = normalizeSkipReasonText(reason.reason);
                         reasonBadge = `<span class="badge bg-primary ms-2" title="${escapeHtml(displayReason)}"><i class="fas fa-user-edit me-1"></i>Χειροκίνητη ανάθεση</span>`;
                     } else if (reason.type === 'skip' && showReplacementSlot) {
@@ -6950,8 +6990,28 @@
                         reasonBadge = reasonBadge ? reasonBadge + swapBadge : swapBadge;
                     }
                 }
+                if (
+                    !reasonBadge &&
+                    person.name &&
+                    person.group &&
+                    typeof personHasThursdaySpacingFail === 'function' &&
+                    personHasThursdaySpacingFail(key, person.group, person.name)
+                ) {
+                    const failText =
+                        typeof buildThursdaySpacingSwapReasonText === 'function'
+                            ? buildThursdaySpacingSwapReasonText(
+                                  key,
+                                  person.group,
+                                  person.name,
+                                  dayTypeCategory
+                              )
+                            : 'Κανόνας Ν Πεμπτών: δεν βρέθηκε ανταλλαγή.';
+                    reasonBadge = `<span class="badge bg-danger ms-2" title="${escapeHtml(failText)}"><i class="fas fa-exclamation-triangle me-1"></i>Αποτυχία Ν Πεμπτών</span>`;
+                }
                 const defaultChangeMode =
-                    rawReason?.meta?.preserveBaseline
+                    rawReason?.meta?.thursdaySpacingFail
+                        ? 'manual_assign'
+                        : rawReason?.meta?.preserveBaseline
                         ? 'manual_assign'
                         : rawReason && rawReason.type === 'skip'
                           ? 'replacement'
@@ -7000,6 +7060,20 @@
                             missingEndKey: rawReason.meta.missingEnd || null,
                             reasonOfMissing: rawReason.meta.reasonOfMissing || null
                         });
+                    }
+                }
+                if (!derivedReasonText && !reason && person.name && person.group && !(rawReason && rawReason.type === 'shift')) {
+                    if (
+                        typeof personHasThursdaySpacingFail === 'function' &&
+                        personHasThursdaySpacingFail(key, person.group, person.name) &&
+                        typeof buildThursdaySpacingSwapReasonText === 'function'
+                    ) {
+                        derivedReasonText = buildThursdaySpacingSwapReasonText(
+                            key,
+                            person.group,
+                            person.name,
+                            dayTypeCategory
+                        );
                     }
                 }
                 if (!derivedReasonText && !reason && person.name && person.group && !(rawReason && rawReason.type === 'shift')) {

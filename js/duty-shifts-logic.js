@@ -545,6 +545,7 @@
             return !!(disabled || missing);
         }
         function personShouldShowReplacementUnderline(dateKey, groupNum, personName, reason, dayTypeCategory, dateObj) {
+            if (reason?.meta?.thursdaySpacingFail) return false;
             if (!personIsReplacementInDisabledBaselineSlot(dateKey, groupNum, personName, dayTypeCategory, dateObj)) {
                 return false;
             }
@@ -577,11 +578,17 @@
             if (!dateKey || !personName || !groupNum) return '';
             const reason =
                 typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, personName) : null;
+            if (reason?.meta?.thursdaySpacingFail) {
+                return String(reason.reason || '').trim();
+            }
             if (reason?.type === 'swap' && reason.meta?.thursdaySpacing) {
                 return buildSwapReasonDisplayText(reason, dayTypeCategory);
             }
             if (typeof getThursdaySpacingMarker !== 'function') return '';
             const sp = getThursdaySpacingMarker(dateKey, groupNum, personName);
+            if (sp?.status === 'fail') {
+                return String(sp.reason || '').trim() || 'Κανόνας Ν Πεμπτών: δεν βρέθηκε ανταλλαγή.';
+            }
             if (!sp || sp.status !== 'swap') return '';
             if (sp.reason) return sp.reason;
             if (sp.partnerPerson) {
@@ -599,10 +606,19 @@
         function personHasThursdaySpacingSwap(dateKey, groupNum, personName) {
             const reason =
                 typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, personName) : null;
+            if (reason?.meta?.thursdaySpacingFail) return false;
             if (reason?.type === 'swap' && reason.meta?.thursdaySpacing) return true;
             if (typeof getThursdaySpacingMarker !== 'function') return false;
             const sp = getThursdaySpacingMarker(dateKey, groupNum, personName);
             return !!(sp && sp.status === 'swap');
+        }
+        function personHasThursdaySpacingFail(dateKey, groupNum, personName) {
+            const reason =
+                typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, personName) : null;
+            if (reason?.meta?.thursdaySpacingFail) return true;
+            if (typeof getThursdaySpacingMarker !== 'function') return false;
+            const sp = getThursdaySpacingMarker(dateKey, groupNum, personName);
+            return !!(sp && sp.status === 'fail');
         }
         function buildCombinedAssignmentReasonParts(reason, dateKey, groupNum, personName, dayTypeCategory) {
             const parts = [];

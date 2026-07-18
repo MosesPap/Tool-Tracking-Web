@@ -325,6 +325,20 @@
         );
     }
 
+    /** Όταν δεν περνάει το Ν και δεν βρέθηκε Δευ/Τρι/Τετ για ανταλλαγή — εμφανής αποτυχία. */
+    function buildThursdaySpacingFailReason(person, thursdayKey, spacing) {
+        const thuDate = formatDateKeyElGR(thursdayKey);
+        const lastThu = spacing?.lastThursday ? formatDateKeyElGR(spacing.lastThursday) : '—';
+        const nReq = spacing?.nRequired ?? '?';
+        const since = spacing?.thursdaysSince ?? '?';
+        return (
+            `Κανόνας Ν Πεμπτών (Ν=${nReq}): Ο/Η ${person} παρέμεινε την Πέμπτη ${thuDate}, ` +
+            `αλλά από την τελευταία του/της Πέμπτη (${lastThu}) είχαν περάσει μόνο ${since} ` +
+            `καθημερινές Πέμπτες (απαιτούνται ${nReq}) και δεν βρέθηκε διαθέσιμος εταίρος ` +
+            `για ανταλλαγή (Δευτέρα/Τρίτη/Τετάρτη εντός μήνα).`
+        );
+    }
+
     function setSpacingMarker(markers, dateKey, groupNum, personName, data) {
         const name = normPerson(personName);
         if (!name) return;
@@ -654,9 +668,51 @@
                 }
 
                 if (!swapped) {
+                    const failReason = buildThursdaySpacingFailReason(person, thursdayKey, spacing);
                     console.warn(
                         `[THURSDAY SPACING] Δεν βρέθηκε ανταλλαγή για ${person} την ${thursdayKey} (Ομάδα ${groupNum}, Ν=${spacing.nRequired}, πέρασαν ${spacing.thursdaysSince})`
                     );
+                    setSpacingMarker(markers, thursdayKey, groupNum, person, {
+                        status: 'fail',
+                        nRequired: spacing.nRequired,
+                        thursdaysSince: spacing.thursdaysSince,
+                        lastThursday: spacing.lastThursday || null,
+                        reason: failReason
+                    });
+                    if (typeof storeAssignmentReason === 'function') {
+                        const existing =
+                            typeof getAssignmentReason === 'function'
+                                ? getAssignmentReason(thursdayKey, groupNum, person)
+                                : null;
+                        // Μην αντικαθιστάς υπάρχουσα ανταλλαγή· για skip κράτα το παλιό στο meta.
+                        if (!(existing && existing.type === 'swap')) {
+                            const failMeta = {
+                                thursdaySpacing: true,
+                                thursdaySpacingFail: true,
+                                nRequired: spacing.nRequired,
+                                thursdaysSince: spacing.thursdaysSince,
+                                lastThursday: spacing.lastThursday || null
+                            };
+                            if (existing && existing.type === 'skip' && !existing.meta?.thursdaySpacingFail) {
+                                failMeta.preservedSkipReason = {
+                                    type: existing.type,
+                                    reason: existing.reason,
+                                    swappedWith: existing.swappedWith,
+                                    meta: existing.meta ? { ...existing.meta } : null
+                                };
+                            }
+                            storeAssignmentReason(
+                                thursdayKey,
+                                groupNum,
+                                person,
+                                'skip',
+                                failReason,
+                                null,
+                                null,
+                                failMeta
+                            );
+                        }
+                    }
                     runtimeLastThu[`${groupNum}:${normPerson(person)}`] = thursdayKey;
                 }
             }
@@ -731,7 +787,17 @@
             };
         }
 
-        if (reason?.meta?.thursdaySpacing) {
+        if (marker?.status === 'fail' || reason?.meta?.thursdaySpacingFail) {
+            return {
+                status: 'fail',
+                nRequired: marker?.nRequired ?? reason?.meta?.nRequired ?? null,
+                thursdaysSince: marker?.thursdaysSince ?? reason?.meta?.thursdaysSince ?? null,
+                lastThursday: marker?.lastThursday || reason?.meta?.lastThursday || null,
+                reasonText: marker?.reason || reason?.reason || ''
+            };
+        }
+
+        if (reason?.meta?.thursdaySpacing && !reason?.meta?.thursdaySpacingFail) {
             return {
                 status: 'swap',
                 displacedPerson: reason.meta.displacedPerson || reason.swappedWith || null,
@@ -1032,6 +1098,14 @@
             }
             if (status === 'swap') {
                 return '<span class="badge bg-warning text-dark">Ανταλλαγή Ν</span>';
+            }
+            if (status === 'fail') {
+                const extra =
+                    ev?.nRequired != null
+                        ? ` (Ν=${ev.nRequired}${ev.thursdaysSince != null ? ', πέρασαν ' + ev.thursdaysSince : ''})`
+                        : '';
+                const tip = ev?.reasonText ? ` title="${esc(ev.reasonText)}"` : '';
+                return `<span class="badge bg-danger"${tip}>Αποτυχία Ν${esc(extra)}</span>`;
             }
             if (status === 'none') {
                 return '<span class="badge bg-secondary">—</span>';
