@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>PDF Question Generator v1.6 - Tool Tracking</title>
+    <title>PDF Question Generator v1.7 - Tool Tracking</title>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -266,7 +266,7 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <div>
                     <i class="fas fa-file-pdf me-2"></i>
-                    PDF Question Generator <span style="font-size: 0.7em; opacity: 0.8;">v1.6</span>
+                    PDF Question Generator <span style="font-size: 0.7em; opacity: 0.8;">v1.7</span>
                 </div>
                 <button id="backToMenuFromPdfBtn" title="Back to Menu">
                     <i class="fas fa-arrow-left me-1"></i>Back to Menu
@@ -1016,46 +1016,56 @@
             return accepted;
         }
 
-        /** Remove any referral to manuals / documentation / "the text" from question/option wording */
+        /** Remove source referrals (training manual / "the text") — keep operational "manual mode" etc. */
         function scrubSourceReferenceText(text) {
             if (!text || typeof text !== 'string') return text;
 
-            const sourceWord =
-                '(?:manual|training\\s+manual|document|documentation|pdf|text|source(?:\\s+material)?|' +
+            // Protect operational uses of "manual" so scrubbing does not touch them
+            const protectedPhrases = [];
+            const protect = (match) => {
+                const token = `__MANUAL_OP_${protectedPhrases.length}__`;
+                protectedPhrases.push(match);
+                return token;
+            };
+
+            let t = text.replace(
+                /\bmanual\s+(?:mode|control|override|operation|operations|selection|position|setting|settings|input|inputs|valve|valves|switch|switches|flight|governor|reversion|reversionary)\b/gi,
+                protect
+            );
+            // "switch to manual" / "revert to manual" (operational), not "from the manual"
+            t = t.replace(/\b(?:to|into)\s+manual\b/gi, protect);
+
+            const docSource =
+                '(?:training\\s+manual|document|documentation|pdf|text|source(?:\\s+material)?|' +
                 'provided\\s+text|manufacturer(?:[\'’]?s)?\\s+(?:manual|instructions?|documentation)|' +
                 'amm|cmm|technical\\s+(?:manual|documentation))';
 
-            let t = text;
             let prev;
-            // Repeat until stable — catch stacked / trailing phrases
             do {
                 prev = t;
                 t = t
-                    // "According to the training manual," / "Based on the provided text,"
+                    // "According to the training manual," / "According to the manual," / "Based on the text,"
+                    .replace(/\b(?:according\s+to|based\s+on|per)\s+(?:the\s+)?(?:provided\s+)?(?:training\s+)?manual\b[,:;]?\s*/gi, '')
                     .replace(new RegExp(
-                        '\\b(?:according\\s+to|based\\s+on|per)\\s+(?:the\\s+)?(?:provided\\s+)?' + sourceWord + '\\b[,:;]?\\s*',
+                        '\\b(?:according\\s+to|based\\s+on|per)\\s+(?:the\\s+)?(?:provided\\s+)?' + docSource + '\\b[,:;]?\\s*',
                         'gi'
                     ), '')
-                    // "as described in the text" / "as stated in the manual" (comma optional)
-                    .replace(new RegExp(
-                        ',?\\s*\\bas\\s+(?:described|stated|shown|mentioned|noted|indicated|outlined|written)\\s+in\\s+(?:the\\s+)?(?:provided\\s+)?' + sourceWord + '\\b[,:;]?',
-                        'gi'
-                    ), '')
+                    // "as described in the text" / "as stated in the manual"
+                    .replace(/,?\s*\bas\s+(?:described|stated|shown|mentioned|noted|indicated|outlined|written)\s+in\s+(?:the\s+)?(?:provided\s+)?(?:training\s+)?(?:manual|document|documentation|pdf|text|source(?:\s+material)?)\b[,:;]?/gi, '')
                     // "described in the text" without leading "as"
+                    .replace(/,?\s*\b(?:described|stated|shown|mentioned|noted)\s+in\s+(?:the\s+)?(?:provided\s+)?(?:training\s+)?(?:manual|document|documentation|pdf|text|source(?:\s+material)?)\b[,:;]?/gi, '')
+                    // "in/from the training manual" / "in/from the manual" — REQUIRES "the" (won't match "in manual mode")
+                    .replace(/\b(?:in|from)\s+the\s+(?:provided\s+)?(?:training\s+)?manual\b/gi, '')
                     .replace(new RegExp(
-                        ',?\\s*\\b(?:described|stated|shown|mentioned|noted)\\s+in\\s+(?:the\\s+)?(?:provided\\s+)?' + sourceWord + '\\b[,:;]?',
+                        '\\b(?:in|from)\\s+(?:the\\s+)?(?:provided\\s+)?' + docSource + '\\b',
                         'gi'
                     ), '')
-                    // "in the training manual" / "from the document" (not bare "in the text" mid-sentence about other topics)
-                    .replace(new RegExp(
-                        '\\b(?:in|from)\\s+(?:the\\s+)?(?:provided\\s+)?(?:training\\s+)?(?:manual|document|documentation|pdf|source(?:\\s+material)?)\\b',
-                        'gi'
-                    ), '')
-                    // "in the text" / "of the text" only when clearly a source referral at end or after comma
+                    // "in the text" only at end of sentence (source referral)
                     .replace(/,?\s*\b(?:in|from|of)\s+(?:the\s+)?(?:provided\s+)?text\b(?=\s*[?.!]?\s*$)/gi, '')
                     // "the manual states that" / "the text says"
+                    .replace(/\bthe\s+(?:training\s+)?manual\s+(?:states|says|indicates|specifies|requires|mentions|describes)\s+that\s+/gi, '')
                     .replace(new RegExp(
-                        '\\b(?:the\\s+)?' + sourceWord + '\\s+(?:states|says|indicates|specifies|requires|mentions|describes)\\s+that\\s+',
+                        '\\b(?:the\\s+)?' + docSource + '\\s+(?:states|says|indicates|specifies|requires|mentions|describes)\\s+that\\s+',
                         'gi'
                     ), '')
                     .replace(/\b(?:the\s+)?(?:provided|source)\s+text\b/gi, '')
@@ -1073,10 +1083,14 @@
                 .replace(/[,\s;:]+$/, '')
                 .trim();
 
-            if (t && text !== t) {
+            // Restore protected operational phrases
+            protectedPhrases.forEach((phrase, i) => {
+                t = t.replace(`__MANUAL_OP_${i}__`, phrase);
+            });
+
+            if (t && /^[a-z]/.test(t)) {
                 t = t.charAt(0).toUpperCase() + t.slice(1);
             }
-            // If scrubbing emptied the string, keep original rather than blank
             return t || text;
         }
 
@@ -1093,10 +1107,15 @@
             };
         }
 
-        /** True if text still contains banned source-reference phrases */
+        /** True if text still contains banned *source* referrals (not operational "manual mode") */
         function hasBannedSourcePhrase(text) {
             if (!text) return false;
-            return /according\s+to\s+(?:the\s+)?(?:training\s+)?(?:manual|document|text|pdf)|based\s+on\s+(?:the\s+)?(?:training\s+)?(?:manual|document|text|pdf)|as\s+(?:described|stated|shown|mentioned|noted)\s+in\s+(?:the\s+)?(?:text|manual|document|pdf)|(?:described|stated|shown)\s+in\s+(?:the\s+)?(?:text|manual|document)|in\s+the\s+(?:training\s+)?manual|provided\s+text|source\s+material/i.test(text);
+            // Ignore operational compounds before testing
+            const cleaned = text.replace(
+                /\bmanual\s+(?:mode|control|override|operation|operations|selection|position|setting|settings|input|inputs|valve|valves|switch|switches|flight|governor|reversion|reversionary)\b/gi,
+                'OPERATION'
+            ).replace(/\b(?:to|into)\s+manual\b/gi, 'OPERATION');
+            return /according\s+to\s+(?:the\s+)?(?:training\s+)?(?:manual|document|text|pdf)|based\s+on\s+(?:the\s+)?(?:training\s+)?(?:manual|document|text|pdf)|as\s+(?:described|stated|shown|mentioned|noted)\s+in\s+(?:the\s+)?(?:text|manual|document|pdf)|(?:described|stated|shown)\s+in\s+(?:the\s+)?(?:text|manual|document)|in\s+the\s+(?:training\s+)?manual|from\s+the\s+(?:training\s+)?manual|provided\s+text|source\s+material|training\s+manual/i.test(cleaned);
         }
 
         function calculateSimilarity(str1, str2) {
