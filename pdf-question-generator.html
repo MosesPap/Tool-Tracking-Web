@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <title>PDF Question Generator - Tool Tracking</title>
+    <title>PDF Question Generator v1.6 - Tool Tracking</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -263,7 +266,7 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <div>
                     <i class="fas fa-file-pdf me-2"></i>
-                    PDF Question Generator
+                    PDF Question Generator <span style="font-size: 0.7em; opacity: 0.8;">v1.6</span>
                 </div>
                 <button id="backToMenuFromPdfBtn" title="Back to Menu">
                     <i class="fas fa-arrow-left me-1"></i>Back to Menu
@@ -933,24 +936,63 @@
         }
 
         // ========== DUPLICATE DETECTION ==========
+        function normalizeQuestionText(text) {
+            return scrubSourceReferenceText(text || '')
+                .toLowerCase()
+                .trim()
+                .replace(/\s+/g, ' ')
+                .replace(/[^\w\s]/g, '');
+        }
+
         function isDuplicateQuestion(newQuestion, existingQuestions) {
-            // Normalize question text for comparison (lowercase, remove extra spaces)
-            const normalize = (text) => text.toLowerCase().trim().replace(/\s+/g, ' ');
-            const newQText = normalize(newQuestion.question);
-            
-            // Check against all existing questions across all levels
+            const newQText = normalizeQuestionText(newQuestion.question);
+            if (!newQText) return false;
+
+            const newOptions = Object.values(newQuestion.options || {}).map(v => normalizeQuestionText(v)).filter(Boolean).sort();
+            const newCorrect = normalizeQuestionText(
+                (newQuestion.options && newQuestion.options[newQuestion.correct]) || ''
+            );
+
             for (const levelGroup of existingQuestions) {
                 for (const existingQ of levelGroup.questions) {
-                    const existingQText = normalize(existingQ.question);
-                    
-                    // Check if question text is the same or very similar (90% similarity)
-                    if (newQText === existingQText || calculateSimilarity(newQText, existingQText) > 0.9) {
-                        // Also check if answers are the same
-                        const newOptions = Object.values(newQuestion.options).map(v => normalize(v)).sort().join('|');
-                        const existingOptions = Object.values(existingQ.options).map(v => normalize(v)).sort().join('|');
-                        
-                        if (newOptions === existingOptions) {
-                            return true; // Duplicate question with same answers
+                    const existingQText = normalizeQuestionText(existingQ.question);
+                    const stemSimilarity = calculateSimilarity(newQText, existingQText);
+
+                    // Same or very similar question stem = duplicate across levels
+                    if (newQText === existingQText || stemSimilarity > 0.72) {
+                        return true;
+                    }
+
+                    // Same correct-answer idea even if stem is rephrased
+                    const existingCorrect = normalizeQuestionText(
+                        (existingQ.options && existingQ.options[existingQ.correct]) || ''
+                    );
+                    if (newCorrect && existingCorrect && (
+                        newCorrect === existingCorrect ||
+                        calculateSimilarity(newCorrect, existingCorrect) > 0.8
+                    )) {
+                        // If correct answers match closely, treat as duplicate unless stems are clearly different topics
+                        if (stemSimilarity > 0.45) {
+                            return true;
+                        }
+                    }
+
+                    // Similar stem + same correct answer concept
+                    if (stemSimilarity > 0.55) {
+                        if (newCorrect && existingCorrect && (
+                            newCorrect === existingCorrect ||
+                            calculateSimilarity(newCorrect, existingCorrect) > 0.85
+                        )) {
+                            return true;
+                        }
+
+                        const existingOptions = Object.values(existingQ.options || {})
+                            .map(v => normalizeQuestionText(v))
+                            .filter(Boolean)
+                            .sort();
+                        if (newOptions.length && existingOptions.length &&
+                            newOptions.join('|') === existingOptions.join('|')) {
+                            return true;
                         }
                     }
                 }
@@ -958,8 +1000,107 @@
             return false;
         }
 
+        function filterUniqueQuestions(newQuestions, existingQuestions) {
+            const accepted = [];
+            const workingSet = existingQuestions.map(group => ({
+                ...group,
+                questions: [...group.questions]
+            }));
+
+            for (const q of newQuestions) {
+                if (isDuplicateQuestion(q, workingSet) || isDuplicateQuestion(q, [{ level: 0, questions: accepted }])) {
+                    continue;
+                }
+                accepted.push(q);
+            }
+            return accepted;
+        }
+
+        /** Remove any referral to manuals / documentation / "the text" from question/option wording */
+        function scrubSourceReferenceText(text) {
+            if (!text || typeof text !== 'string') return text;
+
+            const sourceWord =
+                '(?:manual|training\\s+manual|document|documentation|pdf|text|source(?:\\s+material)?|' +
+                'provided\\s+text|manufacturer(?:[\'’]?s)?\\s+(?:manual|instructions?|documentation)|' +
+                'amm|cmm|technical\\s+(?:manual|documentation))';
+
+            let t = text;
+            let prev;
+            // Repeat until stable — catch stacked / trailing phrases
+            do {
+                prev = t;
+                t = t
+                    // "According to the training manual," / "Based on the provided text,"
+                    .replace(new RegExp(
+                        '\\b(?:according\\s+to|based\\s+on|per)\\s+(?:the\\s+)?(?:provided\\s+)?' + sourceWord + '\\b[,:;]?\\s*',
+                        'gi'
+                    ), '')
+                    // "as described in the text" / "as stated in the manual" (comma optional)
+                    .replace(new RegExp(
+                        ',?\\s*\\bas\\s+(?:described|stated|shown|mentioned|noted|indicated|outlined|written)\\s+in\\s+(?:the\\s+)?(?:provided\\s+)?' + sourceWord + '\\b[,:;]?',
+                        'gi'
+                    ), '')
+                    // "described in the text" without leading "as"
+                    .replace(new RegExp(
+                        ',?\\s*\\b(?:described|stated|shown|mentioned|noted)\\s+in\\s+(?:the\\s+)?(?:provided\\s+)?' + sourceWord + '\\b[,:;]?',
+                        'gi'
+                    ), '')
+                    // "in the training manual" / "from the document" (not bare "in the text" mid-sentence about other topics)
+                    .replace(new RegExp(
+                        '\\b(?:in|from)\\s+(?:the\\s+)?(?:provided\\s+)?(?:training\\s+)?(?:manual|document|documentation|pdf|source(?:\\s+material)?)\\b',
+                        'gi'
+                    ), '')
+                    // "in the text" / "of the text" only when clearly a source referral at end or after comma
+                    .replace(/,?\s*\b(?:in|from|of)\s+(?:the\s+)?(?:provided\s+)?text\b(?=\s*[?.!]?\s*$)/gi, '')
+                    // "the manual states that" / "the text says"
+                    .replace(new RegExp(
+                        '\\b(?:the\\s+)?' + sourceWord + '\\s+(?:states|says|indicates|specifies|requires|mentions|describes)\\s+that\\s+',
+                        'gi'
+                    ), '')
+                    .replace(/\b(?:the\s+)?(?:provided|source)\s+text\b/gi, '')
+                    .replace(/\btraining\s+manual\b/gi, '');
+            } while (t !== prev);
+
+            t = t
+                .replace(/\s+([?!,.;:])/g, '$1')
+                .replace(/,\s*,/g, ',')
+                .replace(/\s+,/g, ',')
+                .replace(/,\s*\?/g, '?')
+                .replace(/\?\?+/g, '?')
+                .replace(/\s{2,}/g, ' ')
+                .replace(/^[,\s;:]+/, '')
+                .replace(/[,\s;:]+$/, '')
+                .trim();
+
+            if (t && text !== t) {
+                t = t.charAt(0).toUpperCase() + t.slice(1);
+            }
+            // If scrubbing emptied the string, keep original rather than blank
+            return t || text;
+        }
+
+        function stripManualReferences(question) {
+            if (!question) return question;
+            return {
+                ...question,
+                question: scrubSourceReferenceText(question.question),
+                options: {
+                    A: scrubSourceReferenceText(question.options?.A),
+                    B: scrubSourceReferenceText(question.options?.B),
+                    C: scrubSourceReferenceText(question.options?.C)
+                }
+            };
+        }
+
+        /** True if text still contains banned source-reference phrases */
+        function hasBannedSourcePhrase(text) {
+            if (!text) return false;
+            return /according\s+to\s+(?:the\s+)?(?:training\s+)?(?:manual|document|text|pdf)|based\s+on\s+(?:the\s+)?(?:training\s+)?(?:manual|document|text|pdf)|as\s+(?:described|stated|shown|mentioned|noted)\s+in\s+(?:the\s+)?(?:text|manual|document|pdf)|(?:described|stated|shown)\s+in\s+(?:the\s+)?(?:text|manual|document)|in\s+the\s+(?:training\s+)?manual|provided\s+text|source\s+material/i.test(text);
+        }
+
         function calculateSimilarity(str1, str2) {
-            // Simple similarity calculation using longest common subsequence
+            // Simple similarity calculation using edit distance
             const longer = str1.length > str2.length ? str1 : str2;
             const shorter = str1.length > str2.length ? str2 : str1;
             if (longer.length === 0) return 1.0;
@@ -1374,6 +1515,108 @@
             return shuffledQuestions;
         }
 
+        /**
+         * One Gemini call → parsed question objects (recovers truncated JSON when possible).
+         */
+        async function requestGeminiQuestions(prompt, modelsToTry, apiKey, levelLabel) {
+            let data = null;
+            let lastError = null;
+
+            for (const model of modelsToTry) {
+                try {
+                    const endpoints = [
+                        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                        `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`
+                    ];
+                    const isBetaEndpoint = (url) => url.includes('/v1beta/');
+
+                    for (const url of endpoints) {
+                        try {
+                            const generationConfig = {
+                                temperature: 0.7,
+                                // Single-question calls stay small; keep headroom anyway
+                                maxOutputTokens: 4096
+                            };
+                            if (isBetaEndpoint(url)) {
+                                generationConfig.responseMimeType = 'application/json';
+                            }
+
+                            const response = await fetch(url, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{ parts: [{ text: prompt }] }],
+                                    generationConfig
+                                })
+                            });
+
+                            if (response.ok) {
+                                trackApiCall();
+                                data = await response.json();
+                                if (data.error) {
+                                    lastError = data.error.message || 'API returned an error';
+                                    data = null;
+                                    continue;
+                                }
+                                if (data.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+                                    console.warn(`Response truncated for ${levelLabel} (MAX_TOKENS). Recovering complete questions if possible.`);
+                                }
+                                console.log(`Successfully used model: ${model} for ${levelLabel}`);
+                                break;
+                            }
+
+                            const errorData = await response.json().catch(() => ({}));
+                            lastError = errorData.error?.message || `HTTP ${response.status}`;
+                        } catch (err) {
+                            lastError = err.message;
+                        }
+                    }
+
+                    if (data) break;
+                } catch (err) {
+                    lastError = err.message;
+                }
+            }
+
+            if (!data) {
+                return { questions: [], error: lastError || 'No response' };
+            }
+
+            let content = '';
+            if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                content = data.candidates[0].content.parts[0].text;
+            } else if (data.candidates?.[0]?.text) {
+                content = data.candidates[0].text;
+            } else {
+                return { questions: [], error: 'No content in response' };
+            }
+
+            content = content.trim();
+
+            try {
+                let parsed = parseQuestionsFromModelContent(content);
+                if (!Array.isArray(parsed) || parsed.length === 0) {
+                    parsed = extractQuestionsFromText(content);
+                }
+                if (!parsed.length) {
+                    return { questions: [], error: 'Could not parse questions', content };
+                }
+                return { questions: parsed, error: null };
+            } catch (parseError) {
+                try {
+                    const recovered = extractQuestionsFromText(content);
+                    if (recovered.length) {
+                        console.warn(`Recovered ${recovered.length} question(s) via fallback for ${levelLabel}`);
+                        return { questions: recovered, error: null };
+                    }
+                } catch (_) { /* ignore */ }
+
+                console.error(`Failed to parse questions for ${levelLabel}:`, parseError);
+                console.error('Content that failed to parse:', content.substring(0, 1000));
+                return { questions: [], error: parseError.message, content };
+            }
+        }
+
         async function generateQuestions() {
             const apiKey = document.getElementById('apiKey')?.value?.trim();
             if (!apiKey) {
@@ -1430,7 +1673,7 @@
                         "The applicant should be able to give a detailed description using theoretical fundamentals and specific examples",
                         "The applicant should understand and be able to use mathematical formulae related to the subject",
                         "The applicant should be able to read, understand and prepare sketches, simple drawings and schematics",
-                        "The applicant should be able to apply knowledge in a practical manner using manufacturer's instructions",
+                        "The applicant should be able to apply knowledge in a practical manner using correct procedures and limits",
                         "The applicant should be able to interpret results from various sources and measurements and apply corrective action"
                     ]
                 }
@@ -1444,18 +1687,19 @@
             document.getElementById('questionsContainer').style.display = 'none';
 
             try {
-                // Truncate text to prevent MAX_TOKENS error
-                // Reduce text size based on total number of questions
+                // Spread coverage across the whole document (not only the beginning).
+                // One section per planned question so 10 total questions → 10 evenly spaced slices.
                 const baseLength = 20000;
                 const lengthPerQuestion = 3000;
-                const maxLength = baseLength + (totalQuestions * lengthPerQuestion);
-                const adjustedLength = Math.min(maxLength, 50000); // Cap at 50K to ensure output space
-                
-                const textToUse = pdfText.length > adjustedLength 
-                    ? pdfText.substring(0, adjustedLength) + '\n\n[Text truncated to ensure sufficient output tokens]' 
-                    : pdfText;
-                
-                console.log(`Using ${textToUse.length} characters from PDF (${pdfText.length} total available)`);
+                const maxLength = Math.min(baseLength + (totalQuestions * lengthPerQuestion), 50000);
+                const sectionCount = Math.max(totalQuestions, 3);
+                const documentSections = splitDocumentIntoSections(pdfText, sectionCount);
+                let nextSectionIndex = 0;
+
+                console.log(
+                    `Document coverage: ${documentSections.length} sections from ${pdfText.length} characters ` +
+                    `(budget ${maxLength} chars for prompts)`
+                );
                 
                 // Clear previous questions
                 questions = [];
@@ -1498,34 +1742,73 @@
                     }
                 }
 
-                // Generate questions for each level
+                // Generate questions for each level (one API call per document section = less truncation)
                 for (const { level, count } of levelsToGenerate) {
                     const levelInfo = levelObjectives[level];
                     console.log(`Generating ${count} questions for ${levelInfo.name}...`);
-                    
-                    // For Level 3, add specific instructions about complexity
-                    const complexityNote = level === 3 
-                        ? '\nIMPORTANT FOR LEVEL 3: Generate detailed, complex questions that require deep understanding. Keep questions and options concise but comprehensive. Ensure the JSON response is complete and valid.'
+
+                    const { assigned, nextIndex } = assignSectionsForLevel(documentSections, count, nextSectionIndex);
+                    nextSectionIndex = nextIndex;
+                    const sectionLabels = assigned.map(s => s.index).join(', ');
+                    console.log(`Level ${level}: using document sections [${sectionLabels}]`);
+
+                    const complexityNote = level === 3
+                        ? `\nIMPORTANT FOR LEVEL 3:
+- Test deep understanding: theory, how topics connect, reading schematics, applying correct procedures and limits, interpreting measurements and corrective action.
+- Use simple, clear, everyday English. Prefer common words a technician can read quickly.
+- Avoid advanced, academic, or rare vocabulary unless it is a required technical term from the source (e.g. component names, part numbers, standard aviation terms).
+- Keep question stems and options short and easy to read.
+- Difficulty must come from the knowledge required, not from complex wording.
+- Ensure the JSON response is complete and valid.`
                         : '';
-                    
-                    const levelPrompt = `Based on the following text from a PDF document, generate ${count} multiple choice questions at ${levelInfo.name}.${complexityNote}
+
+                    const levelQuestionsAccum = [];
+
+                    for (let sIdx = 0; sIdx < assigned.length; sIdx++) {
+                        const section = assigned[sIdx];
+                        const sectionText = formatSectionsForPrompt([section], Math.min(maxLength, 12000));
+
+                        const existingSnapshot = [
+                            ...questions,
+                            { level, questions: levelQuestionsAccum }
+                        ];
+                        let avoidDuplicatesNote = '';
+                        const existingList = [];
+                        existingSnapshot.forEach(group => {
+                            (group.questions || []).forEach((q) => {
+                                existingList.push(`- [Level ${group.level}] ${q.question}`);
+                            });
+                        });
+                        if (existingList.length) {
+                            avoidDuplicatesNote = `\n\nALREADY GENERATED QUESTIONS (do NOT repeat these topics or rephrase them):
+${existingList.slice(-40).join('\n')}
+Generate a completely DIFFERENT question.`;
+                        }
+
+                        const sectionPrompt = `Based on the following text from a PDF document, generate exactly 1 multiple choice question at ${levelInfo.name}.${complexityNote}${avoidDuplicatesNote}
 
 KNOWLEDGE LEVEL REQUIREMENTS:
 ${levelInfo.description}
 
-The questions must align with these objectives:
+The question must align with these objectives:
 ${levelInfo.objectives.map((obj, idx) => `${idx + 1}. ${obj}`).join('\n')}
 
-Each question should have:
-- A clear question stem appropriate for ${levelInfo.name}
-- 3 answer options (A, B, C)
-- One correct answer clearly marked
-- IMPORTANT: Distribute correct answers evenly and randomly across A, B, and C options. 
-  For ${count} questions, ensure roughly equal distribution (not all A, not all B, not all C, and not in a pattern like first=A, middle=B, last=C).
-- Questions should test knowledge at the specified level depth
-- Questions should be varied in style (factual, comprehension, application, analysis) as appropriate for the level
+Rules:
+- Clear question stem appropriate for ${levelInfo.name}
+- Exactly 3 answer options (A, B, C) and one correct answer
+- Correct answer letter may be A, B, or C (vary across questions; do not always use A)
+- Plain everyday English; no advanced/academic wording unless it is a required technical term
+- NEVER refer to a manual, training manual, document, documentation, PDF, text, "provided text", source, AMM, CMM, or manufacturer's instructions
+- FORBIDDEN PHRASES (do not use any of these or similar): "According to the training manual", "According to the manual", "According to the provided text", "as described in the text", "as stated in the document", "Based on the document", "in the training manual", "from the text"
+- Ask about the subject matter directly with no source referral
+  Good: "What type of engine is the Pratt & Whitney PT6C-67C?"
+  Bad: "What type of engine is the Pratt & Whitney PT6C-67C, as described in the text?"
+  Bad: "According to the training manual, which characteristic best describes..."
+- Base this question on THIS section only (about ${section.pctStart}%–${section.pctEnd}% through the material)
+- Do not mention section numbers in the question text
+- Return ONLY a JSON array with exactly one question object
 
-Format the response as a JSON array with this structure:
+Format:
 [
   {
     "question": "Question text here?",
@@ -1539,197 +1822,46 @@ Format the response as a JSON array with this structure:
 ]
 
 Text content:
-${textToUse}
+${sectionText}`;
 
-Return ONLY the JSON array, no additional text or markdown formatting.`;
+                        const label = `Level ${level} section ${section.index}/${section.total}`;
+                        const { questions: batch, error } = await requestGeminiQuestions(
+                            sectionPrompt, modelsToTry, apiKey, label
+                        );
 
-                    let data = null;
-                    let lastError = null;
-
-                    // Try to generate questions for this level
-                    for (const model of modelsToTry) {
-                        try {
-                            const endpoints = [
-                                `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`,
-                                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-                            ];
-
-                            let apiCallTracked = false; // Track if we've already counted this API call
-                            
-                            for (const url of endpoints) {
-                                try {
-                                    const response = await fetch(url, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            contents: [{ parts: [{ text: levelPrompt }] }],
-                                            generationConfig: {
-                                                temperature: 0.7,
-                                                // Level 3 questions are more complex and need more tokens
-                                                maxOutputTokens: level === 3 ? Math.max(8192, count * 1500) : Math.max(4096, count * 1000)
-                                            }
-                                        })
-                                    });
-
-                                    if (response.ok) {
-                                        // Track API call for analytics - only once per level generation
-                                        if (!apiCallTracked) {
-                                            trackApiCall();
-                                            apiCallTracked = true;
-                                            console.log('API call tracked for Level', level);
-                                        }
-                                        
-                                        data = await response.json();
-                                        if (data.error) {
-                                            lastError = data.error.message || 'API returned an error';
-                                            continue;
-                                        }
-                                        
-                                        // Check for truncation issues (especially for Level 3)
-                                        if (data.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
-                                            console.warn(`Response truncated for Level ${level}. May need more tokens.`);
-                                            if (level === 3) {
-                                                console.warn('Level 3 response was truncated. Try generating fewer questions at once or the response may be incomplete.');
-                                            }
-                                            // Still try to use what we got, but warn user
-                                        }
-                                        
-                                        console.log(`Successfully used model: ${model} for Level ${level}`);
-                                        break;
-                                    } else {
-                                        const errorData = await response.json().catch(() => ({}));
-                                        lastError = errorData.error?.message || `HTTP ${response.status}`;
-                                    }
-                                } catch (err) {
-                                    lastError = err.message;
-                                }
-                            }
-
-                            if (data) break;
-                        } catch (err) {
-                            lastError = err.message;
+                        if (!batch.length) {
+                            console.warn(`No question returned for ${label}${error ? ': ' + error : ''}`);
                             continue;
                         }
+
+                        let cleaned = shuffleQuestionOptions(batch.map(stripManualReferences));
+                        // Force-scrub again and drop anything that still names the source
+                        cleaned = cleaned
+                            .map(stripManualReferences)
+                            .filter(q => !hasBannedSourcePhrase(q.question) &&
+                                !hasBannedSourcePhrase(q.options?.A) &&
+                                !hasBannedSourcePhrase(q.options?.B) &&
+                                !hasBannedSourcePhrase(q.options?.C));
+                        if (!cleaned.length) {
+                            console.warn(`Skipped ${label}: still contained banned source phrases after scrubbing`);
+                            continue;
+                        }
+                        const unique = filterUniqueQuestions(cleaned, existingSnapshot);
+                        if (!unique.length) {
+                            console.warn(`Duplicate skipped for ${label}`);
+                            continue;
+                        }
+
+                        levelQuestionsAccum.push(unique[0]);
+                        console.log(`Added question from section ${section.index} for Level ${level}`);
                     }
 
-                    if (!data) {
-                        console.error(`Failed to generate Level ${level} questions:`, lastError);
-                        continue; // Skip this level and continue with others
-                    }
-
-                    // Parse response
-                    let content = '';
-                    if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-                        content = data.candidates[0].content.parts[0].text;
-                    } else if (data.candidates?.[0]?.text) {
-                        content = data.candidates[0].text;
+                    if (levelQuestionsAccum.length > 0) {
+                        const balanced = shuffleQuestionOptions(levelQuestionsAccum);
+                        questions.push({ level, levelName: levelInfo.name, questions: balanced });
+                        console.log(`Successfully generated ${balanced.length} questions for ${levelInfo.name}`);
                     } else {
-                        console.error(`No content in response for Level ${level}`);
-                        continue;
-                    }
-
-                    content = content.trim();
-                    if (content.startsWith('```')) {
-                        content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-                    }
-
-                    try {
-                        // Try to fix common JSON issues before parsing
-                        let cleanedContent = content;
-                        
-                        // Remove any text before the first [
-                        const firstBracket = cleanedContent.indexOf('[');
-                        if (firstBracket > 0) {
-                            cleanedContent = cleanedContent.substring(firstBracket);
-                        }
-                        
-                        // Remove any text after the last ]
-                        const lastBracket = cleanedContent.lastIndexOf(']');
-                        if (lastBracket > 0 && lastBracket < cleanedContent.length - 1) {
-                            cleanedContent = cleanedContent.substring(0, lastBracket + 1);
-                        }
-                        
-                        // Fix common JSON issues
-                        cleanedContent = cleanedContent
-                            .replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3') // Fix unquoted keys
-                            .replace(/,\s*}/g, '}') // Remove trailing commas
-                            .replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
-                        
-                        let levelQuestions = JSON.parse(cleanedContent);
-                        
-                        // Validate it's an array
-                        if (!Array.isArray(levelQuestions)) {
-                            throw new Error('Response is not an array');
-                        }
-                        
-                        // Randomly shuffle options for each question to ensure balanced distribution of correct answers
-                        levelQuestions = shuffleQuestionOptions(levelQuestions);
-                        
-                        // Filter out duplicates before adding
-                        const existingQuestions = questions; // All questions generated so far
-                        const uniqueQuestions = levelQuestions.filter(q => !isDuplicateQuestion(q, existingQuestions));
-                        const duplicatesRemoved = levelQuestions.length - uniqueQuestions.length;
-                        
-                        if (duplicatesRemoved > 0) {
-                            console.warn(`Removed ${duplicatesRemoved} duplicate question(s) from Level ${level}`);
-                        }
-                        
-                        if (uniqueQuestions.length > 0) {
-                            questions.push({ level, levelName: levelInfo.name, questions: uniqueQuestions });
-                            console.log(`Successfully generated ${uniqueQuestions.length} questions for ${levelInfo.name}${duplicatesRemoved > 0 ? ` (${duplicatesRemoved} duplicates removed)` : ''}`);
-                        } else {
-                            console.warn(`All questions for Level ${level} were duplicates. Skipping this level.`);
-                        }
-                    } catch (parseError) {
-                        console.error(`Failed to parse questions for Level ${level}:`, parseError);
-                        console.error('Content that failed to parse:', content.substring(0, 1000));
-                        
-                        // For Level 3, show more detailed error info
-                        if (level === 3) {
-                            console.error('Level 3 parsing error details:', {
-                                contentLength: content.length,
-                                firstChars: content.substring(0, 200),
-                                lastChars: content.substring(Math.max(0, content.length - 200)),
-                                errorMessage: parseError.message
-                            });
-                        }
-                        
-                        // Try to extract questions manually if JSON parsing fails
-                        try {
-                            let manualQuestions = extractQuestionsFromText(content);
-                            if (manualQuestions.length > 0) {
-                                // Randomly shuffle options for manually extracted questions too
-                                manualQuestions = shuffleQuestionOptions(manualQuestions);
-                                
-                                // Filter out duplicates
-                                const existingQuestions = questions;
-                                const uniqueManualQuestions = manualQuestions.filter(q => !isDuplicateQuestion(q, existingQuestions));
-                                const duplicatesRemoved = manualQuestions.length - uniqueManualQuestions.length;
-                                
-                                if (duplicatesRemoved > 0) {
-                                    console.warn(`Removed ${duplicatesRemoved} duplicate question(s) from manually extracted Level ${level} questions`);
-                                }
-                                
-                                if (uniqueManualQuestions.length > 0) {
-                                    questions.push({ level, levelName: levelInfo.name, questions: uniqueManualQuestions });
-                                    console.log(`Manually extracted ${uniqueManualQuestions.length} questions for ${levelInfo.name}`);
-                                } else {
-                                    console.warn(`All manually extracted questions for Level ${level} were duplicates.`);
-                                }
-                            } else {
-                                const errorMsg = level === 3 
-                                    ? `Could not extract any questions for Level 3. The response may be incomplete or truncated. Try generating fewer Level 3 questions at once, or check the console for details.`
-                                    : `Could not extract any questions for Level ${level}. The response may be incomplete.`;
-                                console.warn(errorMsg);
-                                // Still continue - other levels may have worked
-                            }
-                        } catch (extractError) {
-                            console.error(`Failed to extract questions manually:`, extractError);
-                            if (level === 3) {
-                                console.error('Level 3 manual extraction also failed. The API response may be malformed or incomplete. Try reducing the number of Level 3 questions.');
-                            }
-                            // Continue with other levels
-                        }
+                        console.warn(`No questions generated for Level ${level}.`);
                     }
                 }
 
@@ -1750,6 +1882,11 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
         function displayQuestions() {
             const container = document.getElementById('questionsList');
             container.innerHTML = '';
+
+            // Always scrub source-reference phrases before showing (safety net)
+            questions.forEach((levelGroup) => {
+                levelGroup.questions = (levelGroup.questions || []).map(stripManualReferences);
+            });
 
             // Display questions grouped by level
             questions.forEach((levelGroup) => {
@@ -2804,8 +2941,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 return;
             }
 
-            // Update question in array
-            levelGroup.questions[questionIndex] = {
+            // Update question in array (scrub source-reference phrases)
+            levelGroup.questions[questionIndex] = stripManualReferences({
                 question: questionText,
                 options: {
                     A: optionA,
@@ -2813,7 +2950,7 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                     C: optionC
                 },
                 correct: correctAnswer
-            };
+            });
 
             // Re-display the question
             displayQuestions();
@@ -2839,8 +2976,215 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
             displayQuestions();
         }
 
+        /**
+         * Split the full document into evenly spaced sections so questions
+         * cover beginning → middle → end instead of only the opening pages.
+         */
+        function splitDocumentIntoSections(fullText, sectionCount) {
+            const text = (fullText || '').trim();
+            const n = Math.max(1, sectionCount);
+            if (!text) return [];
+
+            const sections = [];
+            const len = text.length;
+
+            for (let i = 0; i < n; i++) {
+                let start = Math.floor((i / n) * len);
+                let end = Math.floor(((i + 1) / n) * len);
+
+                // Snap start to a cleaner boundary (paragraph / sentence) so we don't cut mid-word badly
+                if (i > 0 && start < len) {
+                    const window = text.substring(start, Math.min(len, start + 250));
+                    const para = window.indexOf('\n\n');
+                    const sentence = window.search(/\.\s+[A-Z0-9]/);
+                    if (para >= 0 && para < 200) {
+                        start += para + 2;
+                    } else if (sentence >= 0 && sentence < 200) {
+                        start += sentence + 1;
+                        while (start < len && /\s/.test(text[start])) start++;
+                    }
+                }
+
+                if (start >= end) {
+                    start = Math.floor((i / n) * len);
+                    end = Math.max(start + 1, Math.floor(((i + 1) / n) * len));
+                }
+
+                sections.push({
+                    index: i + 1,
+                    total: n,
+                    pctStart: Math.round((i / n) * 100),
+                    pctEnd: Math.round(((i + 1) / n) * 100),
+                    text: text.substring(start, end).trim()
+                });
+            }
+
+            return sections.filter(s => s.text.length > 0);
+        }
+
+        /**
+         * Build prompt text from assigned sections, trimming evenly if over budget.
+         */
+        function formatSectionsForPrompt(sections, maxChars) {
+            if (!sections.length) return '';
+
+            let pieces = sections.map(s => {
+                return `===== DOCUMENT SECTION ${s.index} of ${s.total} ` +
+                    `(about ${s.pctStart}%–${s.pctEnd}% through the document) =====\n${s.text}`;
+            });
+
+            let combined = pieces.join('\n\n');
+            if (combined.length <= maxChars) {
+                return combined;
+            }
+
+            // Trim each section proportionally so coverage stays even
+            const perSection = Math.max(400, Math.floor(maxChars / sections.length) - 120);
+            pieces = sections.map(s => {
+                let body = s.text;
+                if (body.length > perSection) {
+                    body = body.substring(0, perSection).trim() + '\n[...section trimmed for length...]';
+                }
+                return `===== DOCUMENT SECTION ${s.index} of ${s.total} ` +
+                    `(about ${s.pctStart}%–${s.pctEnd}% through the document) =====\n${body}`;
+            });
+
+            return pieces.join('\n\n');
+        }
+
+        function assignSectionsForLevel(allSections, count, startIndex) {
+            if (!allSections.length || count <= 0) {
+                return { assigned: [], nextIndex: startIndex };
+            }
+
+            const assigned = [];
+            let idx = startIndex;
+
+            for (let i = 0; i < count; i++) {
+                assigned.push(allSections[idx % allSections.length]);
+                idx++;
+            }
+
+            return { assigned, nextIndex: idx };
+        }
+
+        // Extract complete question objects from truncated/malformed JSON arrays
+        function recoverCompleteQuestionObjects(text) {
+            const results = [];
+            if (!text) return results;
+
+            let i = 0;
+            while (i < text.length) {
+                if (text[i] !== '{') {
+                    i++;
+                    continue;
+                }
+
+                let depth = 0;
+                let start = i;
+                let inString = false;
+                let escape = false;
+                let closed = false;
+
+                for (let j = i; j < text.length; j++) {
+                    const c = text[j];
+                    if (inString) {
+                        if (escape) {
+                            escape = false;
+                        } else if (c === '\\') {
+                            escape = true;
+                        } else if (c === '"') {
+                            inString = false;
+                        }
+                        continue;
+                    }
+                    if (c === '"') {
+                        inString = true;
+                        continue;
+                    }
+                    if (c === '{') depth++;
+                    else if (c === '}') {
+                        depth--;
+                        if (depth === 0) {
+                            const slice = text.substring(start, j + 1);
+                            try {
+                                // Fix unquoted keys if needed
+                                const fixed = slice.replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3');
+                                const obj = JSON.parse(fixed);
+                                if (obj && typeof obj.question === 'string' && obj.options &&
+                                    (obj.options.A || obj.options.B || obj.options.C)) {
+                                    if (!obj.correct) obj.correct = 'A';
+                                    results.push(obj);
+                                }
+                            } catch (_) {
+                                // skip incomplete/invalid object
+                            }
+                            i = j + 1;
+                            closed = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!closed) {
+                    // Truncated mid-object — stop; remaining text is incomplete
+                    break;
+                }
+            }
+
+            return results;
+        }
+
+        function cleanModelJsonContent(content) {
+            let cleaned = (content || '').trim();
+            if (cleaned.startsWith('```')) {
+                cleaned = cleaned.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+            }
+            const firstBracket = cleaned.indexOf('[');
+            if (firstBracket > 0) {
+                cleaned = cleaned.substring(firstBracket);
+            }
+            // If there is a closing ], keep through it; otherwise keep all (truncated)
+            const lastBracket = cleaned.lastIndexOf(']');
+            if (lastBracket > 0 && lastBracket < cleaned.length - 1) {
+                cleaned = cleaned.substring(0, lastBracket + 1);
+            }
+            return cleaned
+                .replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3')
+                .replace(/,\s*}/g, '}')
+                .replace(/,\s*]/g, ']');
+        }
+
+        function parseQuestionsFromModelContent(content) {
+            const cleanedContent = cleanModelJsonContent(content);
+
+            try {
+                const parsed = JSON.parse(cleanedContent);
+                if (Array.isArray(parsed)) return parsed;
+                if (parsed && Array.isArray(parsed.questions)) return parsed.questions;
+                throw new Error('Response is not an array');
+            } catch (parseError) {
+                // Prefer recovering complete objects from cleaned text, then raw text
+                let recovered = recoverCompleteQuestionObjects(cleanedContent);
+                if (!recovered.length) {
+                    recovered = recoverCompleteQuestionObjects(content);
+                }
+                if (recovered.length > 0) {
+                    console.warn(`Recovered ${recovered.length} complete question(s) from truncated/malformed JSON.`);
+                    return recovered;
+                }
+                throw parseError;
+            }
+        }
+
         // Extract questions from text when JSON parsing fails
         function extractQuestionsFromText(text) {
+            // Prefer recovering complete JSON objects from truncated arrays
+            const fromJson = recoverCompleteQuestionObjects(cleanModelJsonContent(text));
+            if (fromJson.length > 0) {
+                return fromJson;
+            }
+
             const extracted = [];
             const lines = text.split('\n');
             let currentQuestion = null;
@@ -2850,9 +3194,37 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 const line = lines[i].trim();
                 if (!line) continue;
 
+                // JSON-style question field
+                const jsonQ = line.match(/"question"\s*:\s*"((?:\\.|[^"\\])*)"/);
+                if (jsonQ) {
+                    if (currentQuestion && currentQuestion.question && optionCount >= 2) {
+                        extracted.push(currentQuestion);
+                    }
+                    currentQuestion = {
+                        question: jsonQ[1].replace(/\\"/g, '"'),
+                        options: {},
+                        correct: 'A'
+                    };
+                    optionCount = 0;
+                    continue;
+                }
+
+                const jsonOpt = line.match(/"(A|B|C)"\s*:\s*"((?:\\.|[^"\\])*)"/);
+                if (jsonOpt && currentQuestion) {
+                    currentQuestion.options[jsonOpt[1]] = jsonOpt[2].replace(/\\"/g, '"');
+                    optionCount++;
+                    continue;
+                }
+
+                const jsonCorrect = line.match(/"correct"\s*:\s*"(A|B|C)"/);
+                if (jsonCorrect && currentQuestion) {
+                    currentQuestion.correct = jsonCorrect[1];
+                    continue;
+                }
+
                 // Look for question patterns
                 if (line.match(/^\d+[\.\)]\s*[A-Z]/) || line.match(/^[Qq]uestion\s*\d+[\.:]/) || 
-                    (line.length > 20 && !line.match(/^[A-C][\.\)]/))) {
+                    (line.length > 20 && !line.match(/^[A-C][\.\)]/) && !line.startsWith('{') && !line.startsWith('"'))) {
                     if (currentQuestion && currentQuestion.question && optionCount >= 2) {
                         extracted.push(currentQuestion);
                     }
@@ -2866,7 +3238,8 @@ Return ONLY the JSON array, no additional text or markdown formatting.`;
                 // Look for option patterns
                 else if (line.match(/^[A-C][\.\)]\s*/) && currentQuestion) {
                     const option = line.charAt(0);
-                    const optionText = line.substring(line.indexOf(')') + 1).trim();
+                    const optionText = line.substring(line.indexOf(')') >= 0 ? line.indexOf(')') + 1 : 2).trim()
+                        || line.replace(/^[A-C][\.\)]\s*/, '');
                     if (optionText) {
                         currentQuestion.options[option] = optionText;
                         optionCount++;
