@@ -1150,7 +1150,8 @@
 
     /**
      * Μετά από Ν-ανταλλαγή: ξαναγεμίζει τις επόμενες καθημερινές από το τελικό άτομο
-     * της ημέρας-αγκύρωσης (συνέχεια λίστας). Μόνο ομάδες 3 & 4.
+     * της Πέμπτης (όχι από τον displaced στον εταίρο). Μόνο ομάδες 3 & 4.
+     * @param {Set<string>|null} frozenDateKeys — μέρες που μένουν ως έχουν χωρίς να μετακινούν τον δείκτη (π.χ. εταίρος Ν)
      */
     function resequenceNightGroupNormalDaysAfterAnchor(
         assignments,
@@ -1158,13 +1159,21 @@
         groupNum,
         afterDateKey,
         seedPerson,
-        simulated
+        simulated,
+        frozenDateKeys
     ) {
         if (!NIGHT_GROUPS.includes(Number(groupNum))) return 0;
         if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
             return 0;
         }
         if (!afterDateKey || !seedPerson) return 0;
+
+        const frozen =
+            frozenDateKeys instanceof Set
+                ? frozenDateKeys
+                : frozenDateKeys
+                  ? new Set(frozenDateKeys)
+                  : null;
 
         const sortedDays = [...(normalDays || [])].filter((dk) => dk > afterDateKey).sort();
         if (!sortedDays.length) return 0;
@@ -1177,6 +1186,12 @@
             if (!groupPeople.length) continue;
 
             const prev = getAssigneeOnDate(dateKey, groupNum, assignments);
+
+            // Εταίρος Ν: κράτα displaced, ΜΗΝ προχωράς συνέχεια από αυτόν (αλλιώς ξαναβγαίνει ο της Πέμπτης)
+            if (frozen && frozen.has(dateKey)) {
+                continue;
+            }
+
             if (prev && shouldFreezeNightResequenceDay(dateKey, groupNum, prev)) {
                 lastPerson = prev;
                 continue;
@@ -1241,6 +1256,7 @@
 
     /**
      * Άμεση αναδιάταξη μετά από μία Ν-ανταλλαγή (μέσα στο πέρασμα, χρονολογικά).
+     * Συνέχεια από τον/την που έμεινε στην Πέμπτη· ο εταίρος παγώνει χωρίς να γίνει σπόρος.
      */
     function resequenceAfterSingleSpacingSwap(assignments, normalDays, swap, simulated) {
         if (!swap) return 0;
@@ -1250,28 +1266,36 @@
         const thu = swap.thursdayKey;
         const partner = swap.partnerKey;
         if (!thu || !partner) return 0;
-        const afterDateKey = thu >= partner ? thu : partner;
-        const seedPerson = getAssigneeOnDate(afterDateKey, groupNum, assignments);
+
+        // Πάντα μετά την Πέμπτη, σπόρος = άτομο Ν στην Πέμπτη (όχι displaced στον εταίρο)
+        const afterDateKey = thu;
+        const seedPerson = getAssigneeOnDate(thu, groupNum, assignments);
         if (!seedPerson) return 0;
+
+        const frozenDateKeys = new Set();
+        if (partner > thu) {
+            frozenDateKeys.add(partner);
+        }
+
         const n = resequenceNightGroupNormalDaysAfterAnchor(
             assignments,
             normalDays,
             groupNum,
             afterDateKey,
             seedPerson,
-            simulated
+            simulated,
+            frozenDateKeys
         );
         if (n > 0) {
             console.log(
-                `[THURSDAY SPACING] Mid-pass resequence group ${groupNum} after ${afterDateKey} (seed=${seedPerson}): ${n} day(s)`
+                `[THURSDAY SPACING] Mid-pass resequence group ${groupNum} after Thursday ${afterDateKey} (seed=${seedPerson}, freezePartner=${partner > thu ? partner : '—'}): ${n} day(s)`
             );
         }
         return n;
     }
 
     /**
-     * Ανά ομάδα Ν: αναδιάταξη από την ΠΡΩΤΗ (χρονολογικά) Ν-ανταλλαγή του γύρου —
-     * όχι από την τελευταία. Μεταγενέστερα Ν πάνω σε παλιά ουρά ξαναγράφονται.
+     * Ανά ομάδα Ν: αναδιάταξη από την ΠΡΩΤΗ Ν-Πέμπτη του γύρου, με σπόρο τον της Πέμπτης.
      */
     function resequenceNightGroupsAfterSpacingSwaps(assignments, dayTypeLists, spacingSwaps, simulated) {
         if (!Array.isArray(spacingSwaps) || spacingSwaps.length === 0) return 0;
@@ -1285,30 +1309,35 @@
             const thu = swap.thursdayKey;
             const partner = swap.partnerKey;
             if (!thu || !partner) continue;
-            const afterKey = thu >= partner ? thu : partner;
-            // Ελάχιστο afterKey = πρώτη Ν-ανταλλαγή → συνέχεια από εκεί
-            if (!perGroup[groupNum] || afterKey < perGroup[groupNum]) {
-                perGroup[groupNum] = afterKey;
+            if (!perGroup[groupNum]) {
+                perGroup[groupNum] = { earliestThu: thu, partners: new Set() };
+            }
+            if (thu < perGroup[groupNum].earliestThu) {
+                perGroup[groupNum].earliestThu = thu;
+            }
+            if (partner > thu) {
+                perGroup[groupNum].partners.add(partner);
             }
         }
 
         let total = 0;
         for (const groupNumStr of Object.keys(perGroup)) {
             const groupNum = parseInt(groupNumStr, 10);
-            const afterDateKey = perGroup[groupNum];
-            const seedPerson = getAssigneeOnDate(afterDateKey, groupNum, assignments);
+            const { earliestThu, partners } = perGroup[groupNum];
+            const seedPerson = getAssigneeOnDate(earliestThu, groupNum, assignments);
             if (!seedPerson) continue;
             const n = resequenceNightGroupNormalDaysAfterAnchor(
                 assignments,
                 normalDays,
                 groupNum,
-                afterDateKey,
+                earliestThu,
                 seedPerson,
-                simulated
+                simulated,
+                partners
             );
             if (n > 0) {
                 console.log(
-                    `[THURSDAY SPACING] Resequence group ${groupNum} after earliest ${afterDateKey} (seed=${seedPerson}): ${n} day(s)`
+                    `[THURSDAY SPACING] Resequence group ${groupNum} after earliest Thursday ${earliestThu} (seed=${seedPerson}): ${n} day(s)`
                 );
             }
             total += n;
