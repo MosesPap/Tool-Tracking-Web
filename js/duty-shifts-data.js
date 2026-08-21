@@ -5671,22 +5671,25 @@
                     return out;
                 };
                 const specialDates = findNextSpecialDates(3, 3650);
-                const getMonthRangeKeys = (dateObj) => {
-                    if (!dateObj || isNaN(dateObj.getTime())) return { startKey: '', endKey: '' };
-                    const start = new Date(dateObj.getFullYear(), dateObj.getMonth(), 1);
-                    const end = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0);
-                    return { startKey: formatDateKey(start), endKey: formatDateKey(end) };
-                };
                 const outNotes = [];
                 for (let i = 0; i < 3; i++) {
                     const name = outNames[i] || '';
                     let note = '';
                     if (name) {
-                        const { startKey, endKey } = getMonthRangeKeys(specialDates[i]);
-                        if (isDisabledForTypeAtDate(name, 'special', startKey)) {
+                        const specialDate = specialDates[i];
+                        const specialDateKey =
+                            specialDate && !isNaN(specialDate.getTime())
+                                ? formatDateKey(specialDate)
+                                : '';
+                        if (!specialDateKey) {
+                            outNotes.push('');
+                            continue;
+                        }
+                        // Απενεργοποίηση / απουσία μόνο αν επηρεάζει την ίδια την ειδική αργία που αναλογεί
+                        if (isDisabledForTypeAtDate(name, 'special', specialDateKey)) {
                             note = 'ΕΚΤΟΣ ΥΠΗΡΕΣΙΑΣ';
                         } else {
-                            const r = getMissingReasonOverRange(name, startKey, endKey);
+                            const r = getMissingReasonOverRange(name, specialDateKey, specialDateKey);
                             if (r) note = r;
                         }
                     }
