@@ -2606,6 +2606,20 @@
         function hasConsecutiveDuty(dayKey, person, groupNum, simulatedAssignments = null) {
             const date = new Date(dayKey + 'T00:00:00');
             const currentDayType = getDayType(date);
+            const sameDutyPerson = (assigned, target) => {
+                if (!assigned || !target) return false;
+                if (assigned === target) return true;
+                return normalizePersonKey(assigned) === normalizePersonKey(target);
+            };
+            const specialSetHasPerson = (personSet, target) => {
+                if (!personSet || typeof personSet.has !== 'function') return false;
+                if (personSet.has(target)) return true;
+                const n = normalizePersonKey(target);
+                for (const p of personSet) {
+                    if (normalizePersonKey(p) === n) return true;
+                }
+                return false;
+            };
             
             // Get day type category for current day
             let currentTypeCategory = 'normal';
@@ -2643,16 +2657,28 @@
                 let beforeTypeCategory = 'normal';
                 if (beforeDayType === 'special-holiday') {
                     beforeTypeCategory = 'special';
-                    hasDutyBefore = simulatedAssignments.special?.[beforeMonthKey]?.[groupNum]?.has(person) || false;
+                    hasDutyBefore = specialSetHasPerson(
+                        simulatedAssignments.special?.[beforeMonthKey]?.[groupNum],
+                        person
+                    );
                 } else if (beforeDayType === 'semi-normal-day') {
                     beforeTypeCategory = 'semi';
-                    hasDutyBefore = simulatedAssignments.semi?.[dayBeforeKey]?.[groupNum] === person;
+                    hasDutyBefore = sameDutyPerson(
+                        simulatedAssignments.semi?.[dayBeforeKey]?.[groupNum],
+                        person
+                    );
                 } else if (beforeDayType === 'weekend-holiday') {
                     beforeTypeCategory = 'weekend';
-                    hasDutyBefore = simulatedAssignments.weekend?.[dayBeforeKey]?.[groupNum] === person;
+                    hasDutyBefore = sameDutyPerson(
+                        simulatedAssignments.weekend?.[dayBeforeKey]?.[groupNum],
+                        person
+                    );
                 } else {
                     beforeTypeCategory = 'normal';
-                    hasDutyBefore = simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum] === person;
+                    hasDutyBefore = sameDutyPerson(
+                        simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum],
+                        person
+                    );
                 }
             } else {
                 // Check permanent assignments
@@ -2695,16 +2721,28 @@
                 let afterTypeCategory = 'normal';
                 if (afterDayType === 'special-holiday') {
                     afterTypeCategory = 'special';
-                    hasDutyAfter = simulatedAssignments.special?.[afterMonthKey]?.[groupNum]?.has(person) || false;
+                    hasDutyAfter = specialSetHasPerson(
+                        simulatedAssignments.special?.[afterMonthKey]?.[groupNum],
+                        person
+                    );
                 } else if (afterDayType === 'semi-normal-day') {
                     afterTypeCategory = 'semi';
-                    hasDutyAfter = simulatedAssignments.semi?.[dayAfterKey]?.[groupNum] === person;
+                    hasDutyAfter = sameDutyPerson(
+                        simulatedAssignments.semi?.[dayAfterKey]?.[groupNum],
+                        person
+                    );
                 } else if (afterDayType === 'weekend-holiday') {
                     afterTypeCategory = 'weekend';
-                    hasDutyAfter = simulatedAssignments.weekend?.[dayAfterKey]?.[groupNum] === person;
+                    hasDutyAfter = sameDutyPerson(
+                        simulatedAssignments.weekend?.[dayAfterKey]?.[groupNum],
+                        person
+                    );
                 } else {
                     afterTypeCategory = 'normal';
-                    hasDutyAfter = simulatedAssignments.normal?.[dayAfterKey]?.[groupNum] === person;
+                    hasDutyAfter = sameDutyPerson(
+                        simulatedAssignments.normal?.[dayAfterKey]?.[groupNum],
+                        person
+                    );
                     
                     // If not assigned yet, check if person will be assigned based on rotation
                     // This is important for preview mode when processing days in chronological order
@@ -2751,7 +2789,7 @@
                                 }
                                 
                                 // If this person is expected to be assigned to day after, it's a conflict
-                                if (expectedPerson === person && !isPersonMissingOnDate(person, groupNum, dayAfter, 'normal')) {
+                                if (sameDutyPerson(expectedPerson, person) && !isPersonMissingOnDate(person, groupNum, dayAfter, 'normal')) {
                                     hasDutyAfter = true;
                                 }
                             }
@@ -2793,7 +2831,7 @@
                                 }
                                 
                                 // If this person is expected to be assigned to day after in next month, it's a conflict
-                                if (expectedPerson === person && !isPersonMissingOnDate(person, groupNum, dayAfter, 'normal')) {
+                                if (sameDutyPerson(expectedPerson, person) && !isPersonMissingOnDate(person, groupNum, dayAfter, 'normal')) {
                                     hasDutyAfter = true;
                                 }
                             }
@@ -7483,6 +7521,7 @@
                         let swapDayKey = null;
                         let swapDayIndex = null;
                         let swapFound = false;
+                        let usedAsapFallback = false;
                         
                         if (hasConsecutiveConflict) {
                             if (
@@ -7939,6 +7978,44 @@
                                 }
                                 
                             }
+
+                            // Fallback ASAP όταν το week-pair (Τρι↔Πέμ / Δευ↔Τετ) δεν βρήκε έγκυρο εταίρο
+                            if (
+                                !swapFound &&
+                                applyWeekPairLogic &&
+                                !isPersonInvolvedInNormalAsapSwap(normalSwapInvolvedPersons, groupNum, currentPerson)
+                            ) {
+                                const asapFallback = findNormalAsapSwapPartner({
+                                    dateKey,
+                                    currentPerson,
+                                    groupNum,
+                                    sortedNormal,
+                                    assignments: updatedAssignments,
+                                    swappedPeopleSet,
+                                    swapInvolvedPersons: normalSwapInvolvedPersons,
+                                    validateSwapFn: (candidateKey) => {
+                                        const result = tryEarliestSwapCandidate(candidateKey);
+                                        if (!result) return null;
+                                        return {
+                                            candidateKey: result.candidateKey,
+                                            swapCandidate: result.swapCandidate,
+                                            isMutualConflict: hasConsecutiveDuty(
+                                                candidateKey,
+                                                result.swapCandidate,
+                                                groupNum,
+                                                simulatedAssignments
+                                            )
+                                        };
+                                    }
+                                });
+                                if (asapFallback) {
+                                    swapDayKey = asapFallback.swapDayKey;
+                                    swapDayIndex = normalDays.indexOf(swapDayKey);
+                                    if (swapDayIndex < 0) swapDayIndex = -1;
+                                    swapFound = true;
+                                    usedAsapFallback = true;
+                                }
+                            }
                             
                             // Perform swap if found - STOP after finding valid swap (don't continue to other steps)
                             // Note: swapDayIndex can be -1 for cross-month swaps (not in normalDays array)
@@ -8103,7 +8180,7 @@
                                 // Mark both people as swapped to prevent re-swapping
                                 swappedPeopleSet.add(`${dateKey}:${groupNum}:${currentPerson}`);
                                 swappedPeopleSet.add(`${swapDayKey}:${groupNum}:${swapCandidate}`);
-                                if (!applyWeekPairLogic) {
+                                if (!applyWeekPairLogic || usedAsapFallback) {
                                     markNormalAsapSwapInvolved(normalSwapInvolvedPersons, groupNum, currentPerson);
                                     markNormalAsapSwapInvolved(normalSwapInvolvedPersons, groupNum, swapCandidate);
                                 }
@@ -13762,6 +13839,7 @@
                         
                         let swapDayKey = null;
                         let swapFound = false;
+                        let usedAsapFallbackPreview = false;
                         const tryPreviewEarliestSwapCandidate = (candidateKey) => {
                             if (!candidateKey || candidateKey === dateKey) return null;
                             const d = new Date(candidateKey + 'T00:00:00');
@@ -13938,6 +14016,55 @@
                                     swapFound = true;
                                 }
                             }
+
+                            // TUESDAY/THURSDAY - Step 1b: BACKWARD (ίδιο με runNormalSwapLogic) — κρίσιμο για τέλος μήνα
+                            if (!swapFound) {
+                                const tryPreviewBackwardSwapCandidate = (candidateKey) => {
+                                    const d = new Date(candidateKey + 'T00:00:00');
+                                    if (isNaN(d.getTime()) || d >= date || d.getMonth() !== month || d.getFullYear() !== year) {
+                                        return null;
+                                    }
+                                    if (getDayType(d) !== 'normal-day') return null;
+                                    const swapCandidate = normalAssignments[candidateKey]?.[groupNum];
+                                    if (!swapCandidate) return null;
+                                    if (isPersonMissingOnDate(swapCandidate, groupNum, d, 'normal')) return null;
+                                    if (hasConsecutiveDuty(candidateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                        return null;
+                                    }
+                                    if (hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) {
+                                        return null;
+                                    }
+                                    if (
+                                        !isNormalConflictSwapValidForMissingBoundaries(
+                                            dateKey,
+                                            candidateKey,
+                                            currentPerson,
+                                            swapCandidate,
+                                            groupNum
+                                        )
+                                    ) {
+                                        return null;
+                                    }
+                                    return { swapCandidate, candidateKey };
+                                };
+                                const backwardOffsets =
+                                    typeof isNightChangesGroup === 'function' &&
+                                    isNightChangesGroup(groupNum) &&
+                                    dayOfWeek === 2
+                                        ? [7, 14, 21]
+                                        : [7, 2, 9, 14, 16, 21];
+                                for (const offset of backwardOffsets) {
+                                    const prevDay = new Date(date);
+                                    prevDay.setDate(date.getDate() - offset);
+                                    if (prevDay.getMonth() !== month || prevDay.getFullYear() !== year) continue;
+                                    const result = tryPreviewBackwardSwapCandidate(formatDateKey(prevDay));
+                                    if (result) {
+                                        swapDayKey = result.candidateKey;
+                                        swapFound = true;
+                                        break;
+                                    }
+                                }
+                            }
                             
                             // TUESDAY/THURSDAY - Step 2: ONLY if Step 1 failed, try alternative day in same week
                             if (!swapFound) {
@@ -13978,6 +14105,88 @@
                                             swapFound = true;
                                         }
                                     }
+                                }
+                            }
+
+                            // TUESDAY/THURSDAY - Step 3a: previous alternative day same month (π.χ. Τρι 29 → Πέμ 24)
+                            if (!swapFound) {
+                                const prevAlternativeDay = new Date(date);
+                                const daysToSubtract = dayOfWeek - alternativeDayOfWeek;
+                                if (daysToSubtract > 0) {
+                                    prevAlternativeDay.setDate(date.getDate() - daysToSubtract);
+                                } else {
+                                    prevAlternativeDay.setDate(date.getDate() - (7 + daysToSubtract));
+                                }
+                                const prevAlternativeKey = formatDateKey(prevAlternativeDay);
+                                if (
+                                    prevAlternativeDay < date &&
+                                    prevAlternativeDay.getMonth() === month &&
+                                    prevAlternativeDay.getFullYear() === year &&
+                                    normalDays.includes(prevAlternativeKey) &&
+                                    getDayType(prevAlternativeDay) === 'normal-day'
+                                ) {
+                                    const swapCandidate = normalAssignments[prevAlternativeKey]?.[groupNum];
+                                    if (
+                                        swapCandidate &&
+                                        !isPersonMissingOnDate(swapCandidate, groupNum, prevAlternativeDay, 'normal') &&
+                                        !hasConsecutiveDuty(
+                                            prevAlternativeKey,
+                                            swapCandidate,
+                                            groupNum,
+                                            simulatedAssignments
+                                        ) &&
+                                        !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
+                                        isNormalConflictSwapValidForMissingBoundaries(
+                                            dateKey,
+                                            prevAlternativeKey,
+                                            currentPerson,
+                                            swapCandidate,
+                                            groupNum
+                                        )
+                                    ) {
+                                        swapDayKey = prevAlternativeKey;
+                                        swapFound = true;
+                                    }
+                                }
+                            }
+
+                            // Fallback ASAP αν το week-pair δεν βρήκε εταίρο
+                            if (
+                                !swapFound &&
+                                applyWeekPairLogic &&
+                                !isPersonInvolvedInNormalAsapSwap(
+                                    normalSwapInvolvedPersonsPreview,
+                                    groupNum,
+                                    currentPerson
+                                )
+                            ) {
+                                const asapFallbackPreview = findNormalAsapSwapPartner({
+                                    dateKey,
+                                    currentPerson,
+                                    groupNum,
+                                    sortedNormal,
+                                    assignments: normalAssignments,
+                                    swappedPeopleSet,
+                                    swapInvolvedPersons: normalSwapInvolvedPersonsPreview,
+                                    validateSwapFn: (candidateKey) => {
+                                        const result = tryPreviewEarliestSwapCandidate(candidateKey);
+                                        if (!result) return null;
+                                        return {
+                                            candidateKey: result.candidateKey,
+                                            swapCandidate: result.swapCandidate,
+                                            isMutualConflict: hasConsecutiveDuty(
+                                                candidateKey,
+                                                result.swapCandidate,
+                                                groupNum,
+                                                simulatedAssignments
+                                            )
+                                        };
+                                    }
+                                });
+                                if (asapFallbackPreview) {
+                                    swapDayKey = asapFallbackPreview.swapDayKey;
+                                    swapFound = true;
+                                    usedAsapFallbackPreview = true;
                                 }
                             }
                             
@@ -14120,7 +14329,7 @@
                             // Mark both people as swapped to prevent re-swapping
                             swappedPeopleSet.add(`${dateKey}:${groupNum}:${currentPerson}`);
                             swappedPeopleSet.add(`${swapDayKey}:${groupNum}:${swapCandidate}`);
-                            if (!applyWeekPairLogic) {
+                            if (!applyWeekPairLogic || usedAsapFallbackPreview) {
                                 markNormalAsapSwapInvolved(normalSwapInvolvedPersonsPreview, groupNum, currentPerson);
                                 markNormalAsapSwapInvolved(normalSwapInvolvedPersonsPreview, groupNum, swapCandidate);
                             }
