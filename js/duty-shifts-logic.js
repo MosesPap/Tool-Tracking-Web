@@ -2563,11 +2563,84 @@
             }
             
             if (!assignment) return false;
-            
-            // Ensure assignment is a string
-            const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
-            const personGroupStr = `${person} (Ομάδα ${groupNum})`;
-            return assignmentStr.includes(personGroupStr);
+
+            if (typeof extractGroupAssignmentsMap === 'function') {
+                const gmap = extractGroupAssignmentsMap(assignment);
+                const assigned = gmap?.[groupNum] || gmap?.[String(groupNum)];
+                if (assigned) {
+                    if (assigned === person) return true;
+                    if (
+                        typeof normalizePersonKey === 'function' &&
+                        normalizePersonKey(assigned) === normalizePersonKey(person)
+                    ) {
+                        return true;
+                    }
+                }
+            }
+
+            if (typeof assignment === 'string') {
+                const personGroupStr = `${person} (Ομάδα ${groupNum})`;
+                return assignment.includes(personGroupStr);
+            }
+            return false;
+        }
+
+        /** Person on a date/group from simulated map (supports numeric + string keys). */
+        function getSimulatedAssignee(dayMap, groupNum) {
+            if (!dayMap || typeof dayMap !== 'object') return null;
+            return dayMap[groupNum] || dayMap[String(groupNum)] || null;
+        }
+
+        /**
+         * Merge Step 3 / store semi assignments into dateKey -> {1..4: person} for conflict checks.
+         */
+        function buildSimulatedSemiMapForConflictCheck() {
+            const out = {};
+            const mergeDate = (dateKey, raw) => {
+                if (!dateKey || raw == null) return;
+                let gmap = null;
+                if (typeof raw === 'object' && !Array.isArray(raw)) {
+                    gmap =
+                        typeof extractGroupAssignmentsMap === 'function'
+                            ? extractGroupAssignmentsMap(raw)
+                            : null;
+                    if (!gmap || !Object.keys(gmap).length) {
+                        gmap = {};
+                        for (let g = 1; g <= 4; g++) {
+                            const v = raw[g] || raw[String(g)];
+                            if (typeof v === 'string' && v.trim()) gmap[g] = v.trim();
+                        }
+                    }
+                } else if (typeof extractGroupAssignmentsMap === 'function') {
+                    gmap = extractGroupAssignmentsMap(raw);
+                }
+                if (!gmap || !Object.keys(gmap).length) return;
+                if (!out[dateKey]) out[dateKey] = {};
+                for (let g = 1; g <= 4; g++) {
+                    if (gmap[g]) out[dateKey][g] = gmap[g];
+                }
+            };
+
+            const fromSteps =
+                (typeof calculationSteps !== 'undefined' &&
+                    (calculationSteps.finalSemiAssignments || calculationSteps.tempSemiAssignments)) ||
+                {};
+            for (const dk of Object.keys(fromSteps)) mergeDate(dk, fromSteps[dk]);
+
+            if (typeof semiNormalAssignments === 'object' && semiNormalAssignments) {
+                for (const dk of Object.keys(semiNormalAssignments)) {
+                    mergeDate(dk, semiNormalAssignments[dk]);
+                }
+            }
+
+            const semiDays =
+                (typeof calculationSteps !== 'undefined' && calculationSteps.dayTypeLists?.semi) || [];
+            for (const dk of semiDays) {
+                if (!out[dk] && typeof semiNormalAssignments !== 'undefined') {
+                    mergeDate(dk, semiNormalAssignments[dk]);
+                }
+            }
+            return out;
         }
 
         /**
@@ -2664,21 +2737,25 @@
                 } else if (beforeDayType === 'semi-normal-day') {
                     beforeTypeCategory = 'semi';
                     hasDutyBefore = sameDutyPerson(
-                        simulatedAssignments.semi?.[dayBeforeKey]?.[groupNum],
+                        getSimulatedAssignee(simulatedAssignments.semi?.[dayBeforeKey], groupNum),
                         person
                     );
                 } else if (beforeDayType === 'weekend-holiday') {
                     beforeTypeCategory = 'weekend';
                     hasDutyBefore = sameDutyPerson(
-                        simulatedAssignments.weekend?.[dayBeforeKey]?.[groupNum],
+                        getSimulatedAssignee(simulatedAssignments.weekend?.[dayBeforeKey], groupNum),
                         person
                     );
                 } else {
                     beforeTypeCategory = 'normal';
                     hasDutyBefore = sameDutyPerson(
-                        simulatedAssignments.normal?.[dayBeforeKey]?.[groupNum],
+                        getSimulatedAssignee(simulatedAssignments.normal?.[dayBeforeKey], groupNum),
                         person
                     );
+                }
+                // Fallback: store / Firestore αν το simulated δεν έχει ακόμα τη γειτονική ανάθεση
+                if (!hasDutyBefore) {
+                    hasDutyBefore = hasDutyOnDay(dayBeforeKey, person, groupNum);
                 }
             } else {
                 // Check permanent assignments
@@ -2728,19 +2805,19 @@
                 } else if (afterDayType === 'semi-normal-day') {
                     afterTypeCategory = 'semi';
                     hasDutyAfter = sameDutyPerson(
-                        simulatedAssignments.semi?.[dayAfterKey]?.[groupNum],
+                        getSimulatedAssignee(simulatedAssignments.semi?.[dayAfterKey], groupNum),
                         person
                     );
                 } else if (afterDayType === 'weekend-holiday') {
                     afterTypeCategory = 'weekend';
                     hasDutyAfter = sameDutyPerson(
-                        simulatedAssignments.weekend?.[dayAfterKey]?.[groupNum],
+                        getSimulatedAssignee(simulatedAssignments.weekend?.[dayAfterKey], groupNum),
                         person
                     );
                 } else {
                     afterTypeCategory = 'normal';
                     hasDutyAfter = sameDutyPerson(
-                        simulatedAssignments.normal?.[dayAfterKey]?.[groupNum],
+                        getSimulatedAssignee(simulatedAssignments.normal?.[dayAfterKey], groupNum),
                         person
                     );
                     
@@ -2900,6 +2977,10 @@
                             }
                         }
                     }
+                }
+                // Fallback: ημιαργία/αργία από store αν το simulated δεν τις έχει φορτώσει
+                if (!hasDutyAfter) {
+                    hasDutyAfter = hasDutyOnDay(dayAfterKey, person, groupNum);
                 }
             } else {
                 // Check permanent assignments
@@ -6840,46 +6921,13 @@
                     }
                 }
                 
-                // Load semi-normal assignments from Step 3 final results (finalSemiAssignments)
-                const finalSemiAssignments = calculationSteps.finalSemiAssignments || {};
-                const simulatedSemiAssignments = {}; // dateKey -> { groupNum -> person name }
-                
-                // finalSemiAssignments is in format: { dateKey: { groupNum: personName } }
-                for (const dateKey in finalSemiAssignments) {
-                    const groups = finalSemiAssignments[dateKey];
-                    if (groups && typeof groups === 'object') {
-                        simulatedSemiAssignments[dateKey] = { ...groups };
-                    }
-                }
-                
-                // Also check global semiNormalAssignments for any dates not in finalSemiAssignments (backward compatibility)
-                for (const dateKey in semiNormalAssignments) {
-                    if (!simulatedSemiAssignments[dateKey]) {
-                        const assignment = semiNormalAssignments[dateKey];
-                        if (!assignment) continue;
-                        if (typeof extractGroupAssignmentsMap === 'function') {
-                            const gmap = extractGroupAssignmentsMap(assignment);
-                            if (gmap && Object.keys(gmap).length > 0) {
-                                simulatedSemiAssignments[dateKey] = { ...gmap };
-                                continue;
-                            }
-                        }
-                        if (typeof assignment === 'string') {
-                            const parts = assignment.split(',').map(p => p.trim());
-                            parts.forEach(part => {
-                                const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
-                                if (match) {
-                                    const personName = match[1].trim();
-                                    const groupNum = parseInt(match[2]);
-                                    if (!simulatedSemiAssignments[dateKey]) {
-                                        simulatedSemiAssignments[dateKey] = {};
-                                    }
-                                    simulatedSemiAssignments[dateKey][groupNum] = personName;
-                                }
-                            });
-                        }
-                    }
-                }
+                // Load semi-normal assignments for conflict checks (Step 3 + store)
+                const simulatedSemiAssignments = buildSimulatedSemiMapForConflictCheck();
+                console.log(
+                    '[STEP 4] Semi for conflict check:',
+                    Object.keys(simulatedSemiAssignments).length,
+                    'dates'
+                );
                 
                 // Track swapped people and replacements
                 const swappedPeople = []; // Array of { date, groupNum, skippedPerson, swappedPerson }
@@ -12922,55 +12970,14 @@
             }
             
             // Initialize simulatedSemiAssignments and normalAssignments for consecutive check (will be populated later)
-            const simulatedSemiAssignments = {}; // dateKey -> { groupNum -> person name }
+            const simulatedSemiAssignments = buildSimulatedSemiMapForConflictCheck();
             const normalAssignments = {}; // dateKey -> { groupNum -> person name }
-            
-            // Load Step 3 semi results — ΠΡΩΤΑ από calculationSteps (ίδιο με runNormalSwapLogic),
-            // αλλιώς οι συγκρούσεις normal↔ημιαργία δεν ανιχνεύονται στο preview.
-            const previewFinalSemi =
-                calculationSteps.finalSemiAssignments || calculationSteps.tempSemiAssignments || {};
-            for (const dateKey in previewFinalSemi) {
-                const groups = previewFinalSemi[dateKey];
-                if (groups && typeof groups === 'object' && !Array.isArray(groups)) {
-                    simulatedSemiAssignments[dateKey] = { ...groups };
-                }
-            }
-            const sortedSemi = [...semiNormalDays].sort();
-            sortedSemi.forEach((dateKey) => {
-                if (simulatedSemiAssignments[dateKey] && Object.keys(simulatedSemiAssignments[dateKey]).length > 0) {
-                    return;
-                }
-                const assignment = semiNormalAssignments[dateKey];
-                if (!assignment) return;
-                if (typeof extractGroupAssignmentsMap === 'function') {
-                    const gmap = extractGroupAssignmentsMap(assignment);
-                    if (gmap && Object.keys(gmap).length > 0) {
-                        simulatedSemiAssignments[dateKey] = { ...gmap };
-                        return;
-                    }
-                }
-                if (typeof assignment === 'string') {
-                    const parts = assignment.split(',').map((p) => p.trim());
-                    parts.forEach((part) => {
-                        const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
-                        if (match) {
-                            const personName = match[1].trim();
-                            const groupNum = parseInt(match[2], 10);
-                            if (!simulatedSemiAssignments[dateKey]) {
-                                simulatedSemiAssignments[dateKey] = {};
-                            }
-                            simulatedSemiAssignments[dateKey][groupNum] = personName;
-                        }
-                    });
-                }
-            });
             console.log(
                 '[PREVIEW] Semi for conflict check:',
                 Object.keys(simulatedSemiAssignments).length,
-                'dates (from steps:',
-                Object.keys(previewFinalSemi).length,
-                ')'
+                'dates'
             );
+            const sortedSemi = [...(semiNormalDays || [])].sort();
 
             const periodLabel = buildPeriodLabel(startDate, endDate);
             if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
@@ -14368,6 +14375,188 @@
                     }
                 }
                 });
+
+                // Δεύτερο πέρασμα: όσες συγκρούσεις έμειναν (π.χ. λόγω απουσιών / τέλος μήνα)
+                // ψάξε εταίρο σε ΟΛΟ τον μήνα (όχι μόνο ±10 ημέρες).
+                const residualSimulated = {
+                    special: simulatedSpecialAssignments,
+                    weekend: simulatedWeekendAssignments,
+                    semi: simulatedSemiAssignments,
+                    normal: normalAssignments,
+                    normalRotationPositions: globalNormalRotationPosition
+                };
+                let residualSwaps = 0;
+                for (let residualPass = 0; residualPass < 4; residualPass++) {
+                    let passSwaps = 0;
+                    for (const dateKey of sortedNormal) {
+                        const date = new Date(dateKey + 'T00:00:00');
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            if (
+                                typeof shouldRecalculateDutyGroup === 'function' &&
+                                !shouldRecalculateDutyGroup(groupNum)
+                            ) {
+                                continue;
+                            }
+                            const currentPerson = normalAssignments[dateKey]?.[groupNum];
+                            if (!currentPerson) continue;
+                            const swapKey = `${dateKey}:${groupNum}:${currentPerson}`;
+                            if (swappedPeopleSet.has(swapKey)) continue;
+                            if (
+                                !hasConsecutiveDuty(dateKey, currentPerson, groupNum, residualSimulated)
+                            ) {
+                                continue;
+                            }
+                            const asap = findNormalAsapSwapPartner({
+                                dateKey,
+                                currentPerson,
+                                groupNum,
+                                sortedNormal,
+                                assignments: normalAssignments,
+                                swappedPeopleSet,
+                                swapInvolvedPersons: normalSwapInvolvedPersonsPreview,
+                                maxCalendarDays: 62,
+                                validateSwapFn: (candidateKey) => {
+                                    if (!candidateKey || candidateKey === dateKey) return null;
+                                    const d = new Date(candidateKey + 'T00:00:00');
+                                    if (isNaN(d.getTime()) || getDayType(d) !== 'normal-day') return null;
+                                    const swapCandidate = normalAssignments[candidateKey]?.[groupNum];
+                                    if (!swapCandidate) return null;
+                                    if (
+                                        typeof isPersonDisabledForDuty === 'function' &&
+                                        isPersonDisabledForDuty(swapCandidate, groupNum, 'normal')
+                                    ) {
+                                        return null;
+                                    }
+                                    if (isPersonMissingOnDate(swapCandidate, groupNum, d, 'normal')) {
+                                        return null;
+                                    }
+                                    if (
+                                        !isNormalConflictSwapValidForMissingBoundaries(
+                                            dateKey,
+                                            candidateKey,
+                                            currentPerson,
+                                            swapCandidate,
+                                            groupNum
+                                        )
+                                    ) {
+                                        return null;
+                                    }
+                                    if (
+                                        hasConsecutiveDuty(
+                                            candidateKey,
+                                            swapCandidate,
+                                            groupNum,
+                                            residualSimulated
+                                        )
+                                    ) {
+                                        return null;
+                                    }
+                                    if (
+                                        hasConsecutiveDuty(
+                                            dateKey,
+                                            swapCandidate,
+                                            groupNum,
+                                            residualSimulated
+                                        )
+                                    ) {
+                                        return null;
+                                    }
+                                    return { swapCandidate, candidateKey };
+                                }
+                            });
+                            if (!asap?.swapDayKey || !asap?.swapCandidate) {
+                                console.warn(
+                                    `[PREVIEW RESIDUAL] Unresolved conflict ${dateKey} G${groupNum} ${currentPerson}`
+                                );
+                                continue;
+                            }
+                            const swapCandidate = asap.swapCandidate;
+                            const swapDayKey = asap.swapDayKey;
+                            const swapPairId = previewSwapPairCounter++;
+                            previewSwappedPeople.push({
+                                date: dateKey,
+                                dateStr: date.toLocaleDateString('el-GR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric'
+                                }),
+                                groupNum,
+                                skippedPerson: currentPerson,
+                                swappedPerson: swapCandidate,
+                                swapDate: swapDayKey,
+                                swapDateStr: new Date(swapDayKey + 'T00:00:00').toLocaleDateString(
+                                    'el-GR',
+                                    { day: '2-digit', month: '2-digit', year: 'numeric' }
+                                ),
+                                swapPairId,
+                                residualConflict: true
+                            });
+                            normalAssignments[dateKey][groupNum] = swapCandidate;
+                            if (!normalAssignments[swapDayKey]) normalAssignments[swapDayKey] = {};
+                            normalAssignments[swapDayKey][groupNum] = currentPerson;
+                            const conflictNeighborInfoPreview = getConsecutiveConflictNeighborInfo(
+                                dateKey,
+                                currentPerson,
+                                groupNum,
+                                residualSimulated
+                            );
+                            const conflictWithLabelPreview =
+                                conflictNeighborInfoPreview?.conflictWithLabel || 'Αργία';
+                            const reason = buildNormalConsecutiveDutySwapReason(
+                                swapCandidate,
+                                currentPerson,
+                                dateKey,
+                                swapDayKey,
+                                conflictWithLabelPreview
+                            );
+                            const meta = getNormalConsecutiveDutySwapMeta(
+                                swapCandidate,
+                                currentPerson,
+                                dateKey,
+                                swapDayKey,
+                                conflictWithLabelPreview
+                            );
+                            storeAssignmentReason(
+                                dateKey,
+                                groupNum,
+                                swapCandidate,
+                                'swap',
+                                reason,
+                                currentPerson,
+                                swapPairId,
+                                { ...meta, residualConflict: true }
+                            );
+                            storeAssignmentReason(
+                                swapDayKey,
+                                groupNum,
+                                currentPerson,
+                                'swap',
+                                reason,
+                                swapCandidate,
+                                swapPairId,
+                                { ...meta, residualConflict: true }
+                            );
+                            swappedPeopleSet.add(`${dateKey}:${groupNum}:${currentPerson}`);
+                            swappedPeopleSet.add(`${swapDayKey}:${groupNum}:${swapCandidate}`);
+                            markNormalAsapSwapInvolved(
+                                normalSwapInvolvedPersonsPreview,
+                                groupNum,
+                                currentPerson
+                            );
+                            markNormalAsapSwapInvolved(
+                                normalSwapInvolvedPersonsPreview,
+                                groupNum,
+                                swapCandidate
+                            );
+                            passSwaps += 1;
+                            residualSwaps += 1;
+                        }
+                    }
+                    if (passSwaps === 0) break;
+                }
+                if (residualSwaps > 0) {
+                    console.log(`[PREVIEW RESIDUAL] Resolved ${residualSwaps} remaining conflict swap(s)`);
+                }
             }
 
             if (normalDays.length > 0 && sortedNormal.length > 0) {
@@ -14379,6 +14568,162 @@
                     startDate,
                     endDate
                 });
+
+                // Μετά return-from-missing μπορεί να ξαναδημιουργηθούν συγκρούσεις — ξανά residual
+                const postRfmSimulated = {
+                    special: simulatedSpecialAssignments,
+                    weekend: simulatedWeekendAssignments,
+                    semi: simulatedSemiAssignments,
+                    normal: normalAssignments,
+                    normalRotationPositions: globalNormalRotationPosition
+                };
+                let postRfmSwaps = 0;
+                for (let residualPass = 0; residualPass < 3; residualPass++) {
+                    let passSwaps = 0;
+                    for (const dateKey of sortedNormal) {
+                        const date = new Date(dateKey + 'T00:00:00');
+                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            if (
+                                typeof shouldRecalculateDutyGroup === 'function' &&
+                                !shouldRecalculateDutyGroup(groupNum)
+                            ) {
+                                continue;
+                            }
+                            const currentPerson = normalAssignments[dateKey]?.[groupNum];
+                            if (!currentPerson) continue;
+                            if (
+                                !hasConsecutiveDuty(dateKey, currentPerson, groupNum, postRfmSimulated)
+                            ) {
+                                continue;
+                            }
+                            const asap = findNormalAsapSwapPartner({
+                                dateKey,
+                                currentPerson,
+                                groupNum,
+                                sortedNormal,
+                                assignments: normalAssignments,
+                                swappedPeopleSet: new Set(),
+                                swapInvolvedPersons: new Set(),
+                                maxCalendarDays: 62,
+                                validateSwapFn: (candidateKey) => {
+                                    if (!candidateKey || candidateKey === dateKey) return null;
+                                    const d = new Date(candidateKey + 'T00:00:00');
+                                    if (isNaN(d.getTime()) || getDayType(d) !== 'normal-day') return null;
+                                    const swapCandidate = normalAssignments[candidateKey]?.[groupNum];
+                                    if (!swapCandidate || swapCandidate === currentPerson) return null;
+                                    if (isPersonMissingOnDate(swapCandidate, groupNum, d, 'normal')) {
+                                        return null;
+                                    }
+                                    if (
+                                        !isNormalConflictSwapValidForMissingBoundaries(
+                                            dateKey,
+                                            candidateKey,
+                                            currentPerson,
+                                            swapCandidate,
+                                            groupNum
+                                        )
+                                    ) {
+                                        return null;
+                                    }
+                                    if (
+                                        hasConsecutiveDuty(
+                                            candidateKey,
+                                            swapCandidate,
+                                            groupNum,
+                                            postRfmSimulated
+                                        )
+                                    ) {
+                                        return null;
+                                    }
+                                    if (
+                                        hasConsecutiveDuty(
+                                            dateKey,
+                                            swapCandidate,
+                                            groupNum,
+                                            postRfmSimulated
+                                        )
+                                    ) {
+                                        return null;
+                                    }
+                                    return { swapCandidate, candidateKey };
+                                }
+                            });
+                            if (!asap?.swapDayKey || !asap?.swapCandidate) continue;
+                            const swapCandidate = asap.swapCandidate;
+                            const swapDayKey = asap.swapDayKey;
+                            const swapPairId = previewSwapPairCounter++;
+                            normalAssignments[dateKey][groupNum] = swapCandidate;
+                            if (!normalAssignments[swapDayKey]) normalAssignments[swapDayKey] = {};
+                            normalAssignments[swapDayKey][groupNum] = currentPerson;
+                            const info = getConsecutiveConflictNeighborInfo(
+                                dateKey,
+                                currentPerson,
+                                groupNum,
+                                postRfmSimulated
+                            );
+                            const reason = buildNormalConsecutiveDutySwapReason(
+                                swapCandidate,
+                                currentPerson,
+                                dateKey,
+                                swapDayKey,
+                                info?.conflictWithLabel || 'Αργία'
+                            );
+                            const meta = getNormalConsecutiveDutySwapMeta(
+                                swapCandidate,
+                                currentPerson,
+                                dateKey,
+                                swapDayKey,
+                                info?.conflictWithLabel || 'Αργία'
+                            );
+                            storeAssignmentReason(
+                                dateKey,
+                                groupNum,
+                                swapCandidate,
+                                'swap',
+                                reason,
+                                currentPerson,
+                                swapPairId,
+                                { ...meta, residualConflict: true, afterReturnFromMissing: true }
+                            );
+                            storeAssignmentReason(
+                                swapDayKey,
+                                groupNum,
+                                currentPerson,
+                                'swap',
+                                reason,
+                                swapCandidate,
+                                swapPairId,
+                                { ...meta, residualConflict: true, afterReturnFromMissing: true }
+                            );
+                            previewSwappedPeople.push({
+                                date: dateKey,
+                                dateStr: date.toLocaleDateString('el-GR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric'
+                                }),
+                                groupNum,
+                                skippedPerson: currentPerson,
+                                swappedPerson: swapCandidate,
+                                swapDate: swapDayKey,
+                                swapDateStr: new Date(swapDayKey + 'T00:00:00').toLocaleDateString(
+                                    'el-GR',
+                                    { day: '2-digit', month: '2-digit', year: 'numeric' }
+                                ),
+                                swapPairId,
+                                residualConflict: true
+                            });
+                            passSwaps += 1;
+                            postRfmSwaps += 1;
+                        }
+                    }
+                    if (passSwaps === 0) break;
+                }
+                if (postRfmSwaps > 0) {
+                    console.log(
+                        `[PREVIEW RESIDUAL] After return-from-missing resolved ${postRfmSwaps} conflict(s)`
+                    );
+                }
             }
             
             stepContent.innerHTML = html;
@@ -14891,12 +15236,18 @@
             assignments,
             swappedPeopleSet,
             swapInvolvedPersons,
-            validateSwapFn
+            validateSwapFn,
+            maxCalendarDays = NORMAL_ASAP_SWAP_MAX_CALENDAR_DAYS
         }) {
             if (!dateKey || !currentPerson || !Array.isArray(sortedNormal) || !assignments || typeof validateSwapFn !== 'function') {
                 return null;
             }
             if (isPersonInvolvedInNormalAsapSwap(swapInvolvedPersons, groupNum, currentPerson)) return null;
+
+            const limit =
+                Number.isFinite(maxCalendarDays) && maxCalendarDays > 0
+                    ? maxCalendarDays
+                    : NORMAL_ASAP_SWAP_MAX_CALENDAR_DAYS;
 
             const mutualCandidates = [];
             const slotCandidates = [];
@@ -14904,7 +15255,7 @@
             for (const otherKey of sortedNormal) {
                 if (otherKey === dateKey) continue;
                 const dist = calendarDayDistanceAbs(dateKey, otherKey);
-                if (dist > NORMAL_ASAP_SWAP_MAX_CALENDAR_DAYS) continue;
+                if (dist > limit) continue;
 
                 const otherPerson = assignments[otherKey]?.[groupNum];
                 if (!otherPerson || otherPerson === currentPerson) continue;
