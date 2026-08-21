@@ -1801,6 +1801,7 @@
 
             if (typeof saveData === 'function') saveData();
             if (typeof renderGroups === 'function') renderGroups();
+            if (typeof updateStatistics === 'function') updateStatistics();
 
             // Stay on the already-open Person Actions modal — do not create a second Bootstrap instance
             // (that left a stuck backdrop and blocked the page until refresh).
@@ -8942,13 +8943,23 @@
             nextMonthDate.setHours(0, 0, 0, 0);
             
             for (let i = 1; i <= 4; i++) {
-                const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
+                const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {}, excludedFromDuties: {} };
                 const specialList = groupData.special || [];
                 const weekendList = groupData.weekend || [];
                 const semiList = groupData.semi || [];
                 const normalList = groupData.normal || [];
                 const uniquePeople = new Set([...specialList, ...weekendList, ...semiList, ...normalList]);
-                const peopleCount = uniquePeople.size;
+                // Εξαίρεση από υπηρεσίες: δεν μετράνε στο σύνολο ατόμων της ομάδας
+                const countedPeople = [...uniquePeople].filter((person) => {
+                    if (
+                        typeof isPersonExcludedFromDuties === 'function' &&
+                        isPersonExcludedFromDuties(person, i)
+                    ) {
+                        return false;
+                    }
+                    return true;
+                });
+                const peopleCount = countedPeople.length;
                 totalPeople += peopleCount;
                 
                 const el = document.getElementById(statIds[i]);
@@ -8958,7 +8969,7 @@
                     let missingCount = 0;
                     let disabledCount = 0;
                     let unavailableUnionCount = 0;
-                    uniquePeople.forEach((person) => {
+                    countedPeople.forEach((person) => {
                         const st = (typeof getDisabledState === 'function') ? getDisabledState(i, person) : {};
                         const isDisabled = !!(st && (st.all || st.special || st.weekend || st.semi || st.normal));
                         if (isDisabled) disabledCount++;
