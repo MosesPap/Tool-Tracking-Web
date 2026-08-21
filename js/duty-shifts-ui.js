@@ -4541,30 +4541,42 @@
         };
 
         function getDutyRotationListForCalendar(groupNum, listType, dateKey) {
-            if (typeof getGroupRotationListAtDate === 'function') {
-                return getGroupRotationListAtDate(groupNum, listType, dateKey) || [];
-            }
+            // Same live roster order as the group lists (priority sort), not historical schedule snapshots.
             let list = [];
             if (typeof getSortedGroupListForRotation === 'function') {
                 list = getSortedGroupListForRotation(groupNum, listType) || [];
             } else {
                 list = (groups[groupNum] || {})[listType] || [];
             }
-            if (typeof filterExcludedFromDutyList === 'function') {
-                return filterExcludedFromDutyList(list, groupNum);
-            }
-            return list;
+            return Array.isArray(list) ? list.slice() : [];
         }
 
         function getPersonDutyListPosition(groupNum, personName, listType, dateKey) {
             if (!personName || !groupNum) return null;
-            const list = getDutyRotationListForCalendar(groupNum, listType, dateKey);
-            if (!Array.isArray(list) || list.length === 0) return null;
+            const g = groups?.[groupNum];
+            if (!g) return null;
             const norm =
                 typeof normalizePersonKey === 'function'
                     ? normalizePersonKey
                     : (s) => String(s || '').trim();
             const target = norm(personName);
+
+            // Prefer the same priority number shown on the person card in the group lists.
+            let priority = g.priorities?.[personName]?.[listType];
+            if (priority == null && g.priorities) {
+                for (const key of Object.keys(g.priorities)) {
+                    if (norm(key) === target) {
+                        priority = g.priorities[key]?.[listType];
+                        break;
+                    }
+                }
+            }
+            if (typeof priority === 'number' && priority > 0 && priority < 999) {
+                return priority;
+            }
+
+            const list = getDutyRotationListForCalendar(groupNum, listType, dateKey);
+            if (!Array.isArray(list) || list.length === 0) return null;
             for (let i = 0; i < list.length; i++) {
                 if (norm(list[i]) === target) return i + 1;
             }
@@ -4576,7 +4588,7 @@
             const pos = getPersonDutyListPosition(groupNum, personName, listType, dateKey);
             if (!pos) return '';
             const label = DUTY_LIST_TYPE_LABELS[listType] || listType;
-            return ` <span class="duty-list-order" title="Σειρά στη λίστα ${label}">(${pos})</span>`;
+            return ` <span class="duty-list-order" title="Σειρά / προτεραιότητα στη λίστα ${label}">(${pos})</span>`;
         }
 
         function renderCalendar() {
@@ -5044,7 +5056,7 @@
                             }
                             const listOrderSuffix =
                                 e.listOrder != null
-                                    ? ` <span class="duty-list-order" title="Σειρά στη λίστα ${escapeHtml(DUTY_LIST_TYPE_LABELS[dayTypeCategory] || dayTypeCategory)}">(${e.listOrder})</span>`
+                                    ? ` <span class="duty-list-order" title="Σειρά / προτεραιότητα στη λίστα ${escapeHtml(DUTY_LIST_TYPE_LABELS[dayTypeCategory] || dayTypeCategory)}">(${e.listOrder})</span>`
                                     : '';
                             displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${escapeHtml(e.nameOnly)}${listOrderSuffix}${bufferIcon}${spacingIcon}</div>`;
                         });
