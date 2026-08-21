@@ -9500,8 +9500,15 @@
                     .join(' | ');
             };
             
-            // Get all people for rankings
-            const allPeople = getAllPeople();
+            // Get all people for rankings (εξαιρεμένοι δεν εμφανίζονται)
+            const isExcludedPerson = (person, groupNum) =>
+                typeof isPersonExcludedFromDuties === 'function' &&
+                !!groupNum &&
+                isPersonExcludedFromDuties(person, groupNum);
+            const allPeople = getAllPeople().filter((person) => {
+                const g = typeof getPersonGroup === 'function' ? getPersonGroup(person) : null;
+                return !isExcludedPerson(person, g);
+            });
             const sortedByRanking = [...allPeople].sort((a, b) => {
                 const rankA = rankings[a] || 9999;
                 const rankB = rankings[b] || 9999;
@@ -9564,7 +9571,11 @@
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
                     const groupName = getGroupName(groupNum);
-                    const list = groupData[listType.key] || [];
+                    const rawList =
+                        typeof getSortedGroupListForRotation === 'function'
+                            ? getSortedGroupListForRotation(groupNum, listType.key) || []
+                            : groupData[listType.key] || [];
+                    const list = rawList.filter((person) => !isExcludedPerson(person, groupNum));
                     html += `
         <div class="group-section">
             <h3>Ομάδα ${groupNum}: ${groupName}</h3>
