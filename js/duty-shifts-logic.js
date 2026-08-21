@@ -6856,10 +6856,16 @@
                 for (const dateKey in semiNormalAssignments) {
                     if (!simulatedSemiAssignments[dateKey]) {
                         const assignment = semiNormalAssignments[dateKey];
-                        if (assignment) {
-                            // Ensure assignment is a string (it might be an object if data wasn't flattened correctly)
-                            const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
-                            const parts = assignmentStr.split(',').map(p => p.trim());
+                        if (!assignment) continue;
+                        if (typeof extractGroupAssignmentsMap === 'function') {
+                            const gmap = extractGroupAssignmentsMap(assignment);
+                            if (gmap && Object.keys(gmap).length > 0) {
+                                simulatedSemiAssignments[dateKey] = { ...gmap };
+                                continue;
+                            }
+                        }
+                        if (typeof assignment === 'string') {
+                            const parts = assignment.split(',').map(p => p.trim());
                             parts.forEach(part => {
                                 const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
                                 if (match) {
@@ -12919,19 +12925,37 @@
             const simulatedSemiAssignments = {}; // dateKey -> { groupNum -> person name }
             const normalAssignments = {}; // dateKey -> { groupNum -> person name }
             
-            // Third, load Step 3 (semi-normal days) from saved data
-            // Load semi-normal assignments from saved data (after swap logic from Step 3)
+            // Load Step 3 semi results — ΠΡΩΤΑ από calculationSteps (ίδιο με runNormalSwapLogic),
+            // αλλιώς οι συγκρούσεις normal↔ημιαργία δεν ανιχνεύονται στο preview.
+            const previewFinalSemi =
+                calculationSteps.finalSemiAssignments || calculationSteps.tempSemiAssignments || {};
+            for (const dateKey in previewFinalSemi) {
+                const groups = previewFinalSemi[dateKey];
+                if (groups && typeof groups === 'object' && !Array.isArray(groups)) {
+                    simulatedSemiAssignments[dateKey] = { ...groups };
+                }
+            }
             const sortedSemi = [...semiNormalDays].sort();
-            
             sortedSemi.forEach((dateKey) => {
+                if (simulatedSemiAssignments[dateKey] && Object.keys(simulatedSemiAssignments[dateKey]).length > 0) {
+                    return;
+                }
                 const assignment = semiNormalAssignments[dateKey];
-                if (assignment) {
-                    const parts = assignment.split(',').map(p => p.trim());
-                    parts.forEach(part => {
+                if (!assignment) return;
+                if (typeof extractGroupAssignmentsMap === 'function') {
+                    const gmap = extractGroupAssignmentsMap(assignment);
+                    if (gmap && Object.keys(gmap).length > 0) {
+                        simulatedSemiAssignments[dateKey] = { ...gmap };
+                        return;
+                    }
+                }
+                if (typeof assignment === 'string') {
+                    const parts = assignment.split(',').map((p) => p.trim());
+                    parts.forEach((part) => {
                         const match = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)$/);
                         if (match) {
                             const personName = match[1].trim();
-                            const groupNum = parseInt(match[2]);
+                            const groupNum = parseInt(match[2], 10);
                             if (!simulatedSemiAssignments[dateKey]) {
                                 simulatedSemiAssignments[dateKey] = {};
                             }
@@ -12940,6 +12964,13 @@
                     });
                 }
             });
+            console.log(
+                '[PREVIEW] Semi for conflict check:',
+                Object.keys(simulatedSemiAssignments).length,
+                'dates (from steps:',
+                Object.keys(previewFinalSemi).length,
+                ')'
+            );
 
             const periodLabel = buildPeriodLabel(startDate, endDate);
             if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
