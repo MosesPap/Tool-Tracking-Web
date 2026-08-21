@@ -448,6 +448,12 @@
             return { lastDuty: lastDutyFormatted, nextDuty: nextDutyFormatted };
         }
         function isPersonDisabledForDuty(person, groupNum, dutyCategory, asOfDate) {
+            if (
+                typeof isPersonExcludedFromDuties === 'function' &&
+                isPersonExcludedFromDuties(person, groupNum)
+            ) {
+                return true;
+            }
             let dateKey = null;
             if (asOfDate instanceof Date && !isNaN(asOfDate.getTime())) {
                 dateKey = typeof formatDateKey === 'function' ? formatDateKey(asOfDate) : null;
@@ -476,6 +482,12 @@
         }
         function getUnavailableReasonShort(person, groupNum, dateObj, dutyCategory = null) {
             if (!person) return '';
+            if (
+                typeof isPersonExcludedFromDuties === 'function' &&
+                isPersonExcludedFromDuties(person, groupNum)
+            ) {
+                return 'Εξαιρείται από υπηρεσίες';
+            }
             if (isPersonDisabledForDuty(person, groupNum, dutyCategory, dateObj)) return 'Απενεργοποιημένος';
             const mp = getPersonMissingPeriod(person, groupNum, dateObj);
             if (mp) {
@@ -496,7 +508,10 @@
                 if (unified) return unified;
             }
             const reasonShort = getUnavailableReasonShort(skippedPersonName, groupNum, dateObj, dutyCategory);
-            const verb = reasonShort === 'Απενεργοποιημένος' ? 'ήταν' : 'είχε';
+            const verb =
+                reasonShort === 'Απενεργοποιημένος' || reasonShort === 'Εξαιρείται από υπηρεσίες'
+                    ? 'ήταν'
+                    : 'είχε';
             const dayName = getGreekDayName(dateObj);
             const dayArt = getGreekDayAccusativeArticle(dateObj);
             const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });

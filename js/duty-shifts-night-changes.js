@@ -108,6 +108,12 @@
         for (const p of list) {
             if (!p) continue;
             if (
+                typeof isPersonExcludedFromDuties === 'function' &&
+                isPersonExcludedFromDuties(p, groupNum)
+            ) {
+                continue;
+            }
+            if (
                 typeof isPersonDisabledForDuty === 'function' &&
                 isPersonDisabledForDuty(p, groupNum, 'normal', dateKey)
             ) {

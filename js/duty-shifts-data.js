@@ -6,10 +6,10 @@
         // Data storage - each group has four order lists: special, weekend, semi, normal
         // Each person also has last duty dates for each type, missing periods, and priorities
         let groups = {
-            1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
-            2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
-            3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
-            4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} }
+            1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} },
+            2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} },
+            3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} },
+            4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} }
         };
         // Organizational rankings - separate from priority, doesn't affect list order
         let rankings = {}; // Format: { "Person Name": rankNumber }
@@ -411,10 +411,43 @@
                 g[listType] = getSortedGroupListForRotation(groupNum, listType);
             }
         }
+        function isPersonExcludedFromDuties(person, groupNum) {
+            if (!person || !groupNum) return false;
+            const g = groups?.[groupNum];
+            if (!g) return false;
+            const map = g.excludedFromDuties || {};
+            const pk = personScheduleKey(person);
+            if (map[person] === true || map[pk] === true) return true;
+            if (!pk) return false;
+            for (const k of Object.keys(map)) {
+                if (map[k] === true && personScheduleKey(k) === pk) return true;
+            }
+            return false;
+        }
+        function setPersonExcludedFromDuties(groupNum, personName, excluded) {
+            const g = groups?.[groupNum];
+            if (!g || !personName) return;
+            if (!g.excludedFromDuties) g.excludedFromDuties = {};
+            const pk = personScheduleKey(personName) || personName;
+            if (excluded) {
+                g.excludedFromDuties[pk] = true;
+                if (pk !== personName) delete g.excludedFromDuties[personName];
+            } else {
+                delete g.excludedFromDuties[pk];
+                delete g.excludedFromDuties[personName];
+            }
+        }
+        function filterExcludedFromDutyList(list, groupNum) {
+            if (!Array.isArray(list) || !list.length) return Array.isArray(list) ? list.slice() : [];
+            return list.filter((person) => !isPersonExcludedFromDuties(person, groupNum));
+        }
         function getGroupRotationListAtDate(groupNum, listType, dateKey) {
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
             const order = getListOrderAtDate(groupNum, listType, dk);
-            return order.filter((person) => getPersonHomeGroupAtDate(person, dk) === groupNum);
+            return filterExcludedFromDutyList(
+                order.filter((person) => getPersonHomeGroupAtDate(person, dk) === groupNum),
+                groupNum
+            );
         }
         function groupsForDuty(groupNum, dateKey) {
             const g = groups[groupNum] || {
@@ -425,7 +458,8 @@
                 lastDuties: {},
                 missingPeriods: {},
                 priorities: {},
-                disabledPersons: {}
+                disabledPersons: {},
+                excludedFromDuties: {}
             };
             const dk =
                 dateKey ||
@@ -434,10 +468,22 @@
             if (!dk) {
                 return {
                     ...g,
-                    special: getSortedGroupListForRotation(groupNum, 'special'),
-                    weekend: getSortedGroupListForRotation(groupNum, 'weekend'),
-                    semi: getSortedGroupListForRotation(groupNum, 'semi'),
-                    normal: getSortedGroupListForRotation(groupNum, 'normal')
+                    special: filterExcludedFromDutyList(
+                        getSortedGroupListForRotation(groupNum, 'special'),
+                        groupNum
+                    ),
+                    weekend: filterExcludedFromDutyList(
+                        getSortedGroupListForRotation(groupNum, 'weekend'),
+                        groupNum
+                    ),
+                    semi: filterExcludedFromDutyList(
+                        getSortedGroupListForRotation(groupNum, 'semi'),
+                        groupNum
+                    ),
+                    normal: filterExcludedFromDutyList(
+                        getSortedGroupListForRotation(groupNum, 'normal'),
+                        groupNum
+                    )
                 };
             }
             return {
@@ -464,6 +510,7 @@
             return legacyDisabledStateFromGroups(groupNum, personName);
         }
         function isPersonDisabledForDutyAtDate(person, groupNum, dutyCategory, dateKey) {
+            if (isPersonExcludedFromDuties(person, groupNum)) return true;
             const st = getDisabledStateAtDate(groupNum, person, dateKey);
             if (st.all) return true;
             if (!dutyCategory) {
@@ -575,8 +622,12 @@
         window.clearDutyCalcContextDateKey = clearDutyCalcContextDateKey;
         window.groupsForDuty = groupsForDuty;
         window.getSortedGroupListForRotation = getSortedGroupListForRotation;
+        window.getGroupRotationListAtDate = getGroupRotationListAtDate;
         window.syncGroupListArraysFromPriorities = syncGroupListArraysFromPriorities;
         window.scheduleListOrdersForGroup = scheduleListOrdersForGroup;
+        window.isPersonExcludedFromDuties = isPersonExcludedFromDuties;
+        window.setPersonExcludedFromDuties = setPersonExcludedFromDuties;
+        window.filterExcludedFromDutyList = filterExcludedFromDutyList;
         function getPendingScheduledStatusSummary(personName, groupNum) {
             ensurePersonStatusScheduleSeeded();
             const todayKey = formatDateKey(new Date());
@@ -2644,13 +2695,16 @@
                     // CRITICAL: Always ensure priorities/disabled objects exist and are properly initialized
                     for (let i = 1; i <= 4; i++) {
                         if (!groups[i]) {
-                            groups[i] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} };
+                            groups[i] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} };
                         }
                         if (!groups[i].priorities) {
                             groups[i].priorities = {};
                         }
                         if (!groups[i].disabledPersons) {
                             groups[i].disabledPersons = {};
+                        }
+                        if (!groups[i].excludedFromDuties) {
+                            groups[i].excludedFromDuties = {};
                         }
 
                         // Migrate old boolean disabled flag to per-type object
@@ -4005,10 +4059,10 @@
             if (!data) return null;
             
             const migrated = {
-                1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
-                2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
-                3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} },
-                4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {} }
+                1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} },
+                2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} },
+                3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} },
+                4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} }
             };
             
             for (let i = 1; i <= 4; i++) {
@@ -4024,12 +4078,14 @@
                     if (data[i].missingPeriods) migrated[i].missingPeriods = data[i].missingPeriods;
                     if (data[i].priorities) migrated[i].priorities = data[i].priorities;
                     if (data[i].disabledPersons) migrated[i].disabledPersons = data[i].disabledPersons;
+                    if (data[i].excludedFromDuties) migrated[i].excludedFromDuties = data[i].excludedFromDuties;
                 } else if (data[i] && typeof data[i] === 'object') {
                     // ALWAYS preserve lastDuties, missingPeriods, and priorities if they exist
                     if (data[i].lastDuties) migrated[i].lastDuties = data[i].lastDuties;
                     if (data[i].missingPeriods) migrated[i].missingPeriods = data[i].missingPeriods;
                     if (data[i].priorities) migrated[i].priorities = data[i].priorities;
                     if (data[i].disabledPersons) migrated[i].disabledPersons = data[i].disabledPersons;
+                    if (data[i].excludedFromDuties) migrated[i].excludedFromDuties = data[i].excludedFromDuties;
                     
                     // Check if old format (regular/special) or new format
                     if (data[i].regular || data[i].special) {
@@ -4058,6 +4114,7 @@
                     if (data[i].missingPeriods) migrated[i].missingPeriods = data[i].missingPeriods;
                     if (data[i].priorities) migrated[i].priorities = data[i].priorities;
                     if (data[i].disabledPersons) migrated[i].disabledPersons = data[i].disabledPersons;
+                    if (data[i].excludedFromDuties) migrated[i].excludedFromDuties = data[i].excludedFromDuties;
                 }
             }
             

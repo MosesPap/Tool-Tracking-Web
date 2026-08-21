@@ -879,6 +879,9 @@
             // Check if person is currently missing/disabled
             const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {} };
             const isDisabledForThisList = isPersonDisabledForDuty(person, groupNum, listType);
+            const isExcludedFromDuties =
+                typeof isPersonExcludedFromDuties === 'function' &&
+                isPersonExcludedFromDuties(person, groupNum);
             const st = getDisabledState(groupNum, person);
             const missingPeriods = groupData.missingPeriods?.[person] || [];
             const today = new Date();
@@ -899,7 +902,11 @@
                 if (st.night) parts.push('Νυχτερινές');
                 return `Απενεργοποίηση: ${parts.join(', ')}`;
             })();
-            const disabledBadge = isDisabledForThisList
+            const excludedBadge = isExcludedFromDuties
+                ? `<span class="badge bg-dark ms-2" title="Δεν συμμετέχει στον υπολογισμό υπηρεσιών ούτε στη σειρά"><i class="fas fa-ban me-1"></i>Εξαίρεση</span>`
+                : '';
+            const disabledBadge =
+                !isExcludedFromDuties && isDisabledForThisList
                 ? `<span class="badge bg-secondary ms-2" title="${escapeHtml(disabledTitle)}"><i class="fas fa-user-slash me-1"></i>Απενεργοποιημένος</span>`
                 : '';
             const missingBadge = isCurrentlyMissing ? '<span class="badge bg-warning ms-2"><i class="fas fa-user-slash me-1"></i>Απουσία</span>' : '';
@@ -927,14 +934,15 @@
                     ?
                 </div>`;
             
-            const disabledCardClass = isDisabledForThisList ? ' person-name-card-disabled' : '';
+            const disabledCardClass =
+                isExcludedFromDuties || isDisabledForThisList ? ' person-name-card-disabled' : '';
             personDiv.innerHTML = `
                 <div class="person-name-card${disabledCardClass}" onclick="openPersonActionsModal(${groupNum}, '${person.replace(/'/g, "\\'")}', ${index}, '${listType}')">
                     <div style="display: flex; flex-direction: column;">
                         <div style="display: flex; align-items: center;">
                             <i class="fas fa-grip-vertical text-muted me-2" style="cursor: move;"></i>
                             ${priorityBadge}
-                            <span>${person}${disabledBadge}${missingBadge}</span>
+                            <span>${person}${excludedBadge}${disabledBadge}${missingBadge}</span>
                         </div>
                         <div style="font-size: 0.75rem; color: #666; margin-top: 0.25rem; margin-left: 1.5rem;">
                             <div><strong>Τελευταία:</strong> ${dutyDates.lastDuty}</div>
@@ -1720,9 +1728,77 @@
                         : (enabledTypes.length ? `Απενεργοποίηση (${enabledTypes.length} τύποι)` : 'Απενεργοποίηση (Ρυθμίσεις)');
                 }
             } catch (_) {}
+
+            try {
+                const excluded =
+                    typeof isPersonExcludedFromDuties === 'function' &&
+                    isPersonExcludedFromDuties(personName, groupNum);
+                const exclText = document.getElementById('toggleExcludeFromDutiesButtonText');
+                const exclBtn = document.getElementById('toggleExcludeFromDutiesButton');
+                if (exclText) {
+                    exclText.textContent = excluded
+                        ? 'Άρση εξαίρεσης από τις υπηρεσίες'
+                        : 'Εξαίρεση από τις υπηρεσίες';
+                }
+                if (exclBtn) {
+                    exclBtn.classList.toggle('btn-outline-dark', !excluded);
+                    exclBtn.classList.toggle('btn-dark', !!excluded);
+                }
+            } catch (_) {}
             
             const modal = new bootstrap.Modal(document.getElementById('personActionsModal'));
             modal.show();
+        }
+
+        function toggleExcludeFromDutiesFromActions() {
+            if (!currentPersonActionsGroup || !currentPersonActionsName) return;
+            const groupNum = currentPersonActionsGroup;
+            const personName = currentPersonActionsName;
+            const currentlyExcluded =
+                typeof isPersonExcludedFromDuties === 'function' &&
+                isPersonExcludedFromDuties(personName, groupNum);
+
+            if (!currentlyExcluded) {
+                const ok = confirm(
+                    `Εξαίρεση του/της "${personName}" από τις υπηρεσίες;\n\n` +
+                        'Τα στοιχεία του ατόμου θα παραμείνουν στις λίστες, αλλά δεν θα συμμετέχει καθόλου στον υπολογισμό υπηρεσιών ούτε στη σειρά περιστροφής.'
+                );
+                if (!ok) return;
+            } else {
+                const ok = confirm(
+                    `Άρση εξαίρεσης για τον/την "${personName}";\n\n` +
+                        'Το άτομο θα ξαναμπεί στη λογική υπολογισμού υπηρεσιών και στη σειρά.'
+                );
+                if (!ok) return;
+            }
+
+            if (typeof setPersonExcludedFromDuties === 'function') {
+                setPersonExcludedFromDuties(groupNum, personName, !currentlyExcluded);
+            } else {
+                const g = groups[groupNum];
+                if (!g) return;
+                if (!g.excludedFromDuties) g.excludedFromDuties = {};
+                const key =
+                    typeof normalizePersonKey === 'function'
+                        ? normalizePersonKey(personName)
+                        : String(personName || '').trim();
+                if (!currentlyExcluded) {
+                    g.excludedFromDuties[key || personName] = true;
+                } else {
+                    delete g.excludedFromDuties[key];
+                    delete g.excludedFromDuties[personName];
+                }
+            }
+
+            if (typeof saveData === 'function') saveData();
+            if (typeof renderGroups === 'function') renderGroups();
+
+            openPersonActionsModal(
+                currentPersonActionsGroup,
+                currentPersonActionsName,
+                currentPersonActionsIndex,
+                currentPersonActionsListType
+            );
         }
 
         function openAlternateReplacementFromActions() {
@@ -2541,6 +2617,15 @@
                 }
                 if (groups[currentPersonActionsGroup].disabledPersons) {
                     delete groups[currentPersonActionsGroup].disabledPersons[currentPersonActionsName];
+                }
+                if (groups[currentPersonActionsGroup].excludedFromDuties) {
+                    const excl = groups[currentPersonActionsGroup].excludedFromDuties;
+                    delete excl[currentPersonActionsName];
+                    const pk =
+                        typeof normalizePersonKey === 'function'
+                            ? normalizePersonKey(currentPersonActionsName)
+                            : null;
+                    if (pk) delete excl[pk];
                 }
                 if (groups[currentPersonActionsGroup].priorities) {
                     delete groups[currentPersonActionsGroup].priorities[currentPersonActionsName];
@@ -3785,6 +3870,22 @@
             if (transferData.missingPeriods) {
                 groups[transferData.toGroup].missingPeriods[transferData.person] = transferData.missingPeriods;
             }
+
+            // Transfer exclusion-from-duties flag
+            const fromExcl = groups[transferData.fromGroup]?.excludedFromDuties || {};
+            const personKey =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey(transferData.person)
+                    : String(transferData.person || '').trim();
+            const wasExcluded =
+                fromExcl[transferData.person] === true ||
+                (personKey && fromExcl[personKey] === true);
+            if (wasExcluded) {
+                if (!groups[transferData.toGroup].excludedFromDuties) {
+                    groups[transferData.toGroup].excludedFromDuties = {};
+                }
+                groups[transferData.toGroup].excludedFromDuties[personKey || transferData.person] = true;
+            }
             
             // Remove last duties and missing periods from source group if person is completely removed
             const stillInSourceGroup = allListTypes.some(lt => (groups[transferData.fromGroup][lt] || []).includes(transferData.person));
@@ -3794,6 +3895,10 @@
                 }
                 if (groups[transferData.fromGroup].missingPeriods) {
                     delete groups[transferData.fromGroup].missingPeriods[transferData.person];
+                }
+                if (groups[transferData.fromGroup].excludedFromDuties) {
+                    delete groups[transferData.fromGroup].excludedFromDuties[transferData.person];
+                    if (personKey) delete groups[transferData.fromGroup].excludedFromDuties[personKey];
                 }
             }
             
@@ -4329,10 +4434,16 @@
             if (typeof getGroupRotationListAtDate === 'function') {
                 return getGroupRotationListAtDate(groupNum, listType, dateKey) || [];
             }
+            let list = [];
             if (typeof getSortedGroupListForRotation === 'function') {
-                return getSortedGroupListForRotation(groupNum, listType) || [];
+                list = getSortedGroupListForRotation(groupNum, listType) || [];
+            } else {
+                list = (groups[groupNum] || {})[listType] || [];
             }
-            return (groups[groupNum] || {})[listType] || [];
+            if (typeof filterExcludedFromDutyList === 'function') {
+                return filterExcludedFromDutyList(list, groupNum);
+            }
+            return list;
         }
 
         function getPersonDutyListPosition(groupNum, personName, listType, dateKey) {
