@@ -9500,15 +9500,12 @@
                     .join(' | ');
             };
             
-            // Get all people for rankings (εξαιρεμένοι δεν εμφανίζονται)
+            // Get all people for rankings
             const isExcludedPerson = (person, groupNum) =>
                 typeof isPersonExcludedFromDuties === 'function' &&
                 !!groupNum &&
                 isPersonExcludedFromDuties(person, groupNum);
-            const allPeople = getAllPeople().filter((person) => {
-                const g = typeof getPersonGroup === 'function' ? getPersonGroup(person) : null;
-                return !isExcludedPerson(person, g);
-            });
+            const allPeople = getAllPeople();
             const sortedByRanking = [...allPeople].sort((a, b) => {
                 const rankA = rankings[a] || 9999;
                 const rankB = rankings[b] || 9999;
@@ -9571,11 +9568,10 @@
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
                     const groupName = getGroupName(groupNum);
-                    const rawList =
+                    const list =
                         typeof getSortedGroupListForRotation === 'function'
                             ? getSortedGroupListForRotation(groupNum, listType.key) || []
                             : groupData[listType.key] || [];
-                    const list = rawList.filter((person) => !isExcludedPerson(person, groupNum));
                     html += `
         <div class="group-section">
             <h3>Ομάδα ${groupNum}: ${groupName}</h3>
@@ -9583,18 +9579,26 @@
                     if (list.length > 0) {
                         html += `            <ol>`;
                         list.forEach((person) => {
-                            const disabledForType = typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(person, groupNum, listType.key);
+                            const excluded = isExcludedPerson(person, groupNum);
+                            const st =
+                                typeof getDisabledState === 'function'
+                                    ? getDisabledState(groupNum, person)
+                                    : {};
+                            const disabledForType =
+                                !excluded && !!(st.all || st[listType.key]);
                             const missingPeriods = groupData?.missingPeriods?.[person] || [];
                             const missingLabel = buildMissingRangesLabel(missingPeriods);
                             const hasPresentOrFutureMissing = !!missingLabel;
                             const reasons = [];
-                            if (disabledForType) reasons.push('Απενεργοποιημένος');
+                            if (excluded) reasons.push('Εξαίρεση');
+                            else if (disabledForType) reasons.push('Απενεργοποιημένος');
                             if (hasPresentOrFutureMissing) {
                                 reasons.push(`Απουσία: ${missingLabel}`);
                             }
-                            const personHtml = disabledForType
-                                ? `<span class="list-item-unavailable-name">${esc(person)}</span>`
-                                : esc(person);
+                            const personHtml =
+                                excluded || disabledForType
+                                    ? `<span class="list-item-unavailable-name">${esc(person)}</span>`
+                                    : esc(person);
                             const reasonHtml = reasons.length > 0
                                 ? ` <span class="list-item-reason">(${esc(reasons.join(' | '))})</span>`
                                 : '';
@@ -9631,10 +9635,17 @@
                 const rank = rankings[person] || null;
                 const personGroup = getPersonGroup(person);
                 const groupName = personGroup ? getGroupName(personGroup) : '-';
+                const excluded = isExcludedPerson(person, personGroup);
+                const nameHtml = excluded
+                    ? `<span class="list-item-unavailable-name">${esc(person)}</span>`
+                    : esc(person);
+                const exclNote = excluded
+                    ? ` <span class="list-item-reason">(Εξαίρεση)</span>`
+                    : '';
                 html += `            <tr>
                 <td><span class="ranking-number">${rank !== null ? rank : '-'}</span></td>
-                <td>${person}</td>
-                <td>${groupName}</td>
+                <td>${nameHtml}${exclNote}</td>
+                <td>${esc(groupName)}</td>
             </tr>
 `;
             });
