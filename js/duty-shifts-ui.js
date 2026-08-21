@@ -2027,13 +2027,19 @@
                 if (startIdx < 0) startIdx = 0;
                 for (let off = 1; off < list.length; off++) {
                     const cand = list[(startIdx + off) % list.length];
-                                    if (!cand) continue;
+                    if (!cand) continue;
                     if (norm(cand) === nSkip) continue;
+                    if (
+                        typeof isPersonExcludedFromDuties === 'function' &&
+                        isPersonExcludedFromDuties(cand, groupNum)
+                    ) {
+                        continue;
+                    }
                     if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, typeCategory)) continue;
                     if (typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(cand, groupNum, dateObj, typeCategory)) continue;
                     replacement = cand;
-                                    break;
-                                }
+                    break;
+                }
             } else {
                 if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(replacement, groupNum, typeCategory)) {
                     alert('Ο/η επιλεγμένος/η επιλαχόνος/α είναι απενεργοποιημένος/η για αυτόν τον τύπο υπηρεσίας.');
@@ -7547,7 +7553,16 @@
                         ? getSortedGroupListForRotation(person.group, dayTypeCategory)
                         : (groups[person.group] || {})[dayTypeCategory] || [];
                 const peopleList = Array.isArray(groupPeopleForDay)
-                    ? groupPeopleForDay.map((p) => String(p || '').trim()).filter(Boolean)
+                    ? groupPeopleForDay
+                          .map((p) => String(p || '').trim())
+                          .filter(Boolean)
+                          .filter(
+                              (p) =>
+                                  !(
+                                      typeof isPersonExcludedFromDuties === 'function' &&
+                                      isPersonExcludedFromDuties(p, person.group)
+                                  )
+                          )
                     : [];
 
                 // Build dropdown: μόνο άτομα της συγκεκριμένης ομάδας για τον τύπο ημέρας.

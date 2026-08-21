@@ -5468,6 +5468,13 @@
             };
 
             const isAvailableForNextMonth = (personName, dutyType, { allowIneligible = false } = {}) => {
+                // Εξαίρεση από υπηρεσίες: ποτέ στους επιλαχόντες — πάμε στον επόμενο διαθέσιμο
+                if (
+                    typeof isPersonExcludedFromDuties === 'function' &&
+                    isPersonExcludedFromDuties(personName, groupNum)
+                ) {
+                    return false;
+                }
                 if (allowIneligible) return true;
                 if (isDisabledForNextMonth(personName, dutyType)) return false;
                 if (isMissingWholeNextMonth(personName)) return false;
@@ -5622,7 +5629,14 @@
                 let checked = 0;
                 while (checked < rawList.length * 2 && picks.length < count) {
                     const person = rawList[cursor];
-                    if (person && isAvailableForNextMonth(person, type, { allowIneligible })) {
+                    const excluded =
+                        typeof isPersonExcludedFromDuties === 'function' &&
+                        isPersonExcludedFromDuties(person, groupNum);
+                    if (
+                        person &&
+                        !excluded &&
+                        isAvailableForNextMonth(person, type, { allowIneligible })
+                    ) {
                         picks.push(person);
                     }
                     cursor = (cursor + 1) % rawList.length;
@@ -6084,6 +6098,12 @@
 
         function isPersonUnavailableWholeMonth(personName, groupNum, dutyType, monthStartKey, monthEndKey, groupData) {
             if (!personName || !monthStartKey || !monthEndKey) return false;
+            if (
+                typeof isPersonExcludedFromDuties === 'function' &&
+                isPersonExcludedFromDuties(personName, groupNum)
+            ) {
+                return true;
+            }
             if (typeof isPersonDisabledForDuty === 'function') {
                 let disabledEveryDay = true;
                 const d = new Date(monthStartKey + 'T00:00:00');
@@ -6147,6 +6167,10 @@
                 if (
                     candidate &&
                     !skip.has(candidateNorm) &&
+                    !(
+                        typeof isPersonExcludedFromDuties === 'function' &&
+                        isPersonExcludedFromDuties(candidate, groupNum)
+                    ) &&
                     !isPersonUnavailableWholeMonth(
                         candidate,
                         groupNum,
