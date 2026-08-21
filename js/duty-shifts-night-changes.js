@@ -981,6 +981,18 @@
                     }
 
                     runtimeLastThu[`${groupNum}:${normPerson(partnerPerson)}`] = thursdayKey;
+
+                    // Άμεση αναδιάταξη ουράς ώστε οι επόμενες Πέμπτες να δουν τη σωστή συνέχεια
+                    resequenceAfterSingleSpacingSwap(
+                        assignments,
+                        normalDays,
+                        {
+                            thursdayKey,
+                            partnerKey,
+                            groupNum
+                        },
+                        simulated
+                    );
                     continue;
                 }
 
@@ -1125,22 +1137,28 @@
         const reason =
             typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, assignee) : null;
         if (!reason) return false;
+        // Μην παγώνεις Ν-swaps: μεταγενέστερα Ν πάνω σε παλιά ουρά πρέπει να ξαναγραφτούν.
         if (reason.meta?.manualAlternateReplacement || reason.meta?.preserveBaseline) return true;
-        if (reason.type === 'swap' && reason.meta?.thursdaySpacing) return true;
         return false;
     }
 
+    function syncSimulatedNormalAssignee(simulated, dateKey, groupNum, person) {
+        if (!simulated || !simulated.normal) return;
+        if (!simulated.normal[dateKey]) simulated.normal[dateKey] = {};
+        simulated.normal[dateKey][groupNum] = person;
+    }
+
     /**
-     * Μετά από Ν-ανταλλαγές: ξαναγεμίζει τις επόμενες καθημερινές της ομάδας
-     * με συνέχεια από το τελικό άτομο της ημέρας-αγκύρωσης (όχι από τον displaced).
-     * Μόνο ομάδες 3 & 4.
+     * Μετά από Ν-ανταλλαγή: ξαναγεμίζει τις επόμενες καθημερινές από το τελικό άτομο
+     * της ημέρας-αγκύρωσης (συνέχεια λίστας). Μόνο ομάδες 3 & 4.
      */
     function resequenceNightGroupNormalDaysAfterAnchor(
         assignments,
         normalDays,
         groupNum,
         afterDateKey,
-        seedPerson
+        seedPerson,
+        simulated
     ) {
         if (!NIGHT_GROUPS.includes(Number(groupNum))) return 0;
         if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
@@ -1179,7 +1197,27 @@
             if (prev && typeof clearAssignmentReasonForPersonOnDate === 'function') {
                 clearAssignmentReasonForPersonOnDate(dateKey, groupNum, prev);
             }
+            // Καθάρισε παλιό Ν-swap/fail reason άλλου ατόμου στην ίδια θέση
+            if (typeof assignmentReasons !== 'undefined' && assignmentReasons?.[dateKey]?.[groupNum]) {
+                const gmap = assignmentReasons[dateKey][groupNum];
+                for (const pn of Object.keys(gmap)) {
+                    const r = gmap[pn];
+                    if (
+                        r &&
+                        (r.meta?.thursdaySpacing ||
+                            r.meta?.thursdaySpacingFail ||
+                            r.meta?.thursdaySpacingResequence)
+                    ) {
+                        if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
+                            clearAssignmentReasonForPersonOnDate(dateKey, groupNum, pn);
+                        } else {
+                            delete gmap[pn];
+                        }
+                    }
+                }
+            }
             assignments[dateKey][groupNum] = next.person;
+            syncSimulatedNormalAssignee(simulated, dateKey, groupNum, next.person);
             if (typeof storeAssignmentReason === 'function') {
                 storeAssignmentReason(
                     dateKey,
@@ -1202,9 +1240,40 @@
     }
 
     /**
-     * Ανά ομάδα Ν: αναδιάταξη μετά την τελευταία ημέρα που άγγιξε Ν-ανταλλαγή αυτού του γύρου.
+     * Άμεση αναδιάταξη μετά από μία Ν-ανταλλαγή (μέσα στο πέρασμα, χρονολογικά).
      */
-    function resequenceNightGroupsAfterSpacingSwaps(assignments, dayTypeLists, spacingSwaps) {
+    function resequenceAfterSingleSpacingSwap(assignments, normalDays, swap, simulated) {
+        if (!swap) return 0;
+        const groupNum = parseInt(swap.groupNum, 10);
+        if (!NIGHT_GROUPS.includes(groupNum)) return 0;
+        if (typeof isNightChangesGroup === 'function' && !isNightChangesGroup(groupNum)) return 0;
+        const thu = swap.thursdayKey;
+        const partner = swap.partnerKey;
+        if (!thu || !partner) return 0;
+        const afterDateKey = thu >= partner ? thu : partner;
+        const seedPerson = getAssigneeOnDate(afterDateKey, groupNum, assignments);
+        if (!seedPerson) return 0;
+        const n = resequenceNightGroupNormalDaysAfterAnchor(
+            assignments,
+            normalDays,
+            groupNum,
+            afterDateKey,
+            seedPerson,
+            simulated
+        );
+        if (n > 0) {
+            console.log(
+                `[THURSDAY SPACING] Mid-pass resequence group ${groupNum} after ${afterDateKey} (seed=${seedPerson}): ${n} day(s)`
+            );
+        }
+        return n;
+    }
+
+    /**
+     * Ανά ομάδα Ν: αναδιάταξη από την ΠΡΩΤΗ (χρονολογικά) Ν-ανταλλαγή του γύρου —
+     * όχι από την τελευταία. Μεταγενέστερα Ν πάνω σε παλιά ουρά ξαναγράφονται.
+     */
+    function resequenceNightGroupsAfterSpacingSwaps(assignments, dayTypeLists, spacingSwaps, simulated) {
         if (!Array.isArray(spacingSwaps) || spacingSwaps.length === 0) return 0;
         const normalDays = [...(dayTypeLists?.normal || [])].sort();
         const perGroup = {};
@@ -1217,7 +1286,8 @@
             const partner = swap.partnerKey;
             if (!thu || !partner) continue;
             const afterKey = thu >= partner ? thu : partner;
-            if (!perGroup[groupNum] || afterKey > perGroup[groupNum]) {
+            // Ελάχιστο afterKey = πρώτη Ν-ανταλλαγή → συνέχεια από εκεί
+            if (!perGroup[groupNum] || afterKey < perGroup[groupNum]) {
                 perGroup[groupNum] = afterKey;
             }
         }
@@ -1233,11 +1303,12 @@
                 normalDays,
                 groupNum,
                 afterDateKey,
-                seedPerson
+                seedPerson,
+                simulated
             );
             if (n > 0) {
                 console.log(
-                    `[THURSDAY SPACING] Resequence group ${groupNum} after ${afterDateKey} (seed=${seedPerson}): ${n} day(s)`
+                    `[THURSDAY SPACING] Resequence group ${groupNum} after earliest ${afterDateKey} (seed=${seedPerson}): ${n} day(s)`
                 );
             }
             total += n;
@@ -1258,7 +1329,8 @@
     }
 
     /**
-     * Επαναληπτικό: Ν πέρασμα → αναδιάταξη ουράς νυχτερινών → ξανά Ν μέχρι σταθεροποίηση.
+     * Επαναληπτικό: κάθε πέρασμα Ν κάνει mid-pass αναδιάταξη μετά από κάθε ανταλλαγή.
+     * Επαναλαμβάνει μέχρι να μην υπάρχουν νέες Ν-ανταλλαγές (edge cases) ή max γύροι.
      * Μόνο όταν isNightChangesMode (ομάδες 3 & 4).
      */
     function runThursdaySpacingChangesPassIterative(finalNormalAssignments, dayTypeLists) {
@@ -1282,6 +1354,7 @@
         };
 
         for (let iter = 1; iter <= MAX_ITERS; iter++) {
+            const fpBefore = fingerprintNightGroupAssignments(assignments, dayTypeLists);
             const result = runThursdaySpacingChangesPass(assignments, dayTypeLists);
             lastResult = result;
             assignments = result.assignments;
@@ -1302,17 +1375,13 @@
                 }))
             );
 
-            const fpBeforeReseq = fingerprintNightGroupAssignments(assignments, dayTypeLists);
-            const changed = resequenceNightGroupsAfterSpacingSwaps(assignments, dayTypeLists, swaps);
-            const fpAfterReseq = fingerprintNightGroupAssignments(assignments, dayTypeLists);
-
-            if (changed === 0 || fpAfterReseq === fpBeforeReseq) {
-                console.log(
-                    `[THURSDAY SPACING] Iterative stabilize after pass ${iter} (resequence changes=${changed})`
-                );
+            const fpAfter = fingerprintNightGroupAssignments(assignments, dayTypeLists);
+            if (fpAfter === fpBefore) {
+                console.log(`[THURSDAY SPACING] Iterative stabilize after pass ${iter} (no assignment delta)`);
                 break;
             }
-            // Αλλιώς: νέο πέρασμα Ν στις Πέμπτες που άλλαξαν από την αναδιάταξη
+            // Επόμενος γύρος: ξανά Ν σε Πέμπτες που μπορεί να μην καλύφθηκαν
+            // (π.χ. εταίρος μετά την Πέμπτη με ενδιάμεσες Πέμπτες).
         }
 
         if (typeof calculationSteps !== 'undefined' && calculationSteps) {
