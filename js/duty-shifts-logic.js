@@ -6451,9 +6451,15 @@
             if (
                 typeof isNightChangesMode === 'function' &&
                 isNightChangesMode() &&
-                typeof runThursdaySpacingChangesPass === 'function'
+                (typeof runThursdaySpacingChangesPassIterative === 'function' ||
+                    typeof runThursdaySpacingChangesPass === 'function')
             ) {
-                const spacingResult = runThursdaySpacingChangesPass(assignments, dayTypeLists);
+                // Ομάδες Ν Πεμπτών (3 & 4): επαναληπτικό Ν + αναδιάταξη ουράς μέχρι σταθεροποίηση.
+                const spacingRunner =
+                    typeof runThursdaySpacingChangesPassIterative === 'function'
+                        ? runThursdaySpacingChangesPassIterative
+                        : runThursdaySpacingChangesPass;
+                const spacingResult = spacingRunner(assignments, dayTypeLists);
                 if (spacingResult && spacingResult.assignments) {
                     assignments = spacingResult.assignments;
                     spacingSwaps = spacingResult.spacingSwaps || [];

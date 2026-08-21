@@ -1070,6 +1070,264 @@
         return { assignments, markers, spacingSwaps, spacingFails };
     }
 
+    function findPersonIndexInList(groupPeople, personName) {
+        if (!Array.isArray(groupPeople) || !personName) return -1;
+        const n = normPerson(personName);
+        let idx = groupPeople.indexOf(personName);
+        if (idx >= 0) return idx;
+        return groupPeople.findIndex((p) => normPerson(p) === n);
+    }
+
+    function getNightGroupNormalPeople(groupNum, dateKey) {
+        const gd =
+            typeof groupsForDuty === 'function'
+                ? groupsForDuty(groupNum, dateKey)
+                : typeof groups !== 'undefined'
+                  ? groups[groupNum]
+                  : null;
+        return (gd && gd.normal) || [];
+    }
+
+    function pickNextEligibleNormalPerson(groupPeople, fromIndex, groupNum, dateKey) {
+        const rotationDays = groupPeople.length;
+        if (!rotationDays) return { person: null, index: fromIndex };
+        const date = new Date(dateKey + 'T00:00:00');
+        for (let offset = 1; offset <= rotationDays * 2; offset++) {
+            const idx = ((fromIndex + offset) % rotationDays + rotationDays) % rotationDays;
+            const candidate = groupPeople[idx];
+            if (!candidate) continue;
+            if (
+                typeof isPersonExcludedFromDuties === 'function' &&
+                isPersonExcludedFromDuties(candidate, groupNum)
+            ) {
+                continue;
+            }
+            if (
+                typeof isPersonDisabledForDuty === 'function' &&
+                isPersonDisabledForDuty(candidate, groupNum, 'normal', dateKey)
+            ) {
+                continue;
+            }
+            if (
+                typeof isPersonMissingOnDate === 'function' &&
+                !isNaN(date.getTime()) &&
+                isPersonMissingOnDate(candidate, groupNum, date, 'normal')
+            ) {
+                continue;
+            }
+            return { person: candidate, index: idx };
+        }
+        return { person: null, index: fromIndex };
+    }
+
+    function shouldFreezeNightResequenceDay(dateKey, groupNum, assignee) {
+        if (!assignee) return false;
+        const reason =
+            typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, assignee) : null;
+        if (!reason) return false;
+        if (reason.meta?.manualAlternateReplacement || reason.meta?.preserveBaseline) return true;
+        if (reason.type === 'swap' && reason.meta?.thursdaySpacing) return true;
+        return false;
+    }
+
+    /**
+     * Μετά από Ν-ανταλλαγές: ξαναγεμίζει τις επόμενες καθημερινές της ομάδας
+     * με συνέχεια από το τελικό άτομο της ημέρας-αγκύρωσης (όχι από τον displaced).
+     * Μόνο ομάδες 3 & 4.
+     */
+    function resequenceNightGroupNormalDaysAfterAnchor(
+        assignments,
+        normalDays,
+        groupNum,
+        afterDateKey,
+        seedPerson
+    ) {
+        if (!NIGHT_GROUPS.includes(Number(groupNum))) return 0;
+        if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
+            return 0;
+        }
+        if (!afterDateKey || !seedPerson) return 0;
+
+        const sortedDays = [...(normalDays || [])].filter((dk) => dk > afterDateKey).sort();
+        if (!sortedDays.length) return 0;
+
+        let lastPerson = seedPerson;
+        let changes = 0;
+
+        for (const dateKey of sortedDays) {
+            const groupPeople = getNightGroupNormalPeople(groupNum, dateKey);
+            if (!groupPeople.length) continue;
+
+            const prev = getAssigneeOnDate(dateKey, groupNum, assignments);
+            if (prev && shouldFreezeNightResequenceDay(dateKey, groupNum, prev)) {
+                lastPerson = prev;
+                continue;
+            }
+
+            let fromIndex = findPersonIndexInList(groupPeople, lastPerson);
+            if (fromIndex < 0) fromIndex = 0;
+
+            const next = pickNextEligibleNormalPerson(groupPeople, fromIndex, groupNum, dateKey);
+            if (!next.person) continue;
+
+            lastPerson = next.person;
+            if (prev && normPerson(prev) === normPerson(next.person)) {
+                continue;
+            }
+
+            if (!assignments[dateKey]) assignments[dateKey] = {};
+            if (prev && typeof clearAssignmentReasonForPersonOnDate === 'function') {
+                clearAssignmentReasonForPersonOnDate(dateKey, groupNum, prev);
+            }
+            assignments[dateKey][groupNum] = next.person;
+            if (typeof storeAssignmentReason === 'function') {
+                storeAssignmentReason(
+                    dateKey,
+                    groupNum,
+                    next.person,
+                    'shift',
+                    `Αναδιάταξη ουράς μετά Ν Πέμπτης (συνέχεια μετά ${afterDateKey})`,
+                    prev || null,
+                    null,
+                    {
+                        thursdaySpacingResequence: true,
+                        afterDateKey,
+                        seedPerson
+                    }
+                );
+            }
+            changes += 1;
+        }
+        return changes;
+    }
+
+    /**
+     * Ανά ομάδα Ν: αναδιάταξη μετά την τελευταία ημέρα που άγγιξε Ν-ανταλλαγή αυτού του γύρου.
+     */
+    function resequenceNightGroupsAfterSpacingSwaps(assignments, dayTypeLists, spacingSwaps) {
+        if (!Array.isArray(spacingSwaps) || spacingSwaps.length === 0) return 0;
+        const normalDays = [...(dayTypeLists?.normal || [])].sort();
+        const perGroup = {};
+
+        for (const swap of spacingSwaps) {
+            const groupNum = parseInt(swap.groupNum, 10);
+            if (!NIGHT_GROUPS.includes(groupNum)) continue;
+            if (typeof isNightChangesGroup === 'function' && !isNightChangesGroup(groupNum)) continue;
+            const thu = swap.thursdayKey;
+            const partner = swap.partnerKey;
+            if (!thu || !partner) continue;
+            const afterKey = thu >= partner ? thu : partner;
+            if (!perGroup[groupNum] || afterKey > perGroup[groupNum]) {
+                perGroup[groupNum] = afterKey;
+            }
+        }
+
+        let total = 0;
+        for (const groupNumStr of Object.keys(perGroup)) {
+            const groupNum = parseInt(groupNumStr, 10);
+            const afterDateKey = perGroup[groupNum];
+            const seedPerson = getAssigneeOnDate(afterDateKey, groupNum, assignments);
+            if (!seedPerson) continue;
+            const n = resequenceNightGroupNormalDaysAfterAnchor(
+                assignments,
+                normalDays,
+                groupNum,
+                afterDateKey,
+                seedPerson
+            );
+            if (n > 0) {
+                console.log(
+                    `[THURSDAY SPACING] Resequence group ${groupNum} after ${afterDateKey} (seed=${seedPerson}): ${n} day(s)`
+                );
+            }
+            total += n;
+        }
+        return total;
+    }
+
+    function fingerprintNightGroupAssignments(assignments, dayTypeLists) {
+        const normalDays = [...(dayTypeLists?.normal || [])].sort();
+        const parts = [];
+        for (const dk of normalDays) {
+            for (const groupNum of NIGHT_GROUPS) {
+                const p = assignments?.[dk]?.[groupNum] || assignments?.[dk]?.[String(groupNum)] || '';
+                parts.push(`${dk}|${groupNum}|${normPerson(p)}`);
+            }
+        }
+        return parts.join(';');
+    }
+
+    /**
+     * Επαναληπτικό: Ν πέρασμα → αναδιάταξη ουράς νυχτερινών → ξανά Ν μέχρι σταθεροποίηση.
+     * Μόνο όταν isNightChangesMode (ομάδες 3 & 4).
+     */
+    function runThursdaySpacingChangesPassIterative(finalNormalAssignments, dayTypeLists) {
+        if (typeof isNightChangesMode !== 'function' || !isNightChangesMode()) {
+            return {
+                assignments: finalNormalAssignments,
+                markers: {},
+                spacingSwaps: [],
+                spacingFails: []
+            };
+        }
+
+        const MAX_ITERS = 5;
+        let assignments = JSON.parse(JSON.stringify(finalNormalAssignments || {}));
+        let cumulativeSwaps = [];
+        let lastResult = {
+            assignments,
+            markers: {},
+            spacingSwaps: [],
+            spacingFails: []
+        };
+
+        for (let iter = 1; iter <= MAX_ITERS; iter++) {
+            const result = runThursdaySpacingChangesPass(assignments, dayTypeLists);
+            lastResult = result;
+            assignments = result.assignments;
+            const swaps = result.spacingSwaps || [];
+
+            console.log(
+                `[THURSDAY SPACING] Iterative pass ${iter}/${MAX_ITERS}: swaps=${swaps.length}, fails=${(result.spacingFails || []).length}`
+            );
+
+            if (swaps.length === 0) {
+                break;
+            }
+
+            cumulativeSwaps = cumulativeSwaps.concat(
+                swaps.map((s) => ({
+                    ...s,
+                    iterativePass: iter
+                }))
+            );
+
+            const fpBeforeReseq = fingerprintNightGroupAssignments(assignments, dayTypeLists);
+            const changed = resequenceNightGroupsAfterSpacingSwaps(assignments, dayTypeLists, swaps);
+            const fpAfterReseq = fingerprintNightGroupAssignments(assignments, dayTypeLists);
+
+            if (changed === 0 || fpAfterReseq === fpBeforeReseq) {
+                console.log(
+                    `[THURSDAY SPACING] Iterative stabilize after pass ${iter} (resequence changes=${changed})`
+                );
+                break;
+            }
+            // Αλλιώς: νέο πέρασμα Ν στις Πέμπτες που άλλαξαν από την αναδιάταξη
+        }
+
+        if (typeof calculationSteps !== 'undefined' && calculationSteps) {
+            calculationSteps.thursdaySpacingFails = lastResult.spacingFails || [];
+            calculationSteps.thursdaySpacingIterativeSwaps = cumulativeSwaps;
+        }
+
+        return {
+            assignments,
+            markers: lastResult.markers || {},
+            spacingSwaps: cumulativeSwaps.length ? cumulativeSwaps : lastResult.spacingSwaps || [],
+            spacingFails: lastResult.spacingFails || []
+        };
+    }
+
     function formatThursdayHistoryDateLabel(dateKey) {
         if (!dateKey) return '—';
         const d = new Date(dateKey + 'T00:00:00');
@@ -1946,6 +2204,8 @@
     }
 
     window.runThursdaySpacingChangesPass = runThursdaySpacingChangesPass;
+    window.runThursdaySpacingChangesPassIterative = runThursdaySpacingChangesPassIterative;
+    window.resequenceNightGroupsAfterSpacingSwaps = resequenceNightGroupsAfterSpacingSwaps;
     window.buildThursdaySpacingSwapReason = buildThursdaySpacingSwapReason;
     window.countActiveNormalListSizeForThursday = countActiveNormalListSize;
     window.countNormalThursdaysSinceLast = countNormalThursdaysSinceLast;
