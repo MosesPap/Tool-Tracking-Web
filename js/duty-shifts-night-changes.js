@@ -1707,10 +1707,29 @@
 
         thursdayEvents.sort((a, b) => a.dateKey.localeCompare(b.dateKey));
 
-        const lastByPerson = new Map();
+        const thursdaysByPerson = new Map();
         for (const ev of thursdayEvents) {
             const pk = `${ev.groupNum}:${normPerson(ev.assignee)}`;
-            lastByPerson.set(pk, ev);
+            if (!thursdaysByPerson.has(pk)) thursdaysByPerson.set(pk, []);
+            thursdaysByPerson.get(pk).push(ev);
+        }
+        for (const arr of thursdaysByPerson.values()) {
+            arr.sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+        }
+
+        function formatPenultimateToLastNGap(groupNum, penultimateKey, lastKey) {
+            if (!penultimateKey || !lastKey || penultimateKey >= lastKey) return '—';
+            const thursdaysSince = countNormalThursdaysSinceLast(penultimateKey, lastKey);
+            const nRequired = countActiveNormalListSize(groupNum, lastKey);
+            if (!Number.isFinite(thursdaysSince) || thursdaysSince === Infinity) return '—';
+            if (!Number.isFinite(nRequired) || nRequired <= 0) {
+                return `${thursdaysSince} Πέμπτ${thursdaysSince === 1 ? 'η' : 'ες'}`;
+            }
+            const delta = thursdaysSince - nRequired;
+            const base = `${thursdaysSince} / Ν=${nRequired}`;
+            if (delta === 0) return `${base} ✓`;
+            if (delta > 0) return `${base} (+${delta})`;
+            return `${base} (${delta})`;
         }
 
         const personSummaries = [];
@@ -1726,12 +1745,22 @@
                 const pk = `${groupNum}:${normPerson(person)}`;
                 if (seen.has(pk)) continue;
                 seen.add(pk);
-                const last = lastByPerson.get(pk) || null;
+                const personThursdays = thursdaysByPerson.get(pk) || [];
+                const last = personThursdays.length ? personThursdays[personThursdays.length - 1] : null;
+                const penultimate =
+                    personThursdays.length >= 2 ? personThursdays[personThursdays.length - 2] : null;
                 personSummaries.push({
                     groupNum,
                     person,
                     lastThursdayKey: last?.dateKey || null,
                     lastThursdayLabel: last?.dateLabel || '—',
+                    penultimateThursdayKey: penultimate?.dateKey || null,
+                    penultimateThursdayLabel: penultimate?.dateLabel || '—',
+                    nGapPenultimateToLastLabel: formatPenultimateToLastNGap(
+                        groupNum,
+                        penultimate?.dateKey || null,
+                        last?.dateKey || null
+                    ),
                     status: last?.status || 'none',
                     displacedPerson: last?.displacedPerson || null,
                     partnerDateKey: last?.partnerDateKey || null,
@@ -1754,28 +1783,6 @@
             if (ia >= 0 && ib >= 0 && ia !== ib) return ia - ib;
             return String(a.person || '').localeCompare(String(b.person || ''), 'el');
         });
-
-        const displacementByPerson = new Map();
-        for (const sp of swapPairs) {
-            if (!sp.displacedFromThursday) continue;
-            const pk = `${sp.groupNum}:${normPerson(sp.displacedFromThursday)}`;
-            const prev = displacementByPerson.get(pk);
-            if (!prev || sp.thursdayKey > prev.thursdayKey) {
-                displacementByPerson.set(pk, {
-                    thursdayKey: sp.thursdayKey,
-                    thursdayLabel: formatThursdayHistoryDateLabel(sp.thursdayKey),
-                    replacedBy: sp.finalThursdayPerson || null,
-                    partnerDateKey: sp.partnerDateKey || null,
-                    partnerDateLabel: sp.partnerDateKey
-                        ? formatThursdayHistoryDateLabel(sp.partnerDateKey)
-                        : null,
-                    reasonText: sp.reasonText || ''
-                });
-            }
-        }
-        for (const row of personSummaries) {
-            row.lastDisplacement = displacementByPerson.get(`${row.groupNum}:${normPerson(row.person)}`) || null;
-        }
 
         const thursdayCountByPerson = new Map();
         for (const ev of thursdayEvents) {
@@ -2052,18 +2059,14 @@
                     ? `<td>${esc(row.displacedPerson ? row.displacedPerson : '—')}</td>
                        <td>${esc(row.partnerDateLabel || '—')}</td>`
                     : `<td>—</td><td>—</td>`;
-            const displacedCols = row.lastDisplacement
-                ? `<td>${esc(row.lastDisplacement.thursdayLabel)}</td>
-                   <td>${esc(row.lastDisplacement.replacedBy || '—')}</td>
-                   <td>${esc(row.lastDisplacement.partnerDateLabel || '—')}</td>`
-                : `<td>—</td><td>—</td><td>—</td>`;
             tr.innerHTML = `
                 <td><span class="badge bg-primary">${esc(groupLabel(row.groupNum))}</span></td>
                 <td><strong>${esc(row.person)}</strong></td>
                 <td>${esc(row.lastThursdayLabel)}</td>
+                <td>${esc(row.penultimateThursdayLabel)}</td>
+                <td>${esc(row.nGapPenultimateToLastLabel)}</td>
                 <td>${statusBadge(row.status, row)}</td>
                 ${swapCols}
-                ${displacedCols}
             `;
             tbodyPerson.appendChild(tr);
         }
