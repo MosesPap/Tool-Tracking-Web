@@ -5623,7 +5623,14 @@
                     const assigned = getPersonOnDateForRotationContinuityLookup(type, lastKey, groupNum);
                     let continuity = assigned;
                     if (typeof getPersonForRotationContinuity === 'function') {
-                        continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
+                        const reason = getAssignmentReasonForGroupOnDate(lastKey, groupNum, assigned);
+                        // Excel επιλαχόντες: μετά από ημιαργία που κράτησε ο αντικαταστάτης, anchor = αυτός
+                        // (όχι ο conflicted που μετακινήθηκε σε καθημερινή — βλ. getPersonForRotationContinuity).
+                        if (type === 'semi' && reason?.meta?.semiConsecutiveHolidaySwap) {
+                            continuity = assigned;
+                        } else {
+                            continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
+                        }
                     } else {
                         const manual = findManualAlternateReplacementForGroup(lastKey, groupNum);
                         if (
