@@ -8347,13 +8347,14 @@
                                 const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
 
                                 // Rotation continuity reflow only for Mon↔Wed / Tue↔Thu groups (week-pair logic).
-                                // Cursor continues after who actually serves on the later day (post-swap),
-                                // not after the conflicted baseline person — e.g. Sun→Mon: Kaparis on Mon → next = Fatsitas.
+                                // Cursor continues after who actually serves on the later swap day (not the
+                                // conflicted baseline person) so e.g. Sun→Mon fill by Kaparis leaves Fatsitas next.
                                 try {
                                     if (applyWeekPairLogic && !isCrossMonthSwap && Array.isArray(groupPeople) && groupPeople.length > 0) {
                                         const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
-                                        // After two-slot swap: dateKey → swapCandidate, swapDayKey → currentPerson
-                                        const laterAssignedPerson = (laterKey === dateKey) ? swapCandidate : currentPerson;
+                                        const laterAssignedPerson =
+                                            updatedAssignments[laterKey]?.[groupNum] ||
+                                            ((laterKey === dateKey) ? swapCandidate : currentPerson);
                                         const laterAssignedIdx = groupPeople.indexOf(laterAssignedPerson);
                                         if (laterAssignedIdx >= 0) {
                                             let cursorIdx = (laterAssignedIdx + 1) % groupPeople.length;
@@ -14464,12 +14465,14 @@
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
 
                             // Rotation continuity reflow in preview only for week-pair groups.
-                            // Continue after who actually serves on later day (post-swap), not conflicted baseline.
+                            // Same as save path: continue after the person who remains on the later swap day.
                             try {
                                 const isCrossMonthSwapPreview = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
                                 if (applyWeekPairLogic && !isCrossMonthSwapPreview && Array.isArray(groupPeople) && groupPeople.length > 0) {
                                     const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
-                                    const laterAssignedPerson = (laterKey === dateKey) ? swapCandidate : currentPerson;
+                                    const laterAssignedPerson =
+                                        normalAssignments[laterKey]?.[groupNum] ||
+                                        ((laterKey === dateKey) ? swapCandidate : currentPerson);
                                     const laterAssignedIdx = groupPeople.indexOf(laterAssignedPerson);
                                     if (laterAssignedIdx >= 0) {
                                         let cursorIdx = (laterAssignedIdx + 1) % groupPeople.length;
