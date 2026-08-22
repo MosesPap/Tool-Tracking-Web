@@ -2406,6 +2406,56 @@
             }
         }
 
+        /** Αφαιρεί markers Ν Πεμπτών για ημερομηνίες/ομάδες που διαγράφονται. */
+        function filterThursdaySpacingMarkersByMonthDelete(markers, monthKeys, groupNums) {
+            if (!markers || typeof markers !== 'object') return {};
+            if (!Array.isArray(monthKeys) || monthKeys.length === 0) return { ...markers };
+            const prefixSet = new Set(monthKeys);
+            const groupSet = _stripOverrideGroupSetFromArray(groupNums);
+            const dateKeyInRange = (dateKey) =>
+                /^\d{4}-\d{2}-\d{2}$/.test(dateKey) && prefixSet.has(dateKey.substring(0, 7));
+            const out = {};
+            for (const dk of Object.keys(markers)) {
+                if (!dateKeyInRange(dk)) {
+                    out[dk] = markers[dk];
+                    continue;
+                }
+                if (!groupSet) continue;
+                const gmap = markers[dk];
+                if (!gmap || typeof gmap !== 'object') continue;
+                const outG = {};
+                for (const gStr of Object.keys(gmap)) {
+                    const gNum = parseInt(gStr, 10);
+                    if (groupSet.has(gNum)) continue;
+                    outG[gStr] = gmap[gStr];
+                }
+                if (Object.keys(outG).length > 0) out[dk] = outG;
+            }
+            return out;
+        }
+
+        function stripThursdaySpacingMarkersInMemory(monthKeys, groupNums) {
+            const filtered = filterThursdaySpacingMarkersByMonthDelete(
+                thursdaySpacingMarkers,
+                monthKeys,
+                groupNums
+            );
+            for (const k of Object.keys(thursdaySpacingMarkers)) {
+                delete thursdaySpacingMarkers[k];
+            }
+            Object.assign(thursdaySpacingMarkers, filtered);
+            syncThursdaySpacingMarkersWindow();
+        }
+
+        function persistAssignmentReasonsAndMarkersToLocalStorage() {
+            try {
+                localStorage.setItem(
+                    'dutyShiftsAssignmentReasons',
+                    JSON.stringify(buildAssignmentReasonsSavePayload())
+                );
+            } catch (_) {}
+        }
+
         function getThursdaySpacingMarker(dateKey, groupNum, personName) {
             const gmap =
                 thursdaySpacingMarkers[dateKey]?.[groupNum] ||
@@ -5189,6 +5239,17 @@
                     delete data.updatedBy;
                     const filtered = {};
                     for (const key in data) {
+                        if (key === '_thursdaySpacingMarkers') {
+                            const pruned = filterThursdaySpacingMarkersByMonthDelete(
+                                data[key],
+                                monthKeys,
+                                groupNums
+                            );
+                            if (pruned && Object.keys(pruned).length > 0) {
+                                filtered[key] = pruned;
+                            }
+                            continue;
+                        }
                         if (dateKeyRegex.test(key)) {
                             const mk = key.substring(0, 7);
                             if (monthKeySet.has(mk)) {
@@ -5298,6 +5359,8 @@
                     if (Object.keys(frag).length === 0) delete assignmentReasons[key];
                 }
             }
+            stripThursdaySpacingMarkersInMemory(monthKeys, groupNums);
+            persistAssignmentReasonsAndMarkersToLocalStorage();
             for (const dayType of ['normal', 'semi', 'weekend', 'special']) {
                 const byType = lastRotationPositions[dayType];
                 if (!byType || typeof byType !== 'object') continue;
