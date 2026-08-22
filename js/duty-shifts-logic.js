@@ -5039,6 +5039,156 @@
                 console.error('Error saving Step 2 (Weekends) to Firestore:', error);
             }
         }
+        /** Έναρξη περιόδου απουσίας που καλύπτει την ημέρα (για προτεραιότητα ΣΚ πριν την απουσία). */
+        function getAbsenceStartKeyForMissingOnDate(person, groupNum, date) {
+            if (!person || !date) return null;
+            const missingPeriods =
+                typeof getMissingPeriodsForPersonNorm === 'function'
+                    ? getMissingPeriodsForPersonNorm(groupNum, person)
+                    : [];
+            if (!missingPeriods.length) return null;
+            const checkDate = date instanceof Date ? new Date(date.getTime()) : new Date(String(date) + 'T00:00:00');
+            if (isNaN(checkDate.getTime())) return null;
+            checkDate.setHours(0, 0, 0, 0);
+            for (const period of missingPeriods) {
+                const startKey =
+                    typeof inputValueToDateKey === 'function' ? inputValueToDateKey(period.start) : null;
+                const endKey =
+                    typeof inputValueToDateKey === 'function' ? inputValueToDateKey(period.end) : null;
+                if (!startKey || !endKey) continue;
+                const start = new Date(startKey + 'T00:00:00');
+                const end = new Date(endKey + 'T00:00:00');
+                if (isNaN(start.getTime()) || isNaN(end.getTime())) continue;
+                if (checkDate >= start && checkDate <= end) return startKey;
+            }
+            return null;
+        }
+        function getWeekendPersonForSwapLookup(assignmentsByDate, baselineByDate, otherDateKey, groupNum) {
+            const fromAssignments = assignmentsByDate?.[otherDateKey]?.[groupNum];
+            if (fromAssignments) return fromAssignments;
+            return baselineByDate?.[otherDateKey]?.[groupNum] ?? null;
+        }
+        function orderWeekendSwapCandidateDates(sortedWeekends, monthKey, dateKey, absenceStartKey) {
+            const sameMonth = sortedWeekends.filter((dk) => {
+                if (dk === dateKey) return false;
+                const d = new Date(dk + 'T00:00:00');
+                const mk =
+                    typeof getMonthKeyFromDate === 'function'
+                        ? getMonthKeyFromDate(d)
+                        : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                return mk === monthKey;
+            });
+            const tier = (dk) => {
+                if (absenceStartKey && dk < absenceStartKey) return 0;
+                if (dk < dateKey) return 1;
+                return 2;
+            };
+            return sameMonth.sort((a, b) => {
+                const ta = tier(a);
+                const tb = tier(b);
+                if (ta !== tb) return ta - tb;
+                if (ta === 0 || ta === 1) return b.localeCompare(a);
+                return a.localeCompare(b);
+            });
+        }
+        function findWeekendAbsentDateSwapPartner(params) {
+            const {
+                sortedWeekends,
+                monthKey,
+                dateKey,
+                groupNum,
+                absentPerson,
+                assignmentsByDate,
+                baselineByDate,
+                missedDate
+            } = params;
+            if (!absentPerson || !dateKey || !monthKey) return null;
+            const absenceStartKey = getAbsenceStartKeyForMissingOnDate(absentPerson, groupNum, missedDate);
+            const candidates = orderWeekendSwapCandidateDates(
+                sortedWeekends,
+                monthKey,
+                dateKey,
+                absenceStartKey
+            );
+            for (const otherDateKey of candidates) {
+                const personOnOther = getWeekendPersonForSwapLookup(
+                    assignmentsByDate,
+                    baselineByDate,
+                    otherDateKey,
+                    groupNum
+                );
+                if (!personOnOther || personOnOther === absentPerson) continue;
+                const otherDate = new Date(otherDateKey + 'T00:00:00');
+                if (isPersonMissingOnDate(personOnOther, groupNum, missedDate, 'weekend')) continue;
+                if (isPersonMissingOnDate(absentPerson, groupNum, otherDate, 'weekend')) continue;
+                if (
+                    typeof isPersonDisabledForDuty === 'function' &&
+                    isPersonDisabledForDuty(personOnOther, groupNum, 'weekend')
+                ) {
+                    continue;
+                }
+                return { partnerDateKey: otherDateKey, partnerPerson: personOnOther };
+            }
+            return null;
+        }
+        function applyWeekendAbsentDateSwap(params) {
+            const {
+                dateKey,
+                groupNum,
+                absentPerson,
+                partnerDateKey,
+                partnerPerson,
+                missedDate,
+                assignmentsByDate,
+                swapPairId: providedSwapPairId,
+                extraMeta
+            } = params;
+            if (!dateKey || !partnerDateKey || !absentPerson || !partnerPerson || !assignmentsByDate) {
+                return null;
+            }
+            if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
+            if (!assignmentsByDate[partnerDateKey]) assignmentsByDate[partnerDateKey] = {};
+            assignmentsByDate[dateKey][groupNum] = partnerPerson;
+            assignmentsByDate[partnerDateKey][groupNum] = absentPerson;
+            const swapPairId =
+                providedSwapPairId != null
+                    ? providedSwapPairId
+                    : typeof getNextSwapPairIdForAssignmentReasons === 'function'
+                      ? getNextSwapPairIdForAssignmentReasons()
+                      : null;
+            const partnerDate = new Date(partnerDateKey + 'T00:00:00');
+            const missedDateStr = missedDate.toLocaleDateString('el-GR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+            const partnerDateStr = partnerDate.toLocaleDateString('el-GR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+            storeUnavailableReplacementReason(
+                dateKey,
+                groupNum,
+                partnerPerson,
+                absentPerson,
+                missedDate,
+                'weekend',
+                swapPairId,
+                { weekendAbsentDateSwap: true, partnerDateKey, ...(extraMeta || {}) }
+            );
+            storeAssignmentReason(
+                partnerDateKey,
+                groupNum,
+                absentPerson,
+                'skip',
+                `Ανταλλαγή ημερομηνίας Σαβ/Κυρ: απουσία ${missedDateStr}. Ανατέθηκε ${partnerDateStr}.`,
+                partnerPerson,
+                swapPairId,
+                { weekendAbsentDateSwap: true, partnerDateKey: dateKey, displacedPerson: partnerPerson }
+            );
+            return swapPairId;
+        }
         async function runWeekendSkipLogic() {
             try {
                 const dayTypeLists = calculationSteps.dayTypeLists || { weekend: [], special: [] };
@@ -5282,26 +5432,29 @@
                         let currentIndex = groupPeople.indexOf(currentPerson);
                         if (currentIndex === -1) currentIndex = 0;
 
-                        // Try to swap with another weekend date in the same month
-                        let swapPartnerDateKey = null;
-                        let swapPartnerPerson = null;
-                        for (const otherDateKey of sortedWeekends) {
-                            if (otherDateKey === dateKey) continue;
-                            const otherDate = new Date(otherDateKey + 'T00:00:00');
-                            const otherMonthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(otherDate) : `${otherDate.getFullYear()}-${String(otherDate.getMonth() + 1).padStart(2, '0')}`;
-                            if (otherMonthKey !== monthKey) continue;
-                            const personOnOther = updatedAssignments[otherDateKey]?.[groupNum];
-                            if (!personOnOther || personOnOther === currentPerson) continue;
-                            if (isPersonMissingOnDate(personOnOther, groupNum, date, 'weekend')) continue;
-                            if (isPersonMissingOnDate(currentPerson, groupNum, otherDate, 'weekend')) continue;
-                            swapPartnerDateKey = otherDateKey;
-                            swapPartnerPerson = personOnOther;
-                            break;
-                        }
+                        const swapMatch = findWeekendAbsentDateSwapPartner({
+                            sortedWeekends,
+                            monthKey,
+                            dateKey,
+                            groupNum,
+                            absentPerson: currentPerson,
+                            assignmentsByDate: updatedAssignments,
+                            baselineByDate: null,
+                            missedDate: date
+                        });
+                        const swapPartnerDateKey = swapMatch?.partnerDateKey ?? null;
+                        const swapPartnerPerson = swapMatch?.partnerPerson ?? null;
 
                         if (swapPartnerDateKey !== null && swapPartnerPerson) {
-                            updatedAssignments[dateKey][groupNum] = swapPartnerPerson;
-                            updatedAssignments[swapPartnerDateKey][groupNum] = currentPerson;
+                            applyWeekendAbsentDateSwap({
+                                dateKey,
+                                groupNum,
+                                absentPerson: currentPerson,
+                                partnerDateKey: swapPartnerDateKey,
+                                partnerPerson: swapPartnerPerson,
+                                missedDate: date,
+                                assignmentsByDate: updatedAssignments
+                            });
                             skippedPeople.push({
                                 date: dateKey,
                                 dateStr: date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
@@ -5309,24 +5462,9 @@
                                 skippedPerson: currentPerson,
                                 replacementPerson: swapPartnerPerson
                             });
+                            assignedWeekendInMonth[monthKey][groupNum].add(swapPartnerPerson);
+                            assignedWeekendInMonth[monthKey][groupNum].add(currentPerson);
                             const swapPartnerDate = new Date(swapPartnerDateKey + 'T00:00:00');
-                            storeUnavailableReplacementReason(
-                                dateKey,
-                                groupNum,
-                                swapPartnerPerson,
-                                currentPerson,
-                                date,
-                                'weekend'
-                            );
-                            storeAssignmentReason(
-                                swapPartnerDateKey,
-                                groupNum,
-                                currentPerson,
-                                'skip',
-                                `Ανταλλαγή ημερομηνίας: απουσία ${date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Ανατέθηκε ${swapPartnerDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' })}.`,
-                                swapPartnerPerson,
-                                null
-                            );
                             if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                 dutyWeekendDebug.recordSwapScan(
                                     'skip-phase2-swap',
@@ -9206,6 +9344,7 @@
                 const assignedPeoplePreviewWeekend = {}; // monthKey -> { groupNum -> { personName -> dateKey } }
                 // Track persons assigned via return-from-missing (backward/forward) so we don't assign them again when their turn comes
                 const assignedByReturnFromMissingWeekend = {}; // groupNum -> Set of person names
+                const weekendSwapLockedCells = new Set(); // dateKey|groupNum — κελιά που οριστικοποιήθηκαν από ανταλλαγή ΣΚ
                 
                 // Baseline ΣΚ = rotationPerson πριν skip (ίδια προσομοίωση σειράς με preview, όχι απλός μετρητής)
                 const baselineWeekendByDate = {};
@@ -9921,6 +10060,71 @@
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
                         } else {
+                            const weekendSwapLockKey = `${dateKey}|${groupNum}`;
+                            if (weekendSwapLockedCells.has(weekendSwapLockKey)) {
+                                const lockedPerson = simulatedWeekendAssignments[dateKey]?.[groupNum];
+                                const baselineLocked =
+                                    baselineWeekendByDate[dateKey]?.[groupNum] ??
+                                    weekendRotationPersons[dateKey]?.[groupNum] ??
+                                    lockedPerson;
+                                if (!weekendRotationPersons[dateKey]) weekendRotationPersons[dateKey] = {};
+                                weekendRotationPersons[dateKey][groupNum] = baselineLocked;
+                                if (lockedPerson) {
+                                    if (!simulatedWeekendAssignments[dateKey]) simulatedWeekendAssignments[dateKey] = {};
+                                    simulatedWeekendAssignments[dateKey][groupNum] = lockedPerson;
+                                    if (!assignedWeekendInMonthPreview[monthKey]) assignedWeekendInMonthPreview[monthKey] = {};
+                                    if (!assignedWeekendInMonthPreview[monthKey][groupNum]) {
+                                        assignedWeekendInMonthPreview[monthKey][groupNum] = new Set();
+                                    }
+                                    assignedWeekendInMonthPreview[monthKey][groupNum].add(lockedPerson);
+                                    if (!assignedPeoplePreviewWeekend[monthKey][groupNum]) {
+                                        assignedPeoplePreviewWeekend[monthKey][groupNum] = {};
+                                    }
+                                    assignedPeoplePreviewWeekend[monthKey][groupNum][lockedPerson] = dateKey;
+                                    let lastDutyInfo = '';
+                                    let daysCountInfo = '';
+                                    const daysSince = countDaysSinceLastDuty(
+                                        dateKey,
+                                        lockedPerson,
+                                        groupNum,
+                                        'weekend',
+                                        dayTypeLists,
+                                        startDate
+                                    );
+                                    const dutyDates = getLastAndNextDutyDates(
+                                        lockedPerson,
+                                        groupNum,
+                                        'weekend',
+                                        groupPeople.length
+                                    );
+                                    lastDutyInfo =
+                                        dutyDates.lastDuty !== 'Δεν έχει'
+                                            ? `<br><small class="text-muted">Τελευταία: ${dutyDates.lastDuty}</small>`
+                                            : '';
+                                    if (daysSince !== null && daysSince !== Infinity) {
+                                        daysCountInfo = ` <span class="text-info">${daysSince}/${groupPeople.length} ημέρες</span>`;
+                                    } else if (daysSince === Infinity) {
+                                        daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
+                                    }
+                                    html += `<td>${buildBaselineComputedCellHtml(baselineLocked, lockedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                                } else {
+                                    html += '<td class="text-muted">-</td>';
+                                }
+                                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                    dutyWeekendDebug.startSlot('preview-swap-locked', dateKey, groupNum, {
+                                        lockedPerson: lockedPerson || null
+                                    });
+                                    dutyWeekendDebug.logStep(
+                                        'weekend-swap-locked',
+                                        `Κλειδωμένο από προηγούμενη ανταλλαγή ΣΚ → ${lockedPerson || '—'}`
+                                    );
+                                    dutyWeekendDebug.endSlot({
+                                        finalPerson: lockedPerson || null,
+                                        emptyReason: lockedPerson ? null : 'SWAP_LOCKED_EMPTY'
+                                    });
+                                }
+                                continue;
+                            }
                             // Return-from-missing: assign person to weekend after/before return (match by normalized name)
                             const designatedWeekend = returnFromMissingWeekendTargets[dateKey]?.[groupNum];
                             const normWeekend = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
@@ -10181,56 +10385,131 @@
                                     }
                                 }
                             }
-                            // Phase 2: Swaps because person is missing on this date
+                            // Phase 2: Swaps because person is missing on this date — prefer same-month date swap (like normal days)
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
                                 if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                     dutyWeekendDebug.logStep(
                                         'phase2-missing',
-                                        `Απουσία: ${assignedPerson} — αναζήτηση αντικαταστάτη στη σειρά weekend.`
+                                        `Απουσία: ${assignedPerson} — ανταλλαγή ημερομηνίας ΣΚ ή επόμενος στη σειρά.`
                                     );
                                 }
-                                let currentIndex = groupPeople.indexOf(assignedPerson);
-                                if (currentIndex === -1) currentIndex = 0;
+                                const absentPersonWeekend = assignedPerson;
+                                const swapMatch = findWeekendAbsentDateSwapPartner({
+                                    sortedWeekends,
+                                    monthKey,
+                                    dateKey,
+                                    groupNum,
+                                    absentPerson: absentPersonWeekend,
+                                    assignmentsByDate: simulatedWeekendAssignments,
+                                    baselineByDate: baselineWeekendByDate,
+                                    missedDate: date
+                                });
                                 let swapPerson = null;
-                                for (let offset = 1; offset < rotationDays; offset++) {
-                                    const nextIndex = (currentIndex + offset) % rotationDays;
-                                    const candidate = groupPeople[nextIndex];
-                                    if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                                    const candidateAlreadyAssigned = assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate);
-                                    if (!candidateAlreadyAssigned) {
-                                        swapPerson = candidate;
-                                        break;
-                                    }
-                                }
-                                previewMissingSwapPerson = swapPerson;
-                                if (swapPerson) {
+                                if (swapMatch) {
                                     const unavailableExtra =
                                         manualAltResolved.deferFulfillment?.skippedReplacement
                                             ? { deferFulfillment: manualAltResolved.deferFulfillment }
                                             : null;
-                                    storeUnavailableReplacementReason(
+                                    applyWeekendAbsentDateSwap({
                                         dateKey,
                                         groupNum,
-                                        swapPerson,
-                                        assignedPerson,
-                                        date,
-                                        'weekend',
-                                        null,
-                                        unavailableExtra
-                                    );
-                                    assignedPerson = swapPerson;
+                                        absentPerson: absentPersonWeekend,
+                                        partnerDateKey: swapMatch.partnerDateKey,
+                                        partnerPerson: swapMatch.partnerPerson,
+                                        missedDate: date,
+                                        assignmentsByDate: simulatedWeekendAssignments,
+                                        extraMeta: unavailableExtra
+                                    });
+                                    weekendSwapLockedCells.add(`${swapMatch.partnerDateKey}|${groupNum}`);
+                                    assignedPerson = swapMatch.partnerPerson;
+                                    swapPerson = swapMatch.partnerPerson;
+                                    previewMissingSwapPerson = swapMatch.partnerPerson;
                                     wasReplaced = true;
-                                    replacementIndex = groupPeople.indexOf(swapPerson);
-                                } else if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
-                                    dutyWeekendDebug.logStep(
-                                        'phase2-missing-fail',
-                                        'Preview: κανένας επιλέξιμος — η ανταλλαγή ημερομηνιών θα τρέξει στο Επόμενο (runWeekendSkipLogic).'
-                                    );
+                                    replacementIndex = groupPeople.indexOf(swapMatch.partnerPerson);
+                                    if (!assignedWeekendInMonthPreview[monthKey]) assignedWeekendInMonthPreview[monthKey] = {};
+                                    if (!assignedWeekendInMonthPreview[monthKey][groupNum]) {
+                                        assignedWeekendInMonthPreview[monthKey][groupNum] = new Set();
+                                    }
+                                    assignedWeekendInMonthPreview[monthKey][groupNum].add(absentPersonWeekend);
+                                    if (!assignedPeoplePreviewWeekend[monthKey][groupNum]) {
+                                        assignedPeoplePreviewWeekend[monthKey][groupNum] = {};
+                                    }
+                                    assignedPeoplePreviewWeekend[monthKey][groupNum][absentPersonWeekend] =
+                                        swapMatch.partnerDateKey;
+                                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                        dutyWeekendDebug.recordSwapScan(
+                                            'preview-phase2-swap',
+                                            {
+                                                dateKey,
+                                                monthKey,
+                                                groupNum,
+                                                date,
+                                                currentPerson: absentPersonWeekend,
+                                                sortedWeekends,
+                                                updatedAssignments: simulatedWeekendAssignments
+                                            },
+                                            swapMatch.partnerPerson
+                                        );
+                                        dutyWeekendDebug.recordAbsentPlacement({
+                                            groupNum,
+                                            personName: absentPersonWeekend,
+                                            missedOnDateKey: dateKey,
+                                            targetDateKey: swapMatch.partnerDateKey,
+                                            replacementOnMissedDate: swapMatch.partnerPerson,
+                                            status: 'applied',
+                                            reasonCode: 'SWAP_MOVES_ABSENT_TO',
+                                            message: `Ανταλλαγή preview: ο απόντας ${absentPersonWeekend} → ${swapMatch.partnerDateKey}.`
+                                        });
+                                    }
+                                } else {
+                                    let currentIndex = groupPeople.indexOf(assignedPerson);
+                                    if (currentIndex === -1) currentIndex = 0;
+                                    for (let offset = 1; offset < rotationDays; offset++) {
+                                        const nextIndex = (currentIndex + offset) % rotationDays;
+                                        const candidate = groupPeople[nextIndex];
+                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) {
+                                            continue;
+                                        }
+                                        const candidateAlreadyAssigned =
+                                            assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate);
+                                        if (!candidateAlreadyAssigned) {
+                                            swapPerson = candidate;
+                                            break;
+                                        }
+                                    }
+                                    previewMissingSwapPerson = swapPerson;
+                                    if (swapPerson) {
+                                        const unavailableExtra =
+                                            manualAltResolved.deferFulfillment?.skippedReplacement
+                                                ? { deferFulfillment: manualAltResolved.deferFulfillment }
+                                                : null;
+                                        storeUnavailableReplacementReason(
+                                            dateKey,
+                                            groupNum,
+                                            swapPerson,
+                                            assignedPerson,
+                                            date,
+                                            'weekend',
+                                            null,
+                                            unavailableExtra
+                                        );
+                                        assignedPerson = swapPerson;
+                                        wasReplaced = true;
+                                        replacementIndex = groupPeople.indexOf(swapPerson);
+                                    } else if (
+                                        typeof dutyWeekendDebug !== 'undefined' &&
+                                        dutyWeekendDebug.isEnabled()
+                                    ) {
+                                        dutyWeekendDebug.logStep(
+                                            'phase2-missing-fail',
+                                            'Preview: κανένας επιλέξιμος για ανταλλαγή ημερομηνίας ή αντικατάσταση.'
+                                        );
+                                    }
                                 }
                                 if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                     const dbgCtx = {
                                         groupPeople,
-                                        startIndex: currentIndex,
+                                        startIndex: groupPeople.indexOf(absentPersonWeekend),
                                         maxOffset: rotationDays,
                                         groupNum,
                                         date,
@@ -10244,12 +10523,11 @@
                                             assignedPeoplePreviewWeekend[monthKey]?.[groupNum] || null
                                     };
                                     dutyWeekendDebug.recordCandidateScan(
-                                        'preview-phase2-missing',
+                                        swapMatch ? 'preview-phase2-swap' : 'preview-phase2-missing',
                                         dbgCtx,
                                         previewMissingSwapPerson
                                     );
                                 }
-                                // If no replacement found, keep assignedPerson (missing) so runWeekendSkipLogic can perform same-month swap when user clicks Next
                             }
 
                             assignedPerson = applyManualAlternateToAssignedPerson(
