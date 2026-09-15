@@ -1605,6 +1605,24 @@
                     ? fromAssignments || fromBaseline || fromStored
                     : fromAssignments || fromBaseline || fromStored;
             const continuityIdx = findIdx(lastContinuityPerson);
+            // #region agent log
+            try {
+                const mk = dateInMonth && typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(dateInMonth) : '';
+                if (dayTypeCategory === 'weekend' && groupNum === 1 && (mk === '2026-10' || (dateInMonth && dateInMonth.getMonth && dateInMonth.getMonth() === 9 && dateInMonth.getFullYear() === 2026))) {
+                    const prevKeys = [...(typeof collectDateKeysForRotationContinuityScan === 'function' ? collectDateKeysForRotationContinuityScan('weekend', prevMonthKey) : [])].sort();
+                    let scanLastKey = null;
+                    let scanLastAssigned = null;
+                    for (const dk of prevKeys) {
+                        if (typeof getDutyCategoryForDateKeyLocal === 'function' && getDutyCategoryForDateKeyLocal(dk) !== 'weekend') continue;
+                        const a = typeof getPersonOnDateForRotationContinuityLookup === 'function' ? getPersonOnDateForRotationContinuityLookup('weekend', dk, groupNum) : null;
+                        if (!a) continue;
+                        scanLastKey = dk;
+                        scanLastAssigned = a;
+                    }
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'A',location:'duty-shifts-data.js:computeRotationPositionAtMonthStart',message:'weekend Oct seed',data:{prevMonthKey,fromAssignments,fromBaseline,fromStored,lastContinuityPerson,continuityIdx,cursorOut:lastContinuityPerson&&continuityIdx>=0?(continuityIdx+1)%len:null,nextPerson:lastContinuityPerson&&continuityIdx>=0?groupPeople[(continuityIdx+1)%len]:groupPeople[0],scanLastKey,scanLastAssigned,listSample:groupPeople.slice(0,8),prevManualAlt:prevManualAlternate?{r:prevManualAlternate.replacementPerson,b:prevManualAlternate.baselinePerson}:null},timestamp:Date.now()})}).catch(()=>{});
+                }
+            } catch (_) {}
+            // #endregion
             if (lastContinuityPerson && continuityIdx >= 0) {
                 return (continuityIdx + 1) % len;
             }

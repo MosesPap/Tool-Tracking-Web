@@ -5228,6 +5228,11 @@
                 }
             }
             alreadyProcessedKeys?.add(procKey);
+            // #region agent log
+            if (chain.includes('2026-10-01') || missedDateKey === '2026-10-01' || groupNum === 1 && String(monthKey).includes('2026-10')) {
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'C',location:'duty-shifts-logic.js:weekendCascade',message:'cascade applied',data:{groupNum,missedDateKey,absentPerson,chain,newAssignees,oldAssignees,oct1After:assignmentsByDate['2026-10-01']?.[groupNum]||null},timestamp:Date.now()})}).catch(()=>{});
+            }
+            // #endregion
             return { chain, newAssignees, oldAssignees, cascadeId, replacementOnMissedDate: newAssignees[n - 1] };
         }
         function applyAllWeekendAbsentCascadeReflows(sortedWeekends, assignmentsByDate, baselineByDate, options = {}) {
@@ -5299,6 +5304,11 @@
                     if (!swapPerson) continue;
                     if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
                     assignmentsByDate[dateKey][groupNum] = swapPerson;
+                    // #region agent log
+                    if (dateKey === '2026-10-01' && groupNum === 1) {
+                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'B',location:'duty-shifts-logic.js:oneSidedFallback',message:'Oct1 one-sided replacement',data:{currentPerson,swapPerson,currentIndex,alreadyInMonth:[...assignedWeekendInMonth[monthKey][groupNum]]},timestamp:Date.now()})}).catch(()=>{});
+                    }
+                    // #endregion
                     storeUnavailableReplacementReason(
                         dateKey,
                         groupNum,
@@ -10085,7 +10095,13 @@
                                     : groups[g]) || {};
                             const people = gd.weekend || [];
                             if (people.length) {
+                                const beforePos = globalWeekendRotationPosition[g];
                                 reseedGlobalRotationPositionAtMonthStart('weekend', date, g, people, globalWeekendRotationPosition);
+                                // #region agent log
+                                if (g === 1 && monthKey === '2026-10') {
+                                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'E',location:'duty-shifts-logic.js:reseedOct',message:'reseed weekend at Oct month boundary',data:{beforePos,afterPos:globalWeekendRotationPosition[g],nextPerson:people[globalWeekendRotationPosition[g]%people.length],beforePerson:Number.isFinite(beforePos)?people[beforePos%people.length]:null},timestamp:Date.now()})}).catch(()=>{});
+                                }
+                                // #endregion
                             }
                         }
                         prevCalMonthKeyWeekendRot = monthKey;
@@ -10269,6 +10285,12 @@
                             }
                             
                             let assignedPerson = rotationPerson;
+                            // #region agent log
+                            if (dateKey === '2026-10-01' && groupNum === 1) {
+                                const dayTypeNow = typeof getDayType === 'function' ? getDayType(date) : null;
+                                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'A,B,E',location:'duty-shifts-logic.js:weekendPreview:oct1',message:'Oct1 group1 baseline rotation',data:{dateKey,dayTypeNow,rotationPosition,rotationPerson,globalPos:globalWeekendRotationPosition[groupNum],listIdx:groupPeople.map((p,i)=>({i,p:String(p).slice(0,40)})),designated:returnFromMissingWeekendTargets[dateKey]?.[groupNum]||null,manualAlt:existingManualAlternateWeekend?{b:existingManualAlternateWeekend.baseline,r:existingManualAlternateWeekend.replacement}:null},timestamp:Date.now()})}).catch(()=>{});
+                            }
+                            // #endregion
                             let wasReplaced = false;
                             let replacementIndex = null;
                             let wasDisabledOnlySkippedWeekend = false;
@@ -10464,6 +10486,11 @@
                                     simulatedWeekendAssignments[dateKey] = {};
                                 }
                                 simulatedWeekendAssignments[dateKey][groupNum] = assignedPerson;
+                                // #region agent log
+                                if (dateKey === '2026-10-01' && groupNum === 1) {
+                                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'B,D',location:'duty-shifts-logic.js:weekendPreview:oct1:stored',message:'Oct1 group1 after preview logic',data:{rotationPerson,assignedPerson,wasReplaced,replacementIndex,wasDisabledOnlySkippedWeekend,isMissing:typeof isPersonMissingOnDate==='function'?isPersonMissingOnDate(assignedPerson,groupNum,date,'weekend'):null,rotMissing:typeof isPersonMissingOnDate==='function'&&rotationPerson?isPersonMissingOnDate(rotationPerson,groupNum,date,'weekend'):null},timestamp:Date.now()})}).catch(()=>{});
+                                }
+                                // #endregion
                                 if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                     const baselineMissed =
                                         baselineWeekendByDate[dateKey]?.[groupNum] ||
@@ -10575,6 +10602,9 @@
                     simulatedWeekendAssignments,
                     assignedWeekendInMonthPreview
                 );
+                // #region agent log
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'C,B,final',location:'duty-shifts-logic.js:weekendPreview:afterCascade',message:'Oct1 final after cascade+fallback',data:{oct1g1:simulatedWeekendAssignments['2026-10-01']?.[1]||null,sep27g1:simulatedWeekendAssignments['2026-09-27']?.[1]||null,sep26g1:simulatedWeekendAssignments['2026-09-26']?.[1]||null,oct3g1:simulatedWeekendAssignments['2026-10-03']?.[1]||null,baselineOct1:baselineWeekendByDate['2026-10-01']?.[1]||weekendRotationPersons['2026-10-01']?.[1]||null},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempWeekendAssignments = simulatedWeekendAssignments;
