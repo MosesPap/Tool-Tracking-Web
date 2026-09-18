@@ -2,26 +2,6 @@
         // DUTY-SHIFTS-DATA.JS - Data Management & Utilities
         // ============================================================================
 
-        // #region agent log
-        window.__agentDbgLog = window.__agentDbgLog || function (p) {
-            const payload = Object.assign({ sessionId: '8e8ea0', timestamp: Date.now() }, p || {});
-            try {
-                const key = 'debug-8e8ea0';
-                const arr = JSON.parse(localStorage.getItem(key) || '[]');
-                arr.push(payload);
-                localStorage.setItem(key, JSON.stringify(arr.slice(-300)));
-                window.__debug8e8ea0 = arr;
-            } catch (_) {}
-            try {
-                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '8e8ea0' },
-                    body: JSON.stringify(payload)
-                }).catch(function () {});
-            } catch (_) {}
-        };
-        // #endregion
-
         // Data storage - each group has four order lists: special, weekend, semi, normal
         // Each person also has last duty dates for each type, missing periods, and priorities
         let groups = {
@@ -1624,91 +1604,6 @@
                     ? fromAssignments || fromBaseline || fromStored
                     : fromAssignments || fromBaseline || fromStored;
             const continuityIdx = findIdx(lastContinuityPerson);
-            // #region agent log
-            try {
-                const mk = dateInMonth && typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(dateInMonth) : '';
-                const isOct2026 =
-                    mk === '2026-10' ||
-                    (dateInMonth && dateInMonth.getMonth && dateInMonth.getMonth() === 9 && dateInMonth.getFullYear() === 2026);
-                if (groupNum === 1 && isOct2026 && (dayTypeCategory === 'weekend' || dayTypeCategory === 'semi')) {
-                    const prevKeys = [
-                        ...(typeof collectDateKeysForRotationContinuityScan === 'function'
-                            ? collectDateKeysForRotationContinuityScan(dayTypeCategory, prevMonthKey)
-                            : [])
-                    ].sort();
-                    let scanLastKey = null;
-                    let scanLastAssigned = null;
-                    const semiDates = [];
-                    for (const dk of prevKeys) {
-                        if (
-                            typeof getDutyCategoryForDateKeyLocal === 'function' &&
-                            getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory
-                        ) {
-                            continue;
-                        }
-                        const a =
-                            typeof getPersonOnDateForRotationContinuityLookup === 'function'
-                                ? getPersonOnDateForRotationContinuityLookup(dayTypeCategory, dk, groupNum)
-                                : null;
-                        if (!a) continue;
-                        scanLastKey = dk;
-                        scanLastAssigned = a;
-                        if (dayTypeCategory === 'semi') {
-                            const reason =
-                                typeof getAssignmentReason === 'function'
-                                    ? getAssignmentReason(dk, groupNum, a)
-                                    : null;
-                            semiDates.push({
-                                dk,
-                                a: String(a).slice(0, 48),
-                                type: reason?.type || null,
-                                conflicted: reason?.meta?.conflictedName || null,
-                                changer: reason?.meta?.changerName || null,
-                                semiSwap: !!reason?.meta?.semiConsecutiveHolidaySwap,
-                                continuity:
-                                    typeof getPersonForRotationContinuity === 'function'
-                                        ? getPersonForRotationContinuity(
-                                              dk,
-                                              groupNum,
-                                              a,
-                                              typeof getAssignmentsForDayType === 'function'
-                                                  ? getAssignmentsForDayType(dayTypeCategory)
-                                                  : null
-                                          )
-                                        : a
-                            });
-                        }
-                    }
-                    (window.__agentDbgLog || function () {})({
-                        runId: 'semi-post',
-                        hypothesisId: dayTypeCategory === 'semi' ? 'S1' : 'A',
-                        location: 'duty-shifts-data.js:computeRotationPositionAtMonthStart',
-                        message: dayTypeCategory + ' Oct seed',
-                        data: {
-                            dayTypeCategory,
-                            prevMonthKey,
-                            fromAssignments,
-                            fromBaseline,
-                            fromStored,
-                            lastContinuityPerson,
-                            continuityIdx,
-                            cursorOut:
-                                lastContinuityPerson && continuityIdx >= 0
-                                    ? (continuityIdx + 1) % len
-                                    : null,
-                            nextPerson:
-                                lastContinuityPerson && continuityIdx >= 0
-                                    ? groupPeople[(continuityIdx + 1) % len]
-                                    : groupPeople[0],
-                            scanLastKey,
-                            scanLastAssigned,
-                            listSample: groupPeople.slice(0, 12).map((p, i) => ({ i, p: String(p).slice(0, 40) })),
-                            semiDates: semiDates.slice(-6)
-                        }
-                    });
-                }
-            } catch (_) {}
-            // #endregion
             if (lastContinuityPerson && continuityIdx >= 0) {
                 return (continuityIdx + 1) % len;
             }
