@@ -5291,13 +5291,30 @@
             return results;
         }
         function applyWeekendMissingOneSidedFallback(sortedWeekends, assignmentsByDate, assignedWeekendInMonth) {
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) => String(s || '').trim();
+            const samePerson = (a, b) => a && b && norm(a) === norm(b);
+            const monthKeyOf = (dk) => {
+                const d = new Date(dk + 'T00:00:00');
+                return typeof getMonthKeyFromDate === 'function'
+                    ? getMonthKeyFromDate(d)
+                    : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            };
+            /** True if candidate already serves an earlier weekend/holiday in this month (not a later one). */
+            const assignedOnEarlierWeekendInMonth = (candidate, groupNum, dateKey, monthKey) => {
+                for (const dk of sortedWeekends) {
+                    if (dk >= dateKey) break;
+                    if (monthKeyOf(dk) !== monthKey) continue;
+                    if (samePerson(assignmentsByDate[dk]?.[groupNum], candidate)) return true;
+                }
+                return false;
+            };
             for (const dateKey of sortedWeekends) {
                 if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                 const date = new Date(dateKey + 'T00:00:00');
-                const monthKey =
-                    typeof getMonthKeyFromDate === 'function'
-                        ? getMonthKeyFromDate(date)
-                        : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                const monthKey = monthKeyOf(dateKey);
                 if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const groupData =
@@ -5316,7 +5333,14 @@
                         const nextIndex = (currentIndex + offset) % groupPeople.length;
                         const candidate = groupPeople[nextIndex];
                         if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                        if (assignedWeekendInMonth[monthKey][groupNum].has(candidate)) continue;
+                        if (
+                            typeof isPersonDisabledForDuty === 'function' &&
+                            isPersonDisabledForDuty(candidate, groupNum, 'weekend', dateKey)
+                        ) {
+                            continue;
+                        }
+                        // Μην αποκλείεις όσους μπήκαν σε ΜΕΤΑΓΕΝΕΣΤΕΡΕΣ αργίες — αλλιώς «γυρνάει» πίσω στη λίστα (π.χ. Μαρία αντί Σολωμού).
+                        if (assignedOnEarlierWeekendInMonth(candidate, groupNum, dateKey, monthKey)) continue;
                         swapPerson = candidate;
                         break;
                     }
@@ -5325,7 +5349,7 @@
                     assignmentsByDate[dateKey][groupNum] = swapPerson;
                     // #region agent log
                     if (dateKey === '2026-10-01' && groupNum === 1) {
-                        (window.__agentDbgLog || function(){})({runId:'pre-fix',hypothesisId:'B',location:'duty-shifts-logic.js:oneSidedFallback',message:'Oct1 one-sided replacement',data:{currentPerson,swapPerson,currentIndex,alreadyInMonth:[...assignedWeekendInMonth[monthKey][groupNum]]}});
+                        (window.__agentDbgLog || function(){})({runId:'post-fix',hypothesisId:'B-fix',location:'duty-shifts-logic.js:oneSidedFallback',message:'Oct1 one-sided replacement',data:{currentPerson,swapPerson,currentIndex,alreadyInMonth:[...assignedWeekendInMonth[monthKey][groupNum]]}});
                     }
                     // #endregion
                     storeUnavailableReplacementReason(
@@ -5337,6 +5361,35 @@
                         'weekend'
                     );
                     assignedWeekendInMonth[monthKey][groupNum].add(swapPerson);
+                    // Αν ο αντικαταστάτης είχε ήδη επόμενη αργία τον ίδιο μήνα, μετακίνησε εκείνον τον δείκτη στον επόμενο διαθέσιμο.
+                    const swapIdx = groupPeople.indexOf(swapPerson);
+                    for (const laterKey of sortedWeekends) {
+                        if (laterKey <= dateKey) continue;
+                        if (monthKeyOf(laterKey) !== monthKey) continue;
+                        if (!samePerson(assignmentsByDate[laterKey]?.[groupNum], swapPerson)) continue;
+                        const laterDate = new Date(laterKey + 'T00:00:00');
+                        let moved = null;
+                        const startIdx = swapIdx >= 0 ? swapIdx : 0;
+                        for (let offset = 1; offset < groupPeople.length; offset++) {
+                            const ni = (startIdx + offset) % groupPeople.length;
+                            const cand = groupPeople[ni];
+                            if (!cand || isPersonMissingOnDate(cand, groupNum, laterDate, 'weekend')) continue;
+                            if (
+                                typeof isPersonDisabledForDuty === 'function' &&
+                                isPersonDisabledForDuty(cand, groupNum, 'weekend', laterKey)
+                            ) {
+                                continue;
+                            }
+                            if (assignedOnEarlierWeekendInMonth(cand, groupNum, laterKey, monthKey)) continue;
+                            if (samePerson(cand, swapPerson)) continue;
+                            moved = cand;
+                            break;
+                        }
+                        if (moved) {
+                            assignmentsByDate[laterKey][groupNum] = moved;
+                            assignedWeekendInMonth[monthKey][groupNum].add(moved);
+                        }
+                    }
                 }
             }
         }
@@ -10455,9 +10508,56 @@
                                     }
                                 }
                             }
-                            // Phase 2: απουσία — cascade reflow τρέχει μετά το loop (όχi inline swap)
+                            // Phase 2: απουσία — cascade μετά το loop· αν είναι πρώτη αργία του μήνα (cascade αδύνατο), αντικατάσταση τώρα.
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
-                                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                const monthWeekendsPreview = getSameMonthWeekendDateKeys(sortedWeekends, monthKey);
+                                const missedIdxPreview = monthWeekendsPreview.indexOf(dateKey);
+                                if (missedIdxPreview <= 0) {
+                                    let currentIndex = groupPeople.indexOf(assignedPerson);
+                                    if (currentIndex === -1) currentIndex = 0;
+                                    let replacementPerson = null;
+                                    let replacementIdx = null;
+                                    for (let offset = 1; offset < rotationDays; offset++) {
+                                        const nextIndex = (currentIndex + offset) % rotationDays;
+                                        const candidate = groupPeople[nextIndex];
+                                        if (!candidate) continue;
+                                        if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                                        if (
+                                            typeof isPersonDisabledForDuty === 'function' &&
+                                            isPersonDisabledForDuty(candidate, groupNum, 'weekend', dateKey)
+                                        ) {
+                                            continue;
+                                        }
+                                        if (assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate)) continue;
+                                        replacementPerson = candidate;
+                                        replacementIdx = nextIndex;
+                                        break;
+                                    }
+                                    if (replacementPerson) {
+                                        storeUnavailableReplacementReason(
+                                            dateKey,
+                                            groupNum,
+                                            replacementPerson,
+                                            assignedPerson,
+                                            date,
+                                            'weekend'
+                                        );
+                                        // #region agent log
+                                        if (dateKey === '2026-10-01' && groupNum === 1) {
+                                            (window.__agentDbgLog || function () {})({
+                                                runId: 'post-fix',
+                                                hypothesisId: 'B-fix',
+                                                location: 'duty-shifts-logic.js:weekendPreview:inlineMissing',
+                                                message: 'Oct1 inline first-of-month missing replace',
+                                                data: { from: assignedPerson, to: replacementPerson, replacementIdx }
+                                            });
+                                        }
+                                        // #endregion
+                                        assignedPerson = replacementPerson;
+                                        wasReplaced = true;
+                                        replacementIndex = replacementIdx;
+                                    }
+                                } else if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                     dutyWeekendDebug.logStep(
                                         'phase2-missing',
                                         `Απουσία: ${assignedPerson} — cascade ΣΚ/αργιών μετά το preview loop.`
@@ -10507,7 +10607,7 @@
                                 simulatedWeekendAssignments[dateKey][groupNum] = assignedPerson;
                                 // #region agent log
                                 if (dateKey === '2026-10-01' && groupNum === 1) {
-                                    (window.__agentDbgLog || function(){})({runId:'pre-fix',hypothesisId:'B,D',location:'duty-shifts-logic.js:weekendPreview:oct1:stored',message:'Oct1 group1 after preview logic',data:{rotationPerson,assignedPerson,wasReplaced,replacementIndex,wasDisabledOnlySkippedWeekend,isMissing:typeof isPersonMissingOnDate==='function'?isPersonMissingOnDate(assignedPerson,groupNum,date,'weekend'):null,rotMissing:typeof isPersonMissingOnDate==='function'&&rotationPerson?isPersonMissingOnDate(rotationPerson,groupNum,date,'weekend'):null}});
+                                    (window.__agentDbgLog || function(){})({runId:'post-fix',hypothesisId:'B,D',location:'duty-shifts-logic.js:weekendPreview:oct1:stored',message:'Oct1 group1 after preview logic',data:{rotationPerson,assignedPerson,wasReplaced,replacementIndex,wasDisabledOnlySkippedWeekend,isMissing:typeof isPersonMissingOnDate==='function'?isPersonMissingOnDate(assignedPerson,groupNum,date,'weekend'):null,rotMissing:typeof isPersonMissingOnDate==='function'&&rotationPerson?isPersonMissingOnDate(rotationPerson,groupNum,date,'weekend'):null}});
                                 }
                                 // #endregion
                                 if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
@@ -10622,7 +10722,7 @@
                     assignedWeekendInMonthPreview
                 );
                 // #region agent log
-                (window.__agentDbgLog || function(){})({runId:'pre-fix',hypothesisId:'C,B,final',location:'duty-shifts-logic.js:weekendPreview:afterCascade',message:'Oct1 final after cascade+fallback',data:{oct1g1:simulatedWeekendAssignments['2026-10-01']?.[1]||null,sep27g1:simulatedWeekendAssignments['2026-09-27']?.[1]||null,sep26g1:simulatedWeekendAssignments['2026-09-26']?.[1]||null,oct3g1:simulatedWeekendAssignments['2026-10-03']?.[1]||null,baselineOct1:baselineWeekendByDate['2026-10-01']?.[1]||weekendRotationPersons['2026-10-01']?.[1]||null}});
+                (window.__agentDbgLog || function(){})({runId:'post-fix',hypothesisId:'C,B,final',location:'duty-shifts-logic.js:weekendPreview:afterCascade',message:'Oct1 final after cascade+fallback',data:{oct1g1:simulatedWeekendAssignments['2026-10-01']?.[1]||null,sep27g1:simulatedWeekendAssignments['2026-09-27']?.[1]||null,sep26g1:simulatedWeekendAssignments['2026-09-26']?.[1]||null,oct3g1:simulatedWeekendAssignments['2026-10-03']?.[1]||null,baselineOct1:baselineWeekendByDate['2026-10-01']?.[1]||weekendRotationPersons['2026-10-01']?.[1]||null}});
                 // Flush: download NDJSON so agent can read it if localhost ingest is blocked (HTTPS)
                 try {
                     const stored = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
