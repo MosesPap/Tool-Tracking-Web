@@ -1590,6 +1590,33 @@
          * (β) η ανταλλαγή είναι στην ίδια εβδομάδα — αρκεί το two-slot swap.
          */
         function shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey) {
+            // #region agent log
+            try {
+                if (!window.__dutyLogicBuild1588Logged) {
+                    window.__dutyLogicBuild1588Logged = true;
+                    const boot = {
+                        sessionId: '8e8ea0',
+                        runId: 'g4-oct-post',
+                        hypothesisId: 'F-cache',
+                        location: 'duty-shifts-logic.js:shouldSkipSwapContinuityReflow:boot',
+                        message: 'logic build 1.588 loaded (first skip helper call)',
+                        data: { build: '1.588' },
+                        timestamp: Date.now()
+                    };
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Debug-Session-Id': '8e8ea0'
+                        },
+                        body: JSON.stringify(boot)
+                    }).catch(function () {});
+                    const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                    arr.push(boot);
+                    localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                }
+            } catch (_) {}
+            // #endregion
             if (typeof isNightChangesGroup === 'function' && isNightChangesGroup(groupNum)) {
                 return true;
             }
@@ -1618,7 +1645,9 @@
                             groupNum: g,
                             personName: personName,
                             type: type,
-                            reason: reason ? String(reason).slice(0, 240) : null,
+                            reason: reason != null && reason !== '' ? String(reason).slice(0, 240) : (reason === '' ? '(empty)' : null),
+                            reasonLen: reason == null ? -1 : String(reason).length,
+                            build: '1.588',
                             swappedWith: swappedWith,
                             swapPairId: swapPairId,
                             metaKeys: meta ? Object.keys(meta) : [],
@@ -8502,10 +8531,52 @@
                                 // Skip for night-changes groups / same-ISO-week swaps: two-slot swap is enough;
                                 // full reflow wrongly rewrote Thu (e.g. ΨΩΜΑ on 08/10 after Mon↔Wed).
                                 try {
+                                    const _skipCont = shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey);
+                                    // #region agent log
+                                    if (groupNum === 4 || (dateKey && String(dateKey).indexOf('2026-10') === 0)) {
+                                        try {
+                                            const row = {
+                                                sessionId: '8e8ea0',
+                                                runId: 'g4-oct-post',
+                                                hypothesisId: 'F-cache',
+                                                location: 'duty-shifts-logic.js:swapContinuity:decision',
+                                                message: 'swapContinuity reflow decision',
+                                                data: {
+                                                    build: '1.588',
+                                                    groupNum: groupNum,
+                                                    dateKey: dateKey,
+                                                    swapDayKey: swapDayKey,
+                                                    applyWeekPairLogic: !!applyWeekPairLogic,
+                                                    isCrossMonthSwap: !!isCrossMonthSwap,
+                                                    skip: !!_skipCont,
+                                                    nightChanges:
+                                                        typeof isNightChangesGroup === 'function' &&
+                                                        isNightChangesGroup(groupNum),
+                                                    sameWeek: dateKeysShareIsoWeek(dateKey, swapDayKey)
+                                                },
+                                                timestamp: Date.now()
+                                            };
+                                            fetch(
+                                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                                {
+                                                    method: 'POST',
+                                                    headers: {
+                                                        'Content-Type': 'application/json',
+                                                        'X-Debug-Session-Id': '8e8ea0'
+                                                    },
+                                                    body: JSON.stringify(row)
+                                                }
+                                            ).catch(function () {});
+                                            const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                                            arr.push(row);
+                                            localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                                        } catch (_) {}
+                                    }
+                                    // #endregion
                                     if (
                                         applyWeekPairLogic &&
                                         !isCrossMonthSwap &&
-                                        !shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey) &&
+                                        !_skipCont &&
                                         Array.isArray(groupPeople) &&
                                         groupPeople.length > 0
                                     ) {
