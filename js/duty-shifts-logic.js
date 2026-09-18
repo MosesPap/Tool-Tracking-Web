@@ -1567,6 +1567,35 @@
                 .replace(/\s*,+$/, '')
                 .replace(/\s+/g, ' ');
         }
+
+        /** Δευτέρα ISO-εβδομάδας για dateKey (τοπική ημερομηνία). */
+        function getIsoWeekMondayTimeFromDateKey(dateKey) {
+            const d = new Date(String(dateKey || '') + 'T00:00:00');
+            if (isNaN(d.getTime())) return null;
+            const dow = d.getDay();
+            d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+            d.setHours(0, 0, 0, 0);
+            return d.getTime();
+        }
+
+        function dateKeysShareIsoWeek(a, b) {
+            const ma = getIsoWeekMondayTimeFromDateKey(a);
+            const mb = getIsoWeekMondayTimeFromDateKey(b);
+            return ma != null && mb != null && ma === mb;
+        }
+
+        /**
+         * Μετά από week-pair ανταλλαγή: μην ξαναγράφεις όλη την ουρά όταν
+         * (α) ομάδα Νυχτερινών με αλλαγές — το Ν Πεμπτών κάνει δική του συνέχεια, ή
+         * (β) η ανταλλαγή είναι στην ίδια εβδομάδα — αρκεί το two-slot swap.
+         */
+        function shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey) {
+            if (typeof isNightChangesGroup === 'function' && isNightChangesGroup(groupNum)) {
+                return true;
+            }
+            return dateKeysShareIsoWeek(dateKey, swapDayKey);
+        }
+
         function storeAssignmentReason(dateKey, groupNum, personName, type, reason, swappedWith = null, swapPairId = null, meta = null) {
             const keyName = normalizePersonKey(personName);
             if (!keyName) return;
@@ -8470,8 +8499,16 @@
                                 // Rotation continuity reflow only for Mon↔Wed / Tue↔Thu groups (week-pair logic).
                                 // Cursor continues after who actually serves on the later swap day (not the
                                 // conflicted baseline person) so e.g. Sun→Mon fill by Kaparis leaves Fatsitas next.
+                                // Skip for night-changes groups / same-ISO-week swaps: two-slot swap is enough;
+                                // full reflow wrongly rewrote Thu (e.g. ΨΩΜΑ on 08/10 after Mon↔Wed).
                                 try {
-                                    if (applyWeekPairLogic && !isCrossMonthSwap && Array.isArray(groupPeople) && groupPeople.length > 0) {
+                                    if (
+                                        applyWeekPairLogic &&
+                                        !isCrossMonthSwap &&
+                                        !shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey) &&
+                                        Array.isArray(groupPeople) &&
+                                        groupPeople.length > 0
+                                    ) {
                                         const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
                                         const laterAssignedPerson =
                                             updatedAssignments[laterKey]?.[groupNum] ||
@@ -8515,7 +8552,7 @@
                                                             groupNum,
                                                             picked,
                                                             'shift',
-                                                            '',
+                                                            `Μετακίνηση συνέχειας μετά ανταλλαγή σύγκρουσης (αγκύλη ${laterKey}).`,
                                                             prevAssigned,
                                                             null,
                                                             { swapContinuity: true, anchorSwapDay: laterKey }
@@ -8525,6 +8562,46 @@
                                                 }
                                             }
                                         }
+                                    } else if (
+                                        applyWeekPairLogic &&
+                                        !isCrossMonthSwap &&
+                                        shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey)
+                                    ) {
+                                        // #region agent log
+                                        try {
+                                            const row = {
+                                                sessionId: '8e8ea0',
+                                                runId: 'g4-oct-post',
+                                                hypothesisId: 'D-fix',
+                                                location: 'duty-shifts-logic.js:swapContinuity:skip',
+                                                message: 'skipped swapContinuity reflow',
+                                                data: {
+                                                    groupNum: groupNum,
+                                                    dateKey: dateKey,
+                                                    swapDayKey: swapDayKey,
+                                                    nightChanges:
+                                                        typeof isNightChangesGroup === 'function' &&
+                                                        isNightChangesGroup(groupNum),
+                                                    sameWeek: dateKeysShareIsoWeek(dateKey, swapDayKey)
+                                                },
+                                                timestamp: Date.now()
+                                            };
+                                            fetch(
+                                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                                {
+                                                    method: 'POST',
+                                                    headers: {
+                                                        'Content-Type': 'application/json',
+                                                        'X-Debug-Session-Id': '8e8ea0'
+                                                    },
+                                                    body: JSON.stringify(row)
+                                                }
+                                            ).catch(function () {});
+                                            const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                                            arr.push(row);
+                                            localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                                        } catch (_) {}
+                                        // #endregion
                                     }
                                 } catch (contErr) {
                                     console.warn('[SWAP CONTINUITY] Failed to reflow future normal days after swap:', contErr);
@@ -14623,9 +14700,16 @@
 
                             // Rotation continuity reflow in preview only for week-pair groups.
                             // Same as save path: continue after the person who remains on the later swap day.
+                            // Skip night-changes / same-ISO-week (two-slot swap only).
                             try {
                                 const isCrossMonthSwapPreview = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
-                                if (applyWeekPairLogic && !isCrossMonthSwapPreview && Array.isArray(groupPeople) && groupPeople.length > 0) {
+                                if (
+                                    applyWeekPairLogic &&
+                                    !isCrossMonthSwapPreview &&
+                                    !shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey) &&
+                                    Array.isArray(groupPeople) &&
+                                    groupPeople.length > 0
+                                ) {
                                     const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
                                     const laterAssignedPerson =
                                         normalAssignments[laterKey]?.[groupNum] ||
@@ -14667,7 +14751,7 @@
                                                             groupNum,
                                                             picked,
                                                             'shift',
-                                                            '',
+                                                            `Μετακίνηση συνέχειας μετά ανταλλαγή σύγκρουσης (αγκύλη ${laterKey}).`,
                                                             prevAssigned,
                                                             null,
                                                             { swapContinuity: true, anchorSwapDay: laterKey }
@@ -14677,6 +14761,46 @@
                                             }
                                         }
                                     }
+                                } else if (
+                                    applyWeekPairLogic &&
+                                    !isCrossMonthSwapPreview &&
+                                    shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey)
+                                ) {
+                                    // #region agent log
+                                    try {
+                                        const row = {
+                                            sessionId: '8e8ea0',
+                                            runId: 'g4-oct-post',
+                                            hypothesisId: 'D-fix',
+                                            location: 'duty-shifts-logic.js:previewSwapContinuity:skip',
+                                            message: 'skipped preview swapContinuity reflow',
+                                            data: {
+                                                groupNum: groupNum,
+                                                dateKey: dateKey,
+                                                swapDayKey: swapDayKey,
+                                                nightChanges:
+                                                    typeof isNightChangesGroup === 'function' &&
+                                                    isNightChangesGroup(groupNum),
+                                                sameWeek: dateKeysShareIsoWeek(dateKey, swapDayKey)
+                                            },
+                                            timestamp: Date.now()
+                                        };
+                                        fetch(
+                                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                            {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                    'X-Debug-Session-Id': '8e8ea0'
+                                                },
+                                                body: JSON.stringify(row)
+                                            }
+                                        ).catch(function () {});
+                                        const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                                        arr.push(row);
+                                        localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                                    } catch (_) {}
+                                    // #endregion
                                 }
                             } catch (previewContErr) {
                                 console.warn('[PREVIEW SWAP CONTINUITY] Failed to reflow future normal days after swap:', previewContErr);
