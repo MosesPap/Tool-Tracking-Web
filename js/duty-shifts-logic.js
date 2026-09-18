@@ -1919,7 +1919,7 @@
             // #region agent log
             if (groupNum === 1 && monthKey === '2026-10') {
                 (window.__agentDbgLog || function () {})({
-                    runId: 'semi-pre',
+                    runId: 'semi-post',
                     hypothesisId: 'S3',
                     location: 'duty-shifts-logic.js:alignSemiRotationPosToExpectedAtMonthStart',
                     message: 'semi Oct align to expected',
@@ -2514,10 +2514,37 @@
                     }
                 }
                 if (reason.meta?.semiConsecutiveHolidaySwap && reason.meta?.conflictedName) {
-                    const conflicted =
+                    // Continue after the later person in the semi rotation list among the swap pair
+                    // (changer + conflicted). Otherwise e.g. Maria on last Friday yields next=Fakouras
+                    // who already served on the swapped penultimate semi.
+                    const resolveSemi = (name) =>
                         typeof resolvePersonInGroupRotationList === 'function'
-                            ? resolvePersonInGroupRotationList(reason.meta.conflictedName, groupNum, 'semi')
-                            : reason.meta.conflictedName;
+                            ? resolvePersonInGroupRotationList(name, groupNum, 'semi')
+                            : name;
+                    const conflicted = resolveSemi(reason.meta.conflictedName);
+                    const changer = reason.meta.changerName ? resolveSemi(reason.meta.changerName) : null;
+                    const norm =
+                        typeof normalizePersonKey === 'function'
+                            ? normalizePersonKey
+                            : (s) => String(s || '').trim();
+                    const list =
+                        (typeof groupsForDuty === 'function'
+                            ? groupsForDuty(groupNum)?.semi
+                            : null) ||
+                        groups[groupNum]?.semi ||
+                        [];
+                    const idxOf = (name) => {
+                        if (!name || !Array.isArray(list)) return -1;
+                        return list.findIndex((p) => norm(p) === norm(name));
+                    };
+                    if (changer && conflicted) {
+                        const iCh = idxOf(changer);
+                        const iCo = idxOf(conflicted);
+                        if (iCh >= 0 && iCo >= 0) {
+                            return iCh >= iCo ? changer : conflicted;
+                        }
+                        if (iCh >= 0) return changer;
+                    }
                     if (conflicted) return conflicted;
                 }
                 const otherKey = findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey);
@@ -11322,7 +11349,7 @@
                         const octSemis = (sortedSemi || []).filter((dk) => dk.startsWith('2026-10')).sort();
                         if (octSemis[0] === dateKey) {
                             (window.__agentDbgLog || function () {})({
-                                runId: 'semi-pre',
+                                runId: 'semi-post',
                                 hypothesisId: 'S1',
                                 location: 'duty-shifts-logic.js:semiBuild:firstOct',
                                 message: 'first Oct 2026 semi group1 slot',
@@ -11716,7 +11743,7 @@
                 const octSemis = (sortedSemi || []).filter((dk) => dk.startsWith('2026-10')).sort();
                 const firstOct = octSemis[0];
                 (window.__agentDbgLog || function () {})({
-                    runId: 'semi-pre',
+                    runId: 'semi-post',
                     hypothesisId: 'S-final',
                     location: 'duty-shifts-logic.js:semiBuild:done',
                     message: 'semi step final Oct assignments g1',

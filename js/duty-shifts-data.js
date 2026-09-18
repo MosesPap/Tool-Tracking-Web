@@ -1680,7 +1680,7 @@
                         }
                     }
                     (window.__agentDbgLog || function () {})({
-                        runId: 'semi-pre',
+                        runId: 'semi-post',
                         hypothesisId: dayTypeCategory === 'semi' ? 'S1' : 'A',
                         location: 'duty-shifts-data.js:computeRotationPositionAtMonthStart',
                         message: dayTypeCategory + ' Oct seed',
@@ -5727,14 +5727,7 @@
                     const assigned = getPersonOnDateForRotationContinuityLookup(type, lastKey, groupNum);
                     let continuity = assigned;
                     if (typeof getPersonForRotationContinuity === 'function') {
-                        const reason = getAssignmentReasonForGroupOnDate(lastKey, groupNum, assigned);
-                        // Excel επιλαχόντες: μετά από ημιαργία που κράτησε ο αντικαταστάτης, anchor = αυτός
-                        // (όχι ο conflicted που μετακινήθηκε σε καθημερινή — βλ. getPersonForRotationContinuity).
-                        if (type === 'semi' && reason?.meta?.semiConsecutiveHolidaySwap) {
-                            continuity = assigned;
-                        } else {
-                            continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
-                        }
+                        continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
                     } else {
                         const manual = findManualAlternateReplacementForGroup(lastKey, groupNum);
                         if (
