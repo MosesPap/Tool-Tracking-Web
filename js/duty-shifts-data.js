@@ -2,6 +2,25 @@
         // DUTY-SHIFTS-DATA.JS - Data Management & Utilities
         // ============================================================================
 
+        // #region agent log
+        window.__agentDbgLog = window.__agentDbgLog || function (p) {
+            const payload = Object.assign({ sessionId: '8e8ea0', timestamp: Date.now() }, p || {});
+            try {
+                const key = 'debug-8e8ea0';
+                const arr = JSON.parse(localStorage.getItem(key) || '[]');
+                arr.push(payload);
+                localStorage.setItem(key, JSON.stringify(arr.slice(-300)));
+                window.__debug8e8ea0 = arr;
+            } catch (_) {}
+            try {
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '8e8ea0' },
+                    body: JSON.stringify(payload)
+                }).catch(function () {});
+            } catch (_) {}
+        };
+        // #endregion
 
         // Data storage - each group has four order lists: special, weekend, semi, normal
         // Each person also has last duty dates for each type, missing periods, and priorities
@@ -1619,7 +1638,7 @@
                         scanLastKey = dk;
                         scanLastAssigned = a;
                     }
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'A',location:'duty-shifts-data.js:computeRotationPositionAtMonthStart',message:'weekend Oct seed',data:{prevMonthKey,fromAssignments,fromBaseline,fromStored,lastContinuityPerson,continuityIdx,cursorOut:lastContinuityPerson&&continuityIdx>=0?(continuityIdx+1)%len:null,nextPerson:lastContinuityPerson&&continuityIdx>=0?groupPeople[(continuityIdx+1)%len]:groupPeople[0],scanLastKey,scanLastAssigned,listSample:groupPeople.slice(0,8),prevManualAlt:prevManualAlternate?{r:prevManualAlternate.replacementPerson,b:prevManualAlternate.baselinePerson}:null},timestamp:Date.now()})}).catch(()=>{});
+                    (window.__agentDbgLog || function(){})({runId:'pre-fix',hypothesisId:'A',location:'duty-shifts-data.js:computeRotationPositionAtMonthStart',message:'weekend Oct seed',data:{prevMonthKey,fromAssignments,fromBaseline,fromStored,lastContinuityPerson,continuityIdx,cursorOut:lastContinuityPerson&&continuityIdx>=0?(continuityIdx+1)%len:null,nextPerson:lastContinuityPerson&&continuityIdx>=0?groupPeople[(continuityIdx+1)%len]:groupPeople[0],scanLastKey,scanLastAssigned,listSample:groupPeople.slice(0,8),prevManualAlt:prevManualAlternate?{r:prevManualAlternate.replacementPerson,b:prevManualAlternate.baselinePerson}:null}});
                 }
             } catch (_) {}
             // #endregion

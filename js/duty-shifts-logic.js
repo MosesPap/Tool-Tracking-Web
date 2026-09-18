@@ -2,6 +2,25 @@
         // DUTY-SHIFTS-LOGIC.JS - Calculation & Business Logic
         // ============================================================================
 
+        // #region agent log
+        window.__agentDbgLog = window.__agentDbgLog || function (p) {
+            const payload = Object.assign({ sessionId: '8e8ea0', timestamp: Date.now() }, p || {});
+            try {
+                const key = 'debug-8e8ea0';
+                const arr = JSON.parse(localStorage.getItem(key) || '[]');
+                arr.push(payload);
+                localStorage.setItem(key, JSON.stringify(arr.slice(-300)));
+                window.__debug8e8ea0 = arr;
+            } catch (_) {}
+            try {
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '8e8ea0' },
+                    body: JSON.stringify(payload)
+                }).catch(function () {});
+            } catch (_) {}
+        };
+        // #endregion
 
         function computeDefaultVirtualDatesForArrival(arrivalDateKey) {
             const arrivalDate = new Date(arrivalDateKey + 'T00:00:00');
@@ -5230,7 +5249,7 @@
             alreadyProcessedKeys?.add(procKey);
             // #region agent log
             if (chain.includes('2026-10-01') || missedDateKey === '2026-10-01' || groupNum === 1 && String(monthKey).includes('2026-10')) {
-                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'C',location:'duty-shifts-logic.js:weekendCascade',message:'cascade applied',data:{groupNum,missedDateKey,absentPerson,chain,newAssignees,oldAssignees,oct1After:assignmentsByDate['2026-10-01']?.[groupNum]||null},timestamp:Date.now()})}).catch(()=>{});
+                (window.__agentDbgLog || function(){})({runId:'pre-fix',hypothesisId:'C',location:'duty-shifts-logic.js:weekendCascade',message:'cascade applied',data:{groupNum,missedDateKey,absentPerson,chain,newAssignees,oldAssignees,oct1After:assignmentsByDate['2026-10-01']?.[groupNum]||null}});
             }
             // #endregion
             return { chain, newAssignees, oldAssignees, cascadeId, replacementOnMissedDate: newAssignees[n - 1] };
@@ -5306,7 +5325,7 @@
                     assignmentsByDate[dateKey][groupNum] = swapPerson;
                     // #region agent log
                     if (dateKey === '2026-10-01' && groupNum === 1) {
-                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'B',location:'duty-shifts-logic.js:oneSidedFallback',message:'Oct1 one-sided replacement',data:{currentPerson,swapPerson,currentIndex,alreadyInMonth:[...assignedWeekendInMonth[monthKey][groupNum]]},timestamp:Date.now()})}).catch(()=>{});
+                        (window.__agentDbgLog || function(){})({runId:'pre-fix',hypothesisId:'B',location:'duty-shifts-logic.js:oneSidedFallback',message:'Oct1 one-sided replacement',data:{currentPerson,swapPerson,currentIndex,alreadyInMonth:[...assignedWeekendInMonth[monthKey][groupNum]]}});
                     }
                     // #endregion
                     storeUnavailableReplacementReason(
@@ -10099,7 +10118,7 @@
                                 reseedGlobalRotationPositionAtMonthStart('weekend', date, g, people, globalWeekendRotationPosition);
                                 // #region agent log
                                 if (g === 1 && monthKey === '2026-10') {
-                                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'E',location:'duty-shifts-logic.js:reseedOct',message:'reseed weekend at Oct month boundary',data:{beforePos,afterPos:globalWeekendRotationPosition[g],nextPerson:people[globalWeekendRotationPosition[g]%people.length],beforePerson:Number.isFinite(beforePos)?people[beforePos%people.length]:null},timestamp:Date.now()})}).catch(()=>{});
+                                    (window.__agentDbgLog || function(){})({runId:'pre-fix',hypothesisId:'E',location:'duty-shifts-logic.js:reseedOct',message:'reseed weekend at Oct month boundary',data:{beforePos,afterPos:globalWeekendRotationPosition[g],nextPerson:people[globalWeekendRotationPosition[g]%people.length],beforePerson:Number.isFinite(beforePos)?people[beforePos%people.length]:null}});
                                 }
                                 // #endregion
                             }
@@ -10288,7 +10307,7 @@
                             // #region agent log
                             if (dateKey === '2026-10-01' && groupNum === 1) {
                                 const dayTypeNow = typeof getDayType === 'function' ? getDayType(date) : null;
-                                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'A,B,E',location:'duty-shifts-logic.js:weekendPreview:oct1',message:'Oct1 group1 baseline rotation',data:{dateKey,dayTypeNow,rotationPosition,rotationPerson,globalPos:globalWeekendRotationPosition[groupNum],listIdx:groupPeople.map((p,i)=>({i,p:String(p).slice(0,40)})),designated:returnFromMissingWeekendTargets[dateKey]?.[groupNum]||null,manualAlt:existingManualAlternateWeekend?{b:existingManualAlternateWeekend.baseline,r:existingManualAlternateWeekend.replacement}:null},timestamp:Date.now()})}).catch(()=>{});
+                                (window.__agentDbgLog || function(){})({runId:'pre-fix',hypothesisId:'A,B,E',location:'duty-shifts-logic.js:weekendPreview:oct1',message:'Oct1 group1 baseline rotation',data:{dateKey,dayTypeNow,rotationPosition,rotationPerson,globalPos:globalWeekendRotationPosition[groupNum],listIdx:groupPeople.map((p,i)=>({i,p:String(p).slice(0,40)})),designated:returnFromMissingWeekendTargets[dateKey]?.[groupNum]||null,manualAlt:existingManualAlternateWeekend?{b:existingManualAlternateWeekend.baseline,r:existingManualAlternateWeekend.replacement}:null}});
                             }
                             // #endregion
                             let wasReplaced = false;
@@ -10488,7 +10507,7 @@
                                 simulatedWeekendAssignments[dateKey][groupNum] = assignedPerson;
                                 // #region agent log
                                 if (dateKey === '2026-10-01' && groupNum === 1) {
-                                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'B,D',location:'duty-shifts-logic.js:weekendPreview:oct1:stored',message:'Oct1 group1 after preview logic',data:{rotationPerson,assignedPerson,wasReplaced,replacementIndex,wasDisabledOnlySkippedWeekend,isMissing:typeof isPersonMissingOnDate==='function'?isPersonMissingOnDate(assignedPerson,groupNum,date,'weekend'):null,rotMissing:typeof isPersonMissingOnDate==='function'&&rotationPerson?isPersonMissingOnDate(rotationPerson,groupNum,date,'weekend'):null},timestamp:Date.now()})}).catch(()=>{});
+                                    (window.__agentDbgLog || function(){})({runId:'pre-fix',hypothesisId:'B,D',location:'duty-shifts-logic.js:weekendPreview:oct1:stored',message:'Oct1 group1 after preview logic',data:{rotationPerson,assignedPerson,wasReplaced,replacementIndex,wasDisabledOnlySkippedWeekend,isMissing:typeof isPersonMissingOnDate==='function'?isPersonMissingOnDate(assignedPerson,groupNum,date,'weekend'):null,rotMissing:typeof isPersonMissingOnDate==='function'&&rotationPerson?isPersonMissingOnDate(rotationPerson,groupNum,date,'weekend'):null}});
                                 }
                                 // #endregion
                                 if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
@@ -10603,7 +10622,28 @@
                     assignedWeekendInMonthPreview
                 );
                 // #region agent log
-                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e8ea0'},body:JSON.stringify({sessionId:'8e8ea0',runId:'pre-fix',hypothesisId:'C,B,final',location:'duty-shifts-logic.js:weekendPreview:afterCascade',message:'Oct1 final after cascade+fallback',data:{oct1g1:simulatedWeekendAssignments['2026-10-01']?.[1]||null,sep27g1:simulatedWeekendAssignments['2026-09-27']?.[1]||null,sep26g1:simulatedWeekendAssignments['2026-09-26']?.[1]||null,oct3g1:simulatedWeekendAssignments['2026-10-03']?.[1]||null,baselineOct1:baselineWeekendByDate['2026-10-01']?.[1]||weekendRotationPersons['2026-10-01']?.[1]||null},timestamp:Date.now()})}).catch(()=>{});
+                (window.__agentDbgLog || function(){})({runId:'pre-fix',hypothesisId:'C,B,final',location:'duty-shifts-logic.js:weekendPreview:afterCascade',message:'Oct1 final after cascade+fallback',data:{oct1g1:simulatedWeekendAssignments['2026-10-01']?.[1]||null,sep27g1:simulatedWeekendAssignments['2026-09-27']?.[1]||null,sep26g1:simulatedWeekendAssignments['2026-09-26']?.[1]||null,oct3g1:simulatedWeekendAssignments['2026-10-03']?.[1]||null,baselineOct1:baselineWeekendByDate['2026-10-01']?.[1]||weekendRotationPersons['2026-10-01']?.[1]||null}});
+                // Flush: download NDJSON so agent can read it if localhost ingest is blocked (HTTPS)
+                try {
+                    const stored = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                    const nd = stored.map(function (r) { return JSON.stringify(r); }).join('\n') + '\n';
+                    const blob = new Blob([nd], { type: 'application/x-ndjson' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'debug-8e8ea0.log';
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(function () { try { URL.revokeObjectURL(url); a.remove(); } catch (_) {} }, 2000);
+                    stored.forEach(function (row) {
+                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '8e8ea0' },
+                            body: JSON.stringify(row)
+                        }).catch(function () {});
+                    });
+                } catch (_) {}
                 // #endregion
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
