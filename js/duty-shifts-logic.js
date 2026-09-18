@@ -1910,11 +1910,30 @@
                 .sort();
             const firstSemi = semiDays[0];
             if (!firstSemi) return;
+            const beforePos = globalPos[groupNum];
             const expectedMap = buildExpectedSemiPersonMapForCalendarMonth(y, m, groupNum);
             const expectedPerson = expectedMap[firstSemi];
             if (!expectedPerson) return;
             const idx = groupPeople.findIndex((p) => normalizePersonKey(p) === normalizePersonKey(expectedPerson));
             if (idx >= 0) globalPos[groupNum] = idx;
+            // #region agent log
+            if (groupNum === 1 && monthKey === '2026-10') {
+                (window.__agentDbgLog || function () {})({
+                    runId: 'semi-pre',
+                    hypothesisId: 'S3',
+                    location: 'duty-shifts-logic.js:alignSemiRotationPosToExpectedAtMonthStart',
+                    message: 'semi Oct align to expected',
+                    data: {
+                        firstSemi,
+                        beforePos,
+                        afterPos: globalPos[groupNum],
+                        beforePerson: Number.isFinite(beforePos) ? groupPeople[beforePos % groupPeople.length] : null,
+                        expectedPerson,
+                        afterPerson: groupPeople[globalPos[groupNum] % groupPeople.length]
+                    }
+                });
+            }
+            // #endregion
         }
 
         function personOwnsMissingPeriod(person, groupNum, pStartKey, pEndKey) {
@@ -11298,6 +11317,29 @@
                     }
                     let person = groupPeople[pos];
                     const rotationPersonAtSlot = person;
+                    // #region agent log
+                    if (groupNum === 1 && dateKey && dateKey.startsWith('2026-10') && getDayType(date) === 'semi-normal-day') {
+                        const octSemis = (sortedSemi || []).filter((dk) => dk.startsWith('2026-10')).sort();
+                        if (octSemis[0] === dateKey) {
+                            (window.__agentDbgLog || function () {})({
+                                runId: 'semi-pre',
+                                hypothesisId: 'S1',
+                                location: 'duty-shifts-logic.js:semiBuild:firstOct',
+                                message: 'first Oct 2026 semi group1 slot',
+                                data: {
+                                    dateKey,
+                                    pos,
+                                    person,
+                                    globalSemiPos: globalSemiPos[groupNum],
+                                    listAround: [pos - 1, pos, pos + 1].map((i) => ({
+                                        i: ((i % rotationDays) + rotationDays) % rotationDays,
+                                        p: groupPeople[((i % rotationDays) + rotationDays) % rotationDays]
+                                    }))
+                                }
+                            });
+                        }
+                    }
+                    // #endregion
                     let nextPos = (pos + 1) % rotationDays; // default: next slot goes to person after current pos
                     if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                         dutySemiDebug.startSlot('semi-build', dateKey, groupNum, {
@@ -11668,6 +11710,41 @@
             calculationSteps.tempSemiAssignments = finalAssignments;
             calculationSteps.finalSemiAssignments = finalAssignments;
             calculationSteps.lastSemiRotationPositionsByMonth = lastSemiRotationPositionsByMonth;
+
+            // #region agent log
+            try {
+                const octSemis = (sortedSemi || []).filter((dk) => dk.startsWith('2026-10')).sort();
+                const firstOct = octSemis[0];
+                (window.__agentDbgLog || function () {})({
+                    runId: 'semi-pre',
+                    hypothesisId: 'S-final',
+                    location: 'duty-shifts-logic.js:semiBuild:done',
+                    message: 'semi step final Oct assignments g1',
+                    data: {
+                        firstOct,
+                        firstOctG1: firstOct ? finalAssignments[firstOct]?.[1] : null,
+                        sep25: finalAssignments['2026-09-25']?.[1] || null,
+                        sep30: finalAssignments['2026-09-30']?.[1] || null,
+                        baselineFirstOct: firstOct
+                            ? mergedSemiBaseline?.[firstOct]?.[1] ||
+                              baselineSemiByDate?.[firstOct]?.[1] ||
+                              baseline?.[firstOct]?.[1]
+                            : null
+                    }
+                });
+                const stored = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                const nd = stored.map(function (r) { return JSON.stringify(r); }).join('\n') + '\n';
+                const blob = new Blob([nd], { type: 'application/x-ndjson' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'debug-8e8ea0.log';
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(function () { try { URL.revokeObjectURL(url); a.remove(); } catch (_) {} }, 2000);
+            } catch (_) {}
+            // #endregion
 
             // 5) Build table: baseline vs final (use precomputed dateStr/dayName from semiMeta)
             const periodLabel = (startDate && endDate) ? `${startDate.toLocaleDateString('el-GR')} – ${endDate.toLocaleDateString('el-GR')}` : '';

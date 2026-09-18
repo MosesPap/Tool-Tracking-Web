@@ -1627,18 +1627,85 @@
             // #region agent log
             try {
                 const mk = dateInMonth && typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(dateInMonth) : '';
-                if (dayTypeCategory === 'weekend' && groupNum === 1 && (mk === '2026-10' || (dateInMonth && dateInMonth.getMonth && dateInMonth.getMonth() === 9 && dateInMonth.getFullYear() === 2026))) {
-                    const prevKeys = [...(typeof collectDateKeysForRotationContinuityScan === 'function' ? collectDateKeysForRotationContinuityScan('weekend', prevMonthKey) : [])].sort();
+                const isOct2026 =
+                    mk === '2026-10' ||
+                    (dateInMonth && dateInMonth.getMonth && dateInMonth.getMonth() === 9 && dateInMonth.getFullYear() === 2026);
+                if (groupNum === 1 && isOct2026 && (dayTypeCategory === 'weekend' || dayTypeCategory === 'semi')) {
+                    const prevKeys = [
+                        ...(typeof collectDateKeysForRotationContinuityScan === 'function'
+                            ? collectDateKeysForRotationContinuityScan(dayTypeCategory, prevMonthKey)
+                            : [])
+                    ].sort();
                     let scanLastKey = null;
                     let scanLastAssigned = null;
+                    const semiDates = [];
                     for (const dk of prevKeys) {
-                        if (typeof getDutyCategoryForDateKeyLocal === 'function' && getDutyCategoryForDateKeyLocal(dk) !== 'weekend') continue;
-                        const a = typeof getPersonOnDateForRotationContinuityLookup === 'function' ? getPersonOnDateForRotationContinuityLookup('weekend', dk, groupNum) : null;
+                        if (
+                            typeof getDutyCategoryForDateKeyLocal === 'function' &&
+                            getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory
+                        ) {
+                            continue;
+                        }
+                        const a =
+                            typeof getPersonOnDateForRotationContinuityLookup === 'function'
+                                ? getPersonOnDateForRotationContinuityLookup(dayTypeCategory, dk, groupNum)
+                                : null;
                         if (!a) continue;
                         scanLastKey = dk;
                         scanLastAssigned = a;
+                        if (dayTypeCategory === 'semi') {
+                            const reason =
+                                typeof getAssignmentReason === 'function'
+                                    ? getAssignmentReason(dk, groupNum, a)
+                                    : null;
+                            semiDates.push({
+                                dk,
+                                a: String(a).slice(0, 48),
+                                type: reason?.type || null,
+                                conflicted: reason?.meta?.conflictedName || null,
+                                changer: reason?.meta?.changerName || null,
+                                semiSwap: !!reason?.meta?.semiConsecutiveHolidaySwap,
+                                continuity:
+                                    typeof getPersonForRotationContinuity === 'function'
+                                        ? getPersonForRotationContinuity(
+                                              dk,
+                                              groupNum,
+                                              a,
+                                              typeof getAssignmentsForDayType === 'function'
+                                                  ? getAssignmentsForDayType(dayTypeCategory)
+                                                  : null
+                                          )
+                                        : a
+                            });
+                        }
                     }
-                    (window.__agentDbgLog || function(){})({runId:'pre-fix',hypothesisId:'A',location:'duty-shifts-data.js:computeRotationPositionAtMonthStart',message:'weekend Oct seed',data:{prevMonthKey,fromAssignments,fromBaseline,fromStored,lastContinuityPerson,continuityIdx,cursorOut:lastContinuityPerson&&continuityIdx>=0?(continuityIdx+1)%len:null,nextPerson:lastContinuityPerson&&continuityIdx>=0?groupPeople[(continuityIdx+1)%len]:groupPeople[0],scanLastKey,scanLastAssigned,listSample:groupPeople.slice(0,8),prevManualAlt:prevManualAlternate?{r:prevManualAlternate.replacementPerson,b:prevManualAlternate.baselinePerson}:null}});
+                    (window.__agentDbgLog || function () {})({
+                        runId: 'semi-pre',
+                        hypothesisId: dayTypeCategory === 'semi' ? 'S1' : 'A',
+                        location: 'duty-shifts-data.js:computeRotationPositionAtMonthStart',
+                        message: dayTypeCategory + ' Oct seed',
+                        data: {
+                            dayTypeCategory,
+                            prevMonthKey,
+                            fromAssignments,
+                            fromBaseline,
+                            fromStored,
+                            lastContinuityPerson,
+                            continuityIdx,
+                            cursorOut:
+                                lastContinuityPerson && continuityIdx >= 0
+                                    ? (continuityIdx + 1) % len
+                                    : null,
+                            nextPerson:
+                                lastContinuityPerson && continuityIdx >= 0
+                                    ? groupPeople[(continuityIdx + 1) % len]
+                                    : groupPeople[0],
+                            scanLastKey,
+                            scanLastAssigned,
+                            listSample: groupPeople.slice(0, 12).map((p, i) => ({ i, p: String(p).slice(0, 40) })),
+                            semiDates: semiDates.slice(-6)
+                        }
+                    });
                 }
             } catch (_) {}
             // #endregion
