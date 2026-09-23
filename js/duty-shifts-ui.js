@@ -5133,13 +5133,14 @@
                         location: 'duty-shifts-ui.js:renderCalendar',
                         message: 'calendar Oct 28/31 g3 alex check',
                         data: {
-                            build: '1.609',
+                            build: '1.610',
                             snap,
                             sameAlexBoth:
                                 snap['2026-10-28']?.g3 &&
                                 snap['2026-10-31']?.g3 &&
                                 String(snap['2026-10-28'].g3).includes('ΑΛΕΞΑΝΔΡΟΥ') &&
-                                String(snap['2026-10-31'].g3).includes('ΑΛΕΞΑΝΔΡΟΥ')
+                                String(snap['2026-10-31'].g3).includes('ΑΛΕΞΑΝΔΡΟΥ'),
+                            d31Empty: !snap['2026-10-31']?.g3
                         },
                         timestamp: Date.now()
                     };
