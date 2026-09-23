@@ -5194,6 +5194,121 @@
             if (fromAssignments) return fromAssignments;
             return baselineByDate?.[otherDateKey]?.[groupNum] ?? null;
         }
+        /** Άτομο με προγραμματισμένο forward return-from-missing σε μεταγενέστερο ΣΚ — όχι νωρίτερα. */
+        function isPersonWaitingForForwardWeekendReturn(person, groupNum, dateKey) {
+            if (!person || !dateKey || !groupNum) return false;
+            const map = calculationSteps?.pendingForwardWeekendReturnByGroup?.[groupNum];
+            if (!map) return false;
+            const nk =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey(person)
+                    : String(person || '').trim();
+            const targetKey = map[nk];
+            return !!(targetKey && dateKey < targetKey);
+        }
+        /** Μετά cascade/fallback/phase1: βγάλε όσους μπήκαν πριν τον ορισμένο στόχο return. */
+        function enforceNoEarlyPendingWeekendReturns(sortedWeekends, assignmentsByDate, assignedWeekendInMonth) {
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) => String(s || '').trim();
+            const monthKeyOf = (dk) => {
+                const d = new Date(dk + 'T00:00:00');
+                return typeof getMonthKeyFromDate === 'function'
+                    ? getMonthKeyFromDate(d)
+                    : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            };
+            for (const dateKey of sortedWeekends || []) {
+                if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
+                const date = new Date(dateKey + 'T00:00:00');
+                const monthKey = monthKeyOf(dateKey);
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const current = assignmentsByDate?.[dateKey]?.[groupNum];
+                    if (!current || !isPersonWaitingForForwardWeekendReturn(current, groupNum, dateKey)) {
+                        continue;
+                    }
+                    const groupData =
+                        (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || {
+                            weekend: []
+                        };
+                    const groupPeople = groupData.weekend || [];
+                    if (!groupPeople.length) continue;
+                    let currentIndex = groupPeople.indexOf(current);
+                    if (currentIndex === -1) currentIndex = 0;
+                    let replacement = null;
+                    for (let offset = 1; offset < groupPeople.length; offset++) {
+                        const candidate = groupPeople[(currentIndex + offset) % groupPeople.length];
+                        if (!candidate) continue;
+                        if (isPersonWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
+                        if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                        if (
+                            typeof isPersonDisabledForDuty === 'function' &&
+                            isPersonDisabledForDuty(candidate, groupNum, 'weekend', dateKey)
+                        ) {
+                            continue;
+                        }
+                        if (assignedWeekendInMonth?.[monthKey]?.[groupNum]?.has?.(candidate)) continue;
+                        let onEarlier = false;
+                        for (const dk of sortedWeekends) {
+                            if (dk >= dateKey) break;
+                            if (monthKeyOf(dk) !== monthKey) continue;
+                            if (norm(assignmentsByDate[dk]?.[groupNum]) === norm(candidate)) {
+                                onEarlier = true;
+                                break;
+                            }
+                        }
+                        if (onEarlier) continue;
+                        replacement = candidate;
+                        break;
+                    }
+                    // #region agent log
+                    try {
+                        const row = {
+                            sessionId: '8e8ea0',
+                            runId: 'wk-return',
+                            hypothesisId: 'G',
+                            location: 'duty-shifts-logic.js:enforceNoEarlyPendingWeekendReturns',
+                            message: 'enforce early pending weekend return',
+                            data: {
+                                build: '1.592',
+                                dateKey: dateKey,
+                                groupNum: groupNum,
+                                clearedPerson: current,
+                                replacement: replacement,
+                                designatedTarget:
+                                    calculationSteps?.pendingForwardWeekendReturnByGroup?.[groupNum]?.[
+                                        norm(current)
+                                    ] || null
+                            },
+                            timestamp: Date.now()
+                        };
+                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Debug-Session-Id': '8e8ea0'
+                            },
+                            body: JSON.stringify(row)
+                        }).catch(function () {});
+                        const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                        arr.push(row);
+                        localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-250)));
+                    } catch (_) {}
+                    // #endregion
+                    if (replacement) {
+                        if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
+                        assignmentsByDate[dateKey][groupNum] = replacement;
+                        if (assignedWeekendInMonth) {
+                            if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
+                            if (!assignedWeekendInMonth[monthKey][groupNum]) {
+                                assignedWeekendInMonth[monthKey][groupNum] = new Set();
+                            }
+                            assignedWeekendInMonth[monthKey][groupNum].add(replacement);
+                        }
+                    }
+                }
+            }
+        }
         function getSameMonthWeekendDateKeys(sortedWeekends, monthKey) {
             return sortedWeekends
                 .filter((dk) => {
@@ -5435,6 +5550,7 @@
                         const nextIndex = (currentIndex + offset) % groupPeople.length;
                         const candidate = groupPeople[nextIndex];
                         if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                        if (isPersonWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
                         if (
                             typeof isPersonDisabledForDuty === 'function' &&
                             isPersonDisabledForDuty(candidate, groupNum, 'weekend', dateKey)
@@ -5471,6 +5587,7 @@
                             const ni = (startIdx + offset) % groupPeople.length;
                             const cand = groupPeople[ni];
                             if (!cand || isPersonMissingOnDate(cand, groupNum, laterDate, 'weekend')) continue;
+                            if (isPersonWaitingForForwardWeekendReturn(cand, groupNum, laterKey)) continue;
                             if (
                                 typeof isPersonDisabledForDuty === 'function' &&
                                 isPersonDisabledForDuty(cand, groupNum, 'weekend', laterKey)
@@ -5659,7 +5776,12 @@
                         }
                         const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(currentPerson) || false;
                         const alreadyAssignedThisMonth = assignedWeekendInMonth[monthKey][groupNum].has(currentPerson);
-                        if (!hasSpecialHoliday && !alreadyAssignedThisMonth) {
+                        const waitingEarlyReturn = isPersonWaitingForForwardWeekendReturn(
+                            currentPerson,
+                            groupNum,
+                            dateKey
+                        );
+                        if (!hasSpecialHoliday && !alreadyAssignedThisMonth && !waitingEarlyReturn) {
                             assignedWeekendInMonth[monthKey][groupNum].add(currentPerson);
                             if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                 dutyWeekendDebug.logStep('phase1-ok', 'Χωρίς σύγκρουση ειδικής/διπλής ανάθεσης — διατήρηση.');
@@ -5673,19 +5795,22 @@
                                 'phase1-trigger',
                                 hasSpecialHoliday
                                     ? `${currentPerson}: ειδική αργία ίδιος μήνας.`
-                                    : `${currentPerson}: ήδη ανατεθειμένος ΣΚ/αργία τον μήνα.`
+                                    : waitingEarlyReturn
+                                      ? `${currentPerson}: αναμονή forward return-from-missing.`
+                                      : `${currentPerson}: ήδη ανατεθειμένος ΣΚ/αργία τον μήνα.`
                             );
                         }
                         const rotationDays = groupPeople.length;
                         let currentIndex = groupPeople.indexOf(currentPerson);
                         if (currentIndex === -1) currentIndex = 0;
                         let replacementPerson = null;
-                        // Next eligible person in weekend list order: not special this month, not already assigned this month, not missing, not disabled
+                        // Next eligible person in weekend list order: not special this month, not already assigned this month, not missing, not disabled, not waiting for later return
                         for (let offset = 1; offset < rotationDays; offset++) {
                             const nextIndex = (currentIndex + offset) % rotationDays;
                             const candidate = groupPeople[nextIndex];
                             if (!candidate) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                            if (isPersonWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
                             if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
                             const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
                             const candidateAlreadyAssigned = assignedWeekendInMonth[monthKey][groupNum].has(candidate);
@@ -5694,6 +5819,50 @@
                                 break;
                             }
                         }
+                        // #region agent log
+                        if (
+                            dateKey === '2026-10-17' ||
+                            dateKey === '2026-10-18' ||
+                            String(currentPerson || '').includes('ΣΙΑΚΟΛΑΣ') ||
+                            String(replacementPerson || '').includes('ΠΟΛΥΒΙΟΥ') ||
+                            String(currentPerson || '').includes('ΠΟΛΥΒΙΟΥ')
+                        ) {
+                            try {
+                                const row = {
+                                    sessionId: '8e8ea0',
+                                    runId: 'wk-skip',
+                                    hypothesisId: 'G',
+                                    location: 'duty-shifts-logic.js:runWeekendSkipLogic:phase1',
+                                    message: 'skip phase1 weekend replacement',
+                                    data: {
+                                        build: '1.592',
+                                        dateKey: dateKey,
+                                        groupNum: groupNum,
+                                        currentPerson: currentPerson,
+                                        replacementPerson: replacementPerson,
+                                        hasSpecialHoliday: !!hasSpecialHoliday,
+                                        alreadyAssignedThisMonth: !!alreadyAssignedThisMonth,
+                                        waitingEarlyReturn: !!waitingEarlyReturn
+                                    },
+                                    timestamp: Date.now()
+                                };
+                                fetch(
+                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                    {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-Debug-Session-Id': '8e8ea0'
+                                        },
+                                        body: JSON.stringify(row)
+                                    }
+                                ).catch(function () {});
+                                const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                                arr.push(row);
+                                localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-250)));
+                            } catch (_) {}
+                        }
+                        // #endregion
                         if (replacementPerson) {
                             skippedPeople.push({
                                 date: dateKey,
@@ -5809,6 +5978,55 @@
                     updatedAssignments,
                     assignedWeekendInMonth
                 );
+                enforceNoEarlyPendingWeekendReturns(
+                    sortedWeekends,
+                    updatedAssignments,
+                    assignedWeekendInMonth
+                );
+                // #region agent log
+                try {
+                    const snapSkip = {};
+                    ['2026-10-10', '2026-10-11', '2026-10-17', '2026-10-18', '2026-10-24', '2026-10-25'].forEach(
+                        function (dk) {
+                            const finalP = updatedAssignments?.[dk]?.[1] || null;
+                            let reason = null;
+                            if (finalP && typeof getAssignmentReason === 'function') {
+                                reason = getAssignmentReason(dk, 1, finalP);
+                            }
+                            snapSkip[dk] = {
+                                final: finalP,
+                                reasonType: reason?.type || null,
+                                reasonText: reason?.reason
+                                    ? String(reason.reason).slice(0, 180)
+                                    : null,
+                                swappedWith: reason?.swappedWith || null,
+                                returnFromMissing: !!(reason?.meta && reason.meta.returnFromMissing)
+                            };
+                        }
+                    );
+                    const row = {
+                        sessionId: '8e8ea0',
+                        runId: 'wk-skip',
+                        hypothesisId: 'G',
+                        location: 'duty-shifts-logic.js:runWeekendSkipLogic:final',
+                        message: 'skip logic final Oct g1 snapshot',
+                        data: Object.assign({ build: '1.592' }, snapSkip),
+                        timestamp: Date.now()
+                    };
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Debug-Session-Id': '8e8ea0'
+                        },
+                        body: JSON.stringify(row)
+                    }).catch(function () {});
+                    const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                    arr.push(row);
+                    localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-250)));
+                    if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
+                } catch (_) {}
+                // #endregion
                 sortedWeekends.forEach((dateKey) => {
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
@@ -9895,7 +10113,7 @@
                             hypothesisId: hypothesisId || 'A',
                             location: 'duty-shifts-logic.js:weekend-return',
                             message: message,
-                            data: Object.assign({ build: '1.591' }, data || {}),
+                            data: Object.assign({ build: '1.592' }, data || {}),
                             timestamp: Date.now()
                         };
                         fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
@@ -10483,6 +10701,8 @@
                     ];
                     return !!(t && dateKey < t);
                 };
+                calculationSteps.pendingForwardWeekendReturnByGroup = pendingForwardWeekendReturnByGroup;
+                calculationSteps.returnFromMissingWeekendTargets = returnFromMissingWeekendTargets;
 
                 sortedWeekends.forEach((dateKey, weekendIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
@@ -11145,6 +11365,11 @@
                     baselineWeekendByDate
                 );
                 applyWeekendMissingOneSidedFallback(
+                    sortedWeekends,
+                    simulatedWeekendAssignments,
+                    assignedWeekendInMonthPreview
+                );
+                enforceNoEarlyPendingWeekendReturns(
                     sortedWeekends,
                     simulatedWeekendAssignments,
                     assignedWeekendInMonthPreview
