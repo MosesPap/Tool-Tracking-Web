@@ -5200,6 +5200,81 @@
                             }
                             assignedWeekendInMonth[monthKey][groupNum].add(replacement);
                         }
+                        // #region agent log
+                        try {
+                            if (
+                                String(current || '').includes('ΠΟΛΥΒΙΟΥ') ||
+                                String(replacement || '').includes('ΠΟΛΥΒΙΟΥ')
+                            ) {
+                                const row = {
+                                    sessionId: '8e8ea0',
+                                    runId: 'poly-early',
+                                    hypothesisId: 'H5',
+                                    location: 'duty-shifts-logic.js:enforce-early-return',
+                                    message: 'enforce replaced early pending return',
+                                    data: {
+                                        build: '1.604',
+                                        dateKey: dateKey,
+                                        groupNum: groupNum,
+                                        removed: current,
+                                        replacement: replacement
+                                    },
+                                    timestamp: Date.now()
+                                };
+                                fetch(
+                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                    {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-Debug-Session-Id': '8e8ea0'
+                                        },
+                                        body: JSON.stringify(row)
+                                    }
+                                ).catch(function () {});
+                                const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                                arr.push(row);
+                                localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                            }
+                        } catch (_) {}
+                        // #endregion
+                    } else {
+                        // #region agent log
+                        try {
+                            if (String(current || '').includes('ΠΟΛΥΒΙΟΥ')) {
+                                const row = {
+                                    sessionId: '8e8ea0',
+                                    runId: 'poly-early',
+                                    hypothesisId: 'H5',
+                                    location: 'duty-shifts-logic.js:enforce-early-return',
+                                    message: 'enforce FAILED no replacement for early Polyviou',
+                                    data: {
+                                        build: '1.604',
+                                        dateKey: dateKey,
+                                        groupNum: groupNum,
+                                        stuck: current,
+                                        monthAssignedCount:
+                                            assignedWeekendInMonth?.[monthKey]?.[groupNum]?.size || 0
+                                    },
+                                    timestamp: Date.now()
+                                };
+                                fetch(
+                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                    {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-Debug-Session-Id': '8e8ea0'
+                                        },
+                                        body: JSON.stringify(row)
+                                    }
+                                ).catch(function () {});
+                                const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                                arr.push(row);
+                                localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                            }
+                        } catch (_) {}
+                        // #endregion
                     }
                 }
             }
@@ -10308,6 +10383,52 @@
                 calculationSteps.pendingForwardWeekendReturnByGroup = pendingForwardWeekendReturnByGroup;
                 calculationSteps.returnFromMissingWeekendTargets = returnFromMissingWeekendTargets;
 
+                // #region agent log
+                try {
+                    const polyPending = {};
+                    for (let g = 1; g <= 4; g++) {
+                        const map = pendingForwardWeekendReturnByGroup[g] || {};
+                        for (const [nk, t] of Object.entries(map)) {
+                            if (String(nk).includes('ΠΟΛΥΒΙΟΥ') || String(nk).includes('ΠΟΛΥΒΙΟΣ')) {
+                                polyPending['g' + g] = { nk: nk, target: t };
+                            }
+                        }
+                    }
+                    const polyTargets = {};
+                    for (const [dk, byG] of Object.entries(returnFromMissingWeekendTargets || {})) {
+                        for (const [g, meta] of Object.entries(byG || {})) {
+                            if (String(meta?.personName || '').includes('ΠΟΛΥΒΙΟΥ')) {
+                                polyTargets[dk + '|g' + g] = {
+                                    personName: meta.personName,
+                                    missingEnd: meta.missingEnd,
+                                    isBackward: !!meta.isBackwardAssignment
+                                };
+                            }
+                        }
+                    }
+                    const row = {
+                        sessionId: '8e8ea0',
+                        runId: 'poly-early',
+                        hypothesisId: 'H2',
+                        location: 'duty-shifts-logic.js:pending-return-map',
+                        message: 'Polyviou pending forward return targets',
+                        data: { build: '1.604', polyPending: polyPending, polyTargets: polyTargets },
+                        timestamp: Date.now()
+                    };
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Debug-Session-Id': '8e8ea0'
+                        },
+                        body: JSON.stringify(row)
+                    }).catch(function () {});
+                    const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                    arr.push(row);
+                    localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                } catch (_) {}
+                // #endregion
+
                 sortedWeekends.forEach((dateKey, weekendIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
                     const dateStr = date.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -10863,21 +10984,100 @@
                     html += '</tr>';
                 });
 
+                // #region agent log
+                const __agentPolySnap = (label, assign) => {
+                    try {
+                        const keys = ['2026-10-11', '2026-10-17', '2026-10-18', '2026-10-24', '2026-10-25'];
+                        const byG = {};
+                        for (let g = 1; g <= 4; g++) {
+                            const slot = {};
+                            keys.forEach((dk) => {
+                                const p = assign?.[dk]?.[g] || null;
+                                if (!p) return;
+                                const waiting =
+                                    typeof isPersonWaitingForForwardWeekendReturn === 'function'
+                                        ? isPersonWaitingForForwardWeekendReturn(p, g, dk)
+                                        : null;
+                                slot[dk] = {
+                                    person: p,
+                                    waiting: waiting,
+                                    isPoly: String(p).includes('ΠΟΛΥΒΙΟΥ')
+                                };
+                            });
+                            if (Object.keys(slot).length) byG['g' + g] = slot;
+                        }
+                        const row = {
+                            sessionId: '8e8ea0',
+                            runId: 'poly-early',
+                            hypothesisId: label === 'pre-cascade' ? 'H1' : label === 'post-cascade' ? 'H3' : 'H5',
+                            location: 'duty-shifts-logic.js:weekend-' + label,
+                            message: 'Polyviou weekend snap ' + label,
+                            data: { build: '1.604', label: label, byG: byG },
+                            timestamp: Date.now()
+                        };
+                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Debug-Session-Id': '8e8ea0'
+                            },
+                            body: JSON.stringify(row)
+                        }).catch(function () {});
+                        const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                        arr.push(row);
+                        localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                        window.__agentDbgFlush = function () {
+                            try {
+                                const stored = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                                const nd =
+                                    stored.map(function (r) {
+                                        return JSON.stringify(r);
+                                    }).join('\n') + '\n';
+                                const blob = new Blob([nd], { type: 'application/x-ndjson' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'debug-8e8ea0.log';
+                                a.style.display = 'none';
+                                document.body.appendChild(a);
+                                a.click();
+                                setTimeout(function () {
+                                    try {
+                                        URL.revokeObjectURL(url);
+                                        a.remove();
+                                    } catch (_) {}
+                                }, 1500);
+                            } catch (_) {}
+                        };
+                    } catch (_) {}
+                };
+                __agentPolySnap('pre-cascade', simulatedWeekendAssignments);
+                // #endregion
                 applyAllWeekendAbsentCascadeReflows(
                     sortedWeekends,
                     simulatedWeekendAssignments,
                     baselineWeekendByDate
                 );
+                // #region agent log
+                __agentPolySnap('post-cascade', simulatedWeekendAssignments);
+                // #endregion
                 applyWeekendMissingOneSidedFallback(
                     sortedWeekends,
                     simulatedWeekendAssignments,
                     assignedWeekendInMonthPreview
                 );
+                // #region agent log
+                __agentPolySnap('post-onesided', simulatedWeekendAssignments);
+                // #endregion
                 enforceNoEarlyPendingWeekendReturns(
                     sortedWeekends,
                     simulatedWeekendAssignments,
                     assignedWeekendInMonthPreview
                 );
+                // #region agent log
+                __agentPolySnap('post-enforce', simulatedWeekendAssignments);
+                if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
+                // #endregion
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempWeekendAssignments = simulatedWeekendAssignments;
