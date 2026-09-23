@@ -5206,8 +5206,13 @@
         }
         /**
          * Μετά cascade/onesided: κανένα άτομο δεν κρατά 2+ ΣΚ/αργίες τον ίδιο μήνα.
+         * Κρατά την πρώτη ανάθεση· στις επόμενες συνεχίζει η σειρά στον επόμενο διαθέσιμο.
+         * Αν δεν βρεθεί κανείς, αδειάζει τη θέση (ποτέ δεν αφήνει διπλότυπο).
+         */
+        /**
+         * Μετά cascade/onesided: κανένα άτομο δεν κρατά 2+ ΣΚ/αργίες τον ίδιο μήνα.
          * Κρατά την πρώτη ανάθεση· καθαρίζει τις επόμενες· μετά γεμίζει κενά
-         * με άτομα που δεν έχουν ήδη αργία τον μήνα (χωρίς αλυσίδα που κλέβει μελλοντικές θέσεις).
+         * με τον επόμενο διαθέσιμο στη σειρά (μετά τον αφαιρεθέντα / προηγούμενη αργία).
          */
         function enforceUniqueWeekendAssigneePerMonth(sortedWeekends, assignmentsByDate, assignedWeekendInMonth) {
             const norm =
@@ -5244,8 +5249,16 @@
                         : groups[groupNum]) || { weekend: [] };
                 return groupData.weekend || [];
             };
+            const indexOfPerson = (groupPeople, person) => {
+                if (!person || !groupPeople.length) return -1;
+                let i = groupPeople.indexOf(person);
+                if (i >= 0) return i;
+                const nk = norm(person);
+                return groupPeople.findIndex((p) => norm(p) === nk);
+            };
             const seenByMonthGroup = {};
-            const clearedHint = {}; // `${monthKey}|${g}|${dateKey}` -> removed person (για επόμενο στη λίστα)
+            const clearedHint = {}; // `${monthKey}|${g}|${dateKey}` -> removed person
+            const lastKeptByMonthGroup = {}; // `${monthKey}|${g}` -> last kept assignee (για συνέχεια σειράς)
             const replacements = [];
 
             // Pass 1: κράτα πρώτη εμφάνιση· καθάρισε διπλότυπα (χωρίς αντικατάσταση εδώ).
@@ -5264,9 +5277,11 @@
                         seenByMonthGroup[monthKey][groupNum] = new Set();
                     }
                     const nk = norm(current);
+                    const mg = `${monthKey}|${groupNum}`;
                     if (!seenByMonthGroup[monthKey][groupNum].has(nk)) {
                         seenByMonthGroup[monthKey][groupNum].add(nk);
                         assignedWeekendInMonth[monthKey][groupNum].add(current);
+                        lastKeptByMonthGroup[mg] = current;
                         continue;
                     }
                     delete assignmentsByDate[dateKey][groupNum];
@@ -5282,14 +5297,18 @@
                 }
             }
 
-            // Pass 2: γέμισε κενά — προτίμηση «επόμενος μετά τον αφαιρεθέντα», αλλιώς πρώτος μη χρησιμοποιημένος.
+            // Pass 2: γέμισε κενά — επόμενος διαθέσιμος μετά τον αφαιρεθέντα ή την προηγούμενη αργία.
             for (const dateKey of sortedWeekends || []) {
                 if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                 const date = new Date(dateKey + 'T00:00:00');
                 const monthKey = monthKeyOf(dateKey);
                 if (!seenByMonthGroup[monthKey]) seenByMonthGroup[monthKey] = {};
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    if (assignmentsByDate?.[dateKey]?.[groupNum]) continue;
+                    if (assignmentsByDate?.[dateKey]?.[groupNum]) {
+                        const kept = assignmentsByDate[dateKey][groupNum];
+                        lastKeptByMonthGroup[`${monthKey}|${groupNum}`] = kept;
+                        continue;
+                    }
                     if (!seenByMonthGroup[monthKey][groupNum]) {
                         seenByMonthGroup[monthKey][groupNum] = new Set();
                     }
@@ -5297,15 +5316,12 @@
                     if (!groupPeople.length) continue;
 
                     const hint = clearedHint[`${monthKey}|${groupNum}|${dateKey}`] || null;
+                    const prevKept = lastKeptByMonthGroup[`${monthKey}|${groupNum}`] || null;
+                    // Προτεραιότητα: μετά τον αφαιρεθέντα (διπλότυπο) · αλλιώς μετά την προηγούμενη αργία του μήνα.
+                    const sequenceAnchor = hint || prevKept;
                     let startIndex = 0;
-                    if (hint) {
-                        let hi = groupPeople.indexOf(hint);
-                        if (hi === -1) {
-                            const hn = norm(hint);
-                            hi = groupPeople.findIndex((p) => norm(p) === hn);
-                        }
-                        if (hi >= 0) startIndex = hi;
-                    }
+                    const hi = indexOfPerson(groupPeople, sequenceAnchor);
+                    if (hi >= 0) startIndex = hi;
 
                     let fill = null;
                     for (let offset = 1; offset <= groupPeople.length; offset++) {
@@ -5324,7 +5340,7 @@
                             replacement: null,
                             cleared: true,
                             reason: 'no-eligible-fill',
-                            hintStart: hint
+                            hintStart: sequenceAnchor
                         });
                         continue;
                     }
@@ -5336,6 +5352,7 @@
                         assignedWeekendInMonth[monthKey][groupNum] = new Set();
                     }
                     assignedWeekendInMonth[monthKey][groupNum].add(fill);
+                    lastKeptByMonthGroup[`${monthKey}|${groupNum}`] = fill;
                     if (hint) {
                         storeUnavailableReplacementReason(
                             dateKey,
@@ -5352,7 +5369,8 @@
                         removed: hint,
                         replacement: fill,
                         filledEmpty: true,
-                        afterHint: !!hint
+                        afterHint: !!hint,
+                        sequenceAnchor: sequenceAnchor
                     });
                 }
             }
@@ -9487,52 +9505,20 @@
                     dateIterator.setDate(dateIterator.getDate() + 1);
                 }
                 
-                // Weekend: προτίμηση final (μετά skip/unique)· αντικατάσταση ανά ομάδα, όχι append.
-                const weekendSource =
-                    calculationSteps && calculationSteps.finalWeekendAssignments
-                        ? calculationSteps.finalWeekendAssignments
-                        : tempAssignments.weekend || {};
-                const recalcSetWeekend =
-                    typeof getCalculationRecalcGroupSet === 'function' ? getCalculationRecalcGroupSet() : null;
-                if (
-                    recalcSetWeekend &&
-                    typeof mergeTempGroupAssignmentsIntoAssignmentStore === 'function'
-                ) {
-                    mergeTempGroupAssignmentsIntoAssignmentStore(weekendSource, weekendAssignments);
-                } else if (
-                    typeof extractGroupAssignmentsMap === 'function' &&
-                    typeof groupMapToAssignmentString === 'function'
-                ) {
-                    for (const dateKey in weekendSource) {
-                        const tempMap = weekendSource[dateKey];
-                        if (!tempMap || typeof tempMap !== 'object') continue;
-                        const existingMap = extractGroupAssignmentsMap(weekendAssignments[dateKey]);
-                        for (let g = 1; g <= 4; g++) {
-                            if (tempMap[g]) existingMap[g] = tempMap[g];
-                            else if (tempMap[String(g)]) existingMap[g] = tempMap[String(g)];
-                        }
-                        const str = groupMapToAssignmentString(existingMap);
-                        if (str) weekendAssignments[dateKey] = str;
-                        else delete weekendAssignments[dateKey];
-                    }
-                } else {
-                    for (const dateKey in weekendSource) {
-                        for (const groupNum in weekendSource[dateKey] || {}) {
-                            const person = weekendSource[dateKey][groupNum];
-                            if (!person) continue;
-                            if (!weekendAssignments[dateKey]) weekendAssignments[dateKey] = '';
+                // Weekend assignments: dateKey -> { groupNum -> person }
+                for (const dateKey in tempAssignments.weekend || {}) {
+                    for (const groupNum in tempAssignments.weekend[dateKey] || {}) {
+                        const person = tempAssignments.weekend[dateKey][groupNum];
+                        if (person) {
+                            if (!weekendAssignments[dateKey]) {
+                                weekendAssignments[dateKey] = '';
+                            }
                             const assignment = `${person} (Ομάδα ${groupNum})`;
-                            const re = new RegExp(
-                                `[^,]*(?:Ομάδα\\s*${groupNum})[^,]*,?\\s*`,
-                                'gi'
-                            );
-                            let cleaned = String(weekendAssignments[dateKey] || '')
-                                .replace(re, '')
-                                .replace(/^,\s*|,\s*$/g, '')
-                                .trim();
-                            weekendAssignments[dateKey] = cleaned
-                                ? `${cleaned}, ${assignment}`
-                                : assignment;
+                            if (!weekendAssignments[dateKey].includes(assignment)) {
+                                weekendAssignments[dateKey] = weekendAssignments[dateKey]
+                                    ? `${weekendAssignments[dateKey]}, ${assignment}`
+                                    : assignment;
+                            }
                         }
                     }
                 }
@@ -10897,16 +10883,20 @@
                                         assignedPerson = replacementPerson;
                                         wasReplaced = true;
                                         replacementIndex = groupPeople.indexOf(replacementPerson);
-                                    } else if (
-                                        typeof dutyWeekendDebug !== 'undefined' &&
-                                        dutyWeekendDebug.isEnabled()
-                                    ) {
-                                        dutyWeekendDebug.logStep(
-                                            'phase1-special-or-duplicate',
-                                            hasSpecialHoliday
-                                                ? `${assignedPerson} έχει ειδική αργία τον ίδιο μήνα — δεν βρέθηκε αντικαταστάτης.`
-                                                : `${assignedPerson} ήδη ανατεθειμένος τον μήνα — δεν βρέθηκε αντικαταστάτης.`
-                                        );
+                                    } else {
+                                        // Μην κρατάς διπλότυπο — το unique pass θα γεμίσει με τον επόμενο διαθέσιμο.
+                                        if (
+                                            typeof dutyWeekendDebug !== 'undefined' &&
+                                            dutyWeekendDebug.isEnabled()
+                                        ) {
+                                            dutyWeekendDebug.logStep(
+                                                'phase1-special-or-duplicate',
+                                                hasSpecialHoliday
+                                                    ? `${assignedPerson} έχει ειδική αργία τον ίδιο μήνα — δεν βρέθηκε αντικαταστάτης.`
+                                                    : `${assignedPerson} ήδη ανατεθειμένος τον μήνα — δεν βρέθηκε αντικαταστάτης.`
+                                            );
+                                        }
+                                        assignedPerson = null;
                                     }
                                 }
                             }
@@ -11124,9 +11114,17 @@
                 // #region agent log
                 let __agentAlexPreUnique = null;
                 try {
+                    const snapPre = {};
+                    for (const dk of (sortedWeekends || []).filter((k) => String(k).startsWith('2026-10'))) {
+                        snapPre[dk] = {};
+                        for (let g = 1; g <= 4; g++) {
+                            snapPre[dk][g] = simulatedWeekendAssignments?.[dk]?.[g] || null;
+                        }
+                    }
                     __agentAlexPreUnique = {
-                        d28: simulatedWeekendAssignments?.['2026-10-28']?.[3] || null,
-                        d31: simulatedWeekendAssignments?.['2026-10-31']?.[3] || null
+                        d28g3: simulatedWeekendAssignments?.['2026-10-28']?.[3] || null,
+                        d31g3: simulatedWeekendAssignments?.['2026-10-31']?.[3] || null,
+                        octAll: snapPre
                     };
                 } catch (_) {}
                 // #endregion
@@ -11137,46 +11135,53 @@
                 );
                 // #region agent log
                 try {
+                    const octKeys = (sortedWeekends || []).filter((k) => String(k).startsWith('2026-10'));
+                    const postByGroup = { 1: [], 2: [], 3: [], 4: [] };
+                    const dupesByGroup = {};
+                    for (const dk of octKeys) {
+                        for (let g = 1; g <= 4; g++) {
+                            const p = simulatedWeekendAssignments?.[dk]?.[g] || null;
+                            postByGroup[g].push({ dk: dk, p: p });
+                        }
+                    }
+                    for (let g = 1; g <= 4; g++) {
+                        const counts = {};
+                        for (const row of postByGroup[g]) {
+                            if (!row.p) continue;
+                            const k = String(row.p);
+                            if (!counts[k]) counts[k] = [];
+                            counts[k].push(row.dk);
+                        }
+                        dupesByGroup[g] = Object.entries(counts)
+                            .filter(([, dates]) => dates.length > 1)
+                            .map(([person, dates]) => ({ person: person, dates: dates }));
+                    }
                     const row = {
                         sessionId: '8e8ea0',
                         runId: 'alex-month-dupe',
-                        hypothesisId: 'H-alex',
+                        hypothesisId: 'H-seq',
                         location: 'duty-shifts-logic.js:weekend-unique-month',
-                        message: 'Alexandrou g3 28/31 before/after month-unique enforce',
+                        message: 'Oct weekend sequence after unique (continue-next-available)',
                         data: {
-                            build: '1.610',
-                            runIdTag: 'post-fix-unique-clearfill',
-                            pre: __agentAlexPreUnique,
-                            post: {
-                                d28: simulatedWeekendAssignments?.['2026-10-28']?.[3] || null,
-                                d31: simulatedWeekendAssignments?.['2026-10-31']?.[3] || null
+                            build: '1.611',
+                            runIdTag: 'post-fix-seq-continue',
+                            pre: {
+                                d28g3: __agentAlexPreUnique?.d28g3 || null,
+                                d31g3: __agentAlexPreUnique?.d31g3 || null
                             },
-                            samePersonPost: (() => {
-                                const a = simulatedWeekendAssignments?.['2026-10-28']?.[3];
-                                const b = simulatedWeekendAssignments?.['2026-10-31']?.[3];
-                                return !!(
-                                    a &&
-                                    b &&
-                                    String(a).includes('ΑΛΕΞΑΝΔΡΟΥ') &&
-                                    String(b).includes('ΑΛΕΞΑΝΔΡΟΥ')
-                                );
-                            })(),
-                            d31Empty: !simulatedWeekendAssignments?.['2026-10-31']?.[3],
-                            samePerson:
-                                __agentAlexPreUnique &&
-                                __agentAlexPreUnique.d28 &&
-                                __agentAlexPreUnique.d31 &&
-                                String(__agentAlexPreUnique.d28).includes('ΑΛΕΞΑΝΔΡΟΥ') &&
-                                String(__agentAlexPreUnique.d31).includes('ΑΛΕΞΑΝΔΡΟΥ'),
+                            post: {
+                                d28g3: simulatedWeekendAssignments?.['2026-10-28']?.[3] || null,
+                                d31g3: simulatedWeekendAssignments?.['2026-10-31']?.[3] || null,
+                                d28g1: simulatedWeekendAssignments?.['2026-10-28']?.[1] || null,
+                                d31g1: simulatedWeekendAssignments?.['2026-10-31']?.[1] || null
+                            },
+                            postByGroup: postByGroup,
+                            dupesByGroup: dupesByGroup,
+                            alexDatesG3: (postByGroup[3] || [])
+                                .filter((r) => r.p && String(r.p).includes('ΑΛΕΞΑΝΔΡΟΥ'))
+                                .map((r) => r.dk),
                             fixesG3: (__agentAlexUniqueFixes || []).filter((f) => f.groupNum === 3),
-                            allFixesCount: (__agentAlexUniqueFixes || []).length,
-                            octG3AlexDates: (sortedWeekends || [])
-                                .filter((dk) => String(dk).startsWith('2026-10-'))
-                                .filter((dk) =>
-                                    String(simulatedWeekendAssignments?.[dk]?.[3] || '').includes(
-                                        'ΑΛΕΞΑΝΔΡΟΥ'
-                                    )
-                                )
+                            allFixesCount: (__agentAlexUniqueFixes || []).length
                         },
                         timestamp: Date.now()
                     };
