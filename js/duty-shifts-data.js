@@ -6597,6 +6597,11 @@ body.assignments-compare-print-body {
     color: #495057;
     font-weight: 600;
 }
+.compare-cell-daytype,
+.compare-cell-change {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+}
 .border, .rounded, .bg-white, .p-3, .mb-4 {
     border: none !important;
     border-radius: 0 !important;
@@ -6668,21 +6673,29 @@ ${content.innerHTML}
                       : dayType === 'semi-normal-day'
                         ? 'semi'
                         : 'normal';
-            const hashColor = (seed) => {
-                let h = 0;
-                const str = String(seed || '');
-                for (let i = 0; i < str.length; i++) h = (h << 5) - h + str.charCodeAt(i);
-                const palette = [
-                    '#8e44ad',
-                    '#d35400',
-                    '#2980b9',
-                    '#16a085',
-                    '#c0392b',
-                    '#2c3e50',
-                    '#7f8c8d',
-                    '#27ae60'
-                ];
-                return palette[Math.abs(h) % palette.length];
+            /** Γαλάζιο αντικατάστασης — εκτός παλέτας τύπου ημέρας (πράσινο/κίτρινο/πορτοκαλί/μοβ). */
+            const COMPARE_REPLACEMENT_BG = '#B3E5FC';
+            const COMPARE_REPLACEMENT_FG = '#01579B';
+            /**
+             * Παστέλ ζευγών ανταλλαγής — όχι πράσινο/κίτρινο/πορτοκαλί/μοβ ημέρας ούτε γαλάζιο αντικατάστασης.
+             */
+            const COMPARE_SWAP_PAIR_PALETTE = [
+                { bg: '#F8BBD0', fg: '#880E4F' }, // ροζ
+                { bg: '#B2DFDB', fg: '#004D40' }, // teal
+                { bg: '#FFCCBC', fg: '#BF360C' }, // κοραλί
+                { bg: '#C5CAE9', fg: '#1A237E' }, // indigo
+                { bg: '#D7CCC8', fg: '#3E2723' }, // καφέ-γκρι
+                { bg: '#80DEEA', fg: '#006064' }, // κυανό
+                { bg: '#F48FB1', fg: '#AD1457' }, // φούξια
+                { bg: '#A1887F', fg: '#FFFFFF' }, // καφέ
+                { bg: '#9FA8DA', fg: '#1A237E' }, // βιολετί-μπλε
+                { bg: '#FFAB91', fg: '#BF360C' }  // σομόν
+            ];
+            const COMPARE_OTHER_CHANGE_BG = '#ECEFF1';
+            const COMPARE_OTHER_CHANGE_FG = '#455A64';
+            const dayTypeRgbCss = (dayType) => {
+                const c = getDayTypeColor(dayType);
+                return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
             };
             const getOrderNo = (groupData, type, personName) => {
                 const list = (groupData?.[type] || []).map(normName);
@@ -6745,22 +6758,45 @@ ${content.innerHTML}
                 return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${nextOrder || '-'}</span>${escapeHtml(nextPerson)})</span>`;
             };
             const buildChangeMarker = (reasonObj, pairKey, getSwapPairLabelNo) => {
-                if (!reasonObj) return { text: '', color: null, style: '' };
-                const swapNo = reasonObj.type === 'swap' ? getSwapPairLabelNo(pairKey) : null;
-                const text =
-                    reasonObj.type === 'swap'
-                        ? `Ανταλλαγή #${swapNo || '-'}`
-                        : reasonObj.type === 'skip'
-                          ? 'Αντικατάσταση'
-                          : reasonObj.type === 'shift'
-                            ? 'Μετακίνηση'
-                            : 'Χειροκίνητη αλλαγή';
-                const color = hashColor(pairKey);
-                const style =
-                    reasonObj.type === 'swap'
-                        ? `border-left: 4px solid ${color}; border-right: 4px solid ${color};`
-                        : '';
-                return { text, color: reasonObj.type === 'swap' ? color : '#6c757d', style };
+                if (!reasonObj) {
+                    return { text: '', bg: null, fg: null, style: '' };
+                }
+                if (reasonObj.type === 'swap') {
+                    const swapNo = getSwapPairLabelNo(pairKey);
+                    const paletteIdx =
+                        swapNo != null && swapNo > 0
+                            ? (swapNo - 1) % COMPARE_SWAP_PAIR_PALETTE.length
+                            : 0;
+                    const pal = COMPARE_SWAP_PAIR_PALETTE[paletteIdx];
+                    return {
+                        text: `Ανταλλαγή #${swapNo || '-'}`,
+                        bg: pal.bg,
+                        fg: pal.fg,
+                        style: `border-left: 4px solid ${pal.fg}; border-right: 4px solid ${pal.fg};`
+                    };
+                }
+                if (reasonObj.type === 'skip') {
+                    return {
+                        text: 'Αντικατάσταση',
+                        bg: COMPARE_REPLACEMENT_BG,
+                        fg: COMPARE_REPLACEMENT_FG,
+                        style: `border-left: 4px solid ${COMPARE_REPLACEMENT_FG};`
+                    };
+                }
+                if (reasonObj.type === 'shift') {
+                    return {
+                        text: 'Μετακίνηση',
+                        bg: COMPARE_OTHER_CHANGE_BG,
+                        fg: COMPARE_OTHER_CHANGE_FG,
+                        style: ''
+                    };
+                }
+                return {
+                    text: 'Χειροκίνητη αλλαγή',
+                    bg: COMPARE_OTHER_CHANGE_BG,
+                    fg: COMPARE_OTHER_CHANGE_FG,
+                    style: ''
+                };
             };
 
             let hasAnyGroup = false;
@@ -6849,7 +6885,7 @@ ${content.innerHTML}
                         const dayType = getDayType(date);
                         const dayName = getGreekDayNameUppercase(date);
                         const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
-                        const rgbColor = `rgb(${getDayTypeColor(dayType).join(', ')})`;
+                        const dayTypeBg = dayTypeRgbCss(dayType);
 
                         const finalPerson =
                             getAssignedPersonNameForGroupFromAssignment(
@@ -6868,22 +6904,27 @@ ${content.innerHTML}
                             ? getReasonForAssigned(dayKey, groupNum, finalPerson)
                             : null;
                         const pairKey =
-                            reasonObj?.swapPairId ||
-                            `${reasonObj?.type || ''}:${reasonObj?.swappedWith || ''}:${dayKey}:${groupNum}`;
+                            reasonObj?.type === 'swap'
+                                ? reasonObj.swapPairId != null && reasonObj.swapPairId !== ''
+                                    ? `pair:${reasonObj.swapPairId}`
+                                    : `swap:${[normName(finalPerson), normName(reasonObj.swappedWith)]
+                                          .filter(Boolean)
+                                          .sort()
+                                          .join('|')}:${groupNum}`
+                                : reasonObj
+                                  ? `${reasonObj.type}:${dayKey}:${groupNum}`
+                                  : '';
                         const change = buildChangeMarker(reasonObj, pairKey, getSwapPairLabelNo);
-                        const differs =
-                            normName(finalPerson) !== normName(baselinePerson) &&
-                            (finalPerson || baselinePerson);
-                        const diffClass = differs ? ' compare-diff-row' : '';
+                        const changeBg = change.bg || dayTypeBg;
+                        const changeFg = change.fg || '#212529';
 
                         const row = document.createElement('tr');
-                        row.className = diffClass;
                         row.innerHTML = `
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dateStr}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dayName}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;${change.style}">${formatPersonCell(finalPerson, finalOrder)}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey])}</td>
+                            <td class="compare-cell-daytype" style="padding:4px;border:1px solid #ddd;background-color:${dayTypeBg} !important;">${dateStr}</td>
+                            <td class="compare-cell-daytype" style="padding:4px;border:1px solid #ddd;background-color:${dayTypeBg} !important;">${dayName}</td>
+                            <td class="compare-cell-daytype" style="padding:4px;border:1px solid #ddd;background-color:${dayTypeBg} !important;">${formatPersonCell(finalPerson, finalOrder)}</td>
+                            <td class="compare-cell-change" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;color:${changeFg};font-size:11px;font-weight:600;${change.style}">${escapeHtml(change.text)}</td>
+                            <td class="compare-cell-change" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;${change.style}">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey])}</td>
                         `;
                         tbody.appendChild(row);
                     }
