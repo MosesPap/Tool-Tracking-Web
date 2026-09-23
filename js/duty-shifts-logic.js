@@ -4692,6 +4692,64 @@
                 // Store pure rotation baseline (rotation person per date) for saving to Firestore – so continuation uses baseline, not returner
                 calculationSteps.tempSpecialBaselineAssignments = specialRotationPersons;
 
+                // #region agent log
+                try {
+                    const g1sp = (typeof groupsForDuty === 'function' ? groupsForDuty(1) : groups[1]) || {};
+                    const spList = g1sp.special || [];
+                    const wkList = g1sp.weekend || [];
+                    const row = {
+                        sessionId: '8e8ea0',
+                        runId: 'argia-end',
+                        hypothesisId: 'A',
+                        location: 'duty-shifts-logic.js:special-end',
+                        message: 'special step Oct g1 snapshot',
+                        data: {
+                            build: '1.601',
+                            sortedSpecialOct: (sortedSpecial || []).filter((dk) =>
+                                String(dk).startsWith('2026-10')
+                            ),
+                            oct28: {
+                                assigned: tempSpecialAssignments?.['2026-10-28']?.[1] || null,
+                                baseline: specialRotationPersons?.['2026-10-28']?.[1] || null,
+                                dayType:
+                                    typeof getDayType === 'function'
+                                        ? getDayType(new Date('2026-10-28T00:00:00'))
+                                        : null
+                            },
+                            specialIdxFatitsas: spList.findIndex((p) =>
+                                String(p || '').includes('ΦΑΤΣΙΤΑΣ')
+                            ),
+                            weekendIdxFatitsas: wkList.findIndex((p) =>
+                                String(p || '').includes('ΦΑΤΣΙΤΑΣ')
+                            ),
+                            weekendIdxFakouras: wkList.findIndex((p) =>
+                                String(p || '').includes('ΦΑΚΟΥΡΑΣ')
+                            ),
+                            specialListLen: spList.length,
+                            weekendListLen: wkList.length,
+                            listsSameOrder:
+                                spList.length === wkList.length &&
+                                spList.every(
+                                    (p, i) =>
+                                        String(p || '').trim() === String(wkList[i] || '').trim()
+                                )
+                        },
+                        timestamp: Date.now()
+                    };
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Debug-Session-Id': '8e8ea0'
+                        },
+                        body: JSON.stringify(row)
+                    }).catch(function () {});
+                    const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                    arr.push(row);
+                    localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                } catch (_) {}
+                // #endregion
+
                 // Store last rotation person for each group (overall, for end-of-range continuation)
                 // Use BASELINE (rotation) person for the last date so that when return-from-missing placed A/B (displacing C/D), we continue from E next month
                 calculationSteps.lastSpecialRotationPositions = {};
@@ -10921,6 +10979,116 @@
                     }
                 }
                 calculationSteps.lastWeekendRotationPositionsByMonth = lastWeekendRotationPositionsByMonth;
+
+                // #region agent log
+                try {
+                    const g1 = (typeof groupsForDuty === 'function' ? groupsForDuty(1) : groups[1]) || {};
+                    const wkList = g1.weekend || [];
+                    const keys = ['2026-10-24', '2026-10-25', '2026-10-28', '2026-10-31'];
+                    const snap = {};
+                    keys.forEach((dk) => {
+                        const d = new Date(dk + 'T00:00:00');
+                        const dt = typeof getDayType === 'function' ? getDayType(d) : null;
+                        const finalW = simulatedWeekendAssignments?.[dk]?.[1] || null;
+                        const baseW = weekendRotationPersons?.[dk]?.[1] || baselineWeekendByDate?.[dk]?.[1] || null;
+                        const finalS =
+                            (calculationSteps.tempSpecialAssignments &&
+                                calculationSteps.tempSpecialAssignments[dk]?.[1]) ||
+                            (typeof specialHolidayAssignments !== 'undefined' &&
+                                typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                                ? parseAssignedPersonForGroupFromAssignment(
+                                      specialHolidayAssignments[dk],
+                                      1
+                                  )
+                                : null);
+                        snap[dk] = {
+                            dayType: dt,
+                            weekendFinal: finalW,
+                            weekendBaseline: baseW,
+                            weekendOrder: finalW
+                                ? wkList.findIndex((p) => String(p).trim() === String(finalW).trim()) + 1
+                                : null,
+                            specialFinal: finalS || null,
+                            specialOrder: finalS
+                                ? wkList.findIndex((p) => String(p).trim() === String(finalS).trim()) + 1
+                                : null
+                        };
+                    });
+                    const lastBefore31 = (() => {
+                        const all = ['2026-10-24', '2026-10-25', '2026-10-28'];
+                        let last = null;
+                        for (const dk of all) {
+                            const p =
+                                simulatedWeekendAssignments?.[dk]?.[1] ||
+                                calculationSteps.tempSpecialAssignments?.[dk]?.[1] ||
+                                null;
+                            if (p) last = { dateKey: dk, person: p };
+                        }
+                        return last;
+                    })();
+                    const expectedAfterFatitsas =
+                        lastBefore31 && String(lastBefore31.person || '').includes('ΦΑΤΣΙΤΑΣ')
+                            ? wkList[
+                                  (wkList.findIndex((p) => String(p).includes('ΦΑΤΣΙΤΑΣ')) + 1) %
+                                      (wkList.length || 1)
+                              ]
+                            : null;
+                    const row = {
+                        sessionId: '8e8ea0',
+                        runId: 'argia-end',
+                        hypothesisId: 'A-B',
+                        location: 'duty-shifts-logic.js:weekend-end',
+                        message: 'weekend step Oct g1 argia continuity',
+                        data: {
+                            build: '1.601',
+                            weekendKeysOct: (sortedWeekends || []).filter((dk) =>
+                                String(dk).startsWith('2026-10')
+                            ),
+                            snap: snap,
+                            lastHolidayBefore31: lastBefore31,
+                            expectedNextIfUnifiedAfterFatitsas: expectedAfterFatitsas,
+                            oct31WeekendFinal: simulatedWeekendAssignments?.['2026-10-31']?.[1] || null,
+                            globalPosG1: globalWeekendRotationPosition?.[1]
+                        },
+                        timestamp: Date.now()
+                    };
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Debug-Session-Id': '8e8ea0'
+                        },
+                        body: JSON.stringify(row)
+                    }).catch(function () {});
+                    const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                    arr.push(row);
+                    localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                    window.__agentDbgFlush = function () {
+                        try {
+                            const stored = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                            const nd =
+                                stored.map(function (r) {
+                                    return JSON.stringify(r);
+                                }).join('\n') + '\n';
+                            const blob = new Blob([nd], { type: 'application/x-ndjson' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'debug-8e8ea0.log';
+                            a.style.display = 'none';
+                            document.body.appendChild(a);
+                            a.click();
+                            setTimeout(function () {
+                                try {
+                                    URL.revokeObjectURL(url);
+                                    a.remove();
+                                } catch (_) {}
+                            }, 1500);
+                        } catch (_) {}
+                    };
+                    if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
+                } catch (_) {}
+                // #endregion
 
                 if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                     dutyWeekendDebug.refreshAbsentReplacementsFromPreview(

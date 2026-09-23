@@ -4616,6 +4616,90 @@
             
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth();
+
+            // #region agent log
+            if (year === 2026 && month === 9) {
+                try {
+                    const keys = [
+                        '2026-10-24',
+                        '2026-10-25',
+                        '2026-10-28',
+                        '2026-10-31'
+                    ];
+                    const g1 = (typeof groupsForDuty === 'function' ? groupsForDuty(1) : groups[1]) || {};
+                    const wk = g1.weekend || [];
+                    const sp = g1.special || [];
+                    const snap = {};
+                    keys.forEach((dk) => {
+                        const d = new Date(dk + 'T00:00:00');
+                        const dt = typeof getDayType === 'function' ? getDayType(d) : null;
+                        const raw =
+                            typeof getAssignmentForDate === 'function'
+                                ? getAssignmentForDate(dk)
+                                : null;
+                        const person =
+                            typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                                ? parseAssignedPersonForGroupFromAssignment(raw, 1)
+                                : null;
+                        const list = dt === 'special-holiday' ? sp : wk;
+                        snap[dk] = {
+                            dayType: dt,
+                            person: person,
+                            order:
+                                person && list.length
+                                    ? list.findIndex(
+                                          (p) =>
+                                              String(p || '').trim() === String(person || '').trim()
+                                      ) + 1
+                                    : null
+                        };
+                    });
+                    const row = {
+                        sessionId: '8e8ea0',
+                        runId: 'argia-end',
+                        hypothesisId: 'C',
+                        location: 'duty-shifts-ui.js:renderCalendar',
+                        message: 'calendar Oct g1 holiday sequence',
+                        data: { build: '1.601', snap: snap },
+                        timestamp: Date.now()
+                    };
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Debug-Session-Id': '8e8ea0'
+                        },
+                        body: JSON.stringify(row)
+                    }).catch(function () {});
+                    const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                    arr.push(row);
+                    localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                    window.__agentDbgFlush = function () {
+                        try {
+                            const stored = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                            const nd =
+                                stored.map(function (r) {
+                                    return JSON.stringify(r);
+                                }).join('\n') + '\n';
+                            const blob = new Blob([nd], { type: 'application/x-ndjson' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'debug-8e8ea0.log';
+                            a.style.display = 'none';
+                            document.body.appendChild(a);
+                            a.click();
+                            setTimeout(function () {
+                                try {
+                                    URL.revokeObjectURL(url);
+                                    a.remove();
+                                } catch (_) {}
+                            }, 1500);
+                        } catch (_) {}
+                    };
+                } catch (_) {}
+            }
+            // #endregion
             
             currentMonthYear.textContent = 
                 currentDate.toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
