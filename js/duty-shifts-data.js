@@ -6528,55 +6528,61 @@ body.assignments-compare-print-body {
     break-after: page;
     page-break-inside: avoid;
     break-inside: avoid;
-    padding: 4mm 6mm 5mm;
+    padding: 2mm 4mm 3mm;
     margin: 0;
     border: none;
     border-radius: 0;
     background: #fff;
-    height: 190mm;
-    max-height: 190mm;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    display: block;
 }
 .assignments-compare-print-page:last-child {
     page-break-after: auto;
     break-after: auto;
 }
 .assignments-compare-print-header {
-    flex: 0 0 auto;
-    margin-bottom: 2mm;
+    margin-bottom: 1.5mm;
 }
 .assignments-compare-print-title {
-    font-size: 10pt;
+    font-size: 9pt;
     font-weight: bold;
     color: #0d6efd;
     margin: 0;
-    line-height: 1.2;
+    line-height: 1.15;
 }
 .assignments-compare-print-table-wrap {
-    flex: 1 1 auto;
-    overflow: hidden;
-    max-height: calc(190mm - 10mm);
+    overflow: visible;
+    max-height: none;
 }
 .assignments-compare-print-table {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    font-size: 6.8pt;
-    line-height: 1.08;
+    font-size: 6pt;
+    line-height: 1.05;
 }
+.assignments-compare-print-table col.col-date { width: 7%; }
+.assignments-compare-print-table col.col-day { width: 8%; }
+.assignments-compare-print-table col.col-final-name { width: 25%; }
+.assignments-compare-print-table col.col-change { width: 8%; }
+.assignments-compare-print-table col.col-baseline-name { width: 52%; }
 .assignments-compare-print-table th,
 .assignments-compare-print-table td {
-    border: 0.4pt solid #999;
-    padding: 0.6mm 1mm;
+    border: 0.35pt solid #999;
+    padding: 0.25mm 0.7mm;
     vertical-align: middle;
     word-wrap: break-word;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+}
+.assignments-compare-print-table td.compare-cell-baseline {
+    font-size: 5.7pt;
+    line-height: 1.08;
 }
 .assignments-compare-print-table thead th {
-    font-size: 6.5pt;
-    padding: 0.8mm 1mm;
+    font-size: 5.8pt;
+    padding: 0.5mm 0.6mm;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
 }
@@ -6611,7 +6617,7 @@ body.assignments-compare-print-body {
 }
 @page {
     size: A4 landscape;
-    margin: 6mm 8mm;
+    margin: 5mm 6mm;
 }
 @media print {
     body.assignments-compare-print-body {
@@ -6620,6 +6626,12 @@ body.assignments-compare-print-body {
     .assignments-compare-print-doc-title,
     .assignments-compare-print-doc-meta {
         display: none;
+    }
+    .assignments-compare-print-page {
+        page-break-after: always;
+        break-after: page;
+        page-break-inside: avoid;
+        break-inside: avoid;
     }
 }
 </style>
@@ -6733,8 +6745,7 @@ ${content.innerHTML}
                 monthStartKey,
                 monthEndKey,
                 lastListedBaselineByType,
-                finalPerson = null,
-                dateKeyForDbg = null
+                finalPerson = null
             ) => {
                 const list = (groupData?.[typeKey] || []).filter(Boolean);
                 const inCurrentList = (name) =>
@@ -6751,10 +6762,8 @@ ${content.innerHTML}
                         : null;
 
                 let displayBaseline = '';
-                let seedFromStored = false;
                 if (!prevListed) {
                     // Πρώτη μέρα αυτού του τύπου στον μήνα: σπόρος από αποθηκευμένο baseline (αν είναι στη λίστα).
-                    seedFromStored = true;
                     if (personName && inCurrentList(personName)) {
                         displayBaseline = canonicalFromList(personName);
                     } else {
@@ -6776,78 +6785,6 @@ ${content.innerHTML}
                 const baseNorm = displayBaseline ? normName(displayBaseline) : '';
                 const finalMatchesBaseline = !!(finalNorm && baseNorm && finalNorm === baseNorm);
                 const willStrike = !!(displayBaseline && finalNorm && !finalMatchesBaseline);
-
-                // #region agent log
-                if (
-                    groupNum === 1 &&
-                    (dateKeyForDbg === '2026-10-10' ||
-                        dateKeyForDbg === '2026-10-11' ||
-                        dateKeyForDbg === '2026-10-17' ||
-                        dateKeyForDbg === '2026-10-18' ||
-                        (displayOrder != null &&
-                            (displayOrder === 12 ||
-                                displayOrder === 13 ||
-                                displayOrder === 14 ||
-                                displayOrder === 15)))
-                ) {
-                    const row = {
-                        sessionId: '8e8ea0',
-                        runId: 'compare-seq',
-                        hypothesisId: 'A',
-                        location: 'duty-shifts-data.js:formatBaselinePersonCell',
-                        message: 'compare baseline sequential display',
-                        data: {
-                            build: '1.597',
-                            dateKey: dateKeyForDbg,
-                            typeKey: typeKey,
-                            storedBaseline: personName,
-                            prevListed: prevListed,
-                            displayBaseline: displayBaseline,
-                            displayOrder: displayOrder,
-                            finalPerson: finalPerson,
-                            seedFromStored: seedFromStored,
-                            willStrike: willStrike
-                        },
-                        timestamp: Date.now()
-                    };
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Debug-Session-Id': '8e8ea0'
-                        },
-                        body: JSON.stringify(row)
-                    }).catch(function () {});
-                    try {
-                        const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                        arr.push(row);
-                        localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-120)));
-                        window.__agentDbgFlush = function () {
-                            try {
-                                const stored = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                                const nd =
-                                    stored.map(function (r) {
-                                        return JSON.stringify(r);
-                                    }).join('\n') + '\n';
-                                const blob = new Blob([nd], { type: 'application/x-ndjson' });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = 'debug-8e8ea0.log';
-                                a.style.display = 'none';
-                                document.body.appendChild(a);
-                                a.click();
-                                setTimeout(function () {
-                                    try {
-                                        URL.revokeObjectURL(url);
-                                        a.remove();
-                                    } catch (_) {}
-                                }, 1500);
-                            } catch (_) {}
-                        };
-                    } catch (_) {}
-                }
-                // #endregion
 
                 if (!displayBaseline) {
                     return finalPerson
@@ -6956,16 +6893,23 @@ ${content.innerHTML}
                         </div>
                         <div class="table-responsive assignments-compare-print-table-wrap">
                             <table class="table table-bordered table-sm mb-0 assignments-compare-print-table">
+                                <colgroup>
+                                    <col class="col-date">
+                                    <col class="col-day">
+                                    <col class="col-final-name">
+                                    <col class="col-change">
+                                    <col class="col-baseline-name">
+                                </colgroup>
                                 <thead>
                                     <tr style="background-color:#428BCA;color:white;">
-                                        <th rowspan="2" style="width:10%;text-align:center;vertical-align:middle;">ΗΜΕΡ.</th>
-                                        <th rowspan="2" style="width:9%;text-align:center;vertical-align:middle;">ΗΜΕΡΑ</th>
+                                        <th rowspan="2" style="text-align:center;vertical-align:middle;">ΗΜΕΡ.</th>
+                                        <th rowspan="2" style="text-align:center;vertical-align:middle;">ΗΜΕΡΑ</th>
                                         <th colspan="2" style="text-align:center;">Τελικές αναθέσεις (μετά αλλαγές)</th>
-                                        <th style="width:24%;text-align:center;vertical-align:middle;background:#5a6268;">Βασική σειρά</th>
+                                        <th style="text-align:center;vertical-align:middle;background:#5a6268;">Βασική σειρά</th>
                                     </tr>
                                     <tr style="background-color:#5a9fd4;color:white;">
-                                        <th style="width:30%;text-align:center;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
-                                        <th style="width:12%;text-align:center;">ΑΛΛΑΓΗ</th>
+                                        <th style="text-align:center;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
+                                        <th style="text-align:center;">ΑΛΛΑΓΗ</th>
                                         <th style="text-align:center;background:#6c757d;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
                                     </tr>
                                 </thead>
@@ -7028,7 +6972,7 @@ ${content.innerHTML}
                             <td class="compare-cell-daytype" style="padding:4px;border:1px solid #ddd;background-color:${dayTypeBg} !important;">${dayName}</td>
                             <td class="compare-cell-daytype" style="padding:4px;border:1px solid #ddd;background-color:${dayTypeBg} !important;">${formatPersonCell(finalPerson, finalOrder)}</td>
                             <td class="compare-cell-change" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;color:${changeFg};font-size:11px;font-weight:600;${change.style}">${escapeHtml(change.text)}</td>
-                            <td class="compare-cell-change" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;${change.style}">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, lastListedBaselineByType, finalPerson, dayKey)}</td>
+                            <td class="compare-cell-change compare-cell-baseline" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;${change.style}">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, lastListedBaselineByType, finalPerson)}</td>
                         `;
                         tbody.appendChild(row);
                     }
@@ -7046,13 +6990,6 @@ ${content.innerHTML}
             }
 
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
-            // #region agent log
-            if (typeof window.__agentDbgFlush === 'function') {
-                try {
-                    window.__agentDbgFlush();
-                } catch (_) {}
-            }
-            // #endregion
         }
 
         // Generate Excel files for current month for all groups
