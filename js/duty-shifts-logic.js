@@ -9888,6 +9888,55 @@
                     if (daysAfter > 2) return false;
                     return isSaturdayOrSundayKey(candidateWeekendKey);
                 };
+                // #region agent log
+                const __dbgWk = (message, hypothesisId, data) => {
+                    try {
+                        const row = {
+                            sessionId: '8e8ea0',
+                            runId: 'wk-return',
+                            hypothesisId: hypothesisId || 'A',
+                            location: 'duty-shifts-logic.js:weekend-return',
+                            message: message,
+                            data: Object.assign({ build: '1.590' }, data || {}),
+                            timestamp: Date.now()
+                        };
+                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Debug-Session-Id': '8e8ea0'
+                            },
+                            body: JSON.stringify(row)
+                        }).catch(function () {});
+                        const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                        arr.push(row);
+                        localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-250)));
+                        window.__agentDbgFlush = function () {
+                            try {
+                                const stored = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                                const nd =
+                                    stored.map(function (r) {
+                                        return JSON.stringify(r);
+                                    }).join('\n') + '\n';
+                                const blob = new Blob([nd], { type: 'application/x-ndjson' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'debug-8e8ea0.log';
+                                a.style.display = 'none';
+                                document.body.appendChild(a);
+                                a.click();
+                                setTimeout(function () {
+                                    try {
+                                        URL.revokeObjectURL(url);
+                                        a.remove();
+                                    } catch (_) {}
+                                }, 2000);
+                            } catch (_) {}
+                        };
+                    } catch (_) {}
+                };
+                // #endregion
                 const findSameMonthReturnWeekendTarget = (
                     sorted,
                     calcStartKey,
@@ -9920,11 +9969,54 @@
                     const tryPick = (wk, isBackward) => {
                         if (missedSet.has(wk)) return null;
                         if (returnTargets[wk]?.[groupNum]) return null;
-                        if (
+                        const tooSoon =
                             !isBackward &&
                             absenceEndKey &&
-                            isWeekendTargetTooSoonAfterAbsenceEnd(absenceEndKey, wk)
+                            isWeekendTargetTooSoonAfterAbsenceEnd(absenceEndKey, wk);
+                        // #region agent log
+                        if (
+                            String(personName || '').includes('ΠΟΛΥΒΙΟΥ') ||
+                            String(wk || '').indexOf('2026-10') === 0
                         ) {
+                            let returnKey = null;
+                            let thresholdPlus3 = null;
+                            if (absenceEndKey) {
+                                const rd = new Date(absenceEndKey + 'T00:00:00');
+                                if (!isNaN(rd.getTime())) {
+                                    rd.setDate(rd.getDate() + 1);
+                                    returnKey =
+                                        typeof formatDateKey === 'function'
+                                            ? formatDateKey(rd)
+                                            : null;
+                                    const td = new Date(returnKey + 'T00:00:00');
+                                    if (returnKey && !isNaN(td.getTime())) {
+                                        td.setDate(td.getDate() + 3);
+                                        thresholdPlus3 =
+                                            typeof formatDateKey === 'function'
+                                                ? formatDateKey(td)
+                                                : null;
+                                    }
+                                }
+                            }
+                            __dbgWk('tryPick weekend return candidate', 'A', {
+                                personName: personName,
+                                groupNum: groupNum,
+                                wk: wk,
+                                isBackward: !!isBackward,
+                                absenceEndKey: absenceEndKey,
+                                returnKey: returnKey,
+                                thresholdReturnPlus3: thresholdPlus3,
+                                daysAfterEnd: absenceEndKey
+                                    ? calendarDaysFromTo(absenceEndKey, wk)
+                                    : null,
+                                tooSoonOldBuffer: !!tooSoon,
+                                wouldPassNewRule:
+                                    !thresholdPlus3 || !wk ? null : wk >= thresholdPlus3,
+                                isSatSun: isSaturdayOrSundayKey(wk)
+                            });
+                        }
+                        // #endregion
+                        if (tooSoon) {
                             return null;
                         }
                         const d = new Date(wk + 'T00:00:00');
@@ -10214,6 +10306,22 @@
                                 if (sameMonthPick) {
                                     targetWeekendKey = sameMonthPick.targetWeekendKey;
                                     isBackwardAssignment = sameMonthPick.isBackwardAssignment;
+                                    // #region agent log
+                                    if (
+                                        String(rosterPersonName || '').includes('ΠΟΛΥΒΙΟΥ') ||
+                                        String(targetWeekendKey || '').indexOf('2026-10') === 0
+                                    ) {
+                                        __dbgWk('sameMonthPick selected', 'A', {
+                                            personName: rosterPersonName,
+                                            groupNum: groupNum,
+                                            pStartKey: pStartKey,
+                                            pEndKey: pEndKey,
+                                            missedWeekendKeys: missedWeekendKeysForReturn,
+                                            targetWeekendKey: targetWeekendKey,
+                                            isBackwardAssignment: !!isBackwardAssignment
+                                        });
+                                    }
+                                    // #endregion
                                 }
                                 if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) {
                                     if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
@@ -10311,6 +10419,21 @@
                                     reasonOfMissing: reasonOfMissingW,
                                     missedWeekendKeys: missedWeekendKeysForReturn.slice()
                                 };
+                                // #region agent log
+                                if (
+                                    String(rosterPersonName || '').includes('ΠΟΛΥΒΙΟΥ') ||
+                                    String(targetWeekendKey || '').indexOf('2026-10') === 0
+                                ) {
+                                    __dbgWk('RETURN_PLANNED weekend target stored', 'A', {
+                                        personName: rosterPersonName,
+                                        groupNum: groupNum,
+                                        pEndKey: pEndKey,
+                                        targetWeekendKey: targetWeekendKey,
+                                        isBackwardAssignment: !!isBackwardAssignment,
+                                        missedWeekendKeys: missedWeekendKeysForReturn
+                                    });
+                                }
+                                // #endregion
                                 if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                     dutyWeekendDebug.recordAbsentPlacement({
                                         groupNum,
@@ -10451,6 +10574,27 @@
                             }
                             if (designatedWeekend && matchingPerson && !isPersonMissingOnDate(matchingPerson, groupNum, date, 'weekend')) {
                                 const assignedPerson = matchingPerson;
+                                // #region agent log
+                                if (
+                                    dateKey === '2026-10-17' ||
+                                    String(assignedPerson || '').includes('ΠΟΛΥΒΙΟΥ') ||
+                                    String(assignedPerson || '').includes('ΣΙΑΚΟΛΑΣ')
+                                ) {
+                                    const base = baselineWeekendByDate[dateKey]?.[groupNum] || null;
+                                    __dbgWk('apply designated weekend return', 'D', {
+                                        dateKey: dateKey,
+                                        groupNum: groupNum,
+                                        assignedPerson: assignedPerson,
+                                        baselineDisplaced: base,
+                                        missingEnd: designatedWeekend.missingEnd,
+                                        isBackward: !!designatedWeekend.isBackwardAssignment,
+                                        baselineMissingOnDate: base
+                                            ? isPersonMissingOnDate(base, groupNum, date, 'weekend')
+                                            : null,
+                                        path: 'return-from-missing-designated'
+                                    });
+                                }
+                                // #endregion
                                 if (!assignedByReturnFromMissingWeekend[groupNum]) assignedByReturnFromMissingWeekend[groupNum] = new Set();
                                 assignedByReturnFromMissingWeekend[groupNum].add(assignedPerson);
                                 // Next slot goes to the displaced (baseline) person – set position to displaced person's index so we get F, A, B, C
@@ -10709,6 +10853,38 @@
                                         break;
                                     }
                                     if (replacementPerson) {
+                                        // #region agent log
+                                        if (
+                                            dateKey === '2026-10-17' ||
+                                            String(replacementPerson || '').includes('ΠΟΛΥΒΙΟΥ') ||
+                                            String(assignedPerson || '').includes('ΣΙΑΚΟΛΑΣ')
+                                        ) {
+                                            const mp =
+                                                typeof getPersonMissingPeriod === 'function'
+                                                    ? getPersonMissingPeriod(
+                                                          assignedPerson,
+                                                          groupNum,
+                                                          date
+                                                      )
+                                                    : null;
+                                            __dbgWk('phase2 missing replacement', 'B', {
+                                                dateKey: dateKey,
+                                                groupNum: groupNum,
+                                                skippedBaseline: assignedPerson,
+                                                replacementPerson: replacementPerson,
+                                                skippedIsMissing: isPersonMissingOnDate(
+                                                    assignedPerson,
+                                                    groupNum,
+                                                    date,
+                                                    'weekend'
+                                                ),
+                                                skippedMissingPeriod: mp
+                                                    ? { start: mp.start, end: mp.end, reason: mp.reason }
+                                                    : null,
+                                                path: 'phase2-missing-replacement'
+                                            });
+                                        }
+                                        // #endregion
                                         storeUnavailableReplacementReason(
                                             dateKey,
                                             groupNum,
@@ -10882,6 +11058,38 @@
                 );
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
+                // #region agent log
+                try {
+                    const snap = {};
+                    ['2026-10-10', '2026-10-11', '2026-10-17', '2026-10-18', '2026-10-24', '2026-10-25'].forEach(
+                        function (dk) {
+                            const finalP = simulatedWeekendAssignments?.[dk]?.[1] || null;
+                            const baseP =
+                                baselineWeekendByDate?.[dk]?.[1] ||
+                                weekendRotationPersons?.[dk]?.[1] ||
+                                null;
+                            let reason = null;
+                            if (finalP && typeof getAssignmentReason === 'function') {
+                                reason = getAssignmentReason(dk, 1, finalP);
+                            }
+                            snap[dk] = {
+                                final: finalP,
+                                baseline: baseP,
+                                reasonType: reason?.type || null,
+                                reasonText: reason?.reason
+                                    ? String(reason.reason).slice(0, 200)
+                                    : null,
+                                returnFromMissing: !!(reason?.meta && reason.meta.returnFromMissing),
+                                swappedWith: reason?.swappedWith || null,
+                                designated:
+                                    returnFromMissingWeekendTargets?.[dk]?.[1]?.personName || null
+                            };
+                        }
+                    );
+                    __dbgWk('weekend step final Oct g1 snapshot', 'A-E', snap);
+                    if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
+                } catch (_) {}
+                // #endregion
                 calculationSteps.tempWeekendAssignments = simulatedWeekendAssignments;
                 finalizeWeekendPreview(
                     simulatedWeekendAssignments,
