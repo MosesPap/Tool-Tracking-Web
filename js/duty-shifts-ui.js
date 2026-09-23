@@ -5099,6 +5099,66 @@
             
             grid.appendChild(frag);
 
+            // #region agent log
+            try {
+                if (year === 2026 && month === 9) {
+                    const keys = ['2026-10-28', '2026-10-31'];
+                    const snap = {};
+                    const raws = {};
+                    keys.forEach((dk) => {
+                        const raw =
+                            typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dk) : null;
+                        raws[dk] = typeof raw === 'string' ? raw : raw ? String(raw) : null;
+                        const map =
+                            typeof extractGroupAssignmentsMap === 'function'
+                                ? extractGroupAssignmentsMap(raw)
+                                : {};
+                        snap[dk] = {
+                            dayType:
+                                typeof getDayType === 'function'
+                                    ? getDayType(new Date(dk + 'T00:00:00'))
+                                    : null,
+                            g3: map[3] || null,
+                            rawHasAlex: !!(raws[dk] && String(raws[dk]).includes('ΑΛΕΞΑΝΔΡΟΥ')),
+                            rawG3Parts: (raws[dk] || '')
+                                .split(',')
+                                .map((p) => p.trim())
+                                .filter((p) => /\(Ομάδα\s*3\)/.test(p))
+                        };
+                    });
+                    const row = {
+                        sessionId: '8e8ea0',
+                        runId: 'alex-month-dupe',
+                        hypothesisId: 'H-cal-merge',
+                        location: 'duty-shifts-ui.js:renderCalendar',
+                        message: 'calendar Oct 28/31 g3 alex check',
+                        data: {
+                            build: '1.609',
+                            snap,
+                            sameAlexBoth:
+                                snap['2026-10-28']?.g3 &&
+                                snap['2026-10-31']?.g3 &&
+                                String(snap['2026-10-28'].g3).includes('ΑΛΕΞΑΝΔΡΟΥ') &&
+                                String(snap['2026-10-31'].g3).includes('ΑΛΕΞΑΝΔΡΟΥ')
+                        },
+                        timestamp: Date.now()
+                    };
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Debug-Session-Id': '8e8ea0'
+                        },
+                        body: JSON.stringify(row)
+                    }).catch(function () {});
+                    const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                    arr.push(row);
+                    localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                    if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
+                }
+            } catch (_) {}
+            // #endregion
+
             const calSec = document.querySelector('.calendar-section');
             if (calSec && typeof getMonthKeyFromDate === 'function' && typeof isMonthCalculationLocked === 'function') {
                 const mk = getMonthKeyFromDate(currentDate);

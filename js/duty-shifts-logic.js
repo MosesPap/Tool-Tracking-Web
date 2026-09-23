@@ -5243,12 +5243,27 @@
                         continue;
                     }
                     const groupData =
-                        (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || {
-                            weekend: []
-                        };
+                        (typeof groupsForDuty === 'function'
+                            ? groupsForDuty(groupNum, dateKey)
+                            : groups[groupNum]) || { weekend: [] };
                     const groupPeople = groupData.weekend || [];
-                    if (!groupPeople.length) continue;
+                    if (!groupPeople.length) {
+                        delete assignmentsByDate[dateKey][groupNum];
+                        replacements.push({
+                            dateKey: dateKey,
+                            groupNum: groupNum,
+                            removed: current,
+                            replacement: null,
+                            cleared: true,
+                            reason: 'empty-list'
+                        });
+                        continue;
+                    }
+                    const nkFind = norm(current);
                     let currentIndex = groupPeople.indexOf(current);
+                    if (currentIndex === -1) {
+                        currentIndex = groupPeople.findIndex((p) => norm(p) === nkFind);
+                    }
                     if (currentIndex === -1) currentIndex = 0;
                     let replacement = null;
                     for (let offset = 1; offset < groupPeople.length; offset++) {
@@ -5271,7 +5286,19 @@
                         replacement = candidate;
                         break;
                     }
-                    if (!replacement) continue;
+                    if (!replacement) {
+                        // Καλύτερα κενό παρά διπλή αργία τον ίδιο μήνα.
+                        delete assignmentsByDate[dateKey][groupNum];
+                        replacements.push({
+                            dateKey: dateKey,
+                            groupNum: groupNum,
+                            removed: current,
+                            replacement: null,
+                            cleared: true,
+                            reason: 'no-eligible'
+                        });
+                        continue;
+                    }
                     if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
                     assignmentsByDate[dateKey][groupNum] = replacement;
                     seenByMonthGroup[monthKey][groupNum].add(norm(replacement));
@@ -5288,7 +5315,62 @@
                         dateKey: dateKey,
                         groupNum: groupNum,
                         removed: current,
-                        replacement: replacement
+                        replacement: replacement,
+                        cleared: false
+                    });
+                }
+            }
+            // Γέμισε κενά slots με άτομα χωρίς αργία ακόμα τον μήνα.
+            for (const dateKey of sortedWeekends || []) {
+                if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
+                const date = new Date(dateKey + 'T00:00:00');
+                const monthKey = monthKeyOf(dateKey);
+                if (!seenByMonthGroup[monthKey]) seenByMonthGroup[monthKey] = {};
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    if (assignmentsByDate?.[dateKey]?.[groupNum]) continue;
+                    if (!seenByMonthGroup[monthKey][groupNum]) {
+                        seenByMonthGroup[monthKey][groupNum] = new Set();
+                    }
+                    const groupData =
+                        (typeof groupsForDuty === 'function'
+                            ? groupsForDuty(groupNum, dateKey)
+                            : groups[groupNum]) || { weekend: [] };
+                    const groupPeople = groupData.weekend || [];
+                    let fill = null;
+                    for (const candidate of groupPeople) {
+                        if (!candidate) continue;
+                        if (seenByMonthGroup[monthKey][groupNum].has(norm(candidate))) continue;
+                        if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                        if (
+                            typeof isPersonWaitingForForwardWeekendReturn === 'function' &&
+                            isPersonWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)
+                        ) {
+                            continue;
+                        }
+                        if (
+                            typeof isPersonDisabledForDuty === 'function' &&
+                            isPersonDisabledForDuty(candidate, groupNum, 'weekend', dateKey)
+                        ) {
+                            continue;
+                        }
+                        fill = candidate;
+                        break;
+                    }
+                    if (!fill) continue;
+                    if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
+                    assignmentsByDate[dateKey][groupNum] = fill;
+                    seenByMonthGroup[monthKey][groupNum].add(norm(fill));
+                    if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
+                    if (!assignedWeekendInMonth[monthKey][groupNum]) {
+                        assignedWeekendInMonth[monthKey][groupNum] = new Set();
+                    }
+                    assignedWeekendInMonth[monthKey][groupNum].add(fill);
+                    replacements.push({
+                        dateKey: dateKey,
+                        groupNum: groupNum,
+                        removed: null,
+                        replacement: fill,
+                        filledEmpty: true
                     });
                 }
             }
@@ -9423,20 +9505,52 @@
                     dateIterator.setDate(dateIterator.getDate() + 1);
                 }
                 
-                // Weekend assignments: dateKey -> { groupNum -> person }
-                for (const dateKey in tempAssignments.weekend || {}) {
-                    for (const groupNum in tempAssignments.weekend[dateKey] || {}) {
-                        const person = tempAssignments.weekend[dateKey][groupNum];
-                        if (person) {
-                            if (!weekendAssignments[dateKey]) {
-                                weekendAssignments[dateKey] = '';
-                            }
+                // Weekend: προτίμηση final (μετά skip/unique)· αντικατάσταση ανά ομάδα, όχι append.
+                const weekendSource =
+                    calculationSteps && calculationSteps.finalWeekendAssignments
+                        ? calculationSteps.finalWeekendAssignments
+                        : tempAssignments.weekend || {};
+                const recalcSetWeekend =
+                    typeof getCalculationRecalcGroupSet === 'function' ? getCalculationRecalcGroupSet() : null;
+                if (
+                    recalcSetWeekend &&
+                    typeof mergeTempGroupAssignmentsIntoAssignmentStore === 'function'
+                ) {
+                    mergeTempGroupAssignmentsIntoAssignmentStore(weekendSource, weekendAssignments);
+                } else if (
+                    typeof extractGroupAssignmentsMap === 'function' &&
+                    typeof groupMapToAssignmentString === 'function'
+                ) {
+                    for (const dateKey in weekendSource) {
+                        const tempMap = weekendSource[dateKey];
+                        if (!tempMap || typeof tempMap !== 'object') continue;
+                        const existingMap = extractGroupAssignmentsMap(weekendAssignments[dateKey]);
+                        for (let g = 1; g <= 4; g++) {
+                            if (tempMap[g]) existingMap[g] = tempMap[g];
+                            else if (tempMap[String(g)]) existingMap[g] = tempMap[String(g)];
+                        }
+                        const str = groupMapToAssignmentString(existingMap);
+                        if (str) weekendAssignments[dateKey] = str;
+                        else delete weekendAssignments[dateKey];
+                    }
+                } else {
+                    for (const dateKey in weekendSource) {
+                        for (const groupNum in weekendSource[dateKey] || {}) {
+                            const person = weekendSource[dateKey][groupNum];
+                            if (!person) continue;
+                            if (!weekendAssignments[dateKey]) weekendAssignments[dateKey] = '';
                             const assignment = `${person} (Ομάδα ${groupNum})`;
-                            if (!weekendAssignments[dateKey].includes(assignment)) {
-                                weekendAssignments[dateKey] = weekendAssignments[dateKey]
-                                    ? `${weekendAssignments[dateKey]}, ${assignment}`
-                                    : assignment;
-                            }
+                            const re = new RegExp(
+                                `[^,]*(?:Ομάδα\\s*${groupNum})[^,]*,?\\s*`,
+                                'gi'
+                            );
+                            let cleaned = String(weekendAssignments[dateKey] || '')
+                                .replace(re, '')
+                                .replace(/^,\s*|,\s*$/g, '')
+                                .trim();
+                            weekendAssignments[dateKey] = cleaned
+                                ? `${cleaned}, ${assignment}`
+                                : assignment;
                         }
                     }
                 }
@@ -11048,12 +11162,22 @@
                         location: 'duty-shifts-logic.js:weekend-unique-month',
                         message: 'Alexandrou g3 28/31 before/after month-unique enforce',
                         data: {
-                            build: '1.608',
+                            build: '1.609',
                             pre: __agentAlexPreUnique,
                             post: {
                                 d28: simulatedWeekendAssignments?.['2026-10-28']?.[3] || null,
                                 d31: simulatedWeekendAssignments?.['2026-10-31']?.[3] || null
                             },
+                            samePersonPost: (() => {
+                                const a = simulatedWeekendAssignments?.['2026-10-28']?.[3];
+                                const b = simulatedWeekendAssignments?.['2026-10-31']?.[3];
+                                return !!(
+                                    a &&
+                                    b &&
+                                    String(a).includes('ΑΛΕΞΑΝΔΡΟΥ') &&
+                                    String(b).includes('ΑΛΕΞΑΝΔΡΟΥ')
+                                );
+                            })(),
                             samePerson:
                                 __agentAlexPreUnique &&
                                 __agentAlexPreUnique.d28 &&
@@ -11061,7 +11185,14 @@
                                 String(__agentAlexPreUnique.d28).includes('ΑΛΕΞΑΝΔΡΟΥ') &&
                                 String(__agentAlexPreUnique.d31).includes('ΑΛΕΞΑΝΔΡΟΥ'),
                             fixesG3: (__agentAlexUniqueFixes || []).filter((f) => f.groupNum === 3),
-                            allFixesCount: (__agentAlexUniqueFixes || []).length
+                            allFixesCount: (__agentAlexUniqueFixes || []).length,
+                            octG3AlexDates: (sortedWeekends || [])
+                                .filter((dk) => String(dk).startsWith('2026-10-'))
+                                .filter((dk) =>
+                                    String(simulatedWeekendAssignments?.[dk]?.[3] || '').includes(
+                                        'ΑΛΕΞΑΝΔΡΟΥ'
+                                    )
+                                )
                         },
                         timestamp: Date.now()
                     };
