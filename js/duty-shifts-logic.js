@@ -5204,6 +5204,96 @@
                 }
             }
         }
+        /**
+         * Μετά cascade/onesided: κανένα άτομο δεν κρατά 2+ ΣΚ/αργίες τον ίδιο μήνα.
+         * Κρατά την πρώτη ανάθεση· στις επόμενες βάζει τον επόμενο επιλέξιμο.
+         */
+        function enforceUniqueWeekendAssigneePerMonth(sortedWeekends, assignmentsByDate, assignedWeekendInMonth) {
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) => String(s || '').trim();
+            const monthKeyOf = (dk) => {
+                const d = new Date(dk + 'T00:00:00');
+                return typeof getMonthKeyFromDate === 'function'
+                    ? getMonthKeyFromDate(d)
+                    : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            };
+            const seenByMonthGroup = {};
+            const replacements = [];
+            for (const dateKey of sortedWeekends || []) {
+                if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
+                const date = new Date(dateKey + 'T00:00:00');
+                const monthKey = monthKeyOf(dateKey);
+                if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
+                if (!seenByMonthGroup[monthKey]) seenByMonthGroup[monthKey] = {};
+                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    const current = assignmentsByDate?.[dateKey]?.[groupNum];
+                    if (!current) continue;
+                    if (!assignedWeekendInMonth[monthKey][groupNum]) {
+                        assignedWeekendInMonth[monthKey][groupNum] = new Set();
+                    }
+                    if (!seenByMonthGroup[monthKey][groupNum]) {
+                        seenByMonthGroup[monthKey][groupNum] = new Set();
+                    }
+                    const nk = norm(current);
+                    if (!seenByMonthGroup[monthKey][groupNum].has(nk)) {
+                        seenByMonthGroup[monthKey][groupNum].add(nk);
+                        assignedWeekendInMonth[monthKey][groupNum].add(current);
+                        continue;
+                    }
+                    const groupData =
+                        (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || {
+                            weekend: []
+                        };
+                    const groupPeople = groupData.weekend || [];
+                    if (!groupPeople.length) continue;
+                    let currentIndex = groupPeople.indexOf(current);
+                    if (currentIndex === -1) currentIndex = 0;
+                    let replacement = null;
+                    for (let offset = 1; offset < groupPeople.length; offset++) {
+                        const candidate = groupPeople[(currentIndex + offset) % groupPeople.length];
+                        if (!candidate) continue;
+                        if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                        if (
+                            typeof isPersonWaitingForForwardWeekendReturn === 'function' &&
+                            isPersonWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)
+                        ) {
+                            continue;
+                        }
+                        if (
+                            typeof isPersonDisabledForDuty === 'function' &&
+                            isPersonDisabledForDuty(candidate, groupNum, 'weekend', dateKey)
+                        ) {
+                            continue;
+                        }
+                        if (seenByMonthGroup[monthKey][groupNum].has(norm(candidate))) continue;
+                        replacement = candidate;
+                        break;
+                    }
+                    if (!replacement) continue;
+                    if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
+                    assignmentsByDate[dateKey][groupNum] = replacement;
+                    seenByMonthGroup[monthKey][groupNum].add(norm(replacement));
+                    assignedWeekendInMonth[monthKey][groupNum].add(replacement);
+                    storeUnavailableReplacementReason(
+                        dateKey,
+                        groupNum,
+                        replacement,
+                        current,
+                        date,
+                        'weekend'
+                    );
+                    replacements.push({
+                        dateKey: dateKey,
+                        groupNum: groupNum,
+                        removed: current,
+                        replacement: replacement
+                    });
+                }
+            }
+            return replacements;
+        }
         function getSameMonthWeekendDateKeys(sortedWeekends, monthKey) {
             return sortedWeekends
                 .filter((dk) => {
@@ -5840,6 +5930,11 @@
                     assignedWeekendInMonth
                 );
                 enforceNoEarlyPendingWeekendReturns(
+                    sortedWeekends,
+                    updatedAssignments,
+                    assignedWeekendInMonth
+                );
+                enforceUniqueWeekendAssigneePerMonth(
                     sortedWeekends,
                     updatedAssignments,
                     assignedWeekendInMonth
@@ -10930,6 +11025,60 @@
                     simulatedWeekendAssignments,
                     assignedWeekendInMonthPreview
                 );
+                // #region agent log
+                let __agentAlexPreUnique = null;
+                try {
+                    __agentAlexPreUnique = {
+                        d28: simulatedWeekendAssignments?.['2026-10-28']?.[3] || null,
+                        d31: simulatedWeekendAssignments?.['2026-10-31']?.[3] || null
+                    };
+                } catch (_) {}
+                // #endregion
+                const __agentAlexUniqueFixes = enforceUniqueWeekendAssigneePerMonth(
+                    sortedWeekends,
+                    simulatedWeekendAssignments,
+                    assignedWeekendInMonthPreview
+                );
+                // #region agent log
+                try {
+                    const row = {
+                        sessionId: '8e8ea0',
+                        runId: 'alex-month-dupe',
+                        hypothesisId: 'H-alex',
+                        location: 'duty-shifts-logic.js:weekend-unique-month',
+                        message: 'Alexandrou g3 28/31 before/after month-unique enforce',
+                        data: {
+                            build: '1.608',
+                            pre: __agentAlexPreUnique,
+                            post: {
+                                d28: simulatedWeekendAssignments?.['2026-10-28']?.[3] || null,
+                                d31: simulatedWeekendAssignments?.['2026-10-31']?.[3] || null
+                            },
+                            samePerson:
+                                __agentAlexPreUnique &&
+                                __agentAlexPreUnique.d28 &&
+                                __agentAlexPreUnique.d31 &&
+                                String(__agentAlexPreUnique.d28).includes('ΑΛΕΞΑΝΔΡΟΥ') &&
+                                String(__agentAlexPreUnique.d31).includes('ΑΛΕΞΑΝΔΡΟΥ'),
+                            fixesG3: (__agentAlexUniqueFixes || []).filter((f) => f.groupNum === 3),
+                            allFixesCount: (__agentAlexUniqueFixes || []).length
+                        },
+                        timestamp: Date.now()
+                    };
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Debug-Session-Id': '8e8ea0'
+                        },
+                        body: JSON.stringify(row)
+                    }).catch(function () {});
+                    const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                    arr.push(row);
+                    localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                    if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
+                } catch (_) {}
+                // #endregion
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempWeekendAssignments = simulatedWeekendAssignments;
