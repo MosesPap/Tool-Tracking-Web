@@ -6723,10 +6723,14 @@ ${content.innerHTML}
                 typeKey,
                 monthStartKey,
                 monthEndKey,
-                consumedSubstitutes
+                consumedSubstitutes,
+                finalPerson = null,
+                dateKeyForDbg = null
             ) => {
                 if (!personName) return '<span class="text-muted">—</span>';
                 const personNorm = normName(personName);
+                const finalNorm = finalPerson ? normName(finalPerson) : '';
+                const finalMatchesBaseline = !!(finalNorm && finalNorm === personNorm);
                 const unavailable = isPersonUnavailableWholeMonth(
                     personName,
                     groupNum,
@@ -6737,6 +6741,74 @@ ${content.innerHTML}
                 );
                 const alreadyUsedAsSubstitute =
                     consumedSubstitutes instanceof Set && consumedSubstitutes.has(personNorm);
+                // #region agent log
+                if (
+                    groupNum === 1 &&
+                    (dateKeyForDbg === '2026-10-13' ||
+                        dateKeyForDbg === '2026-10-20' ||
+                        dateKeyForDbg === '2026-10-08' ||
+                        (finalMatchesBaseline && (unavailable || alreadyUsedAsSubstitute)))
+                ) {
+                    const row = {
+                        sessionId: '8e8ea0',
+                        runId: 'compare-baseline',
+                        hypothesisId: 'A-D',
+                        location: 'duty-shifts-data.js:formatBaselinePersonCell',
+                        message: 'compare baseline cell strike decision',
+                        data: {
+                            build: '1.594',
+                            dateKey: dateKeyForDbg,
+                            groupNum: groupNum,
+                            typeKey: typeKey,
+                            baseline: personName,
+                            finalPerson: finalPerson,
+                            finalMatchesBaseline: finalMatchesBaseline,
+                            unavailable: !!unavailable,
+                            alreadyUsedAsSubstitute: !!alreadyUsedAsSubstitute,
+                            willStrike: !!(unavailable || alreadyUsedAsSubstitute),
+                            consumedSize:
+                                consumedSubstitutes instanceof Set ? consumedSubstitutes.size : -1
+                        },
+                        timestamp: Date.now()
+                    };
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Debug-Session-Id': '8e8ea0'
+                        },
+                        body: JSON.stringify(row)
+                    }).catch(function () {});
+                    try {
+                        const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                        arr.push(row);
+                        localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-100)));
+                        window.__agentDbgFlush = function () {
+                            try {
+                                const stored = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                                const nd =
+                                    stored.map(function (r) {
+                                        return JSON.stringify(r);
+                                    }).join('\n') + '\n';
+                                const blob = new Blob([nd], { type: 'application/x-ndjson' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'debug-8e8ea0.log';
+                                a.style.display = 'none';
+                                document.body.appendChild(a);
+                                a.click();
+                                setTimeout(function () {
+                                    try {
+                                        URL.revokeObjectURL(url);
+                                        a.remove();
+                                    } catch (_) {}
+                                }, 1500);
+                            } catch (_) {}
+                        };
+                    } catch (_) {}
+                }
+                // #endregion
                 if (!unavailable && !alreadyUsedAsSubstitute) {
                     return formatPersonCell(personName, orderNo);
                 }
@@ -6924,7 +6996,7 @@ ${content.innerHTML}
                             <td class="compare-cell-daytype" style="padding:4px;border:1px solid #ddd;background-color:${dayTypeBg} !important;">${dayName}</td>
                             <td class="compare-cell-daytype" style="padding:4px;border:1px solid #ddd;background-color:${dayTypeBg} !important;">${formatPersonCell(finalPerson, finalOrder)}</td>
                             <td class="compare-cell-change" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;color:${changeFg};font-size:11px;font-weight:600;${change.style}">${escapeHtml(change.text)}</td>
-                            <td class="compare-cell-change" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;${change.style}">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey])}</td>
+                            <td class="compare-cell-change" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;${change.style}">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey], finalPerson, dayKey)}</td>
                         `;
                         tbody.appendChild(row);
                     }
@@ -6942,6 +7014,13 @@ ${content.innerHTML}
             }
 
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            // #region agent log
+            if (typeof window.__agentDbgFlush === 'function') {
+                try {
+                    window.__agentDbgFlush();
+                } catch (_) {}
+            }
+            // #endregion
         }
 
         // Generate Excel files for current month for all groups

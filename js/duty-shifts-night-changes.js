@@ -6,63 +6,6 @@
 (function () {
     const NIGHT_GROUPS = [3, 4];
 
-    // #region agent log
-    function __agentDbgLog(payload) {
-        try {
-            const row = Object.assign(
-                {
-                    sessionId: '8e8ea0',
-                    timestamp: Date.now(),
-                    location: payload.location || 'duty-shifts-night-changes.js'
-                },
-                payload
-            );
-            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Debug-Session-Id': '8e8ea0'
-                },
-                body: JSON.stringify(row)
-            }).catch(function () {});
-            const key = 'debug-8e8ea0';
-            const arr = JSON.parse(localStorage.getItem(key) || '[]');
-            arr.push(row);
-            localStorage.setItem(key, JSON.stringify(arr.slice(-200)));
-            window.__agentDbgLog = __agentDbgLog;
-            window.__agentDbgFlush = function () {
-                try {
-                    const stored = JSON.parse(localStorage.getItem(key) || '[]');
-                    const nd = stored.map(function (r) { return JSON.stringify(r); }).join('\n') + '\n';
-                    const blob = new Blob([nd], { type: 'application/x-ndjson' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'debug-8e8ea0.log';
-                    a.style.display = 'none';
-                    document.body.appendChild(a);
-                    a.click();
-                    setTimeout(function () {
-                        try {
-                            URL.revokeObjectURL(url);
-                            a.remove();
-                        } catch (_) {}
-                    }, 2000);
-                } catch (_) {}
-            };
-        } catch (_) {}
-    }
-    function __agentG4OctSnapshot(assignments, label) {
-        const keys = ['2026-10-06', '2026-10-07', '2026-10-08', '2026-10-13', '2026-10-15'];
-        const out = { label: label };
-        for (let i = 0; i < keys.length; i++) {
-            const dk = keys[i];
-            out[dk] = (assignments && assignments[dk] && (assignments[dk][4] || assignments[dk]['4'])) || null;
-        }
-        return out;
-    }
-    // #endregion
-
     const THURSDAY_SPACING_SWAP_COLORS = [
         { border: '#FF1744', bg: 'rgba(255, 23, 68, 0.12)' },
         { border: '#00E676', bg: 'rgba(0, 230, 118, 0.12)' },
@@ -829,19 +772,6 @@
 
         clearSpacingMarkersForDateKeys(normalDays);
 
-        // #region agent log
-        __agentDbgLog({
-            runId: 'g4-oct-pre',
-            hypothesisId: 'D',
-            location: 'night-changes.js:runThursdaySpacingChangesPass:entry',
-            message: 'N-pass entry group4 Oct snapshot (pre any N swaps)',
-            data: Object.assign(__agentG4OctSnapshot(assignments, 'pre-N'), {
-                nightChangesMode: typeof isNightChangesMode === 'function' ? isNightChangesMode() : null,
-                thursdayCount: thursdayKeys.length,
-                octThursdays: thursdayKeys.filter(function (k) { return String(k).indexOf('2026-10') === 0; })
-            })
-        });
-        // #endregion
 
         for (const thursdayKey of thursdayKeys) {
             if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(thursdayKey);
@@ -877,28 +807,6 @@
 
                 let spacing = personPassesThursdaySpacing(person, groupNum, thursdayKey, assignments, runtimeLastThu);
 
-                // #region agent log
-                if (groupNum === 4 && String(thursdayKey).indexOf('2026-10') === 0) {
-                    __agentDbgLog({
-                        runId: 'g4-oct-thu',
-                        hypothesisId: 'A',
-                        location: 'night-changes.js:thuCheck',
-                        message: 'group4 Oct Thursday spacing check',
-                        data: {
-                            thursdayKey: thursdayKey,
-                            person: person,
-                            eligible: spacing.eligible,
-                            nRequired: spacing.nRequired,
-                            thursdaysSince: spacing.thursdaysSince,
-                            lastThursday: spacing.lastThursday || null,
-                            delta: spacing.thursdaysSince != null && spacing.nRequired != null
-                                ? spacing.thursdaysSince - spacing.nRequired
-                                : null,
-                            runtimeHit: runtimeLastThu[groupNum + ':' + normPerson(person)] || null
-                        }
-                    });
-                }
-                // #endregion
 
                 if (spacing.eligible) {
                     setSpacingMarker(markers, thursdayKey, groupNum, person, {
@@ -940,49 +848,6 @@
                             runtimeLastThu
                         );
 
-                    // #region agent log
-                    if (groupNum === 4 && String(thursdayKey).indexOf('2026-10') === 0) {
-                        const diagBrief = (candidateDiagnostics || []).slice(0, 9).map(function (d) {
-                            return {
-                                order: d.order,
-                                partnerKey: d.partnerKey,
-                                partnerPerson: d.partnerPerson,
-                                reasonCode: d.reasonCode,
-                                rejected: d.rejected,
-                                partnerThursdaysSince: d.partnerThursdaysSince,
-                                partnerNRequired: d.partnerNRequired,
-                                proximityScore: d.proximityScore
-                            };
-                        });
-                        __agentDbgLog({
-                            runId: 'g4-oct-swap',
-                            hypothesisId: isProximitySwap ? 'B' : 'E',
-                            location: 'night-changes.js:beforeSwap',
-                            message: 'group4 Oct N-swap about to apply',
-                            data: {
-                                thursdayKey: thursdayKey,
-                                displaced: person,
-                                partnerKey: partnerKey,
-                                partnerPerson: partnerPerson,
-                                isProximitySwap: isProximitySwap,
-                                displacedSpacing: {
-                                    nRequired: spacing.nRequired,
-                                    thursdaysSince: spacing.thursdaysSince,
-                                    lastThursday: spacing.lastThursday || null,
-                                    eligible: spacing.eligible
-                                },
-                                partnerSpacing: {
-                                    nRequired: partnerSpacing.nRequired,
-                                    thursdaysSince: partnerSpacing.thursdaysSince,
-                                    lastThursday: partnerSpacing.lastThursday || null,
-                                    eligible: partnerSpacing.eligible
-                                },
-                                preSnap: __agentG4OctSnapshot(assignments, 'before-swap'),
-                                diagnostics: diagBrief
-                            }
-                        });
-                    }
-                    // #endregion
 
                     if (!assignments[thursdayKey]) assignments[thursdayKey] = {};
                     if (!assignments[partnerKey]) assignments[partnerKey] = {};
@@ -1133,24 +998,6 @@
                         },
                         simulated
                     );
-                    // #region agent log
-                    if (groupNum === 4 && String(thursdayKey).indexOf('2026-10') === 0) {
-                        __agentDbgLog({
-                            runId: 'g4-oct-reseq',
-                            hypothesisId: 'C',
-                            location: 'night-changes.js:afterReseq',
-                            message: 'group4 Oct after N-swap + resequence',
-                            data: {
-                                thursdayKey: thursdayKey,
-                                partnerKey: partnerKey,
-                                displaced: person,
-                                replacement: partnerPerson,
-                                reseqChanges: _reseqN,
-                                postSnap: __agentG4OctSnapshot(assignments, 'after-reseq')
-                            }
-                        });
-                    }
-                    // #endregion
                     continue;
                 }
 
@@ -1627,47 +1474,6 @@
             calculationSteps.thursdaySpacingIterativeSwaps = cumulativeSwaps;
         }
 
-        // #region agent log
-        try {
-            const g4Swaps = (cumulativeSwaps.length ? cumulativeSwaps : lastResult.spacingSwaps || []).filter(
-                function (s) {
-                    return (
-                        Number(s.groupNum) === 4 &&
-                        (String(s.thursdayKey || '').indexOf('2026-10') === 0 ||
-                            String(s.partnerKey || '').indexOf('2026-10') === 0)
-                    );
-                }
-            );
-            const reasonSnap = {};
-            ['2026-10-06', '2026-10-08', '2026-10-13'].forEach(function (dk) {
-                const p = assignments?.[dk]?.[4] || assignments?.[dk]?.['4'] || null;
-                let r = null;
-                if (p && typeof getAssignmentReason === 'function') {
-                    r = getAssignmentReason(dk, 4, p);
-                }
-                reasonSnap[dk] = {
-                    person: p,
-                    type: r?.type || null,
-                    reason: r?.reason ? String(r.reason).slice(0, 220) : null,
-                    swappedWith: r?.swappedWith || null,
-                    thursdaySpacing: !!(r?.meta && r.meta.thursdaySpacing),
-                    thursdaySpacingResequence: !!(r?.meta && r.meta.thursdaySpacingResequence)
-                };
-            });
-            __agentDbgLog({
-                runId: 'g4-oct-final',
-                hypothesisId: 'A-E',
-                location: 'night-changes.js:iterative:done',
-                message: 'N iterative done — group4 Oct final',
-                data: Object.assign(__agentG4OctSnapshot(assignments, 'final'), {
-                    g4OctSwaps: g4Swaps,
-                    reasonSnap: reasonSnap,
-                    totalSwaps: (cumulativeSwaps.length ? cumulativeSwaps : lastResult.spacingSwaps || []).length
-                })
-            });
-            if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
-        } catch (_) {}
-        // #endregion
 
         return {
             assignments,

@@ -1590,33 +1590,6 @@
          * (β) η ανταλλαγή είναι στην ίδια εβδομάδα — αρκεί το two-slot swap.
          */
         function shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey) {
-            // #region agent log
-            try {
-                if (!window.__dutyLogicBuild1588Logged) {
-                    window.__dutyLogicBuild1588Logged = true;
-                    const boot = {
-                        sessionId: '8e8ea0',
-                        runId: 'g4-oct-post',
-                        hypothesisId: 'F-cache',
-                        location: 'duty-shifts-logic.js:shouldSkipSwapContinuityReflow:boot',
-                        message: 'logic build 1.588 loaded (first skip helper call)',
-                        data: { build: '1.588' },
-                        timestamp: Date.now()
-                    };
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Debug-Session-Id': '8e8ea0'
-                        },
-                        body: JSON.stringify(boot)
-                    }).catch(function () {});
-                    const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                    arr.push(boot);
-                    localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
-                }
-            } catch (_) {}
-            // #endregion
             if (typeof isNightChangesGroup === 'function' && isNightChangesGroup(groupNum)) {
                 return true;
             }
@@ -1626,50 +1599,6 @@
         function storeAssignmentReason(dateKey, groupNum, personName, type, reason, swappedWith = null, swapPairId = null, meta = null) {
             const keyName = normalizePersonKey(personName);
             if (!keyName) return;
-            // #region agent log
-            try {
-                const g = parseInt(groupNum, 10);
-                const dk = String(dateKey || '');
-                if (
-                    g === 4 &&
-                    (dk === '2026-10-06' || dk === '2026-10-08' || dk === '2026-10-13' || dk === '2026-10-07')
-                ) {
-                    const row = {
-                        sessionId: '8e8ea0',
-                        runId: 'g4-oct-reason',
-                        hypothesisId: 'D',
-                        location: 'duty-shifts-logic.js:storeAssignmentReason',
-                        message: 'store reason group4 Oct target dates',
-                        data: {
-                            dateKey: dk,
-                            groupNum: g,
-                            personName: personName,
-                            type: type,
-                            reason: reason != null && reason !== '' ? String(reason).slice(0, 240) : (reason === '' ? '(empty)' : null),
-                            reasonLen: reason == null ? -1 : String(reason).length,
-                            build: '1.588',
-                            swappedWith: swappedWith,
-                            swapPairId: swapPairId,
-                            metaKeys: meta ? Object.keys(meta) : [],
-                            thursdaySpacing: !!(meta && meta.thursdaySpacing),
-                            thursdaySpacingResequence: !!(meta && meta.thursdaySpacingResequence)
-                        },
-                        timestamp: Date.now()
-                    };
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Debug-Session-Id': '8e8ea0'
-                        },
-                        body: JSON.stringify(row)
-                    }).catch(function () {});
-                    const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                    arr.push(row);
-                    localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
-                }
-            } catch (_) {}
-            // #endregion
             if (!assignmentReasons[dateKey]) {
                 assignmentReasons[dateKey] = {};
             }
@@ -5261,40 +5190,6 @@
                         replacement = candidate;
                         break;
                     }
-                    // #region agent log
-                    try {
-                        const row = {
-                            sessionId: '8e8ea0',
-                            runId: 'wk-return',
-                            hypothesisId: 'G',
-                            location: 'duty-shifts-logic.js:enforceNoEarlyPendingWeekendReturns',
-                            message: 'enforce early pending weekend return',
-                            data: {
-                                build: '1.592',
-                                dateKey: dateKey,
-                                groupNum: groupNum,
-                                clearedPerson: current,
-                                replacement: replacement,
-                                designatedTarget:
-                                    calculationSteps?.pendingForwardWeekendReturnByGroup?.[groupNum]?.[
-                                        norm(current)
-                                    ] || null
-                            },
-                            timestamp: Date.now()
-                        };
-                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Debug-Session-Id': '8e8ea0'
-                            },
-                            body: JSON.stringify(row)
-                        }).catch(function () {});
-                        const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                        arr.push(row);
-                        localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-250)));
-                    } catch (_) {}
-                    // #endregion
                     if (replacement) {
                         if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
                         assignmentsByDate[dateKey][groupNum] = replacement;
@@ -5819,50 +5714,6 @@
                                 break;
                             }
                         }
-                        // #region agent log
-                        if (
-                            dateKey === '2026-10-17' ||
-                            dateKey === '2026-10-18' ||
-                            String(currentPerson || '').includes('ΣΙΑΚΟΛΑΣ') ||
-                            String(replacementPerson || '').includes('ΠΟΛΥΒΙΟΥ') ||
-                            String(currentPerson || '').includes('ΠΟΛΥΒΙΟΥ')
-                        ) {
-                            try {
-                                const row = {
-                                    sessionId: '8e8ea0',
-                                    runId: 'wk-skip',
-                                    hypothesisId: 'G',
-                                    location: 'duty-shifts-logic.js:runWeekendSkipLogic:phase1',
-                                    message: 'skip phase1 weekend replacement',
-                                    data: {
-                                        build: '1.592',
-                                        dateKey: dateKey,
-                                        groupNum: groupNum,
-                                        currentPerson: currentPerson,
-                                        replacementPerson: replacementPerson,
-                                        hasSpecialHoliday: !!hasSpecialHoliday,
-                                        alreadyAssignedThisMonth: !!alreadyAssignedThisMonth,
-                                        waitingEarlyReturn: !!waitingEarlyReturn
-                                    },
-                                    timestamp: Date.now()
-                                };
-                                fetch(
-                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                    {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'X-Debug-Session-Id': '8e8ea0'
-                                        },
-                                        body: JSON.stringify(row)
-                                    }
-                                ).catch(function () {});
-                                const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                                arr.push(row);
-                                localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-250)));
-                            } catch (_) {}
-                        }
-                        // #endregion
                         if (replacementPerson) {
                             skippedPeople.push({
                                 date: dateKey,
@@ -5983,50 +5834,6 @@
                     updatedAssignments,
                     assignedWeekendInMonth
                 );
-                // #region agent log
-                try {
-                    const snapSkip = {};
-                    ['2026-10-10', '2026-10-11', '2026-10-17', '2026-10-18', '2026-10-24', '2026-10-25'].forEach(
-                        function (dk) {
-                            const finalP = updatedAssignments?.[dk]?.[1] || null;
-                            let reason = null;
-                            if (finalP && typeof getAssignmentReason === 'function') {
-                                reason = getAssignmentReason(dk, 1, finalP);
-                            }
-                            snapSkip[dk] = {
-                                final: finalP,
-                                reasonType: reason?.type || null,
-                                reasonText: reason?.reason
-                                    ? String(reason.reason).slice(0, 180)
-                                    : null,
-                                swappedWith: reason?.swappedWith || null,
-                                returnFromMissing: !!(reason?.meta && reason.meta.returnFromMissing)
-                            };
-                        }
-                    );
-                    const row = {
-                        sessionId: '8e8ea0',
-                        runId: 'wk-skip',
-                        hypothesisId: 'G',
-                        location: 'duty-shifts-logic.js:runWeekendSkipLogic:final',
-                        message: 'skip logic final Oct g1 snapshot',
-                        data: Object.assign({ build: '1.592' }, snapSkip),
-                        timestamp: Date.now()
-                    };
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Debug-Session-Id': '8e8ea0'
-                        },
-                        body: JSON.stringify(row)
-                    }).catch(function () {});
-                    const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                    arr.push(row);
-                    localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-250)));
-                    if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
-                } catch (_) {}
-                // #endregion
                 sortedWeekends.forEach((dateKey) => {
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
@@ -8750,47 +8557,6 @@
                                 // full reflow wrongly rewrote Thu (e.g. ΨΩΜΑ on 08/10 after Mon↔Wed).
                                 try {
                                     const _skipCont = shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey);
-                                    // #region agent log
-                                    if (groupNum === 4 || (dateKey && String(dateKey).indexOf('2026-10') === 0)) {
-                                        try {
-                                            const row = {
-                                                sessionId: '8e8ea0',
-                                                runId: 'g4-oct-post',
-                                                hypothesisId: 'F-cache',
-                                                location: 'duty-shifts-logic.js:swapContinuity:decision',
-                                                message: 'swapContinuity reflow decision',
-                                                data: {
-                                                    build: '1.588',
-                                                    groupNum: groupNum,
-                                                    dateKey: dateKey,
-                                                    swapDayKey: swapDayKey,
-                                                    applyWeekPairLogic: !!applyWeekPairLogic,
-                                                    isCrossMonthSwap: !!isCrossMonthSwap,
-                                                    skip: !!_skipCont,
-                                                    nightChanges:
-                                                        typeof isNightChangesGroup === 'function' &&
-                                                        isNightChangesGroup(groupNum),
-                                                    sameWeek: dateKeysShareIsoWeek(dateKey, swapDayKey)
-                                                },
-                                                timestamp: Date.now()
-                                            };
-                                            fetch(
-                                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                                {
-                                                    method: 'POST',
-                                                    headers: {
-                                                        'Content-Type': 'application/json',
-                                                        'X-Debug-Session-Id': '8e8ea0'
-                                                    },
-                                                    body: JSON.stringify(row)
-                                                }
-                                            ).catch(function () {});
-                                            const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                                            arr.push(row);
-                                            localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
-                                        } catch (_) {}
-                                    }
-                                    // #endregion
                                     if (
                                         applyWeekPairLogic &&
                                         !isCrossMonthSwap &&
@@ -8856,41 +8622,6 @@
                                         !isCrossMonthSwap &&
                                         shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey)
                                     ) {
-                                        // #region agent log
-                                        try {
-                                            const row = {
-                                                sessionId: '8e8ea0',
-                                                runId: 'g4-oct-post',
-                                                hypothesisId: 'D-fix',
-                                                location: 'duty-shifts-logic.js:swapContinuity:skip',
-                                                message: 'skipped swapContinuity reflow',
-                                                data: {
-                                                    groupNum: groupNum,
-                                                    dateKey: dateKey,
-                                                    swapDayKey: swapDayKey,
-                                                    nightChanges:
-                                                        typeof isNightChangesGroup === 'function' &&
-                                                        isNightChangesGroup(groupNum),
-                                                    sameWeek: dateKeysShareIsoWeek(dateKey, swapDayKey)
-                                                },
-                                                timestamp: Date.now()
-                                            };
-                                            fetch(
-                                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                                {
-                                                    method: 'POST',
-                                                    headers: {
-                                                        'Content-Type': 'application/json',
-                                                        'X-Debug-Session-Id': '8e8ea0'
-                                                    },
-                                                    body: JSON.stringify(row)
-                                                }
-                                            ).catch(function () {});
-                                            const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                                            arr.push(row);
-                                            localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
-                                        } catch (_) {}
-                                        // #endregion
                                     }
                                 } catch (contErr) {
                                     console.warn('[SWAP CONTINUITY] Failed to reflow future normal days after swap:', contErr);
@@ -10094,65 +9825,12 @@
                     if (isNaN(a.getTime()) || isNaN(b.getTime())) return Infinity;
                     return Math.round((b - a) / (1000 * 60 * 60 * 24));
                 };
-                const isSaturdayOrSundayKey = (dateKey) => {
-                    const dow = new Date(dateKey + 'T00:00:00').getDay();
-                    return dow === 0 || dow === 6;
-                };
                 /** Μετά τη λήξη απουσίας: επιλέξιμο από (λήξη + 3 ημερολογιακές ημέρες) — ίδιο με ημιαργίες. */
                 const isWeekendTargetTooSoonAfterAbsenceEnd = (absenceEndKey, candidateWeekendKey) => {
                     if (!absenceEndKey || !candidateWeekendKey) return false;
                     const daysAfter = calendarDaysFromTo(absenceEndKey, candidateWeekendKey);
                     return daysAfter < 3;
                 };
-                // #region agent log
-                const __dbgWk = (message, hypothesisId, data) => {
-                    try {
-                        const row = {
-                            sessionId: '8e8ea0',
-                            runId: 'wk-return',
-                            hypothesisId: hypothesisId || 'A',
-                            location: 'duty-shifts-logic.js:weekend-return',
-                            message: message,
-                            data: Object.assign({ build: '1.592' }, data || {}),
-                            timestamp: Date.now()
-                        };
-                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Debug-Session-Id': '8e8ea0'
-                            },
-                            body: JSON.stringify(row)
-                        }).catch(function () {});
-                        const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                        arr.push(row);
-                        localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-250)));
-                        window.__agentDbgFlush = function () {
-                            try {
-                                const stored = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                                const nd =
-                                    stored.map(function (r) {
-                                        return JSON.stringify(r);
-                                    }).join('\n') + '\n';
-                                const blob = new Blob([nd], { type: 'application/x-ndjson' });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = 'debug-8e8ea0.log';
-                                a.style.display = 'none';
-                                document.body.appendChild(a);
-                                a.click();
-                                setTimeout(function () {
-                                    try {
-                                        URL.revokeObjectURL(url);
-                                        a.remove();
-                                    } catch (_) {}
-                                }, 2000);
-                            } catch (_) {}
-                        };
-                    } catch (_) {}
-                };
-                // #endregion
                 const findSameMonthReturnWeekendTarget = (
                     sorted,
                     calcStartKey,
@@ -10189,49 +9867,6 @@
                             !isBackward &&
                             absenceEndKey &&
                             isWeekendTargetTooSoonAfterAbsenceEnd(absenceEndKey, wk);
-                        // #region agent log
-                        if (
-                            String(personName || '').includes('ΠΟΛΥΒΙΟΥ') ||
-                            String(wk || '').indexOf('2026-10') === 0
-                        ) {
-                            let returnKey = null;
-                            let thresholdPlus3 = null;
-                            if (absenceEndKey) {
-                                const rd = new Date(absenceEndKey + 'T00:00:00');
-                                if (!isNaN(rd.getTime())) {
-                                    rd.setDate(rd.getDate() + 1);
-                                    returnKey =
-                                        typeof formatDateKey === 'function'
-                                            ? formatDateKey(rd)
-                                            : null;
-                                    const td = new Date(returnKey + 'T00:00:00');
-                                    if (returnKey && !isNaN(td.getTime())) {
-                                        td.setDate(td.getDate() + 3);
-                                        thresholdPlus3 =
-                                            typeof formatDateKey === 'function'
-                                                ? formatDateKey(td)
-                                                : null;
-                                    }
-                                }
-                            }
-                            __dbgWk('tryPick weekend return candidate', 'A', {
-                                personName: personName,
-                                groupNum: groupNum,
-                                wk: wk,
-                                isBackward: !!isBackward,
-                                absenceEndKey: absenceEndKey,
-                                returnKey: returnKey,
-                                thresholdReturnPlus3: thresholdPlus3,
-                                daysAfterEnd: absenceEndKey
-                                    ? calendarDaysFromTo(absenceEndKey, wk)
-                                    : null,
-                                tooSoonOldBuffer: !!tooSoon,
-                                wouldPassNewRule:
-                                    !thresholdPlus3 || !wk ? null : wk >= thresholdPlus3,
-                                isSatSun: isSaturdayOrSundayKey(wk)
-                            });
-                        }
-                        // #endregion
                         if (tooSoon) {
                             return null;
                         }
@@ -10522,22 +10157,6 @@
                                 if (sameMonthPick) {
                                     targetWeekendKey = sameMonthPick.targetWeekendKey;
                                     isBackwardAssignment = sameMonthPick.isBackwardAssignment;
-                                    // #region agent log
-                                    if (
-                                        String(rosterPersonName || '').includes('ΠΟΛΥΒΙΟΥ') ||
-                                        String(targetWeekendKey || '').indexOf('2026-10') === 0
-                                    ) {
-                                        __dbgWk('sameMonthPick selected', 'A', {
-                                            personName: rosterPersonName,
-                                            groupNum: groupNum,
-                                            pStartKey: pStartKey,
-                                            pEndKey: pEndKey,
-                                            missedWeekendKeys: missedWeekendKeysForReturn,
-                                            targetWeekendKey: targetWeekendKey,
-                                            isBackwardAssignment: !!isBackwardAssignment
-                                        });
-                                    }
-                                    // #endregion
                                 }
                                 if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) {
                                     if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
@@ -10635,21 +10254,6 @@
                                     reasonOfMissing: reasonOfMissingW,
                                     missedWeekendKeys: missedWeekendKeysForReturn.slice()
                                 };
-                                // #region agent log
-                                if (
-                                    String(rosterPersonName || '').includes('ΠΟΛΥΒΙΟΥ') ||
-                                    String(targetWeekendKey || '').indexOf('2026-10') === 0
-                                ) {
-                                    __dbgWk('RETURN_PLANNED weekend target stored', 'A', {
-                                        personName: rosterPersonName,
-                                        groupNum: groupNum,
-                                        pEndKey: pEndKey,
-                                        targetWeekendKey: targetWeekendKey,
-                                        isBackwardAssignment: !!isBackwardAssignment,
-                                        missedWeekendKeys: missedWeekendKeysForReturn
-                                    });
-                                }
-                                // #endregion
                                 if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                     dutyWeekendDebug.recordAbsentPlacement({
                                         groupNum,
@@ -10821,27 +10425,6 @@
                             }
                             if (designatedWeekend && matchingPerson && !isPersonMissingOnDate(matchingPerson, groupNum, date, 'weekend')) {
                                 const assignedPerson = matchingPerson;
-                                // #region agent log
-                                if (
-                                    dateKey === '2026-10-17' ||
-                                    String(assignedPerson || '').includes('ΠΟΛΥΒΙΟΥ') ||
-                                    String(assignedPerson || '').includes('ΣΙΑΚΟΛΑΣ')
-                                ) {
-                                    const base = baselineWeekendByDate[dateKey]?.[groupNum] || null;
-                                    __dbgWk('apply designated weekend return', 'D', {
-                                        dateKey: dateKey,
-                                        groupNum: groupNum,
-                                        assignedPerson: assignedPerson,
-                                        baselineDisplaced: base,
-                                        missingEnd: designatedWeekend.missingEnd,
-                                        isBackward: !!designatedWeekend.isBackwardAssignment,
-                                        baselineMissingOnDate: base
-                                            ? isPersonMissingOnDate(base, groupNum, date, 'weekend')
-                                            : null,
-                                        path: 'return-from-missing-designated'
-                                    });
-                                }
-                                // #endregion
                                 if (!assignedByReturnFromMissingWeekend[groupNum]) assignedByReturnFromMissingWeekend[groupNum] = new Set();
                                 assignedByReturnFromMissingWeekend[groupNum].add(assignedPerson);
                                 // Next slot goes to the displaced (baseline) person – set position to displaced person's index so we get F, A, B, C
@@ -10939,25 +10522,6 @@
                             const waitingForwardReturn =
                                 rotationPerson &&
                                 isWaitingForForwardWeekendReturn(rotationPerson, groupNum, dateKey);
-                            // #region agent log
-                            if (
-                                waitingForwardReturn &&
-                                (String(rotationPerson || '').includes('ΠΟΛΥΒΙΟΥ') ||
-                                    dateKey === '2026-10-17' ||
-                                    dateKey === '2026-10-18')
-                            ) {
-                                __dbgWk('blocked rotation: pending forward weekend return', 'F', {
-                                    dateKey: dateKey,
-                                    groupNum: groupNum,
-                                    rotationPerson: rotationPerson,
-                                    designatedTarget:
-                                        pendingForwardWeekendReturnByGroup[groupNum]?.[
-                                            normPendingWeekendReturn(rotationPerson)
-                                        ] || null,
-                                    path: 'waiting-forward-return-skip-rotation'
-                                });
-                            }
-                            // #endregion
                             const wasAssignedByReturnFromMissingWeekend =
                                 (rotationPerson &&
                                     assignedByReturnFromMissingWeekend[groupNum]?.has(rotationPerson)) ||
@@ -11130,38 +10694,6 @@
                                         break;
                                     }
                                     if (replacementPerson) {
-                                        // #region agent log
-                                        if (
-                                            dateKey === '2026-10-17' ||
-                                            String(replacementPerson || '').includes('ΠΟΛΥΒΙΟΥ') ||
-                                            String(assignedPerson || '').includes('ΣΙΑΚΟΛΑΣ')
-                                        ) {
-                                            const mp =
-                                                typeof getPersonMissingPeriod === 'function'
-                                                    ? getPersonMissingPeriod(
-                                                          assignedPerson,
-                                                          groupNum,
-                                                          date
-                                                      )
-                                                    : null;
-                                            __dbgWk('phase2 missing replacement', 'B', {
-                                                dateKey: dateKey,
-                                                groupNum: groupNum,
-                                                skippedBaseline: assignedPerson,
-                                                replacementPerson: replacementPerson,
-                                                skippedIsMissing: isPersonMissingOnDate(
-                                                    assignedPerson,
-                                                    groupNum,
-                                                    date,
-                                                    'weekend'
-                                                ),
-                                                skippedMissingPeriod: mp
-                                                    ? { start: mp.start, end: mp.end, reason: mp.reason }
-                                                    : null,
-                                                path: 'phase2-missing-replacement'
-                                            });
-                                        }
-                                        // #endregion
                                         storeUnavailableReplacementReason(
                                             dateKey,
                                             groupNum,
@@ -11203,36 +10735,8 @@
                                 assignedPerson &&
                                 isWaitingForForwardWeekendReturn(assignedPerson, groupNum, dateKey)
                             ) {
-                                // #region agent log
-                                __dbgWk('cleared early weekend assign before designated return', 'F', {
-                                    dateKey: dateKey,
-                                    groupNum: groupNum,
-                                    clearedPerson: assignedPerson,
-                                    designatedTarget:
-                                        pendingForwardWeekendReturnByGroup[groupNum]?.[
-                                            normPendingWeekendReturn(assignedPerson)
-                                        ] || null,
-                                    path: 'safety-clear-before-designated'
-                                });
-                                // #endregion
                                 assignedPerson = null;
                             }
-                            // #region agent log
-                            if (
-                                assignedPerson &&
-                                (dateKey === '2026-10-17' || dateKey === '2026-10-18') &&
-                                groupNum === 1 &&
-                                String(assignedPerson).includes('ΠΟΛΥΒΙΟΥ')
-                            ) {
-                                __dbgWk('UNEXPECTED Polyviou on 17/18 after guards', 'F', {
-                                    dateKey: dateKey,
-                                    groupNum: groupNum,
-                                    assignedPerson: assignedPerson,
-                                    rotationPerson: rotationPerson,
-                                    path: 'post-guard-still-polyviou'
-                                });
-                            }
-                            // #endregion
 
                             const displayPerson = assignedPerson;
 
@@ -11376,38 +10880,6 @@
                 );
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
-                // #region agent log
-                try {
-                    const snap = {};
-                    ['2026-10-10', '2026-10-11', '2026-10-17', '2026-10-18', '2026-10-24', '2026-10-25'].forEach(
-                        function (dk) {
-                            const finalP = simulatedWeekendAssignments?.[dk]?.[1] || null;
-                            const baseP =
-                                baselineWeekendByDate?.[dk]?.[1] ||
-                                weekendRotationPersons?.[dk]?.[1] ||
-                                null;
-                            let reason = null;
-                            if (finalP && typeof getAssignmentReason === 'function') {
-                                reason = getAssignmentReason(dk, 1, finalP);
-                            }
-                            snap[dk] = {
-                                final: finalP,
-                                baseline: baseP,
-                                reasonType: reason?.type || null,
-                                reasonText: reason?.reason
-                                    ? String(reason.reason).slice(0, 200)
-                                    : null,
-                                returnFromMissing: !!(reason?.meta && reason.meta.returnFromMissing),
-                                swappedWith: reason?.swappedWith || null,
-                                designated:
-                                    returnFromMissingWeekendTargets?.[dk]?.[1]?.personName || null
-                            };
-                        }
-                    );
-                    __dbgWk('weekend step final Oct g1 snapshot', 'A-E', snap);
-                    if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
-                } catch (_) {}
-                // #endregion
                 calculationSteps.tempWeekendAssignments = simulatedWeekendAssignments;
                 finalizeWeekendPreview(
                     simulatedWeekendAssignments,
@@ -15363,41 +14835,6 @@
                                     !isCrossMonthSwapPreview &&
                                     shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey)
                                 ) {
-                                    // #region agent log
-                                    try {
-                                        const row = {
-                                            sessionId: '8e8ea0',
-                                            runId: 'g4-oct-post',
-                                            hypothesisId: 'D-fix',
-                                            location: 'duty-shifts-logic.js:previewSwapContinuity:skip',
-                                            message: 'skipped preview swapContinuity reflow',
-                                            data: {
-                                                groupNum: groupNum,
-                                                dateKey: dateKey,
-                                                swapDayKey: swapDayKey,
-                                                nightChanges:
-                                                    typeof isNightChangesGroup === 'function' &&
-                                                    isNightChangesGroup(groupNum),
-                                                sameWeek: dateKeysShareIsoWeek(dateKey, swapDayKey)
-                                            },
-                                            timestamp: Date.now()
-                                        };
-                                        fetch(
-                                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                            {
-                                                method: 'POST',
-                                                headers: {
-                                                    'Content-Type': 'application/json',
-                                                    'X-Debug-Session-Id': '8e8ea0'
-                                                },
-                                                body: JSON.stringify(row)
-                                            }
-                                        ).catch(function () {});
-                                        const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                                        arr.push(row);
-                                        localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
-                                    } catch (_) {}
-                                    // #endregion
                                 }
                             } catch (previewContErr) {
                                 console.warn('[PREVIEW SWAP CONTINUITY] Failed to reflow future normal days after swap:', previewContErr);
