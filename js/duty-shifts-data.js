@@ -6730,44 +6730,49 @@ ${content.innerHTML}
                 if (!personName) return '<span class="text-muted">—</span>';
                 const personNorm = normName(personName);
                 const finalNorm = finalPerson ? normName(finalPerson) : '';
+                const list = (groupData?.[typeKey] || []).map(normName);
+                const inCurrentList = list.includes(personNorm);
                 const finalMatchesBaseline = !!(finalNorm && finalNorm === personNorm);
-                const unavailable = isPersonUnavailableWholeMonth(
-                    personName,
-                    groupNum,
-                    typeKey,
-                    monthStartKey,
-                    monthEndKey,
-                    groupData
-                );
-                const alreadyUsedAsSubstitute =
-                    consumedSubstitutes instanceof Set && consumedSubstitutes.has(personNorm);
+                // Display-only: pure baseline vs final. No unavailable/substitute cascade in this column.
+                let willStrike = !!(finalNorm && !finalMatchesBaseline);
+                let displayHtml = '';
+                if (!inCurrentList) {
+                    // Stale baseline for someone removed from group lists (e.g. Βάββας) — hide name.
+                    willStrike = false;
+                    displayHtml = '<span class="text-muted">—</span>';
+                } else if (!finalNorm || finalMatchesBaseline) {
+                    displayHtml = formatPersonCell(personName, orderNo);
+                } else {
+                    const finalOrder = getOrderNo(groupData, typeKey, finalPerson);
+                    const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
+                    displayHtml = `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${finalOrder || '-'}</span>${escapeHtml(finalPerson)})</span>`;
+                }
                 // #region agent log
                 if (
                     groupNum === 1 &&
                     (dateKeyForDbg === '2026-10-13' ||
                         dateKeyForDbg === '2026-10-20' ||
                         dateKeyForDbg === '2026-10-08' ||
-                        (finalMatchesBaseline && (unavailable || alreadyUsedAsSubstitute)))
+                        dateKeyForDbg === '2026-10-26' ||
+                        String(personName || '').includes('ΒΑΒΒΑΣ'))
                 ) {
                     const row = {
                         sessionId: '8e8ea0',
-                        runId: 'compare-baseline',
+                        runId: 'compare-baseline-post',
                         hypothesisId: 'A-D',
                         location: 'duty-shifts-data.js:formatBaselinePersonCell',
                         message: 'compare baseline cell strike decision',
                         data: {
-                            build: '1.594',
+                            build: '1.595',
                             dateKey: dateKeyForDbg,
                             groupNum: groupNum,
                             typeKey: typeKey,
                             baseline: personName,
                             finalPerson: finalPerson,
                             finalMatchesBaseline: finalMatchesBaseline,
-                            unavailable: !!unavailable,
-                            alreadyUsedAsSubstitute: !!alreadyUsedAsSubstitute,
-                            willStrike: !!(unavailable || alreadyUsedAsSubstitute),
-                            consumedSize:
-                                consumedSubstitutes instanceof Set ? consumedSubstitutes.size : -1
+                            inCurrentList: inCurrentList,
+                            willStrike: willStrike,
+                            parenIsFinal: willStrike
                         },
                         timestamp: Date.now()
                     };
@@ -6809,25 +6814,7 @@ ${content.innerHTML}
                     } catch (_) {}
                 }
                 // #endregion
-                if (!unavailable && !alreadyUsedAsSubstitute) {
-                    return formatPersonCell(personName, orderNo);
-                }
-                const nextPerson = findNextAvailableInRotationList(
-                    groupData,
-                    typeKey,
-                    personName,
-                    groupNum,
-                    monthStartKey,
-                    monthEndKey,
-                    consumedSubstitutes
-                );
-                if (nextPerson && consumedSubstitutes instanceof Set) {
-                    consumedSubstitutes.add(normName(nextPerson));
-                }
-                const nextOrder = nextPerson ? getOrderNo(groupData, typeKey, nextPerson) : null;
-                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
-                if (!nextPerson) return struck;
-                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${nextOrder || '-'}</span>${escapeHtml(nextPerson)})</span>`;
+                return displayHtml;
             };
             const buildChangeMarker = (reasonObj, pairKey, getSwapPairLabelNo) => {
                 if (!reasonObj) {
