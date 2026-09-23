@@ -5213,7 +5213,7 @@
                                     location: 'duty-shifts-logic.js:enforce-early-return',
                                     message: 'enforce replaced early pending return',
                                     data: {
-                                        build: '1.604',
+                                        build: '1.605',
                                         dateKey: dateKey,
                                         groupNum: groupNum,
                                         removed: current,
@@ -5249,7 +5249,7 @@
                                     location: 'duty-shifts-logic.js:enforce-early-return',
                                     message: 'enforce FAILED no replacement for early Polyviou',
                                     data: {
-                                        build: '1.604',
+                                        build: '1.605',
                                         dateKey: dateKey,
                                         groupNum: groupNum,
                                         stuck: current,
@@ -5377,6 +5377,16 @@
             }
             const newAssignees = [absentPerson];
             for (let i = 1; i < n; i++) newAssignees.push(oldAssignees[i - 1]);
+            for (let i = 0; i < n; i++) {
+                const p = newAssignees[i];
+                if (
+                    p &&
+                    typeof isPersonWaitingForForwardWeekendReturn === 'function' &&
+                    isPersonWaitingForForwardWeekendReturn(p, groupNum, chain[i])
+                ) {
+                    return null;
+                }
+            }
             const cascadeId =
                 typeof getNextSwapPairIdForAssignmentReasons === 'function'
                     ? getNextSwapPairIdForAssignmentReasons()
@@ -10059,6 +10069,32 @@
                 if (calcStartKeyW && calcEndKeyW && sortedWeekends.length > 0) {
                     const processedWeekendReturn = new Set();
                     const normW = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
+                    /** Ακόμα κι αν δεν χάθηκε baseline ΣΚ: μπλοκάρισμα ΣΚ πριν την πρώτη αργία στις/μετά λήξη+3. */
+                    const absenceEndEarliestWeekendByGroup = {};
+                    const noteAbsenceEndWeekendBlock = (groupNum, personName, absenceEndKey) => {
+                        const threshold = addDaysW(absenceEndKey, 3);
+                        if (!threshold) return null;
+                        let earliest = null;
+                        for (const wk of sortedWeekends) {
+                            if (calcStartKeyW && wk < calcStartKeyW) continue;
+                            if (calcEndKeyW && wk > calcEndKeyW) break;
+                            if (wk >= threshold) {
+                                earliest = wk;
+                                break;
+                            }
+                        }
+                        if (!earliest || !personName) return null;
+                        if (!absenceEndEarliestWeekendByGroup[groupNum]) {
+                            absenceEndEarliestWeekendByGroup[groupNum] = {};
+                        }
+                        const nk = normW(personName);
+                        const prev = absenceEndEarliestWeekendByGroup[groupNum][nk];
+                        if (!prev || earliest < prev) {
+                            absenceEndEarliestWeekendByGroup[groupNum][nk] = earliest;
+                        }
+                        return earliest;
+                    };
+                    calculationSteps.absenceEndEarliestWeekendByGroup = absenceEndEarliestWeekendByGroup;
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const g = groups[groupNum];
                         const missingMap = g?.missingPeriods || {};
@@ -10127,6 +10163,8 @@
                                 const personReturnKey = `${groupNum}|${normW(rosterPersonName)}`;
                                 if (processedWeekendReturn.has(personReturnKey)) continue;
                                 processedWeekendReturn.add(personReturnKey);
+                                // Γενικό μπλοκ: καμία ΣΚ/αργία πριν την πρώτη στις/μετά λήξη+3 (ακόμα κι αν δεν χάθηκε baseline).
+                                noteAbsenceEndWeekendBlock(groupNum, rosterPersonName, pEndKey);
                                 const scanStartKey = periodEndsInPrevMonth ? maxKeyW(prevMonthStartKey, pStartKey) : maxKeyW(calcStartKeyW, pStartKey);
                                 const scanEndKey = periodEndsInPrevMonth ? pEndKey : minKeyW(pEndKey, calcEndKeyW);
                                 if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
@@ -10353,11 +10391,30 @@
                 }
 
                 // Forward return-from-missing: μην μπαίνουν σε ΣΚ πριν τον ορισμένο στόχο (π.χ. Πολυβίου όχι 17/18 αν στόχος 24).
+                // Επίσης: μπλοκ από λήξη απουσίας+3 ακόμα κι αν δεν υπάρχει designated return (δεν χάθηκε baseline ΣΚ).
                 const pendingForwardWeekendReturnByGroup = {};
                 const normPendingWeekendReturn = (s) =>
                     typeof normalizePersonKey === 'function'
                         ? normalizePersonKey(s)
                         : String(s || '').trim();
+                const mergePendingEarliest = (g, nk, earliestKey) => {
+                    if (!g || !nk || !earliestKey) return;
+                    if (!pendingForwardWeekendReturnByGroup[g]) pendingForwardWeekendReturnByGroup[g] = {};
+                    const prev = pendingForwardWeekendReturnByGroup[g][nk];
+                    // Strictest (= latest) first-allowed weekend wins.
+                    if (!prev || earliestKey > prev) {
+                        pendingForwardWeekendReturnByGroup[g][nk] = earliestKey;
+                    }
+                };
+                const absenceEndMap =
+                    calculationSteps.absenceEndEarliestWeekendByGroup || {};
+                for (const gStr of Object.keys(absenceEndMap)) {
+                    const g = parseInt(gStr, 10);
+                    if (!g) continue;
+                    for (const [nk, earliest] of Object.entries(absenceEndMap[g] || {})) {
+                        mergePendingEarliest(g, nk, earliest);
+                    }
+                }
                 for (const targetKey of Object.keys(returnFromMissingWeekendTargets)) {
                     const byGroup = returnFromMissingWeekendTargets[targetKey] || {};
                     for (const gStr of Object.keys(byGroup)) {
@@ -10365,12 +10422,7 @@
                         if (!meta || meta.isBackwardAssignment) continue;
                         const g = parseInt(gStr, 10);
                         if (!g || !meta.personName) continue;
-                        if (!pendingForwardWeekendReturnByGroup[g]) pendingForwardWeekendReturnByGroup[g] = {};
-                        const nk = normPendingWeekendReturn(meta.personName);
-                        const prev = pendingForwardWeekendReturnByGroup[g][nk];
-                        if (!prev || targetKey < prev) {
-                            pendingForwardWeekendReturnByGroup[g][nk] = targetKey;
-                        }
+                        mergePendingEarliest(g, normPendingWeekendReturn(meta.personName), targetKey);
                     }
                 }
                 const isWaitingForForwardWeekendReturn = (person, groupNum, dateKey) => {
@@ -10412,7 +10464,13 @@
                         hypothesisId: 'H2',
                         location: 'duty-shifts-logic.js:pending-return-map',
                         message: 'Polyviou pending forward return targets',
-                        data: { build: '1.604', polyPending: polyPending, polyTargets: polyTargets },
+                        data: {
+                            build: '1.605',
+                            polyPending: polyPending,
+                            polyTargets: polyTargets,
+                            absenceEndEarliest:
+                                calculationSteps.absenceEndEarliestWeekendByGroup?.[1] || null
+                        },
                         timestamp: Date.now()
                     };
                     fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
@@ -11012,7 +11070,7 @@
                             hypothesisId: label === 'pre-cascade' ? 'H1' : label === 'post-cascade' ? 'H3' : 'H5',
                             location: 'duty-shifts-logic.js:weekend-' + label,
                             message: 'Polyviou weekend snap ' + label,
-                            data: { build: '1.604', label: label, byG: byG },
+                            data: { build: '1.605', label: label, byG: byG },
                             timestamp: Date.now()
                         };
                         fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
