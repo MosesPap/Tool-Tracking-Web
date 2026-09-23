@@ -9880,13 +9880,11 @@
                     const dow = new Date(dateKey + 'T00:00:00').getDay();
                     return dow === 0 || dow === 6;
                 };
-                /** Μετά τη λήξη απουσίας: όχι Σάβ/Κυρ εντός 2 ημερολογιακών ημερών (π.χ. λήξη Παρ→ όχι Σάβ/Κυρ). */
+                /** Μετά τη λήξη απουσίας: επιλέξιμο από (λήξη + 3 ημερολογιακές ημέρες) — ίδιο με ημιαργίες. */
                 const isWeekendTargetTooSoonAfterAbsenceEnd = (absenceEndKey, candidateWeekendKey) => {
                     if (!absenceEndKey || !candidateWeekendKey) return false;
                     const daysAfter = calendarDaysFromTo(absenceEndKey, candidateWeekendKey);
-                    if (daysAfter <= 0) return true;
-                    if (daysAfter > 2) return false;
-                    return isSaturdayOrSundayKey(candidateWeekendKey);
+                    return daysAfter < 3;
                 };
                 // #region agent log
                 const __dbgWk = (message, hypothesisId, data) => {
@@ -9897,7 +9895,7 @@
                             hypothesisId: hypothesisId || 'A',
                             location: 'duty-shifts-logic.js:weekend-return',
                             message: message,
-                            data: Object.assign({ build: '1.590' }, data || {}),
+                            data: Object.assign({ build: '1.591' }, data || {}),
                             timestamp: Date.now()
                         };
                         fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
@@ -10448,7 +10446,7 @@
                                             `Χάθηκε ΣΚ: ${missedWeekendKeysForReturn.join(', ')}. Θα ανατεθεί στον ίδιο μήνα στην ${targetWeekendKey}` +
                                             (isBackwardAssignment
                                                 ? ' (πριν την απουσία)'
-                                                : ` (μετά την απουσία — όχι Σάβ/Κυρ εντός 2 ημ. από λήξη ${pEndKey})`) +
+                                                : ` (μετά την απουσία — πρώτη ΣΚ/αργία στις/μετά λήξη+3 από ${pEndKey})`) +
                                             '.'
                                     });
                                 }
@@ -10456,6 +10454,35 @@
                         }
                     }
                 }
+
+                // Forward return-from-missing: μην μπαίνουν σε ΣΚ πριν τον ορισμένο στόχο (π.χ. Πολυβίου όχι 17/18 αν στόχος 24).
+                const pendingForwardWeekendReturnByGroup = {};
+                const normPendingWeekendReturn = (s) =>
+                    typeof normalizePersonKey === 'function'
+                        ? normalizePersonKey(s)
+                        : String(s || '').trim();
+                for (const targetKey of Object.keys(returnFromMissingWeekendTargets)) {
+                    const byGroup = returnFromMissingWeekendTargets[targetKey] || {};
+                    for (const gStr of Object.keys(byGroup)) {
+                        const meta = byGroup[gStr];
+                        if (!meta || meta.isBackwardAssignment) continue;
+                        const g = parseInt(gStr, 10);
+                        if (!g || !meta.personName) continue;
+                        if (!pendingForwardWeekendReturnByGroup[g]) pendingForwardWeekendReturnByGroup[g] = {};
+                        const nk = normPendingWeekendReturn(meta.personName);
+                        const prev = pendingForwardWeekendReturnByGroup[g][nk];
+                        if (!prev || targetKey < prev) {
+                            pendingForwardWeekendReturnByGroup[g][nk] = targetKey;
+                        }
+                    }
+                }
+                const isWaitingForForwardWeekendReturn = (person, groupNum, dateKey) => {
+                    if (!person || !dateKey) return false;
+                    const t = pendingForwardWeekendReturnByGroup[groupNum]?.[
+                        normPendingWeekendReturn(person)
+                    ];
+                    return !!(t && dateKey < t);
+                };
 
                 sortedWeekends.forEach((dateKey, weekendIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
@@ -10688,7 +10715,33 @@
                             let previewMissingSwapPerson = null;
                             
                             // Already assigned via return-from-missing (backward/forward): skip when their turn comes – they already had their duty
-                            const wasAssignedByReturnFromMissingWeekend = rotationPerson && assignedByReturnFromMissingWeekend[groupNum]?.has(rotationPerson);
+                            // Also: waiting for a later forward return slot (end+3 target) — do not take earlier weekends via rotation
+                            const waitingForwardReturn =
+                                rotationPerson &&
+                                isWaitingForForwardWeekendReturn(rotationPerson, groupNum, dateKey);
+                            // #region agent log
+                            if (
+                                waitingForwardReturn &&
+                                (String(rotationPerson || '').includes('ΠΟΛΥΒΙΟΥ') ||
+                                    dateKey === '2026-10-17' ||
+                                    dateKey === '2026-10-18')
+                            ) {
+                                __dbgWk('blocked rotation: pending forward weekend return', 'F', {
+                                    dateKey: dateKey,
+                                    groupNum: groupNum,
+                                    rotationPerson: rotationPerson,
+                                    designatedTarget:
+                                        pendingForwardWeekendReturnByGroup[groupNum]?.[
+                                            normPendingWeekendReturn(rotationPerson)
+                                        ] || null,
+                                    path: 'waiting-forward-return-skip-rotation'
+                                });
+                            }
+                            // #endregion
+                            const wasAssignedByReturnFromMissingWeekend =
+                                (rotationPerson &&
+                                    assignedByReturnFromMissingWeekend[groupNum]?.has(rotationPerson)) ||
+                                waitingForwardReturn;
                             if (wasAssignedByReturnFromMissingWeekend) {
                                 if (!assignedPeoplePreviewWeekend[monthKey][groupNum]) assignedPeoplePreviewWeekend[monthKey][groupNum] = {};
                                 let foundEligible = false;
@@ -10697,6 +10750,7 @@
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
                                     if (assignedByReturnFromMissingWeekend[groupNum]?.has(candidate)) continue;
+                                    if (isWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
                                     if (assignedPeoplePreviewWeekend[monthKey][groupNum][candidate]) {
@@ -10734,6 +10788,7 @@
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
+                                    if (isWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
                                     if (assignedPeoplePreviewWeekend[monthKey][groupNum][candidate]) {
                                         const lastAssignmentDateKey = assignedPeoplePreviewWeekend[monthKey][groupNum][candidate];
@@ -10773,6 +10828,7 @@
                                         const nextIndex = (currentIndex + offset) % rotationDays;
                                         const candidate = groupPeople[nextIndex];
                                         if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                                        if (isWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
                                         if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
                                         const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
                                         const candidateAlreadyAssigned = assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate);
@@ -10841,6 +10897,7 @@
                                         const candidate = groupPeople[nextIndex];
                                         if (!candidate) continue;
                                         if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                                        if (isWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
                                         if (
                                             typeof isPersonDisabledForDuty === 'function' &&
                                             isPersonDisabledForDuty(candidate, groupNum, 'weekend', dateKey)
@@ -10920,6 +10977,42 @@
                                     weekendRotationPersons[dateKey][groupNum] = existingManualAlternateWeekend.baseline;
                                 }
                             }
+
+                            // Safety: never keep a person on a weekend before their designated forward return-from-missing
+                            if (
+                                assignedPerson &&
+                                isWaitingForForwardWeekendReturn(assignedPerson, groupNum, dateKey)
+                            ) {
+                                // #region agent log
+                                __dbgWk('cleared early weekend assign before designated return', 'F', {
+                                    dateKey: dateKey,
+                                    groupNum: groupNum,
+                                    clearedPerson: assignedPerson,
+                                    designatedTarget:
+                                        pendingForwardWeekendReturnByGroup[groupNum]?.[
+                                            normPendingWeekendReturn(assignedPerson)
+                                        ] || null,
+                                    path: 'safety-clear-before-designated'
+                                });
+                                // #endregion
+                                assignedPerson = null;
+                            }
+                            // #region agent log
+                            if (
+                                assignedPerson &&
+                                (dateKey === '2026-10-17' || dateKey === '2026-10-18') &&
+                                groupNum === 1 &&
+                                String(assignedPerson).includes('ΠΟΛΥΒΙΟΥ')
+                            ) {
+                                __dbgWk('UNEXPECTED Polyviou on 17/18 after guards', 'F', {
+                                    dateKey: dateKey,
+                                    groupNum: groupNum,
+                                    assignedPerson: assignedPerson,
+                                    rotationPerson: rotationPerson,
+                                    path: 'post-guard-still-polyviou'
+                                });
+                            }
+                            // #endregion
 
                             const displayPerson = assignedPerson;
 
