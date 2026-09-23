@@ -6715,6 +6715,15 @@ ${content.innerHTML}
                 personName
                     ? `<span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}`
                     : '<span class="text-muted">—</span>';
+            /** Επόμενος στη λίστα περιστροφής (μόνο εμφάνιση compare — όχι λογική υπολογισμού). */
+            const nextPersonInDutyList = (groupData, typeKey, afterPerson) => {
+                const list = (groupData?.[typeKey] || []).filter(Boolean);
+                if (!list.length) return '';
+                if (!afterPerson) return list[0];
+                const idx = list.findIndex((p) => normName(p) === normName(afterPerson));
+                if (idx < 0) return list[0];
+                return list[(idx + 1) % list.length];
+            };
             const formatBaselinePersonCell = (
                 personName,
                 orderNo,
@@ -6736,27 +6745,24 @@ ${content.innerHTML}
                     return hit || name;
                 };
 
-                let displayBaseline = personName || '';
-                let fromGhost = false;
-                if (displayBaseline && !inCurrentList(displayBaseline)) {
-                    // Αποθηκευμένο baseline εκτός τρεχουσών λιστών (π.χ. διαγραμμένος Βάββας) — μην το δείχνεις.
-                    fromGhost = true;
-                    const afterPerson =
-                        lastListedBaselineByType && lastListedBaselineByType[typeKey]
-                            ? lastListedBaselineByType[typeKey]
-                            : null;
-                    displayBaseline =
-                        findNextAvailableInRotationList(
-                            groupData,
-                            typeKey,
-                            afterPerson,
-                            groupNum,
-                            monthStartKey,
-                            monthEndKey,
-                            new Set()
-                        ) || '';
-                } else if (displayBaseline) {
-                    displayBaseline = canonicalFromList(displayBaseline);
+                const prevListed =
+                    lastListedBaselineByType && lastListedBaselineByType[typeKey]
+                        ? lastListedBaselineByType[typeKey]
+                        : null;
+
+                let displayBaseline = '';
+                let seedFromStored = false;
+                if (!prevListed) {
+                    // Πρώτη μέρα αυτού του τύπου στον μήνα: σπόρος από αποθηκευμένο baseline (αν είναι στη λίστα).
+                    seedFromStored = true;
+                    if (personName && inCurrentList(personName)) {
+                        displayBaseline = canonicalFromList(personName);
+                    } else {
+                        displayBaseline = nextPersonInDutyList(groupData, typeKey, null);
+                    }
+                } else {
+                    // Επόμενες μέρες: καθαρή συνέχεια λίστας (#12→#13→#14…), αγνοώντας gaps από αντικαταστάσεις στον υπολογισμό.
+                    displayBaseline = nextPersonInDutyList(groupData, typeKey, prevListed);
                 }
 
                 if (displayBaseline && lastListedBaselineByType) {
@@ -6774,32 +6780,33 @@ ${content.innerHTML}
                 // #region agent log
                 if (
                     groupNum === 1 &&
-                    (dateKeyForDbg === '2026-10-08' ||
-                        dateKeyForDbg === '2026-10-13' ||
+                    (dateKeyForDbg === '2026-10-10' ||
+                        dateKeyForDbg === '2026-10-11' ||
+                        dateKeyForDbg === '2026-10-17' ||
                         dateKeyForDbg === '2026-10-18' ||
-                        dateKeyForDbg === '2026-10-20' ||
-                        dateKeyForDbg === '2026-10-29' ||
-                        fromGhost)
+                        (displayOrder != null &&
+                            (displayOrder === 12 ||
+                                displayOrder === 13 ||
+                                displayOrder === 14 ||
+                                displayOrder === 15)))
                 ) {
                     const row = {
                         sessionId: '8e8ea0',
-                        runId: 'compare-baseline-post',
-                        hypothesisId: 'A-D',
+                        runId: 'compare-seq',
+                        hypothesisId: 'A',
                         location: 'duty-shifts-data.js:formatBaselinePersonCell',
-                        message: 'compare baseline cell strike decision',
+                        message: 'compare baseline sequential display',
                         data: {
-                            build: '1.595',
+                            build: '1.597',
                             dateKey: dateKeyForDbg,
-                            groupNum: groupNum,
                             typeKey: typeKey,
                             storedBaseline: personName,
+                            prevListed: prevListed,
                             displayBaseline: displayBaseline,
+                            displayOrder: displayOrder,
                             finalPerson: finalPerson,
-                            fromGhost: !!fromGhost,
-                            finalMatchesBaseline: finalMatchesBaseline,
-                            inCurrentList: personName ? inCurrentList(personName) : false,
-                            willStrike: willStrike,
-                            parenIsFinal: willStrike
+                            seedFromStored: seedFromStored,
+                            willStrike: willStrike
                         },
                         timestamp: Date.now()
                     };
@@ -6814,7 +6821,7 @@ ${content.innerHTML}
                     try {
                         const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
                         arr.push(row);
-                        localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-100)));
+                        localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-120)));
                         window.__agentDbgFlush = function () {
                             try {
                                 const stored = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
