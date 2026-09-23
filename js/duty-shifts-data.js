@@ -6528,7 +6528,7 @@ body.assignments-compare-print-body {
     break-after: page;
     page-break-inside: avoid;
     break-inside: avoid;
-    padding: 2mm 4mm 3mm;
+    padding: 1.5mm 3mm 2mm;
     margin: 0;
     border: none;
     border-radius: 0;
@@ -6543,14 +6543,14 @@ body.assignments-compare-print-body {
     break-after: auto;
 }
 .assignments-compare-print-header {
-    margin-bottom: 1.5mm;
+    margin-bottom: 1mm;
 }
 .assignments-compare-print-title {
-    font-size: 9pt;
+    font-size: 8.5pt;
     font-weight: bold;
     color: #0d6efd;
     margin: 0;
-    line-height: 1.15;
+    line-height: 1.1;
 }
 .assignments-compare-print-table-wrap {
     overflow: visible;
@@ -6560,35 +6560,42 @@ body.assignments-compare-print-body {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    font-size: 6pt;
-    line-height: 1.05;
+    font-size: 5.6pt;
+    line-height: 1.02;
 }
 .assignments-compare-print-table col.col-date { width: 7%; }
 .assignments-compare-print-table col.col-day { width: 8%; }
-.assignments-compare-print-table col.col-final-name { width: 25%; }
-.assignments-compare-print-table col.col-change { width: 8%; }
-.assignments-compare-print-table col.col-baseline-name { width: 52%; }
+.assignments-compare-print-table col.col-final-name { width: 24%; }
+.assignments-compare-print-table col.col-change { width: 11%; }
+.assignments-compare-print-table col.col-baseline-name { width: 50%; }
 .assignments-compare-print-table th,
 .assignments-compare-print-table td {
-    border: 0.35pt solid #999;
-    padding: 0.25mm 0.7mm;
+    border: 0.3pt solid #999;
+    padding: 0.12mm 0.55mm;
     vertical-align: middle;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
+    word-wrap: normal;
+    overflow-wrap: normal;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .assignments-compare-print-table td.compare-cell-baseline {
-    font-size: 5.7pt;
-    line-height: 1.08;
+    font-size: 5.3pt;
+    line-height: 1.05;
+    white-space: nowrap;
 }
 .assignments-compare-print-table thead th {
-    font-size: 5.8pt;
-    padding: 0.5mm 0.6mm;
+    font-size: 5.5pt;
+    padding: 0.35mm 0.5mm;
+    white-space: normal;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
 }
 .assignments-compare-print-table tbody tr {
     page-break-inside: avoid;
     break-inside: avoid;
+    height: 4.8mm;
+    max-height: 4.8mm;
 }
 .compare-diff-row td {
     background-color: rgba(255, 193, 7, 0.22) !important;
@@ -6617,7 +6624,7 @@ body.assignments-compare-print-body {
 }
 @page {
     size: A4 landscape;
-    margin: 5mm 6mm;
+    margin: 4mm 5mm;
 }
 @media print {
     body.assignments-compare-print-body {
@@ -6630,8 +6637,8 @@ body.assignments-compare-print-body {
     .assignments-compare-print-page {
         page-break-after: always;
         break-after: page;
-        page-break-inside: avoid;
-        break-inside: avoid;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
     }
 }
 </style>
@@ -6645,9 +6652,32 @@ ${content.innerHTML}
             printWindow.document.close();
             printWindow.onload = function () {
                 setTimeout(() => {
+                    try {
+                        // A4 landscape usable height ≈ 210mm − margins (4+4) = 202mm
+                        const maxPx = (202 * 96) / 25.4;
+                        const pages = printWindow.document.querySelectorAll(
+                            '.assignments-compare-print-page'
+                        );
+                        pages.forEach((page) => {
+                            page.style.transform = '';
+                            page.style.zoom = '';
+                            page.style.marginBottom = '';
+                            page.style.width = '';
+                            const h = page.scrollHeight;
+                            if (h > maxPx && h > 0) {
+                                const scale = Math.min(1, (maxPx * 0.98) / h);
+                                if (scale < 0.999) {
+                                    page.style.transformOrigin = 'top left';
+                                    page.style.transform = `scale(${scale})`;
+                                    page.style.width = `${100 / scale}%`;
+                                    page.style.marginBottom = `${(scale - 1) * h}px`;
+                                }
+                            }
+                        });
+                    } catch (_) {}
                     printWindow.focus();
                     printWindow.print();
-                }, 400);
+                }, 450);
             };
         }
 
