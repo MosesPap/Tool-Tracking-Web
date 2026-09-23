@@ -6723,38 +6723,63 @@ ${content.innerHTML}
                 typeKey,
                 monthStartKey,
                 monthEndKey,
-                consumedSubstitutes,
+                lastListedBaselineByType,
                 finalPerson = null,
                 dateKeyForDbg = null
             ) => {
-                if (!personName) return '<span class="text-muted">—</span>';
-                const personNorm = normName(personName);
-                const finalNorm = finalPerson ? normName(finalPerson) : '';
-                const list = (groupData?.[typeKey] || []).map(normName);
-                const inCurrentList = list.includes(personNorm);
-                const finalMatchesBaseline = !!(finalNorm && finalNorm === personNorm);
-                // Display-only: pure baseline vs final. No unavailable/substitute cascade in this column.
-                let willStrike = !!(finalNorm && !finalMatchesBaseline);
-                let displayHtml = '';
-                if (!inCurrentList) {
-                    // Stale baseline for someone removed from group lists (e.g. Βάββας) — hide name.
-                    willStrike = false;
-                    displayHtml = '<span class="text-muted">—</span>';
-                } else if (!finalNorm || finalMatchesBaseline) {
-                    displayHtml = formatPersonCell(personName, orderNo);
-                } else {
-                    const finalOrder = getOrderNo(groupData, typeKey, finalPerson);
-                    const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
-                    displayHtml = `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${finalOrder || '-'}</span>${escapeHtml(finalPerson)})</span>`;
+                const list = (groupData?.[typeKey] || []).filter(Boolean);
+                const inCurrentList = (name) =>
+                    !!name && list.some((p) => normName(p) === normName(name));
+                const canonicalFromList = (name) => {
+                    if (!name) return '';
+                    const hit = list.find((p) => normName(p) === normName(name));
+                    return hit || name;
+                };
+
+                let displayBaseline = personName || '';
+                let fromGhost = false;
+                if (displayBaseline && !inCurrentList(displayBaseline)) {
+                    // Αποθηκευμένο baseline εκτός τρεχουσών λιστών (π.χ. διαγραμμένος Βάββας) — μην το δείχνεις.
+                    fromGhost = true;
+                    const afterPerson =
+                        lastListedBaselineByType && lastListedBaselineByType[typeKey]
+                            ? lastListedBaselineByType[typeKey]
+                            : null;
+                    displayBaseline =
+                        findNextAvailableInRotationList(
+                            groupData,
+                            typeKey,
+                            afterPerson,
+                            groupNum,
+                            monthStartKey,
+                            monthEndKey,
+                            new Set()
+                        ) || '';
+                } else if (displayBaseline) {
+                    displayBaseline = canonicalFromList(displayBaseline);
                 }
+
+                if (displayBaseline && lastListedBaselineByType) {
+                    lastListedBaselineByType[typeKey] = displayBaseline;
+                }
+
+                const displayOrder = displayBaseline
+                    ? getOrderNo(groupData, typeKey, displayBaseline)
+                    : null;
+                const finalNorm = finalPerson ? normName(finalPerson) : '';
+                const baseNorm = displayBaseline ? normName(displayBaseline) : '';
+                const finalMatchesBaseline = !!(finalNorm && baseNorm && finalNorm === baseNorm);
+                const willStrike = !!(displayBaseline && finalNorm && !finalMatchesBaseline);
+
                 // #region agent log
                 if (
                     groupNum === 1 &&
-                    (dateKeyForDbg === '2026-10-13' ||
+                    (dateKeyForDbg === '2026-10-08' ||
+                        dateKeyForDbg === '2026-10-13' ||
+                        dateKeyForDbg === '2026-10-18' ||
                         dateKeyForDbg === '2026-10-20' ||
-                        dateKeyForDbg === '2026-10-08' ||
-                        dateKeyForDbg === '2026-10-26' ||
-                        String(personName || '').includes('ΒΑΒΒΑΣ'))
+                        dateKeyForDbg === '2026-10-29' ||
+                        fromGhost)
                 ) {
                     const row = {
                         sessionId: '8e8ea0',
@@ -6767,10 +6792,12 @@ ${content.innerHTML}
                             dateKey: dateKeyForDbg,
                             groupNum: groupNum,
                             typeKey: typeKey,
-                            baseline: personName,
+                            storedBaseline: personName,
+                            displayBaseline: displayBaseline,
                             finalPerson: finalPerson,
+                            fromGhost: !!fromGhost,
                             finalMatchesBaseline: finalMatchesBaseline,
-                            inCurrentList: inCurrentList,
+                            inCurrentList: personName ? inCurrentList(personName) : false,
                             willStrike: willStrike,
                             parenIsFinal: willStrike
                         },
@@ -6814,7 +6841,18 @@ ${content.innerHTML}
                     } catch (_) {}
                 }
                 // #endregion
-                return displayHtml;
+
+                if (!displayBaseline) {
+                    return finalPerson
+                        ? formatPersonCell(finalPerson, getOrderNo(groupData, typeKey, finalPerson))
+                        : '<span class="text-muted">—</span>';
+                }
+                if (!willStrike) {
+                    return formatPersonCell(displayBaseline, displayOrder);
+                }
+                const finalOrder = getOrderNo(groupData, typeKey, finalPerson);
+                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${displayOrder || '-'}</span>${escapeHtml(displayBaseline)}</span>`;
+                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${finalOrder || '-'}</span>${escapeHtml(finalPerson)})</span>`;
             };
             const buildChangeMarker = (reasonObj, pairKey, getSwapPairLabelNo) => {
                 if (!reasonObj) {
@@ -6930,11 +6968,11 @@ ${content.innerHTML}
                     `;
                     monthSection.appendChild(groupBlock);
 
-                    const consumedBaselineSubstitutes = {
-                        normal: new Set(),
-                        semi: new Set(),
-                        weekend: new Set(),
-                        special: new Set()
+                    const lastListedBaselineByType = {
+                        normal: null,
+                        semi: null,
+                        weekend: null,
+                        special: null
                     };
 
                     const tbody = groupBlock.querySelector('tbody');
@@ -6983,7 +7021,7 @@ ${content.innerHTML}
                             <td class="compare-cell-daytype" style="padding:4px;border:1px solid #ddd;background-color:${dayTypeBg} !important;">${dayName}</td>
                             <td class="compare-cell-daytype" style="padding:4px;border:1px solid #ddd;background-color:${dayTypeBg} !important;">${formatPersonCell(finalPerson, finalOrder)}</td>
                             <td class="compare-cell-change" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;color:${changeFg};font-size:11px;font-weight:600;${change.style}">${escapeHtml(change.text)}</td>
-                            <td class="compare-cell-change" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;${change.style}">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey], finalPerson, dayKey)}</td>
+                            <td class="compare-cell-change" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;${change.style}">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, lastListedBaselineByType, finalPerson, dayKey)}</td>
                         `;
                         tbody.appendChild(row);
                     }
