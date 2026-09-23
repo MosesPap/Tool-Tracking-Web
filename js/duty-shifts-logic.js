@@ -10921,6 +10921,53 @@
                     html += '</tr>';
                 });
 
+                // #region agent log
+                let __agentPreCascadeWeekendSnap = null;
+                try {
+                    const mkSnap = (assign) => {
+                        const out = { g1: {}, g3: {} };
+                        ['2026-10-24', '2026-10-25', '2026-10-28', '2026-10-31'].forEach((dk) => {
+                            out.g1[dk] = assign?.[dk]?.[1] || null;
+                            out.g3[dk] = assign?.[dk]?.[3] || null;
+                        });
+                        return out;
+                    };
+                    const findDupes = (assign, g) => {
+                        const seen = {};
+                        const dups = [];
+                        (sortedWeekends || [])
+                            .filter((dk) => String(dk).startsWith('2026-10'))
+                            .forEach((dk) => {
+                                const p = assign?.[dk]?.[g];
+                                if (!p) return;
+                                const n =
+                                    typeof normalizePersonKey === 'function'
+                                        ? normalizePersonKey(p)
+                                        : String(p).trim();
+                                if (seen[n]) dups.push({ person: p, first: seen[n], again: dk });
+                                else seen[n] = dk;
+                            });
+                        return dups;
+                    };
+                    __agentPreCascadeWeekendSnap = {
+                        snap: mkSnap(simulatedWeekendAssignments),
+                        dupesG1: findDupes(simulatedWeekendAssignments, 1),
+                        dupesG3: findDupes(simulatedWeekendAssignments, 3),
+                        setHasPoly24:
+                            !!assignedWeekendInMonthPreview?.['2026-10']?.[1] &&
+                            [...(assignedWeekendInMonthPreview['2026-10'][1] || [])].some((p) =>
+                                String(p).includes('ΠΟΛΥΒΙΟΥ')
+                            ),
+                        setHasAlex:
+                            !!assignedWeekendInMonthPreview?.['2026-10']?.[3] &&
+                            [...(assignedWeekendInMonthPreview['2026-10'][3] || [])].some((p) =>
+                                String(p).includes('ΑΛΕΞΑΝΔΡΟΥ')
+                            )
+                    };
+                } catch (e) {
+                    __agentPreCascadeWeekendSnap = { err: String(e && e.message) };
+                }
+                // #endregion
                 applyAllWeekendAbsentCascadeReflows(
                     sortedWeekends,
                     simulatedWeekendAssignments,
@@ -10982,73 +11029,60 @@
 
                 // #region agent log
                 try {
-                    const g1 = (typeof groupsForDuty === 'function' ? groupsForDuty(1) : groups[1]) || {};
-                    const wkList = g1.weekend || [];
-                    const keys = ['2026-10-24', '2026-10-25', '2026-10-28', '2026-10-31'];
-                    const snap = {};
-                    keys.forEach((dk) => {
-                        const d = new Date(dk + 'T00:00:00');
-                        const dt = typeof getDayType === 'function' ? getDayType(d) : null;
-                        const finalW = simulatedWeekendAssignments?.[dk]?.[1] || null;
-                        const baseW = weekendRotationPersons?.[dk]?.[1] || baselineWeekendByDate?.[dk]?.[1] || null;
-                        const finalS =
-                            (calculationSteps.tempSpecialAssignments &&
-                                calculationSteps.tempSpecialAssignments[dk]?.[1]) ||
-                            (typeof specialHolidayAssignments !== 'undefined' &&
-                                typeof parseAssignedPersonForGroupFromAssignment === 'function'
-                                ? parseAssignedPersonForGroupFromAssignment(
-                                      specialHolidayAssignments[dk],
-                                      1
-                                  )
-                                : null);
-                        snap[dk] = {
-                            dayType: dt,
-                            weekendFinal: finalW,
-                            weekendBaseline: baseW,
-                            weekendOrder: finalW
-                                ? wkList.findIndex((p) => String(p).trim() === String(finalW).trim()) + 1
-                                : null,
-                            specialFinal: finalS || null,
-                            specialOrder: finalS
-                                ? wkList.findIndex((p) => String(p).trim() === String(finalS).trim()) + 1
-                                : null
-                        };
-                    });
-                    const lastBefore31 = (() => {
-                        const all = ['2026-10-24', '2026-10-25', '2026-10-28'];
-                        let last = null;
-                        for (const dk of all) {
-                            const p =
-                                simulatedWeekendAssignments?.[dk]?.[1] ||
-                                calculationSteps.tempSpecialAssignments?.[dk]?.[1] ||
-                                null;
-                            if (p) last = { dateKey: dk, person: p };
-                        }
-                        return last;
-                    })();
-                    const expectedAfterFatitsas =
-                        lastBefore31 && String(lastBefore31.person || '').includes('ΦΑΤΣΙΤΑΣ')
-                            ? wkList[
-                                  (wkList.findIndex((p) => String(p).includes('ΦΑΤΣΙΤΑΣ')) + 1) %
-                                      (wkList.length || 1)
-                              ]
-                            : null;
+                    const mkSnap = (assign) => {
+                        const out = { g1: {}, g3: {} };
+                        ['2026-10-24', '2026-10-25', '2026-10-28', '2026-10-31'].forEach((dk) => {
+                            out.g1[dk] = {
+                                final: assign?.[dk]?.[1] || null,
+                                base:
+                                    weekendRotationPersons?.[dk]?.[1] ||
+                                    baselineWeekendByDate?.[dk]?.[1] ||
+                                    null
+                            };
+                            out.g3[dk] = {
+                                final: assign?.[dk]?.[3] || null,
+                                base:
+                                    weekendRotationPersons?.[dk]?.[3] ||
+                                    baselineWeekendByDate?.[dk]?.[3] ||
+                                    null
+                            };
+                        });
+                        return out;
+                    };
+                    const findDupes = (assign, g) => {
+                        const seen = {};
+                        const dups = [];
+                        (sortedWeekends || [])
+                            .filter((dk) => String(dk).startsWith('2026-10'))
+                            .forEach((dk) => {
+                                const p = assign?.[dk]?.[g];
+                                if (!p) return;
+                                const n =
+                                    typeof normalizePersonKey === 'function'
+                                        ? normalizePersonKey(p)
+                                        : String(p).trim();
+                                if (seen[n]) dups.push({ person: p, first: seen[n], again: dk });
+                                else seen[n] = dk;
+                            });
+                        return dups;
+                    };
+                    const postSnap = mkSnap(simulatedWeekendAssignments);
                     const row = {
                         sessionId: '8e8ea0',
-                        runId: 'argia-end',
-                        hypothesisId: 'A-B',
+                        runId: 'alex-konst',
+                        hypothesisId: 'H1-H3',
                         location: 'duty-shifts-logic.js:weekend-end',
-                        message: 'weekend step Oct g1 argia continuity',
+                        message: 'pre/post cascade g1+g3 Oct weekend dupes',
                         data: {
-                            build: '1.601',
-                            weekendKeysOct: (sortedWeekends || []).filter((dk) =>
-                                String(dk).startsWith('2026-10')
-                            ),
-                            snap: snap,
-                            lastHolidayBefore31: lastBefore31,
-                            expectedNextIfUnifiedAfterFatitsas: expectedAfterFatitsas,
-                            oct31WeekendFinal: simulatedWeekendAssignments?.['2026-10-31']?.[1] || null,
-                            globalPosG1: globalWeekendRotationPosition?.[1]
+                            build: '1.602',
+                            pre: __agentPreCascadeWeekendSnap,
+                            post: {
+                                snap: postSnap,
+                                dupesG1: findDupes(simulatedWeekendAssignments, 1),
+                                dupesG3: findDupes(simulatedWeekendAssignments, 3)
+                            },
+                            alex28: simulatedWeekendAssignments?.['2026-10-28']?.[3] || null,
+                            alex31: simulatedWeekendAssignments?.['2026-10-31']?.[3] || null
                         },
                         timestamp: Date.now()
                     };
@@ -15551,6 +15585,67 @@
                 }
             }
             calculationSteps.lastNormalRotationPositionsByMonth = lastNormalRotationPositionsByMonth;
+
+            // #region agent log
+            try {
+                const n29 = normalAssignments?.['2026-10-29']?.[1] || null;
+                const s30 =
+                    simulatedSemiAssignments?.['2026-10-30']?.[1] ||
+                    calculationSteps.tempSemiAssignments?.['2026-10-30']?.[1] ||
+                    null;
+                const sim = {
+                    special: calculationSteps.tempSpecialAssignments || {},
+                    weekend: simulatedWeekendAssignments || calculationSteps.tempWeekendAssignments || {},
+                    semi: simulatedSemiAssignments || calculationSteps.tempSemiAssignments || {},
+                    normal: normalAssignments || {}
+                };
+                const conflict29 = n29
+                    ? hasConsecutiveDuty('2026-10-29', n29, 1, sim)
+                    : null;
+                const conflict30 = s30
+                    ? hasConsecutiveDuty('2026-10-30', s30, 1, sim)
+                    : null;
+                const neighbor29 = n29
+                    ? getConsecutiveConflictNeighborInfo('2026-10-29', n29, 1, sim)
+                    : null;
+                const row = {
+                    sessionId: '8e8ea0',
+                    runId: 'alex-konst',
+                    hypothesisId: 'H4-H5',
+                    location: 'duty-shifts-logic.js:normal-end',
+                    message: 'Konstantinou consecutive normal29 vs semi30',
+                    data: {
+                        build: '1.602',
+                        normal29g1: n29,
+                        semi30g1: s30,
+                        samePerson:
+                            n29 &&
+                            s30 &&
+                            (typeof normalizePersonKey === 'function'
+                                ? normalizePersonKey(n29) === normalizePersonKey(s30)
+                                : String(n29).trim() === String(s30).trim()),
+                        hasConflictOn29: conflict29,
+                        hasConflictOn30: conflict30,
+                        neighborInfo29: neighbor29,
+                        isKonst29: !!(n29 && String(n29).includes('ΚΩΝΣΤΑΝΤΙΝΟΥ')),
+                        isKonst30: !!(s30 && String(s30).includes('ΚΩΝΣΤΑΝΤΙΝΟΥ'))
+                    },
+                    timestamp: Date.now()
+                };
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Debug-Session-Id': '8e8ea0'
+                    },
+                    body: JSON.stringify(row)
+                }).catch(function () {});
+                const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
+                arr.push(row);
+                localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
+                if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
+            } catch (_) {}
+            // #endregion
             
             // Store preview swaps so they can be shown in popup (will be merged with runNormalSwapLogic results)
             calculationSteps.previewNormalSwaps = previewSwappedPeople;

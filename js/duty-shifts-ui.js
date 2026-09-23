@@ -4624,12 +4624,11 @@
                         '2026-10-24',
                         '2026-10-25',
                         '2026-10-28',
+                        '2026-10-29',
+                        '2026-10-30',
                         '2026-10-31'
                     ];
-                    const g1 = (typeof groupsForDuty === 'function' ? groupsForDuty(1) : groups[1]) || {};
-                    const wk = g1.weekend || [];
-                    const sp = g1.special || [];
-                    const snap = {};
+                    const snap = { g1: {}, g3: {} };
                     keys.forEach((dk) => {
                         const d = new Date(dk + 'T00:00:00');
                         const dt = typeof getDayType === 'function' ? getDayType(d) : null;
@@ -4637,30 +4636,21 @@
                             typeof getAssignmentForDate === 'function'
                                 ? getAssignmentForDate(dk)
                                 : null;
-                        const person =
-                            typeof parseAssignedPersonForGroupFromAssignment === 'function'
-                                ? parseAssignedPersonForGroupFromAssignment(raw, 1)
-                                : null;
-                        const list = dt === 'special-holiday' ? sp : wk;
-                        snap[dk] = {
-                            dayType: dt,
-                            person: person,
-                            order:
-                                person && list.length
-                                    ? list.findIndex(
-                                          (p) =>
-                                              String(p || '').trim() === String(person || '').trim()
-                                      ) + 1
-                                    : null
-                        };
+                        [1, 3].forEach((g) => {
+                            const person =
+                                typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                                    ? parseAssignedPersonForGroupFromAssignment(raw, g)
+                                    : null;
+                            snap['g' + g][dk] = { dayType: dt, person: person };
+                        });
                     });
                     const row = {
                         sessionId: '8e8ea0',
-                        runId: 'argia-end',
-                        hypothesisId: 'C',
+                        runId: 'alex-konst',
+                        hypothesisId: 'H-cal',
                         location: 'duty-shifts-ui.js:renderCalendar',
-                        message: 'calendar Oct g1 holiday sequence',
-                        data: { build: '1.601', snap: snap },
+                        message: 'calendar Oct g1+g3 alex/konst',
+                        data: { build: '1.602', snap: snap },
                         timestamp: Date.now()
                     };
                     fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
@@ -4697,6 +4687,7 @@
                             }, 1500);
                         } catch (_) {}
                     };
+                    if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
                 } catch (_) {}
             }
             // #endregion
