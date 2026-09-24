@@ -1599,6 +1599,75 @@
         }
 
         /**
+         * When previous continuity person left this group's current list (transfer / home-group change),
+         * find the next person after them on the previous-month list who is still in currentGroupPeople.
+         * Returns index into currentGroupPeople (next assignee), or null if unresolvable.
+         * Used so month seed does not reset to position 0 solely because the name is missing.
+         */
+        function resolveMonthStartIndexAfterDepartedContinuityPerson(
+            dayTypeCategory,
+            dateInMonth,
+            groupNum,
+            currentGroupPeople,
+            departedPersonName
+        ) {
+            if (
+                !departedPersonName ||
+                !dateInMonth ||
+                !Array.isArray(currentGroupPeople) ||
+                currentGroupPeople.length === 0
+            ) {
+                return null;
+            }
+            const norm = normRotPersonName;
+            const findIn = (list, name) => {
+                if (!name || !Array.isArray(list)) return -1;
+                const n = norm(name);
+                let i = list.indexOf(name);
+                if (i >= 0) return i;
+                return list.findIndex((p) => norm(p) === n);
+            };
+            const currentSet = new Set(currentGroupPeople.map((p) => norm(p)).filter(Boolean));
+            const prevMonthKey = getPreviousMonthKeyFromDate(dateInMonth);
+            const prevKeys = getSortedDutyDateKeysInCalendarMonth(prevMonthKey, dayTypeCategory);
+            const listDateKey = prevKeys.length ? prevKeys[prevKeys.length - 1] : null;
+            let prevPeople = [];
+            if (listDateKey && typeof groupsForDuty === 'function') {
+                const gd = groupsForDuty(groupNum, listDateKey);
+                prevPeople = (gd && gd[dayTypeCategory]) || [];
+            }
+            if (!prevPeople.length && typeof groupsForDuty === 'function') {
+                const prevStart = new Date(dateInMonth.getFullYear(), dateInMonth.getMonth() - 1, 1);
+                const prevStartKey =
+                    typeof formatDateKey === 'function' ? formatDateKey(prevStart) : null;
+                if (prevStartKey) {
+                    const gd = groupsForDuty(groupNum, prevStartKey);
+                    prevPeople = (gd && gd[dayTypeCategory]) || [];
+                }
+            }
+            if (!prevPeople.length) {
+                prevPeople = (groups[groupNum] && groups[groupNum][dayTypeCategory]) || [];
+            }
+            if (!prevPeople.length) return null;
+
+            const depIdx = findIn(prevPeople, departedPersonName);
+            if (depIdx < 0) return null;
+
+            const prevLen = prevPeople.length;
+            for (let off = 1; off <= prevLen; off++) {
+                const cand = prevPeople[(depIdx + off) % prevLen];
+                if (!cand) continue;
+                if (norm(cand) === norm(departedPersonName)) continue;
+                if (!currentSet.has(norm(cand))) continue;
+                const curIdx = findIn(currentGroupPeople, cand);
+                if (curIdx >= 0) return curIdx;
+            }
+            return null;
+        }
+        window.resolveMonthStartIndexAfterDepartedContinuityPerson =
+            resolveMonthStartIndexAfterDepartedContinuityPerson;
+
+        /**
          * Rotation cursor (index of next assignee) at the start of dateInMonth's calendar month.
          * Simulates previous month baseline slots; manual alternate advances from baseline+1, not replacement.
          */
@@ -1700,6 +1769,24 @@
                 return cursor;
             }
 
+            // Continuity person left this group (e.g. moved to another group): continue after them
+            // using previous-month list order — do not restart at index 0.
+            if (lastContinuityPerson && continuityIdx < 0) {
+                const recovered = resolveMonthStartIndexAfterDepartedContinuityPerson(
+                    dayTypeCategory,
+                    dateInMonth,
+                    groupNum,
+                    groupPeople,
+                    lastContinuityPerson
+                );
+                if (recovered != null && recovered >= 0) {
+                    console.log(
+                        `[ROTATION SEED] Group ${groupNum} ${dayTypeCategory}: continuity "${lastContinuityPerson}" left list — continue at index ${recovered} (${groupPeople[recovered]})`
+                    );
+                    return recovered % len;
+                }
+            }
+
             // Fast path: no manual alternate in previous month -> nothing else to simulate.
             if (!prevManualAlternate?.replacementPerson) {
                 return 0;
@@ -1732,6 +1819,7 @@
             }
             return cursor;
         }
+        window.computeRotationPositionAtMonthStart = computeRotationPositionAtMonthStart;
 
         /** Refresh lastRotationPositions for a month/group from assignments (baseline continuity after manual alternate). */
         function refreshLastRotationContinuityForMonth(dayTypeCategory, monthKey, groupNum) {

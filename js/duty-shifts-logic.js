@@ -2458,6 +2458,20 @@
                 globalPos[groupNum] = (lastPersonIndex + 1) % rotationDays;
             } else {
                 const daysSinceStart = getRotationPosition(dateInMonth, dayTypeCategory, groupNum);
+                // Prefer continue-after-departed over raw daysSinceStart when last person left the group
+                if (lastPersonName && typeof resolveMonthStartIndexAfterDepartedContinuityPerson === 'function') {
+                    const recovered = resolveMonthStartIndexAfterDepartedContinuityPerson(
+                        dayTypeCategory,
+                        dateInMonth,
+                        groupNum,
+                        groupPeople,
+                        lastPersonName
+                    );
+                    if (recovered != null && recovered >= 0) {
+                        globalPos[groupNum] = recovered % rotationDays;
+                        return;
+                    }
+                }
                 globalPos[groupNum] = daysSinceStart % rotationDays;
             }
         }
@@ -2700,6 +2714,41 @@
                     `[NORMAL ROTATION] Month-start seed for group ${groupNum}: after ${lastPersonName} (index ${lastPersonIndex}) → position ${(lastPersonIndex + 1) % rotationDays}`
                 );
                 return (lastPersonIndex + 1) % rotationDays;
+            }
+            if (
+                lastPersonName &&
+                typeof computeRotationPositionAtMonthStart === 'function'
+            ) {
+                const recovered = computeRotationPositionAtMonthStart(
+                    'normal',
+                    date,
+                    groupNum,
+                    groupPeople
+                );
+                if (Number.isFinite(recovered)) {
+                    console.log(
+                        `[NORMAL ROTATION] Seed person ${lastPersonName} not in group ${groupNum} list — recovered position ${recovered % rotationDays}`
+                    );
+                    return recovered % rotationDays;
+                }
+            }
+            if (
+                lastPersonName &&
+                typeof resolveMonthStartIndexAfterDepartedContinuityPerson === 'function'
+            ) {
+                const recovered = resolveMonthStartIndexAfterDepartedContinuityPerson(
+                    'normal',
+                    date,
+                    groupNum,
+                    groupPeople,
+                    lastPersonName
+                );
+                if (recovered != null && recovered >= 0) {
+                    console.log(
+                        `[NORMAL ROTATION] Seed person ${lastPersonName} left group ${groupNum} — continue at index ${recovered}`
+                    );
+                    return recovered % rotationDays;
+                }
             }
             const keys = sortedNormalKeys || [];
             if (keys.length > 0) {
@@ -4238,11 +4287,23 @@
                             }`
                         );
                     } else if (firstDateKey && typeof getRotationSeedPersonForMonthStart === 'function') {
-                        const seedPerson = getRotationSeedPersonForMonthStart('special', new Date(firstDateKey + 'T00:00:00'), groupNum);
+                        const seedDate = new Date(firstDateKey + 'T00:00:00');
+                        const seedPerson = getRotationSeedPersonForMonthStart('special', seedDate, groupNum);
                         const seedIdx = seedPerson ? groupPeople.indexOf(seedPerson) : -1;
                         if (seedPerson && seedIdx >= 0) {
                             globalSpecialRotationPosition[groupNum] = (seedIdx + 1) % rotationDays;
                             console.log(`[SPECIAL ROTATION] From manual-alternate seed ${seedPerson} (index ${seedIdx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`);
+                        } else if (typeof computeRotationPositionAtMonthStart === 'function') {
+                            globalSpecialRotationPosition[groupNum] =
+                                computeRotationPositionAtMonthStart(
+                                    'special',
+                                    seedDate,
+                                    groupNum,
+                                    groupPeople
+                                ) % rotationDays;
+                            console.log(
+                                `[SPECIAL ROTATION] Seed person ${seedPerson || '(none)'} not in group ${groupNum} list — recovered position ${globalSpecialRotationPosition[groupNum]}`
+                            );
                         } else if (baselineDateKeysBeforePeriod.length > 0) {
                             const lastBaselineDateKey = baselineDateKeysBeforePeriod[0];
                             const lastBaselinePerson = getBaselinePersonForGroup(lastBaselineDateKey, groupNum);
@@ -11862,10 +11923,24 @@
                                     // Found last person - start from next person
                                     globalWeekendRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
                                     console.log(`[WEEKEND ROTATION] Continuing from last person ${lastPersonName} (index ${lastPersonIndex}) for group ${groupNum}, starting at position ${globalWeekendRotationPosition[groupNum]}`);
+                                } else if (
+                                    lastPersonName &&
+                                    typeof computeRotationPositionAtMonthStart === 'function'
+                                ) {
+                                    globalWeekendRotationPosition[groupNum] =
+                                        computeRotationPositionAtMonthStart(
+                                            'weekend',
+                                            date,
+                                            groupNum,
+                                            groupPeople
+                                        ) % rotationDays;
+                                    console.log(
+                                        `[WEEKEND ROTATION] Last person ${lastPersonName} not in group ${groupNum} list — recovered seed position ${globalWeekendRotationPosition[groupNum]}`
+                                    );
                                 } else {
                                     // Last person not found in list - use rotation calculation
-                            const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
-                            globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                    const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
+                                    globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
                                     if (lastPersonName) {
                                         console.log(`[WEEKEND ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalWeekendRotationPosition[groupNum]}`);
                                     }
@@ -12264,10 +12339,24 @@
                                         // Found last person - start from next person
                                         globalSemiRotationPosition[groupNum] = (lastPersonIndex + 1) % rotationDays;
                                         console.log(`[SEMI ROTATION] Continuing from last person ${lastPersonName} (index ${lastPersonIndex}) for group ${groupNum}, starting at position ${globalSemiRotationPosition[groupNum]}`);
+                                    } else if (
+                                        lastPersonName &&
+                                        typeof computeRotationPositionAtMonthStart === 'function'
+                                    ) {
+                                        globalSemiRotationPosition[groupNum] =
+                                            computeRotationPositionAtMonthStart(
+                                                'semi',
+                                                date,
+                                                groupNum,
+                                                groupPeople
+                                            ) % rotationDays;
+                                        console.log(
+                                            `[SEMI ROTATION] Last person ${lastPersonName} not in group ${groupNum} list — recovered seed position ${globalSemiRotationPosition[groupNum]}`
+                                        );
                                     } else {
                                         // Last person not found in list - use rotation calculation
-                                const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
-                                globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                        const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
+                                        globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
                                         if (lastPersonName) {
                                             console.log(`[SEMI ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalSemiRotationPosition[groupNum]}`);
                                         }
