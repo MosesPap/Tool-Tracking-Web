@@ -5792,8 +5792,8 @@
             /**
              * 1ες εμφανίσεις vs επαναλήψεις· άγκυρα =
              * - επαναλήψεις: max(#) στις επαναλήψεις
-             * - αλλιώς: τέλος αύξουσας κυκλικής κάλυψης από τον πρώτο # (covered = όλοι που εμφανίστηκαν 1η φορά)
-             * Επιστρέφει idx του τελευταίου «καλυμμένου» (ώστε +1 = πρώτος αναπληρωματικός).
+             * - 1ες χωρίς πτώση (κενά = απουσίες/προσπέραση): max(#)
+             * - 1ες με πτώση (ανταλλαγή/γύρισμα): αύξουσα κυκλική κάλυψη από τον πρώτο #
              */
             const resolveAnchorFromChronoOrderNos = (orderNos, orderList) => {
                 const listLen = orderList.length;
@@ -5836,19 +5836,33 @@
                     lastCoveredOrderNo = Math.max(...repeats);
                     method = 'repeats-max';
                 } else {
-                    // Αύξουσα κυκλική κάλυψη από τον πρώτο χρονολογικά #
-                    const start = firsts[0];
-                    const covered = new Set(firsts);
-                    let pos = start;
-                    lastCoveredOrderNo = start;
-                    for (let steps = 0; steps < listLen; steps++) {
-                        if (!covered.has(pos)) break;
-                        lastCoveredOrderNo = pos;
-                        const next = pos === listLen ? 1 : pos + 1;
-                        if (next === start && steps > 0) break; // πλήρης κύκλος
-                        pos = next;
+                    // Πτώση = νέο # μικρότερο από την τρέχουσα κορυφή → ανταλλαγή/γύρισμα
+                    let runMax = 0;
+                    let hasDrop = false;
+                    for (const n of firsts) {
+                        if (runMax > 0 && n < runMax) hasDrop = true;
+                        if (n > runMax) runMax = n;
                     }
-                    method = 'ascending-coverage';
+
+                    if (!hasDrop) {
+                        // Κανονική πρόοδος με κενά (απουσίες): άγκυρα = μεγαλύτερο #
+                        lastCoveredOrderNo = runMax;
+                        method = 'firsts-max';
+                    } else {
+                        // Κυκλική αύξουσα κάλυψη από τον πρώτο χρονολογικά #
+                        const start = firsts[0];
+                        const covered = new Set(firsts);
+                        let pos = start;
+                        lastCoveredOrderNo = start;
+                        for (let steps = 0; steps < listLen; steps++) {
+                            if (!covered.has(pos)) break;
+                            lastCoveredOrderNo = pos;
+                            const next = pos === listLen ? 1 : pos + 1;
+                            if (next === start && steps > 0) break;
+                            pos = next;
+                        }
+                        method = 'ascending-coverage';
+                    }
                 }
 
                 const idx = lastCoveredOrderNo - 1;
@@ -6553,7 +6567,8 @@
                         return;
                     }
                     const methodLabel = {
-                        'ascending-coverage': 'αύξουσα κάλυψη κύκλου (1ες εμφανίσεις)',
+                        'firsts-max': 'max 1ων εμφανίσεων (κενά=απουσίες)',
+                        'ascending-coverage': 'αύξουσα κάλυψη (πτώση/ανταλλαγή)',
                         'repeats-max': 'max επαναλήψεων (γύρος 2)',
                         'ascending-chain': 'αλυσίδα +1',
                         'max-in-lap': 'μέγιστη θέση γύρου',
@@ -6588,7 +6603,7 @@
                             <div class="mb-2 pb-2 border-bottom">
                                 <div class="fw-semibold">${escapeHtml(d.label || t)}</div>
                                 <div class="text-muted mb-1">Χρονολογικά: ${chronoLine || '—'}</div>
-                                <div class="text-muted mb-1">Γύρος 1 = 1ες εμφανίσεις · Γύρος 2 = μόνο επαναλήψεις · άγκυρα = τέλος αύξουσας κάλυψης (ή max επαναλήψεων)</div>
+                                <div class="text-muted mb-1">1ες εμφανίσεις · επαναλήψεις · χωρίς πτώση→max · με πτώση→κυκλική κάλυψη (κενά=απουσίες)</div>
                                 <div class="mb-1">${lapsLine || 'Ένας γύρος'}</div>
                                 <div>Κάλυψη μέχρι: <strong>${d.coveredThrough != null ? '#' + d.coveredThrough : '—'}</strong></div>
                                 <div>Τελευταίος γύρος: <strong>${lastLap}</strong></div>
