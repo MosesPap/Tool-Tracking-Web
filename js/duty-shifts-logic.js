@@ -5298,7 +5298,16 @@
                     if (groupPeople.length === 0) continue;
                     if (!assignedWeekendInMonth[monthKey][groupNum]) assignedWeekendInMonth[monthKey][groupNum] = new Set();
                     const currentPerson = assignmentsByDate[dateKey]?.[groupNum];
-                    if (!currentPerson || !isPersonMissingOnDate(currentPerson, groupNum, date, 'weekend')) continue;
+                    if (!currentPerson) continue;
+                    const tooSoon =
+                        typeof isWeekendDutyTooSoonAfterAbsenceReturn === 'function' &&
+                        isWeekendDutyTooSoonAfterAbsenceReturn(currentPerson, groupNum, dateKey);
+                    if (
+                        !isPersonMissingOnDate(currentPerson, groupNum, date, 'weekend') &&
+                        !tooSoon
+                    ) {
+                        continue;
+                    }
                     let currentIndex = groupPeople.indexOf(currentPerson);
                     if (currentIndex === -1) currentIndex = 0;
                     const picked = findNextEligibleWeekendPersonInList({
@@ -5326,6 +5335,36 @@
         }
 
         /**
+         * Μετά τη λήξη απουσίας: όχι αργία/ΣΚ πριν περάσουν 3 ημερολογιακές μέρες
+         * (λήξη E → πρώτη επιλέξιμη ημερομηνία E+3). Δεν αλλάζει καθημερινές/ημιαργίες/ειδικές.
+         */
+        function addCalendarDaysToDateKey(dateKey, days) {
+            if (!dateKey || typeof dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return null;
+            const d = new Date(dateKey + 'T00:00:00');
+            if (isNaN(d.getTime())) return null;
+            d.setDate(d.getDate() + (days || 0));
+            return typeof formatDateKey === 'function' ? formatDateKey(d) : null;
+        }
+        function isWeekendDutyTooSoonAfterAbsenceReturn(personName, groupNum, dateKey) {
+            if (!personName || !dateKey || !Number.isFinite(groupNum)) return false;
+            const periods =
+                typeof getMissingPeriodsForPersonNorm === 'function'
+                    ? getMissingPeriodsForPersonNorm(groupNum, personName)
+                    : [];
+            if (!Array.isArray(periods) || periods.length === 0) return false;
+            for (const p of periods) {
+                const endKey =
+                    typeof inputValueToDateKey === 'function' ? inputValueToDateKey(p?.end) : null;
+                if (!endKey) continue;
+                // Ακόμα εντός/μετά το τέλος ως απουσία: το isPersonMissingOnDate το χειρίζεται.
+                if (endKey >= dateKey) continue;
+                const eligibleFrom = addCalendarDaysToDateKey(endKey, 3);
+                if (eligibleFrom && dateKey < eligibleFrom) return true;
+            }
+            return false;
+        }
+
+        /**
          * Επόμενος διαθέσιμος στη λίστα weekend μετά το startIndex (απουσία / ειδική / ήδη ανατεθειμένος).
          * Ίδια λογική για όλες τις ομάδες 1–4.
          */
@@ -5340,11 +5379,23 @@
             const rotationDays = groupPeople.length;
             if (!rotationDays) return null;
             const base = startIndex >= 0 ? startIndex : 0;
+            const dateKey =
+                date instanceof Date && !isNaN(date.getTime())
+                    ? formatDateKey(date)
+                    : typeof date === 'string'
+                      ? date
+                      : null;
             for (let offset = 1; offset < rotationDays; offset++) {
                 const nextIndex = (base + offset) % rotationDays;
                 const candidate = groupPeople[nextIndex];
                 if (!candidate) continue;
                 if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                if (
+                    dateKey &&
+                    isWeekendDutyTooSoonAfterAbsenceReturn(candidate, groupNum, dateKey)
+                ) {
+                    continue;
+                }
                 if (
                     typeof isPersonDisabledForDuty === 'function' &&
                     isPersonDisabledForDuty(candidate, groupNum, 'weekend')
@@ -9614,17 +9665,19 @@
                     if (isNaN(a.getTime()) || isNaN(b.getTime())) return Infinity;
                     return Math.round((b - a) / (1000 * 60 * 60 * 24));
                 };
-                const isSaturdayOrSundayKey = (dateKey) => {
-                    const dow = new Date(dateKey + 'T00:00:00').getDay();
-                    return dow === 0 || dow === 6;
+                const addDaysW = (dk, days) => {
+                    if (!dk || typeof dk !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
+                    const d = new Date(dk + 'T00:00:00');
+                    if (isNaN(d.getTime())) return null;
+                    d.setDate(d.getDate() + (days || 0));
+                    return formatDateKey(d);
                 };
-                /** Μετά τη λήξη απουσίας: όχι Σάβ/Κυρ εντός 2 ημερολογιακών ημερών (π.χ. λήξη Παρ→ όχι Σάβ/Κυρ). */
+                /** Μετά τη λήξη απουσίας: πρώτη επιλέξιμη αργία όταν έχουν περάσει ≥3 ημερολογιακές μέρες (E → E+3). */
                 const isWeekendTargetTooSoonAfterAbsenceEnd = (absenceEndKey, candidateWeekendKey) => {
                     if (!absenceEndKey || !candidateWeekendKey) return false;
                     const daysAfter = calendarDaysFromTo(absenceEndKey, candidateWeekendKey);
                     if (daysAfter <= 0) return true;
-                    if (daysAfter > 2) return false;
-                    return isSaturdayOrSundayKey(candidateWeekendKey);
+                    return daysAfter < 3;
                 };
                 const findSameMonthReturnWeekendTarget = (
                     sorted,
@@ -9636,7 +9689,6 @@
                     returnTargets,
                     absenceEndKey
                 ) => {
-                    const norm = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
                     const missed = (missedWeekendKeys || []).slice().sort();
                     if (!missed.length) return null;
                     const anchorKey = missed[0];
@@ -9646,6 +9698,7 @@
                             ? getMonthKeyFromDate(anchorDate)
                             : `${anchorDate.getFullYear()}-${String(anchorDate.getMonth() + 1).padStart(2, '0')}`;
                     const missedSet = new Set(missed);
+                    const eligibleFromKey = absenceEndKey ? addDaysW(absenceEndKey, 3) : null;
                     const inMonth = sorted.filter((wk) => {
                         if (wk < calcStartKey || wk > calcEndKey) return false;
                         const d = new Date(wk + 'T00:00:00');
@@ -9665,6 +9718,7 @@
                         ) {
                             return null;
                         }
+                        if (!isBackward && eligibleFromKey && wk < eligibleFromKey) return null;
                         const d = new Date(wk + 'T00:00:00');
                         if (
                             typeof isPersonMissingOnDate === 'function' &&
@@ -9674,8 +9728,9 @@
                         }
                         return { targetWeekendKey: wk, isBackwardAssignment: !!isBackward };
                     };
+                    // Forward: πρώτη αργία του μήνα ≥ λήξη+3 (όχι απλώς μετά το missed anchor).
                     for (const wk of inMonth) {
-                        if (wk <= anchorKey) continue;
+                        if (eligibleFromKey && wk < eligibleFromKey) continue;
                         const pick = tryPick(wk, false);
                         if (pick) return pick;
                     }
@@ -9692,13 +9747,6 @@
                 const returnFromMissingWeekendTargets = {}; // dateKey -> { groupNum -> { personName, missingEnd, isBackwardAssignment } }
                 const calcStartKeyW = (startDate && !isNaN(new Date(startDate).getTime())) ? formatDateKey(new Date(startDate)) : null;
                 const calcEndKeyW = (endDate && !isNaN(new Date(endDate).getTime())) ? formatDateKey(new Date(endDate)) : null;
-                const addDaysW = (dk, days) => {
-                    if (!dk || typeof dk !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
-                    const d = new Date(dk + 'T00:00:00');
-                    if (isNaN(d.getTime())) return null;
-                    d.setDate(d.getDate() + (days || 0));
-                    return formatDateKey(d);
-                };
                 const findFirstWeekendOnOrAfter = (sorted, thresholdKey) => {
                     for (const wk of sorted) {
                         if (wk >= thresholdKey) return wk;
@@ -10367,6 +10415,7 @@
                                         const nextIndex = (currentIndex + offset) % rotationDays;
                                         const candidate = groupPeople[nextIndex];
                                         if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                                        if (isWeekendDutyTooSoonAfterAbsenceReturn(candidate, groupNum, dateKey)) continue;
                                         if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
                                         const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
                                         const candidateAlreadyAssigned = assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate);
@@ -10421,8 +10470,16 @@
                                     }
                                 }
                             }
-                            // Απουσία: αμέσως επόμενος διαθέσιμος στην ίδια ημερομηνία (όχι cascade που ξαναμοιράζει).
-                            if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
+                            // Απουσία ή cool-down +3 ημ. μετά επιστροφή: επόμενος διαθέσιμος στην ίδια ημερομηνία.
+                            const tooSoonAfterReturn =
+                                assignedPerson &&
+                                isWeekendDutyTooSoonAfterAbsenceReturn(assignedPerson, groupNum, dateKey);
+                            if (
+                                assignedPerson &&
+                                (isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend') ||
+                                    tooSoonAfterReturn)
+                            ) {
+                                const skippedForCooldown = assignedPerson;
                                 const missIdx = groupPeople.indexOf(assignedPerson);
                                 const pickedMiss = findNextEligibleWeekendPersonInList({
                                     groupPeople,
@@ -10437,14 +10494,16 @@
                                         dateKey,
                                         groupNum,
                                         pickedMiss.person,
-                                        assignedPerson,
+                                        skippedForCooldown,
                                         date,
                                         'weekend'
                                     );
                                     if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                         dutyWeekendDebug.logStep(
-                                            'phase2-missing-inline',
-                                            `Απουσία ${assignedPerson} → επόμενος διαθέσιμος ${pickedMiss.person}.`
+                                            tooSoonAfterReturn ? 'phase2-return-cooldown' : 'phase2-missing-inline',
+                                            tooSoonAfterReturn
+                                                ? `Επιστροφή ${skippedForCooldown}: χρειάζονται 3 ημ. → ${pickedMiss.person}.`
+                                                : `Απουσία ${skippedForCooldown} → επόμενος διαθέσιμος ${pickedMiss.person}.`
                                         );
                                     }
                                     assignedPerson = pickedMiss.person;
@@ -10453,7 +10512,7 @@
                                 } else if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                     dutyWeekendDebug.logStep(
                                         'phase2-missing',
-                                        `Απουσία: ${assignedPerson} — δεν βρέθηκε επόμενος διαθέσιμος.`
+                                        `Παράλειψη ${skippedForCooldown} — δεν βρέθηκε επόμενος διαθέσιμος.`
                                     );
                                 }
                             }
