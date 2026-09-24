@@ -804,6 +804,61 @@
                 let person = getAssigneeOnDate(thursdayKey, groupNum, assignments);
                 if (!person) continue;
 
+                // Same 5-day rule as normal preview: do not leave someone on Πέμπτη if they
+                // already have a normal duty within 5 days (e.g. Τρίτη same week). Replace
+                // only this Thursday slot — does not change conflict / Ν partner rules.
+                if (isPersonOnNormalWithinDays(person, groupNum, thursdayKey, assignments, 5)) {
+                    const groupPeopleFix = getNightGroupNormalPeople(groupNum, thursdayKey);
+                    const fromIdxFix = findPersonIndexInList(groupPeopleFix, person);
+                    const replacement = pickNextEligibleNormalPerson(
+                        groupPeopleFix,
+                        fromIdxFix >= 0 ? fromIdxFix : -1,
+                        groupNum,
+                        thursdayKey,
+                        null,
+                        assignments
+                    );
+                    if (
+                        replacement.person &&
+                        normPerson(replacement.person) !== normPerson(person)
+                    ) {
+                        const prevThu = person;
+                        if (!assignments[thursdayKey]) assignments[thursdayKey] = {};
+                        assignments[thursdayKey][groupNum] = replacement.person;
+                        syncSimulatedNormalAssignee(
+                            simulated,
+                            thursdayKey,
+                            groupNum,
+                            replacement.person
+                        );
+                        if (typeof storeAssignmentReason === 'function') {
+                            if (
+                                typeof clearAssignmentReasonForPersonOnDate === 'function'
+                            ) {
+                                clearAssignmentReasonForPersonOnDate(
+                                    thursdayKey,
+                                    groupNum,
+                                    prevThu
+                                );
+                            }
+                            storeAssignmentReason(
+                                thursdayKey,
+                                groupNum,
+                                replacement.person,
+                                'skip',
+                                `Αντικατάσταση: ο/η ${prevThu} είχε ήδη καθημερινή εντός 5 ημερών.`,
+                                prevThu,
+                                null,
+                                {
+                                    fiveDayProximityReplacement: true,
+                                    skippedPerson: prevThu
+                                }
+                            );
+                        }
+                        person = replacement.person;
+                    }
+                }
+
                 let spacing = personPassesThursdaySpacing(person, groupNum, thursdayKey, assignments, runtimeLastThu);
 
                 if (spacing.eligible) {
@@ -1102,7 +1157,39 @@
         return (gd && gd.normal) || [];
     }
 
-    function pickNextEligibleNormalPerson(groupPeople, fromIndex, groupNum, dateKey, skipPersonNorms) {
+    /**
+     * Same 5-day proximity rule as normal preview: do not re-assign someone already on a
+     * normal day within maxDays (exclusive of dateKey itself). Used so Ν-resequence cannot
+     * put e.g. #8 on Tuesday and again on Thursday of the same week.
+     */
+    function isPersonOnNormalWithinDays(person, groupNum, dateKey, assignments, maxDays) {
+        if (!person || !dateKey || !assignments || !Number.isFinite(maxDays) || maxDays <= 0) {
+            return false;
+        }
+        const current = new Date(dateKey + 'T00:00:00');
+        if (isNaN(current.getTime())) return false;
+        const pNorm = normPerson(person);
+        const g = Number(groupNum);
+        for (const dk of Object.keys(assignments)) {
+            if (!dk || dk === dateKey) continue;
+            const assigned = assignments[dk]?.[g] ?? assignments[dk]?.[groupNum];
+            if (!assigned || normPerson(assigned) !== pNorm) continue;
+            const other = new Date(dk + 'T00:00:00');
+            if (isNaN(other.getTime())) continue;
+            const daysDiff = Math.floor(Math.abs(current - other) / (1000 * 60 * 60 * 24));
+            if (daysDiff > 0 && daysDiff <= maxDays) return true;
+        }
+        return false;
+    }
+
+    function pickNextEligibleNormalPerson(
+        groupPeople,
+        fromIndex,
+        groupNum,
+        dateKey,
+        skipPersonNorms,
+        assignments
+    ) {
         const rotationDays = groupPeople.length;
         if (!rotationDays) return { person: null, index: fromIndex };
         const date = new Date(dateKey + 'T00:00:00');
@@ -1133,6 +1220,13 @@
                 typeof isPersonMissingOnDate === 'function' &&
                 !isNaN(date.getTime()) &&
                 isPersonMissingOnDate(candidate, groupNum, date, 'normal')
+            ) {
+                continue;
+            }
+            // Keep Ν ουρά consistent with normal 5-day rule (do not recreate close duplicates)
+            if (
+                assignments &&
+                isPersonOnNormalWithinDays(candidate, groupNum, dateKey, assignments, 5)
             ) {
                 continue;
             }
@@ -1217,13 +1311,30 @@
             let fromIndex = findPersonIndexInList(groupPeople, lastPerson);
             if (fromIndex < 0) fromIndex = 0;
 
-            const next = pickNextEligibleNormalPerson(
+            let next = pickNextEligibleNormalPerson(
                 groupPeople,
                 fromIndex,
                 groupNum,
                 dateKey,
-                skipNorms
+                skipNorms,
+                assignments
             );
+            // If the day already has someone too close to another normal (e.g. leftover
+            // before this pass), force a full-list search so we do not keep the duplicate.
+            if (
+                !next.person &&
+                prev &&
+                isPersonOnNormalWithinDays(prev, groupNum, dateKey, assignments, 5)
+            ) {
+                next = pickNextEligibleNormalPerson(
+                    groupPeople,
+                    -1,
+                    groupNum,
+                    dateKey,
+                    skipNorms,
+                    assignments
+                );
+            }
             if (!next.person) continue;
 
             lastPerson = next.person;
