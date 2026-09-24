@@ -5670,13 +5670,40 @@
             }
         }
 
+        /**
+         * Excel ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ (background): χρονολογικές αναθέσεις → γύροι (επανάληψη ατόμου = νέος γύρος)
+         * → στον τελευταίο γύρο άγκυρα = μεγαλύτερη θέση στην αύξουσα σειρά της λίστας
+         * → επόμενοι διαθέσιμοι μετά την άγκυρα· αν έφυγε από ομάδα → επόμενος διαθέσιμος (όχι reset 0).
+         */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
             const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
             const firstDayOfNextMonth = new Date(year, month + 1, 1);
             const lastDayOfNextMonth = new Date(year, month + 2, 0);
+            const lastDayOfExportMonth = new Date(year, month + 1, 0);
             const nextMonthStartKey = formatDateKey(firstDayOfNextMonth);
             const nextMonthEndKey = formatDateKey(lastDayOfNextMonth);
+            const exportMonthEndKey = formatDateKey(lastDayOfExportMonth);
+            const exportMonthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+            const rotationListForType = (type, dateKey) => {
+                if (typeof groupsForDuty === 'function' && dateKey) {
+                    const gd = groupsForDuty(groupNum, dateKey);
+                    const list = (gd && gd[type]) || [];
+                    if (Array.isArray(list) && list.length) return list.filter(Boolean);
+                }
+                return (groupData?.[type] || []).filter(Boolean);
+            };
+            const orderListForType = (type) => rotationListForType(type, exportMonthEndKey);
+            const nextListForType = (type) => rotationListForType(type, nextMonthStartKey);
+
+            const findIdxInList = (list, personName) => {
+                if (!personName || !Array.isArray(list)) return -1;
+                const n = normName(personName);
+                let i = list.indexOf(personName);
+                if (i >= 0) return i;
+                return list.findIndex((p) => normName(p) === n);
+            };
 
             const isDisabledForTypeAtDate = (personName, dutyType, dateKey) => {
                 if (!personName) return false;
@@ -5701,7 +5728,6 @@
                     const pStartKey = inputValueToDateKey(p?.start);
                     const pEndKey = inputValueToDateKey(p?.end);
                     if (!pStartKey || !pEndKey) continue;
-                    // Full coverage check: period fully contains the whole next month range.
                     if (pStartKey <= nextMonthStartKey && pEndKey >= nextMonthEndKey) {
                         return true;
                     }
@@ -5710,7 +5736,6 @@
             };
 
             const isAvailableForNextMonth = (personName, dutyType, { allowIneligible = false } = {}) => {
-                // Εξαίρεση από υπηρεσίες: ποτέ στους επιλαχόντες — πάμε στον επόμενο διαθέσιμο
                 if (
                     typeof isPersonExcludedFromDuties === 'function' &&
                     isPersonExcludedFromDuties(personName, groupNum)
@@ -5723,120 +5748,81 @@
                 return true;
             };
 
-            const exportMonthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+            /** Chronological final assignees for this duty type in the export month. */
+            const collectAssignedChronoForType = (type) => {
+                const out = [];
+                if (type === 'normal') {
+                    const sortedDays = getSortedNormalCalendarDateKeysInMonth(year, month);
+                    for (const dk of sortedDays) {
+                        let person =
+                            typeof getPersonOnDateForNormalRotationContinuityLookup === 'function'
+                                ? getPersonOnDateForNormalRotationContinuityLookup(dk, groupNum)
+                                : null;
+                        if (!person) {
+                            const assignment =
+                                (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dk) : null) ??
+                                (dutyAssignments?.[dk] || null);
+                            person = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
+                        }
+                        if (person) out.push(normName(person));
+                    }
+                    return out;
+                }
+                const dateKeys = collectDateKeysForRotationContinuityScan(type, exportMonthKey);
+                for (const dk of dateKeys) {
+                    if (getDutyCategoryForDateKeyLocal(dk) !== type) continue;
+                    const person = getPersonOnDateForRotationContinuityLookup(type, dk, groupNum);
+                    if (person) out.push(normName(person));
+                }
+                return out;
+            };
+
+            /** New lap when a person reappears in the current lap (rotation wrapped). */
+            const splitAssignedIntoLaps = (chronoNames) => {
+                const laps = [];
+                let current = [];
+                const seen = new Set();
+                for (const raw of chronoNames || []) {
+                    const n = normName(raw);
+                    if (!n) continue;
+                    if (seen.has(n)) {
+                        if (current.length) laps.push(current);
+                        current = [];
+                        seen.clear();
+                    }
+                    current.push(raw);
+                    seen.add(n);
+                }
+                if (current.length) laps.push(current);
+                return laps;
+            };
 
             /**
-             * Τελευταίος στη σειρά περιστροφής στο τέλος του μήνα export.
-             * Καθημερινές: χρονολογική σάρωση baseline· ανταλλαγές συγκρούσεων (π.χ. 31/08) δεν αλλάζουν anchor.
+             * Anchor = person with highest position in the official rotation list among the last lap.
+             * (Ascending series — not chronological last of the whole month.)
              */
-            const resolveLastRotationAnchorForType = (type) => {
-                if (type === 'normal') {
-                    const isNightGroup =
-                        typeof isNightChangesGroup === 'function' && isNightChangesGroup(groupNum);
-                    if (isNightGroup) {
-                        return resolveNormalExcelAnchorForNightGroup(year, month, groupNum);
+            const resolveAscendingAnchorFromLastLap = (type, chronoNames) => {
+                const laps = splitAssignedIntoLaps(chronoNames);
+                if (!laps.length) return '';
+                const lastLap = laps[laps.length - 1];
+                const orderList = orderListForType(type);
+                let bestIdx = -1;
+                let bestPerson = '';
+                for (const name of lastLap) {
+                    const idx = findIdxInList(orderList, name);
+                    if (idx >= 0 && idx > bestIdx) {
+                        bestIdx = idx;
+                        bestPerson = orderList[idx] || name;
                     }
-
-                    let anchor = null;
-                    const sortedDays = getSortedNormalCalendarDateKeysInMonth(year, month);
-                    const store = buildNormalRotationContinuityStore();
-
-                    for (const dk of sortedDays) {
-                        const baselineRaw = rotationBaselineNormalAssignments?.[dk];
-                        const baselinePerson = baselineRaw
-                            ? parseAssignedPersonForGroupFromAssignment(baselineRaw, groupNum)
-                    : null;
-                        const finalAssigned = getPersonOnDateForNormalRotationContinuityLookup(dk, groupNum);
-                        if (!baselinePerson && !finalAssigned) continue;
-
-                        const reason = getAssignmentReasonForGroupOnDate(
-                            dk,
-                            groupNum,
-                            finalAssigned || baselinePerson
-                        );
-
-                        if (isExcelAlternateConsecutiveSwapReason(reason)) {
-                            continue;
-                        }
-
-                        const assigned = finalAssigned || baselinePerson;
-                        if (typeof getPersonForRotationContinuity === 'function') {
-                            const continuity = getPersonForRotationContinuity(dk, groupNum, assigned, store);
-                            if (continuity) anchor = continuity;
-                        } else if (baselinePerson) {
-                            anchor = baselinePerson;
-                        }
-                    }
-
-                    if (!anchor) {
-                        anchor =
-                            getLastBaselineRotationPersonForDate('normal', firstDayOfNextMonth, groupNum) ||
-                            (typeof getRotationSeedPersonForMonthStart === 'function'
-                                ? getRotationSeedPersonForMonthStart('normal', firstDayOfNextMonth, groupNum)
-                                : null) ||
-                            (typeof getLastAssignmentContinuityPersonForPreviousMonth === 'function'
-                                ? getLastAssignmentContinuityPersonForPreviousMonth('normal', firstDayOfNextMonth, groupNum)
-                                : null) ||
-                            getLastRotationPersonForDate('normal', firstDayOfNextMonth, groupNum);
-                    }
-                    return anchor ? normName(resolvePersonInGroupRotationList(anchor, groupNum, type)) : '';
                 }
-
-                let anchor = null;
-
-                if (typeof getRotationSeedPersonForMonthStart === 'function') {
-                    anchor = getRotationSeedPersonForMonthStart(type, firstDayOfNextMonth, groupNum);
-                }
-
-                const dateKeys = collectDateKeysForRotationContinuityScan(type, exportMonthKey);
-                let lastKey = null;
-                for (const dk of dateKeys) {
-                    if (type !== 'normal' && getDutyCategoryForDateKeyLocal(dk) !== type) continue;
-                    const assigned = getPersonOnDateForRotationContinuityLookup(type, dk, groupNum);
-                    if (!assigned) continue;
-                    if (!lastKey || dk > lastKey) lastKey = dk;
-                }
-                if (lastKey) {
-                    const store =
-                        type === 'normal' ? buildNormalRotationContinuityStore() : getAssignmentsForDayType(type);
-                    const assigned = getPersonOnDateForRotationContinuityLookup(type, lastKey, groupNum);
-                    let continuity = assigned;
-                    if (typeof getPersonForRotationContinuity === 'function') {
-                        const reason = getAssignmentReasonForGroupOnDate(lastKey, groupNum, assigned);
-                        // Excel επιλαχόντες: μετά από ημιαργία που κράτησε ο αντικαταστάτης, anchor = αυτός
-                        // (όχι ο conflicted που μετακινήθηκε σε καθημερινή — βλ. getPersonForRotationContinuity).
-                        if (type === 'semi' && reason?.meta?.semiConsecutiveHolidaySwap) {
-                            continuity = assigned;
-                        } else {
-                            continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
-                        }
-                    } else {
-                        const manual = findManualAlternateReplacementForGroup(lastKey, groupNum);
-                        if (
-                            manual?.baselinePerson &&
-                            manual?.replacementPerson &&
-                            normName(assigned) === normName(manual.replacementPerson)
-                        ) {
-                            continuity = resolvePersonInGroupRotationList(manual.baselinePerson, groupNum, type);
-                        }
-                    }
-                    if (continuity) anchor = continuity;
-                }
-
-                if (!anchor) {
-                    anchor =
-                        (typeof getLastAssignmentContinuityPersonForPreviousMonth === 'function'
-                            ? getLastAssignmentContinuityPersonForPreviousMonth(type, firstDayOfNextMonth, groupNum)
-                            : null) ||
-                        getLastRotationPersonForDate(type, firstDayOfNextMonth, groupNum) ||
-                        getLastBaselineRotationPersonForDate(type, firstDayOfNextMonth, groupNum);
-                }
-
-                return anchor ? normName(resolvePersonInGroupRotationList(anchor, groupNum, type)) : '';
+                if (bestIdx >= 0) return normName(bestPerson);
+                // Last lap people all left the order list — keep last chrono name as departed anchor
+                return normName(lastLap[lastLap.length - 1] || '');
             };
 
             for (const t of ['normal', 'semi', 'weekend', 'special']) {
-                lastAssigned[t] = resolveLastRotationAnchorForType(t);
+                const chrono = collectAssignedChronoForType(t);
+                lastAssigned[t] = resolveAscendingAnchorFromLastLap(t, chrono);
             }
 
             const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
@@ -5855,24 +5841,41 @@
                 return '';
             };
 
-            /**
-             * Επιλαχόντες: οι επόμενοι N στη λίστα σειράς μετά τον τελευταίο ανατεθέντα στον μήνα export,
-             * που είναι διαθέσιμοι τον επόμενο ημερολογιακό μήνα (όχι απενεργ. / όχι απουσία ολόκληρου μήνα).
-             */
+            const resolveStartIndexAfterAnchor = (type, rawList, anchorRaw) => {
+                if (!rawList.length) return 0;
+                const anchor = anchorRaw ? normName(anchorRaw) : '';
+                if (!anchor) return 0;
+                const lastIdx = findIdxInList(rawList, anchor);
+                if (lastIdx >= 0) return (lastIdx + 1) % rawList.length;
+                // Anchor left this group — continue at next still-in-list after them
+                if (typeof resolveMonthStartIndexAfterDepartedContinuityPerson === 'function') {
+                    const recovered = resolveMonthStartIndexAfterDepartedContinuityPerson(
+                        type,
+                        firstDayOfNextMonth,
+                        groupNum,
+                        rawList,
+                        anchor
+                    );
+                    if (recovered != null && recovered >= 0) return recovered % rawList.length;
+                }
+                // Fallback: walk export-month order list after anchor's old index
+                const orderList = orderListForType(type);
+                const oldIdx = findIdxInList(orderList, anchor);
+                if (oldIdx >= 0 && orderList.length) {
+                    for (let off = 1; off <= orderList.length; off++) {
+                        const cand = orderList[(oldIdx + off) % orderList.length];
+                        const curIdx = findIdxInList(rawList, cand);
+                        if (curIdx >= 0 && normName(cand) !== anchor) return curIdx;
+                    }
+                }
+                return 0;
+            };
+
             const nextNFromRotationListAfterAnchor = (type, count, { allowIneligible = false } = {}) => {
-                const rawList = (groupData?.[type] || []).filter(Boolean);
+                const rawList = nextListForType(type);
                 if (rawList.length === 0) return Array(count).fill('');
 
-                const anchorRaw = lastAssigned[type] || '';
-                const anchor = anchorRaw
-                    ? resolvePersonInGroupRotationList(anchorRaw, groupNum, type)
-                    : '';
-                let startIdx = 0;
-                if (anchor) {
-                    const lastIdx = rawList.findIndex((p) => normName(p) === normName(anchor));
-                    if (lastIdx >= 0) startIdx = (lastIdx + 1) % rawList.length;
-                }
-
+                let startIdx = resolveStartIndexAfterAnchor(type, rawList, lastAssigned[type] || '');
                 const picks = [];
                 let cursor = startIdx;
                 let checked = 0;
@@ -5896,7 +5899,7 @@
             };
 
             const nextTwoForType = (type) => {
-                const rawList = (groupData?.[type] || []).filter(Boolean);
+                const rawList = nextListForType(type);
                 if (rawList.length === 0) return ['', ''];
                 const eligibleCount = rawList.filter((p) => isAvailableForNextMonth(p, type)).length;
                 if (eligibleCount === 0) return ['', ''];
@@ -5904,9 +5907,8 @@
                 return [picks[0] || '', picks[1] || ''];
             };
 
-            // Ειδικές αργίες: εμφάνιση 3 επόμενων στη σειρά (και αν είναι εκτός/απουσία) + σημείωση στον μήνα της επόμενης ειδικής.
             const nextThreeForSpecial = () => {
-                const rawList = (groupData?.special || []).filter(Boolean);
+                const rawList = nextListForType('special');
                 if (rawList.length === 0) return { names: ['', '', ''], notes: ['', '', ''] };
                 const outNames = nextNFromRotationListAfterAnchor('special', 3, { allowIneligible: true });
                 const findNextSpecialDates = (count = 3, maxDays = 3650) => {
@@ -5934,7 +5936,6 @@
                             outNotes.push('');
                             continue;
                         }
-                        // Απενεργοποίηση / απουσία μόνο αν επηρεάζει την ίδια την ειδική αργία που αναλογεί
                         if (isDisabledForTypeAtDate(name, 'special', specialDateKey)) {
                             note = 'ΕΚΤΟΣ ΥΠΗΡΕΣΙΑΣ';
                         } else {
@@ -5957,8 +5958,42 @@
                     special: specialNext.names
                 },
                 nextNotes: {
-                    // Only used for ΕΙΔΙΚΕΣ ΑΡΓΙΕΣ (3 rows). Other categories keep blank notes.
                     special: specialNext.notes
+                }
+            };
+        }
+
+        /** Merge preview overrides into auto-calculated Excel alternates (export only). */
+        function resolveExcelAlternatesWithOverrides(autoInfo, groupNum) {
+            if (!autoInfo) return autoInfo;
+            const ov = _excelAlternateOverrides?.[groupNum];
+            if (!ov) return autoInfo;
+            const pick = (type, count) => {
+                const fromOv = ov[type];
+                const fromAuto = autoInfo.next?.[type] || [];
+                const out = [];
+                for (let i = 0; i < count; i++) {
+                    if (fromOv && Object.prototype.hasOwnProperty.call(fromOv, i) && fromOv[i] != null) {
+                        out.push(String(fromOv[i]));
+                    } else {
+                        out.push(fromAuto[i] || '');
+                    }
+                }
+                return out;
+            };
+            return {
+                lastAssigned: autoInfo.lastAssigned,
+                next: {
+                    normal: pick('normal', 2),
+                    semi: pick('semi', 2),
+                    weekend: pick('weekend', 2),
+                    special: pick('special', 3)
+                },
+                nextNotes: {
+                    special:
+                        ov.specialNotes && Array.isArray(ov.specialNotes)
+                            ? [0, 1, 2].map((i) => ov.specialNotes[i] || autoInfo.nextNotes?.special?.[i] || '')
+                            : autoInfo.nextNotes?.special || ['', '', '']
                 }
             };
         }
@@ -5976,6 +6011,9 @@
 
         // Excel export month selection (separate from calendar currentDate)
         let _excelExportDate = null; // Date object set to 1st of selected month
+        /** Per-group overrides from Excel preview dropdowns (export session only). */
+        let _excelAlternateOverrides = null;
+        let _excelAlternateAutoByGroup = null;
 
         // Open a Greek month picker for Excel export
         function openExcelMonthPicker() {
@@ -6045,6 +6083,8 @@
             
             const previewContent = document.getElementById('excelPreviewContent');
             previewContent.innerHTML = '';
+            _excelAlternateOverrides = {};
+            _excelAlternateAutoByGroup = {};
             
             let hasAnyGroup = false;
             const typeMeta = {
@@ -6124,6 +6164,24 @@
                     groupData,
                     dutyAssignments
                 });
+                _excelAlternateAutoByGroup[groupNum] = {
+                    next: {
+                        normal: [...(rotationInfo.next.normal || [])],
+                        semi: [...(rotationInfo.next.semi || [])],
+                        weekend: [...(rotationInfo.next.weekend || [])],
+                        special: [...(rotationInfo.next.special || [])]
+                    },
+                    nextNotes: {
+                        special: [...(rotationInfo.nextNotes?.special || [])]
+                    }
+                };
+                _excelAlternateOverrides[groupNum] = {
+                    normal: [..._excelAlternateAutoByGroup[groupNum].next.normal],
+                    semi: [..._excelAlternateAutoByGroup[groupNum].next.semi],
+                    weekend: [..._excelAlternateAutoByGroup[groupNum].next.weekend],
+                    special: [..._excelAlternateAutoByGroup[groupNum].next.special],
+                    specialNotes: [..._excelAlternateAutoByGroup[groupNum].nextNotes.special]
+                };
                 const monthStartKey = formatDateKey(firstDay);
                 const monthEndKey = formatDateKey(lastDay);
                 const allPeople = Array.from(new Set([
@@ -6144,18 +6202,34 @@
                 // Create preview table for this group
                 const groupPreview = document.createElement('div');
                 groupPreview.className = 'mb-4 p-3 border rounded bg-white';
+                groupPreview.dataset.excelGroup = String(groupNum);
+                const buildPersonSelect = (type, index, selectedName) => {
+                    const list = (groupData?.[type] || []).filter(Boolean);
+                    const opts = [`<option value="">—</option>`];
+                    for (const p of list) {
+                        const sel = normName(p) === normName(selectedName) ? ' selected' : '';
+                        const orderNo = getOrderNo(groupData, type, p);
+                        opts.push(
+                            `<option value="${escapeHtml(p)}"${sel}>#${orderNo || '-'} ${escapeHtml(p)}</option>`
+                        );
+                    }
+                    if (selectedName && !list.some((p) => normName(p) === normName(selectedName))) {
+                        opts.push(
+                            `<option value="${escapeHtml(selectedName)}" selected>${escapeHtml(selectedName)} (εκτός λίστας)</option>`
+                        );
+                    }
+                    return `<select class="form-select form-select-sm excel-alt-select" data-group="${groupNum}" data-type="${type}" data-index="${index}">${opts.join('')}</select>`;
+                };
                 const renderAlternateRows = (type, names, notes = []) => {
                     const t = typeMeta[type];
                     const count = type === 'special' ? 3 : 2;
                     const rows = [];
                     for (let i = 0; i < count; i++) {
                         const nm = names?.[i] || '';
-                        const orderNo = nm ? getOrderNo(groupData, type, nm) : null;
-                        const leftText = nm ? `#${orderNo || '-'} ${escapeHtml(nm)}` : '-';
                         const rightText = type === 'special' ? (notes?.[i] || '') : '';
                         rows.push(`
                             <tr>
-                                <td style="padding:4px 6px;"><span class="fw-semibold">${leftText}</span></td>
+                                <td style="padding:4px 6px;">${buildPersonSelect(type, i, nm)}</td>
                                 <td style="padding:4px 6px; color:#6c757d; font-size:11px;">${escapeHtml(rightText)}</td>
                             </tr>
                         `);
@@ -6223,8 +6297,14 @@
                             </div>
                         </div>
                         <div class="col-lg-4">
-                            <div class="border rounded p-2 bg-light">
-                                <div class="fw-bold text-center mb-2">ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ (όπως στο τελικό Excel)</div>
+                            <div class="border rounded p-2 bg-light" data-excel-alts="${groupNum}">
+                                <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                                    <div class="fw-bold text-center flex-grow-1">ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ</div>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm excel-alt-reset" data-group="${groupNum}" title="Επαναφορά αυτόματων">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                </div>
+                                <div class="small text-muted mb-2">Μπορείτε να αλλάξετε τα ονόματα πριν τη δημιουργία του αρχείου.</div>
                                 ${renderAlternateRows('normal', rotationInfo.next.normal)}
                                 ${renderAlternateRows('semi', rotationInfo.next.semi)}
                                 ${renderAlternateRows('weekend', rotationInfo.next.weekend)}
@@ -6317,6 +6397,55 @@
                     generateBtn.disabled = false;
                 }
             }
+
+            // Wire editable alternate dropdowns + reset (export-session overrides only)
+            previewContent.querySelectorAll('.excel-alt-select').forEach((sel) => {
+                sel.addEventListener('change', () => {
+                    const g = Number(sel.getAttribute('data-group'));
+                    const type = sel.getAttribute('data-type');
+                    const idx = Number(sel.getAttribute('data-index'));
+                    if (!g || !type || !Number.isFinite(idx)) return;
+                    if (!_excelAlternateOverrides[g]) {
+                        _excelAlternateOverrides[g] = {
+                            normal: [],
+                            semi: [],
+                            weekend: [],
+                            special: [],
+                            specialNotes: []
+                        };
+                    }
+                    if (!Array.isArray(_excelAlternateOverrides[g][type])) {
+                        _excelAlternateOverrides[g][type] = [];
+                    }
+                    _excelAlternateOverrides[g][type][idx] = sel.value || '';
+                });
+            });
+            previewContent.querySelectorAll('.excel-alt-reset').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const g = Number(btn.getAttribute('data-group'));
+                    const auto = _excelAlternateAutoByGroup?.[g];
+                    if (!g || !auto) return;
+                    _excelAlternateOverrides[g] = {
+                        normal: [...(auto.next.normal || [])],
+                        semi: [...(auto.next.semi || [])],
+                        weekend: [...(auto.next.weekend || [])],
+                        special: [...(auto.next.special || [])],
+                        specialNotes: [...(auto.nextNotes?.special || [])]
+                    };
+                    const root = previewContent.querySelector(`[data-excel-alts="${g}"]`);
+                    if (!root) return;
+                    root.querySelectorAll('.excel-alt-select').forEach((sel) => {
+                        const type = sel.getAttribute('data-type');
+                        const idx = Number(sel.getAttribute('data-index'));
+                        const val = _excelAlternateOverrides[g]?.[type]?.[idx] || '';
+                        sel.value = val;
+                        if (sel.value !== val) {
+                            // option missing — keep blank
+                            sel.value = '';
+                        }
+                    });
+                });
+            });
             
             // Show modal
             const modal = new bootstrap.Modal(document.getElementById('excelPreviewModal'));
@@ -7509,14 +7638,17 @@ ${content.innerHTML}
                         sigRow3.height = 25;
 
                         // Add "next on rotation" table on the RIGHT of the main duty list (as in the screenshot)
-                        const rotationInfo = getNextTwoRotationPeopleForCurrentMonth({
+                        const rotationInfo = resolveExcelAlternatesWithOverrides(
+                            getNextTwoRotationPeopleForCurrentMonth({
                             year,
                             month,
                             daysInMonth,
                             groupNum,
                             groupData,
                             dutyAssignments
-                        });
+                            }),
+                            groupNum
+                        );
                         const rightCol = 8; // H (moved from I)
                         const rightNoteCol = 9; // I (notes for ειδικές αργίες)
 
@@ -7705,7 +7837,10 @@ ${content.innerHTML}
                             data.push(['', '', '', '', '', '', '', 'ΔΚΤΗΣ']);
                             rowDayTypes.push(null, null, null);
 
-                            const rotationInfo = getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments });
+                            const rotationInfo = resolveExcelAlternatesWithOverrides(
+                                getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }),
+                                groupNum
+                            );
                             const rightRows = [
                                 { row: 5, text: 'ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ', kind: 'title' },
                                 { row: 7, text: 'ΚΑΘΗΜΕΡΙΝΕΣ', kind: 'normalHeader' },
