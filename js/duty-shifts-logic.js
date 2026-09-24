@@ -5087,6 +5087,12 @@
                 })
                 .sort();
         }
+        /**
+         * Cascade απουσίας ΣΚ/αργίας: ο απόντας πάει στην πλησιέστερη προηγούμενη διαθέσιμη
+         * αργία του μήνα και οι ενδιάμεσοι μετατοπίζονται μία θέση αργότερα.
+         * Anchor = πλησιέστερη προηγούμενη (όχι η πρώτη του μήνα) — αλλιώς ξαναμοιράζεται
+         * όλος ο μήνας και η σειρά «γυρίζει πίσω» (π.χ. 6→2→8→3).
+         */
         function findWeekendAbsentCascadeChain(params) {
             const {
                 sortedWeekends,
@@ -5103,7 +5109,8 @@
             const missedIdx = monthWeekends.indexOf(missedDateKey);
             if (missedIdx <= 0) return null;
             let anchorIdx = -1;
-            for (let i = 0; i < missedIdx; i++) {
+            // Nearest previous weekend where the absent person can serve (same rule, local chain).
+            for (let i = missedIdx - 1; i >= 0; i--) {
                 const dk = monthWeekends[i];
                 const d = new Date(dk + 'T00:00:00');
                 if (isPersonMissingOnDate(absentPerson, groupNum, d, 'weekend')) continue;
