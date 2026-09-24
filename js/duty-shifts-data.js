@@ -5672,10 +5672,10 @@
 
         /**
          * Excel ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ (background, όλοι οι τύποι):
-         * τελικές αναθέσεις όπως στον πίνακα → γύροι όταν η σειρά ξαναρχίζει (#17→#1)
-         * → τελευταίος γύρος: αύξουσα +1 από την επανεκκίνηση (αγνοεί εκτός σειράς π.χ. #16)
-         *   αλλιώς max θέση· επόμενοι στην ΙΔΙΑ λίστα με τα # του πίνακα
-         * → φίλτρο διαθεσιμότητας για επόμενο μήνα· αν άγκυρα έφυγε → επόμενος διαθέσιμος.
+         * τελικές αναθέσεις όπως στον πίνακα → γύροι:
+         *   γύρος τελειώνει στον μεγαλύτερο # που εμφανίστηκε μία φορά· μετά = επόμενος γύρος (επαναλήψεις κ.λπ.)
+         * → τελευταίος γύρος: αύξουσα +1 αν ξεκινά από #1/#2 · αλλιώς max θέση
+         * → επόμενοι στην ίδια λίστα με τα # του πίνακα · διαθεσιμότητα επόμενου μήνα
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
@@ -5788,29 +5788,41 @@
             const collectAssignedChronoForType = (type) =>
                 collectAssignedChronoEntriesForType(type).map((e) => e.person);
 
-            const splitAssignedIntoLapsByOrderWrap = (chronoNames, orderList) => {
-                const laps = [];
-                let current = [];
-                let prevIdx = -1;
-                const len = Math.max(1, orderList.length);
-                for (const raw of chronoNames || []) {
-                    const n = normName(raw);
-                    if (!n) continue;
-                    const idx = findIdxInList(orderList, n);
-                    if (idx >= 0 && prevIdx >= 0) {
-                        const looksLikeWrap =
-                            idx < prevIdx &&
-                            prevIdx >= Math.floor(len / 2) &&
-                            idx <= Math.floor(prevIdx / 2);
-                        if (looksLikeWrap && current.length) {
-                            laps.push(current);
-                            current = [];
-                        }
-                    }
-                    current.push(n);
-                    if (idx >= 0) prevIdx = idx;
+            /**
+             * Γύρος 1 τελειώνει στον μεγαλύτερο αριθμό σειράς που εμφανίστηκε ακριβώς μία φορά
+             * στη χρονολογική λίστα· ό,τι ακολουθεί = επόμενος γύρος (επαναλήψεις / συνέχεια).
+             * Δεν κόβει σε πτώση #15→#5 μέσα στον ίδιο «πρώτο περάσμα».
+             */
+            const splitAssignedIntoLapsByMaxOnce = (chronoNames, orderList) => {
+                const names = (chronoNames || []).map((n) => normName(n)).filter(Boolean);
+                if (!names.length) return [];
+
+                const counts = new Map();
+                const idxs = names.map((n) => findIdxInList(orderList, n));
+                for (const idx of idxs) {
+                    if (idx < 0) continue;
+                    counts.set(idx, (counts.get(idx) || 0) + 1);
                 }
-                if (current.length) laps.push(current);
+
+                let maxOnceIdx = -1;
+                for (const [idx, c] of counts.entries()) {
+                    if (c === 1 && idx > maxOnceIdx) maxOnceIdx = idx;
+                }
+
+                // Κανένας μοναδικός αριθμός → ένας γύρος (όλη η σειρά)
+                if (maxOnceIdx < 0) return [names];
+
+                let cut = -1;
+                for (let i = 0; i < names.length; i++) {
+                    if (idxs[i] === maxOnceIdx) cut = i;
+                }
+                if (cut < 0) return [names];
+
+                const lap1 = names.slice(0, cut + 1);
+                const lap2 = names.slice(cut + 1);
+                const laps = [];
+                if (lap1.length) laps.push(lap1);
+                if (lap2.length) laps.push(lap2);
                 return laps;
             };
 
@@ -5847,7 +5859,7 @@
 
             const resolveAscendingAnchorFromLastLap = (type, chronoNames) => {
                 const orderList = orderListForType(type);
-                const laps = splitAssignedIntoLapsByOrderWrap(chronoNames, orderList);
+                const laps = splitAssignedIntoLapsByMaxOnce(chronoNames, orderList);
                 const empty = {
                     person: '',
                     idx: -1,
@@ -6637,6 +6649,7 @@
                             <div class="mb-2 pb-2 border-bottom">
                                 <div class="fw-semibold">${escapeHtml(d.label || t)}</div>
                                 <div class="text-muted mb-1">Χρονολογικά: ${chronoLine || '—'}</div>
+                                <div class="text-muted mb-1">Γύρος = μέχρι μεγαλύτερο # που εμφανίστηκε 1 φορά· μετά = επόμενος γύρος</div>
                                 <div class="mb-1">${lapsLine || 'Ένας γύρος'}</div>
                                 <div>Τελευταίος γύρος: <strong>${lastLap}</strong></div>
                                 <div>Μέθοδος: <strong>${escapeHtml(methodLabel[d.method] || d.method)}</strong>
