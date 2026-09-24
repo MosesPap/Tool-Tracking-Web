@@ -5301,29 +5301,61 @@
                     if (!currentPerson || !isPersonMissingOnDate(currentPerson, groupNum, date, 'weekend')) continue;
                     let currentIndex = groupPeople.indexOf(currentPerson);
                     if (currentIndex === -1) currentIndex = 0;
-                    let swapPerson = null;
-                    for (let offset = 1; offset < groupPeople.length; offset++) {
-                        const nextIndex = (currentIndex + offset) % groupPeople.length;
-                        const candidate = groupPeople[nextIndex];
-                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                        if (assignedWeekendInMonth[monthKey][groupNum].has(candidate)) continue;
-                        swapPerson = candidate;
-                        break;
-                    }
-                    if (!swapPerson) continue;
+                    const picked = findNextEligibleWeekendPersonInList({
+                        groupPeople,
+                        startIndex: currentIndex,
+                        groupNum,
+                        date,
+                        assignedSet: assignedWeekendInMonth[monthKey][groupNum],
+                        specialMonthSet: null
+                    });
+                    if (!picked) continue;
                     if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
-                    assignmentsByDate[dateKey][groupNum] = swapPerson;
+                    assignmentsByDate[dateKey][groupNum] = picked.person;
                     storeUnavailableReplacementReason(
                         dateKey,
                         groupNum,
-                        swapPerson,
+                        picked.person,
                         currentPerson,
                         date,
                         'weekend'
                     );
-                    assignedWeekendInMonth[monthKey][groupNum].add(swapPerson);
+                    assignedWeekendInMonth[monthKey][groupNum].add(picked.person);
                 }
             }
+        }
+
+        /**
+         * Επόμενος διαθέσιμος στη λίστα weekend μετά το startIndex (απουσία / ειδική / ήδη ανατεθειμένος).
+         * Ίδια λογική για όλες τις ομάδες 1–4.
+         */
+        function findNextEligibleWeekendPersonInList({
+            groupPeople,
+            startIndex,
+            groupNum,
+            date,
+            assignedSet = null,
+            specialMonthSet = null
+        }) {
+            const rotationDays = groupPeople.length;
+            if (!rotationDays) return null;
+            const base = startIndex >= 0 ? startIndex : 0;
+            for (let offset = 1; offset < rotationDays; offset++) {
+                const nextIndex = (base + offset) % rotationDays;
+                const candidate = groupPeople[nextIndex];
+                if (!candidate) continue;
+                if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                if (
+                    typeof isPersonDisabledForDuty === 'function' &&
+                    isPersonDisabledForDuty(candidate, groupNum, 'weekend')
+                ) {
+                    continue;
+                }
+                if (specialMonthSet && specialMonthSet.has(candidate)) continue;
+                if (assignedSet && assignedSet.has(candidate)) continue;
+                return { person: candidate, index: nextIndex };
+            }
+            return null;
         }
         function buildWeekendPreviewTbodyHtml(rowsMeta, simulatedWeekendAssignments, baselineWeekendByDate, weekendRotationPersons, context) {
             let tbody = '';
@@ -5595,50 +5627,7 @@
                         }
                     }
                 });
-                // Phase 2: Cascade reflow when person is missing — everyone shifts one weekend slot later in month.
-                const cascadeResults = applyAllWeekendAbsentCascadeReflows(
-                    sortedWeekends,
-                    updatedAssignments,
-                    null
-                );
-                cascadeResults.forEach((cr) => {
-                    const date = new Date(cr.dateKey + 'T00:00:00');
-                    skippedPeople.push({
-                        date: cr.dateKey,
-                        dateStr: date.toLocaleDateString('el-GR', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric'
-                        }),
-                        groupNum: cr.groupNum,
-                        skippedPerson: cr.absentPerson,
-                        replacementPerson: cr.replacementOnMissedDate
-                    });
-                    const monthKey =
-                        typeof getMonthKeyFromDate === 'function'
-                            ? getMonthKeyFromDate(date)
-                            : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                    if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
-                    if (!assignedWeekendInMonth[monthKey][cr.groupNum]) {
-                        assignedWeekendInMonth[monthKey][cr.groupNum] = new Set();
-                    }
-                    cr.chain.forEach((dk) => {
-                        const p = updatedAssignments[dk]?.[cr.groupNum];
-                        if (p) assignedWeekendInMonth[monthKey][cr.groupNum].add(p);
-                    });
-                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
-                        dutyWeekendDebug.recordAbsentPlacement({
-                            groupNum: cr.groupNum,
-                            personName: cr.absentPerson,
-                            missedOnDateKey: cr.dateKey,
-                            targetDateKey: cr.chain[0],
-                            replacementOnMissedDate: cr.replacementOnMissedDate,
-                            status: 'applied',
-                            reasonCode: 'CASCADE_MOVES_ABSENT_TO',
-                            message: `Cascade ΣΚ: ${cr.absentPerson} → ${cr.chain[0]}, αλυσίδα ${cr.chain.join(' → ')}.`
-                        });
-                    }
-                });
+                // Απουσίες ΣΚ: one-sided επόμενος διαθέσιμος για όλες τις ομάδες (όχι cascade reshuffle).
                 applyWeekendMissingOneSidedFallback(
                     sortedWeekends,
                     updatedAssignments,
@@ -10432,12 +10421,39 @@
                                     }
                                 }
                             }
-                            // Phase 2: απουσία — cascade reflow τρέχει μετά το loop (όχi inline swap)
+                            // Απουσία: αμέσως επόμενος διαθέσιμος στην ίδια ημερομηνία (όχι cascade που ξαναμοιράζει).
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
-                                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                const missIdx = groupPeople.indexOf(assignedPerson);
+                                const pickedMiss = findNextEligibleWeekendPersonInList({
+                                    groupPeople,
+                                    startIndex: missIdx >= 0 ? missIdx : rotationPosition,
+                                    groupNum,
+                                    date,
+                                    assignedSet: assignedWeekendInMonthPreview[monthKey][groupNum],
+                                    specialMonthSet: simulatedSpecialAssignments[monthKey]?.[groupNum] || null
+                                });
+                                if (pickedMiss) {
+                                    storeUnavailableReplacementReason(
+                                        dateKey,
+                                        groupNum,
+                                        pickedMiss.person,
+                                        assignedPerson,
+                                        date,
+                                        'weekend'
+                                    );
+                                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                        dutyWeekendDebug.logStep(
+                                            'phase2-missing-inline',
+                                            `Απουσία ${assignedPerson} → επόμενος διαθέσιμος ${pickedMiss.person}.`
+                                        );
+                                    }
+                                    assignedPerson = pickedMiss.person;
+                                    wasReplaced = true;
+                                    replacementIndex = pickedMiss.index;
+                                } else if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                     dutyWeekendDebug.logStep(
                                         'phase2-missing',
-                                        `Απουσία: ${assignedPerson} — cascade ΣΚ/αργιών μετά το preview loop.`
+                                        `Απουσία: ${assignedPerson} — δεν βρέθηκε επόμενος διαθέσιμος.`
                                     );
                                 }
                             }
@@ -10583,11 +10599,7 @@
                     html += '</tr>';
                 });
 
-                applyAllWeekendAbsentCascadeReflows(
-                    sortedWeekends,
-                    simulatedWeekendAssignments,
-                    baselineWeekendByDate
-                );
+                // Απουσίες: μόνο one-sided «επόμενος διαθέσιμος» (όχι cascade — έσπαγε τη σειρά π.χ. 6→2→8→3).
                 applyWeekendMissingOneSidedFallback(
                     sortedWeekends,
                     simulatedWeekendAssignments,
