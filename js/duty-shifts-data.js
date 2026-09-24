@@ -5672,10 +5672,11 @@
 
         /**
          * Excel ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ (background, όλοι οι τύποι):
-         * τελικές αναθέσεις όπως στον πίνακα → γύροι:
-         *   γύρος τελειώνει στον μεγαλύτερο # που εμφανίστηκε μία φορά· μετά = επόμενος γύρος (επαναλήψεις κ.λπ.)
-         * → τελευταίος γύρος: αύξουσα +1 αν ξεκινά από #1/#2 · αλλιώς max θέση
-         * → επόμενοι στην ίδια λίστα με τα # του πίνακα · διαθεσιμότητα επόμενου μήνα
+         * χρονολογικά: στρώση 1ες εμφανίσεις vs επαναλήψεις (2η+)
+         * ενεργή = επαναλήψεις αν υπάρχουν, αλλιώς 1ες
+         * χωρίς επαναλήψεις: αύξουσα κυκλική κάλυψη από τον πρώτο # (εκτός σειράς = ανταλλαγή, μετράνε στο covered)
+         *   → συνέχεια μετά το τέλος του καλυμμένου κύκλου (π.χ. …12,1,2 → επόμενοι #3,#4)
+         * με επαναλήψεις: συνέχεια μετά το max των επαναλήψεων
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
@@ -5789,150 +5790,79 @@
                 collectAssignedChronoEntriesForType(type).map((e) => e.person);
 
             /**
-             * Γύρος 1 τελειώνει στον μεγαλύτερο αριθμό σειράς που εμφανίστηκε ακριβώς μία φορά
-             * στη χρονολογική λίστα· ό,τι ακολουθεί = επόμενος γύρος (επαναλήψεις / συνέχεια).
-             * Δεν κόβει σε πτώση #15→#5 μέσα στον ίδιο «πρώτο περάσμα».
+             * 1ες εμφανίσεις vs επαναλήψεις· άγκυρα =
+             * - επαναλήψεις: max(#) στις επαναλήψεις
+             * - αλλιώς: τέλος αύξουσας κυκλικής κάλυψης από τον πρώτο # (covered = όλοι που εμφανίστηκαν 1η φορά)
+             * Επιστρέφει idx του τελευταίου «καλυμμένου» (ώστε +1 = πρώτος αναπληρωματικός).
              */
-            const splitAssignedIntoLapsByMaxOnce = (chronoNames, orderList) => {
-                const names = (chronoNames || []).map((n) => normName(n)).filter(Boolean);
-                if (!names.length) return [];
-
-                const counts = new Map();
-                const idxs = names.map((n) => findIdxInList(orderList, n));
-                for (const idx of idxs) {
-                    if (idx < 0) continue;
-                    counts.set(idx, (counts.get(idx) || 0) + 1);
-                }
-
-                let maxOnceIdx = -1;
-                for (const [idx, c] of counts.entries()) {
-                    if (c === 1 && idx > maxOnceIdx) maxOnceIdx = idx;
-                }
-
-                // Κανένας μοναδικός αριθμός → ένας γύρος (όλη η σειρά)
-                if (maxOnceIdx < 0) return [names];
-
-                let cut = -1;
-                for (let i = 0; i < names.length; i++) {
-                    if (idxs[i] === maxOnceIdx) cut = i;
-                }
-                if (cut < 0) return [names];
-
-                const lap1 = names.slice(0, cut + 1);
-                const lap2 = names.slice(cut + 1);
-                const laps = [];
-                if (lap1.length) laps.push(lap1);
-                if (lap2.length) laps.push(lap2);
-                return laps;
-            };
-
-            const ascendingPlusOneChain = (indices, orderList) => {
-                let chainIdx = -1;
-                let chainPerson = '';
-                for (const { name, idx } of indices) {
-                    if (chainIdx < 0) {
-                        chainIdx = idx;
-                        chainPerson = name;
-                        continue;
-                    }
-                    if (idx === chainIdx + 1) {
-                        chainIdx = idx;
-                        chainPerson = name;
-                    }
-                }
-                if (chainIdx < 0) return null;
-                return { idx: chainIdx, person: normName(orderList[chainIdx] || chainPerson) };
-            };
-
-            const maxIndexInLap = (indices, orderList) => {
-                let bestIdx = -1;
-                let bestPerson = '';
-                for (const { name, idx } of indices) {
-                    if (idx > bestIdx) {
-                        bestIdx = idx;
-                        bestPerson = orderList[idx] || name;
-                    }
-                }
-                if (bestIdx < 0) return null;
-                return { idx: bestIdx, person: normName(bestPerson) };
-            };
-
-            const resolveAscendingAnchorFromLastLap = (type, chronoNames) => {
-                const orderList = orderListForType(type);
-                const laps = splitAssignedIntoLapsByMaxOnce(chronoNames, orderList);
+            const resolveAnchorFromChronoOrderNos = (orderNos, orderList) => {
+                const listLen = orderList.length;
                 const empty = {
                     person: '',
                     idx: -1,
                     method: 'none',
                     lapsOrderNos: [],
                     lastLapOrderNos: [],
-                    chainOrderNos: []
+                    chainOrderNos: [],
+                    firstsOrderNos: [],
+                    repeatsOrderNos: []
                 };
-                if (!laps.length) return empty;
-                const lastLap = laps[laps.length - 1];
-                const indices = lastLap
-                    .map((name) => ({ name, idx: findIdxInList(orderList, name) }))
-                    .filter((x) => x.idx >= 0);
-                const lapsOrderNos = laps.map((lap) =>
-                    lap.map((name) => {
-                        const i = findIdxInList(orderList, name);
-                        return i >= 0 ? i + 1 : '?';
-                    })
+                if (!listLen) return empty;
+
+                const nos = (orderNos || []).filter(
+                    (n) => Number.isFinite(n) && n >= 1 && n <= listLen
                 );
-                const lastLapOrderNos = indices.map((x) => x.idx + 1);
+                if (!nos.length) return empty;
 
-                if (!indices.length) {
-                    const fallback = normName(lastLap[lastLap.length - 1] || '');
-                    return {
-                        person: fallback,
-                        idx: findIdxInList(orderList, fallback),
-                        method: 'fallback-last',
-                        lapsOrderNos,
-                        lastLapOrderNos,
-                        chainOrderNos: []
-                    };
-                }
-
-                const firstIdx = indices[0].idx;
-                const hadPriorLap = laps.length > 1;
-                const restartedNearStart = firstIdx <= 1;
-                const chain = ascendingPlusOneChain(indices, orderList);
-                const byMax = maxIndexInLap(indices, orderList);
-                const chainOrderNos = [];
-                if (chain) {
-                    for (let i = firstIdx; i <= chain.idx; i++) chainOrderNos.push(i + 1);
+                const seen = new Set();
+                const firsts = [];
+                const repeats = [];
+                for (const n of nos) {
+                    if (seen.has(n)) repeats.push(n);
+                    else {
+                        seen.add(n);
+                        firsts.push(n);
+                    }
                 }
 
-                // Only +1 chain when new lap restarts near list start (#1/#2), e.g. αργίες 1→2→3→4.
-                // Mid-list restart (e.g. καθημερινές #16→#3) must use max of the lap (#14), not early chain stop.
-                if (hadPriorLap && restartedNearStart && chain) {
-                    return {
-                        person: chain.person,
-                        idx: chain.idx,
-                        method: 'ascending-chain',
-                        lapsOrderNos,
-                        lastLapOrderNos,
-                        chainOrderNos
-                    };
+                const lapsOrderNos = [];
+                if (firsts.length) lapsOrderNos.push(firsts.slice());
+                if (repeats.length) lapsOrderNos.push(repeats.slice());
+
+                let lastCoveredOrderNo;
+                let method;
+
+                if (repeats.length) {
+                    lastCoveredOrderNo = Math.max(...repeats);
+                    method = 'repeats-max';
+                } else {
+                    // Αύξουσα κυκλική κάλυψη από τον πρώτο χρονολογικά #
+                    const start = firsts[0];
+                    const covered = new Set(firsts);
+                    let pos = start;
+                    lastCoveredOrderNo = start;
+                    for (let steps = 0; steps < listLen; steps++) {
+                        if (!covered.has(pos)) break;
+                        lastCoveredOrderNo = pos;
+                        const next = pos === listLen ? 1 : pos + 1;
+                        if (next === start && steps > 0) break; // πλήρης κύκλος
+                        pos = next;
+                    }
+                    method = 'ascending-coverage';
                 }
-                if (byMax) {
-                    return {
-                        person: byMax.person,
-                        idx: byMax.idx,
-                        method: 'max-in-lap',
-                        lapsOrderNos,
-                        lastLapOrderNos,
-                        chainOrderNos
-                    };
-                }
-                const fallback = normName(lastLap[lastLap.length - 1] || '');
+
+                const idx = lastCoveredOrderNo - 1;
+                const person = normName(orderList[idx] || '');
                 return {
-                    person: fallback,
-                    idx: findIdxInList(orderList, fallback),
-                    method: 'fallback-last',
+                    person,
+                    idx,
+                    method,
                     lapsOrderNos,
-                    lastLapOrderNos,
-                    chainOrderNos
+                    lastLapOrderNos: repeats.length ? repeats.slice() : firsts.slice(),
+                    chainOrderNos: [],
+                    firstsOrderNos: firsts.slice(),
+                    repeatsOrderNos: repeats.slice(),
+                    coveredThrough: lastCoveredOrderNo
                 };
             };
 
@@ -5945,8 +5875,9 @@
             };
             for (const t of ['normal', 'semi', 'weekend', 'special']) {
                 const entries = collectAssignedChronoEntriesForType(t);
-                const chrono = entries.map((e) => e.person);
-                const resolved = resolveAscendingAnchorFromLastLap(t, chrono);
+                const orderList = orderListForType(t);
+                const orderNos = entries.map((e) => e.orderNo).filter((n) => n != null);
+                const resolved = resolveAnchorFromChronoOrderNos(orderNos, orderList);
                 lastAssigned[t] = resolved.person || '';
                 lastAssignedIdx[t] = Number.isFinite(resolved.idx) ? resolved.idx : -1;
                 debugByType[t] = {
@@ -5956,8 +5887,11 @@
                     lapsOrderNos: resolved.lapsOrderNos || [],
                     lastLapOrderNos: resolved.lastLapOrderNos || [],
                     chainOrderNos: resolved.chainOrderNos || [],
+                    firstsOrderNos: resolved.firstsOrderNos || [],
+                    repeatsOrderNos: resolved.repeatsOrderNos || [],
                     method: resolved.method || 'none',
                     anchorOrderNo: resolved.idx >= 0 ? resolved.idx + 1 : null,
+                    coveredThrough: resolved.coveredThrough ?? null,
                     anchorPerson: resolved.person || ''
                 };
             }
@@ -6619,8 +6553,10 @@
                         return;
                     }
                     const methodLabel = {
-                        'ascending-chain': 'αλυσίδα +1 (γύρος από #1/#2)',
-                        'max-in-lap': 'μέγιστη θέση τελευταίου γύρου',
+                        'ascending-coverage': 'αύξουσα κάλυψη κύκλου (1ες εμφανίσεις)',
+                        'repeats-max': 'max επαναλήψεων (γύρος 2)',
+                        'ascending-chain': 'αλυσίδα +1',
+                        'max-in-lap': 'μέγιστη θέση γύρου',
                         'fallback-last': 'τελευταίος χρονολογικά',
                         none: '—'
                     };
@@ -6635,7 +6571,10 @@
                             })
                             .join(' → ');
                         const lapsLine = (d.lapsOrderNos || [])
-                            .map((lap, i) => `Γύρος ${i + 1}: ${(lap || []).map((n) => `#${n}`).join(', ')}`)
+                            .map((lap, i) => {
+                                const title = i === 0 ? '1ες εμφανίσεις' : 'Επαναλήψεις';
+                                return `${title}: ${(lap || []).map((n) => `#${n}`).join(', ')}`;
+                            })
                             .join('<br>');
                         const lastLap = (d.lastLapOrderNos || []).map((n) => `#${n}`).join(', ') || '—';
                         const chain = (d.chainOrderNos || []).map((n) => `#${n}`).join('→') || '—';
@@ -6649,8 +6588,9 @@
                             <div class="mb-2 pb-2 border-bottom">
                                 <div class="fw-semibold">${escapeHtml(d.label || t)}</div>
                                 <div class="text-muted mb-1">Χρονολογικά: ${chronoLine || '—'}</div>
-                                <div class="text-muted mb-1">Γύρος = μέχρι μεγαλύτερο # που εμφανίστηκε 1 φορά· μετά = επόμενος γύρος</div>
+                                <div class="text-muted mb-1">Γύρος 1 = 1ες εμφανίσεις · Γύρος 2 = μόνο επαναλήψεις · άγκυρα = τέλος αύξουσας κάλυψης (ή max επαναλήψεων)</div>
                                 <div class="mb-1">${lapsLine || 'Ένας γύρος'}</div>
+                                <div>Κάλυψη μέχρι: <strong>${d.coveredThrough != null ? '#' + d.coveredThrough : '—'}</strong></div>
                                 <div>Τελευταίος γύρος: <strong>${lastLap}</strong></div>
                                 <div>Μέθοδος: <strong>${escapeHtml(methodLabel[d.method] || d.method)}</strong>
                                     ${d.method === 'ascending-chain' ? ` (${chain})` : ''}</div>
