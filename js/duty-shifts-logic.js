@@ -5210,9 +5210,9 @@
          * Αν δεν βρεθεί κανείς, αδειάζει τη θέση (ποτέ δεν αφήνει διπλότυπο).
          */
         /**
-         * Μετά cascade/onesided: κανένα άτομο δεν κρατά 2+ ΣΚ/αργίες τον ίδιο μήνα.
-         * Κρατά την πρώτη ανάθεση· καθαρίζει τις επόμενες· μετά γεμίζει κενά
-         * με τον επόμενο διαθέσιμο στη σειρά (μετά τον αφαιρεθέντα / προηγούμενη αργία).
+         * Μετά cascade/onesided: όχι 2+ ΣΚ/αργίες τον ίδιο μήνα όταν γίνεται·
+         * καθαρίζει διπλότυπα· γεμίζει κενά με τον επόμενο διαθέσιμο στη σειρά.
+         * Ποτέ κενή θέση αν υπάρχει επιλέξιμος (fallback: επανάληψη χωρίς συνεχόμενες αργίες).
          */
         function enforceUniqueWeekendAssigneePerMonth(sortedWeekends, assignmentsByDate, assignedWeekendInMonth) {
             const norm =
@@ -5228,12 +5228,6 @@
             const isEligible = (candidate, groupNum, date, dateKey) => {
                 if (!candidate) return false;
                 if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) return false;
-                if (
-                    typeof isPersonWaitingForForwardWeekendReturn === 'function' &&
-                    isPersonWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)
-                ) {
-                    return false;
-                }
                 if (
                     typeof isPersonDisabledForDuty === 'function' &&
                     isPersonDisabledForDuty(candidate, groupNum, 'weekend', dateKey)
@@ -5256,12 +5250,43 @@
                 const nk = norm(person);
                 return groupPeople.findIndex((p) => norm(p) === nk);
             };
+            const weekendsInMonth = (monthKey) =>
+                (sortedWeekends || []).filter((dk) => monthKeyOf(dk) === monthKey);
+            const adjacentAssignees = (monthKey, groupNum, dateKey) => {
+                const keys = weekendsInMonth(monthKey);
+                const idx = keys.indexOf(dateKey);
+                const prev = idx > 0 ? assignmentsByDate?.[keys[idx - 1]]?.[groupNum] || null : null;
+                const next =
+                    idx >= 0 && idx < keys.length - 1
+                        ? assignmentsByDate?.[keys[idx + 1]]?.[groupNum] || null
+                        : null;
+                return { prev: prev, next: next, prevKey: idx > 0 ? keys[idx - 1] : null, nextKey: idx >= 0 && idx < keys.length - 1 ? keys[idx + 1] : null };
+            };
+            const clearLaterOccurrences = (monthKey, groupNum, person, afterDateKey) => {
+                const nk = norm(person);
+                for (const dk of weekendsInMonth(monthKey)) {
+                    if (dk <= afterDateKey) continue;
+                    const cur = assignmentsByDate?.[dk]?.[groupNum];
+                    if (!cur || norm(cur) !== nk) continue;
+                    delete assignmentsByDate[dk][groupNum];
+                    clearedHint[`${monthKey}|${groupNum}|${dk}`] = cur;
+                    replacements.push({
+                        dateKey: dk,
+                        groupNum: groupNum,
+                        removed: cur,
+                        replacement: null,
+                        cleared: true,
+                        reason: 'stolen-for-earlier-fill',
+                        stolenBy: afterDateKey
+                    });
+                }
+            };
             const seenByMonthGroup = {};
-            const clearedHint = {}; // `${monthKey}|${g}|${dateKey}` -> removed person
-            const lastKeptByMonthGroup = {}; // `${monthKey}|${g}` -> last kept assignee (για συνέχεια σειράς)
+            const clearedHint = {};
+            const lastKeptByMonthGroup = {};
             const replacements = [];
 
-            // Pass 1: κράτα πρώτη εμφάνιση· καθάρισε διπλότυπα (χωρίς αντικατάσταση εδώ).
+            // Pass 1: κράτα πρώτη εμφάνιση· καθάρισε μεταγενέστερα διπλότυπα.
             for (const dateKey of sortedWeekends || []) {
                 if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                 const monthKey = monthKeyOf(dateKey);
@@ -5297,7 +5322,7 @@
                 }
             }
 
-            // Pass 2: γέμισε κενά — επόμενος διαθέσιμος μετά τον αφαιρεθέντα ή την προηγούμενη αργία.
+            // Pass 2: γέμισε κενά — επόμενος στη σειρά· ποτέ κενό αν υπάρχει επιλέξιμος.
             for (const dateKey of sortedWeekends || []) {
                 if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                 const date = new Date(dateKey + 'T00:00:00');
@@ -5305,8 +5330,8 @@
                 if (!seenByMonthGroup[monthKey]) seenByMonthGroup[monthKey] = {};
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     if (assignmentsByDate?.[dateKey]?.[groupNum]) {
-                        const kept = assignmentsByDate[dateKey][groupNum];
-                        lastKeptByMonthGroup[`${monthKey}|${groupNum}`] = kept;
+                        lastKeptByMonthGroup[`${monthKey}|${groupNum}`] =
+                            assignmentsByDate[dateKey][groupNum];
                         continue;
                     }
                     if (!seenByMonthGroup[monthKey][groupNum]) {
@@ -5317,22 +5342,92 @@
 
                     const hint = clearedHint[`${monthKey}|${groupNum}|${dateKey}`] || null;
                     const prevKept = lastKeptByMonthGroup[`${monthKey}|${groupNum}`] || null;
-                    // Προτεραιότητα: μετά τον αφαιρεθέντα (διπλότυπο) · αλλιώς μετά την προηγούμενη αργία του μήνα.
                     const sequenceAnchor = hint || prevKept;
                     let startIndex = 0;
                     const hi = indexOfPerson(groupPeople, sequenceAnchor);
                     if (hi >= 0) startIndex = hi;
+                    const adj = adjacentAssignees(monthKey, groupNum, dateKey);
+                    const adjNorms = new Set(
+                        [adj.prev, adj.next].filter(Boolean).map((p) => norm(p))
+                    );
 
-                    let fill = null;
-                    for (let offset = 1; offset <= groupPeople.length; offset++) {
-                        const candidate = groupPeople[(startIndex + offset) % groupPeople.length];
-                        if (!candidate) continue;
-                        if (seenByMonthGroup[monthKey][groupNum].has(norm(candidate))) continue;
-                        if (!isEligible(candidate, groupNum, date, dateKey)) continue;
-                        fill = candidate;
-                        break;
+                    const pickFrom = (allowUsedThisMonth, requireNoAdjacent) => {
+                        for (let offset = 1; offset <= groupPeople.length; offset++) {
+                            const candidate = groupPeople[(startIndex + offset) % groupPeople.length];
+                            if (!candidate) continue;
+                            const cn = norm(candidate);
+                            if (!allowUsedThisMonth && seenByMonthGroup[monthKey][groupNum].has(cn)) {
+                                continue;
+                            }
+                            if (requireNoAdjacent && adjNorms.has(cn)) continue;
+                            if (!isEligible(candidate, groupNum, date, dateKey)) continue;
+                            return candidate;
+                        }
+                        return null;
+                    };
+
+                    // 1) αχρησιμοποίητος + όχι συνεχόμενος · 2) ήδη χρησιμοποιημένος αλλά όχι συνεχόμενος · 3) οποιοσδήποτε επιλέξιμος ≠ προηγούμενη αργία
+                    let fill =
+                        pickFrom(false, true) ||
+                        pickFrom(true, true) ||
+                        pickFrom(true, false);
+                    // Τελευταία γραμμή: τουλάχιστον ≠ άτομο προηγούμενης αργίας
+                    if (!fill && adj.prev) {
+                        for (let offset = 1; offset <= groupPeople.length; offset++) {
+                            const candidate = groupPeople[(startIndex + offset) % groupPeople.length];
+                            if (!candidate) continue;
+                            if (norm(candidate) === norm(adj.prev)) continue;
+                            if (!isEligible(candidate, groupNum, date, dateKey)) continue;
+                            fill = candidate;
+                            break;
+                        }
                     }
                     if (!fill) {
+                        // #region agent log
+                        try {
+                            const rejectSample = [];
+                            for (let i = 0; i < Math.min(groupPeople.length, 8); i++) {
+                                const c = groupPeople[(startIndex + 1 + i) % groupPeople.length];
+                                if (!c) continue;
+                                rejectSample.push({
+                                    c: c,
+                                    seen: seenByMonthGroup[monthKey][groupNum].has(norm(c)),
+                                    missing: isPersonMissingOnDate(c, groupNum, date, 'weekend'),
+                                    disabled:
+                                        typeof isPersonDisabledForDuty === 'function' &&
+                                        isPersonDisabledForDuty(c, groupNum, 'weekend', dateKey),
+                                    adj: adjNorms.has(norm(c))
+                                });
+                            }
+                            const row = {
+                                sessionId: '8e8ea0',
+                                runId: 'empty-fill',
+                                hypothesisId: 'H-empty',
+                                location: 'duty-shifts-logic.js:unique-fill',
+                                message: 'weekend fill still empty after tiers',
+                                data: {
+                                    build: '1.612',
+                                    dateKey: dateKey,
+                                    groupNum: groupNum,
+                                    hint: hint,
+                                    sequenceAnchor: sequenceAnchor,
+                                    listLen: groupPeople.length,
+                                    seenCount: seenByMonthGroup[monthKey][groupNum].size,
+                                    adj: { prev: adj.prev, next: adj.next },
+                                    rejectSample: rejectSample
+                                },
+                                timestamp: Date.now()
+                            };
+                            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Debug-Session-Id': '8e8ea0'
+                                },
+                                body: JSON.stringify(row)
+                            }).catch(function () {});
+                        } catch (_) {}
+                        // #endregion
                         replacements.push({
                             dateKey: dateKey,
                             groupNum: groupNum,
@@ -5340,12 +5435,15 @@
                             replacement: null,
                             cleared: true,
                             reason: 'no-eligible-fill',
-                            hintStart: sequenceAnchor
+                            hintStart: sequenceAnchor,
+                            listLen: groupPeople.length,
+                            seenCount: seenByMonthGroup[monthKey][groupNum].size
                         });
                         continue;
                     }
                     if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
                     assignmentsByDate[dateKey][groupNum] = fill;
+                    const fillWasSeen = seenByMonthGroup[monthKey][groupNum].has(norm(fill));
                     seenByMonthGroup[monthKey][groupNum].add(norm(fill));
                     if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
                     if (!assignedWeekendInMonth[monthKey][groupNum]) {
@@ -5353,6 +5451,9 @@
                     }
                     assignedWeekendInMonth[monthKey][groupNum].add(fill);
                     lastKeptByMonthGroup[`${monthKey}|${groupNum}`] = fill;
+                    if (fillWasSeen) {
+                        clearLaterOccurrences(monthKey, groupNum, fill, dateKey);
+                    }
                     if (hint) {
                         storeUnavailableReplacementReason(
                             dateKey,
@@ -5370,7 +5471,8 @@
                         replacement: fill,
                         filledEmpty: true,
                         afterHint: !!hint,
-                        sequenceAnchor: sequenceAnchor
+                        sequenceAnchor: sequenceAnchor,
+                        reusedMonth: fillWasSeen
                     });
                 }
             }
@@ -11163,8 +11265,14 @@
                         location: 'duty-shifts-logic.js:weekend-unique-month',
                         message: 'Oct weekend sequence after unique (continue-next-available)',
                         data: {
-                            build: '1.611',
-                            runIdTag: 'post-fix-seq-continue',
+                            build: '1.612',
+                            runIdTag: 'post-fix-empty-fill',
+                            emptySlots: Object.fromEntries(
+                                [1, 2, 3, 4].map((g) => [
+                                    g,
+                                    (postByGroup[g] || []).filter((r) => !r.p).map((r) => r.dk)
+                                ])
+                            ),
                             pre: {
                                 d28g3: __agentAlexPreUnique?.d28g3 || null,
                                 d31g3: __agentAlexPreUnique?.d31g3 || null
