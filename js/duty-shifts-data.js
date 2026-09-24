@@ -2,6 +2,7 @@
         // DUTY-SHIFTS-DATA.JS - Data Management & Utilities
         // ============================================================================
 
+
         // Data storage - each group has four order lists: special, weekend, semi, normal
         // Each person also has last duty dates for each type, missing periods, and priorities
         let groups = {
@@ -990,6 +991,20 @@
         // IMPORTANT: When calculating month M, we read from previous month (M-1), not M.
         // If the immediate previous month doesn't exist, finds the most recent available month.
         function getPersonAssignedOnDateFromStore(dayTypeCategory, dateKey, groupNum) {
+            // In-progress calc (same run): prefer live maps so month-boundary seed sees Sept→Oct continuity.
+            const inProgress =
+                (typeof calculationSteps !== 'undefined' &&
+                    calculationSteps &&
+                    calculationSteps._inProgressAssignmentsByType &&
+                    calculationSteps._inProgressAssignmentsByType[dayTypeCategory]) ||
+                null;
+            if (inProgress && inProgress[dateKey]) {
+                const live = inProgress[dateKey];
+                if (live && typeof live === 'object' && !Array.isArray(live)) {
+                    const fromLive = live[groupNum] || live[String(groupNum)] || null;
+                    if (fromLive) return fromLive;
+                }
+            }
             const store = getAssignmentsForDayType(dayTypeCategory);
             const raw = store?.[dateKey];
             if (!raw) return null;
@@ -1030,13 +1045,21 @@
 
         function collectDateKeysForRotationContinuityScan(dayTypeCategory, monthKey) {
             const keys = new Set();
-            const store = getAssignmentsForDayType(dayTypeCategory);
-            if (store && typeof store === 'object') {
-                for (const dk in store) {
+            const addFrom = (obj) => {
+                if (!obj || typeof obj !== 'object') return;
+                for (const dk in obj) {
                     if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || dk.substring(0, 7) !== monthKey) continue;
                     keys.add(dk);
                 }
-            }
+            };
+            const inProgress =
+                (typeof calculationSteps !== 'undefined' &&
+                    calculationSteps &&
+                    calculationSteps._inProgressAssignmentsByType &&
+                    calculationSteps._inProgressAssignmentsByType[dayTypeCategory]) ||
+                null;
+            addFrom(inProgress);
+            addFrom(getAssignmentsForDayType(dayTypeCategory));
             return keys;
         }
 
@@ -1153,7 +1176,7 @@
             if (baselineMonth && baselineMonth[groupNum]) {
                 return baselineMonth[groupNum];
             }
-
+            
             // If immediate previous month not found, find the most recent available baseline month
             const baselineByType = rotationBaselineLastByType?.[dayType];
             if (baselineByType && typeof baselineByType === 'object') {
@@ -1165,7 +1188,7 @@
                         if (aYear !== bYear) return bYear - aYear;
                         return bMonth - aMonth;
                     });
-
+                
                 const [targetYear, targetMonth] = prevMonthKey.split('-').map(Number);
                 for (const monthKey of availableMonths) {
                     const [year, month] = monthKey.split('-').map(Number);
@@ -3050,7 +3073,7 @@
                 
                 // IMPORTANT: Do not auto-rebuild/restore critical assignments into the schedule.
                 // criticalAssignments are kept as history only and must not affect the current calendar.
-
+                
                 console.log('Data loaded from Firebase');
             } catch (error) {
                 console.error('Error loading data from Firebase:', error);
@@ -3310,8 +3333,8 @@
                             delete parsed._thursdaySpacingMarkers;
                         }
                         assignmentReasons = parsed;
-                    } else {
-                        assignmentReasons = {};
+            } else {
+                assignmentReasons = {};
                     }
                     syncThursdaySpacingMarkersWindow();
                 } catch (_) {
@@ -3694,9 +3717,9 @@
                     console.log('Saving assignmentReasons to Firestore:', Object.keys(assignmentReasons).length, 'dates');
                     const hasSpacingMarkers = Object.keys(thursdaySpacingMarkers || {}).length > 0;
                     if (Object.keys(assignmentReasons).length > 0 || hasSpacingMarkers) {
-                        if (Object.keys(assignmentReasons).length > 0) {
-                            console.log('Sample assignmentReasons being saved:', Object.entries(assignmentReasons).slice(0, 3));
-                        }
+                    if (Object.keys(assignmentReasons).length > 0) {
+                        console.log('Sample assignmentReasons being saved:', Object.entries(assignmentReasons).slice(0, 3));
+                    }
                         const reasonsPayload =
                             typeof buildAssignmentReasonsSavePayload === 'function'
                                 ? buildAssignmentReasonsSavePayload()
@@ -3706,12 +3729,12 @@
                                       _thursdaySpacingMarkers: thursdaySpacingMarkers
                                   };
                         const sanitizedReasons = sanitizeForFirestore(reasonsPayload);
-                        await db.collection('dutyShifts').doc('assignmentReasons').set({
-                            ...sanitizedReasons,
-                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                            updatedBy: user.uid
-                        });
-                        console.log('Assignment reasons saved to Firestore successfully');
+                    await db.collection('dutyShifts').doc('assignmentReasons').set({
+                        ...sanitizedReasons,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    console.log('Assignment reasons saved to Firestore successfully');
                     }
                 } catch (error) {
                     console.error('Error saving assignmentReasons to Firestore:', error);
@@ -3998,35 +4021,35 @@
 
         /** Delete duty data in Firestore + memory for selected YYYY-MM month keys (all groups). */
         async function clearDutyShiftsFirestoreDocsForMonths(monthKeys) {
-            if (!window.db) {
-                alert('Firebase not ready');
-                return;
-            }
-            const db = window.db || firebase.firestore();
-            const user = window.auth?.currentUser;
-            if (!user) {
-                alert('User not authenticated');
-                return;
-            }
+                if (!window.db) {
+                    alert('Firebase not ready');
+                    return;
+                }
+                const db = window.db || firebase.firestore();
+                const user = window.auth?.currentUser;
+                if (!user) {
+                    alert('User not authenticated');
+                    return;
+                }
             const keys = Array.isArray(monthKeys) ? [...new Set(monthKeys.filter((k) => /^\d{4}-\d{2}$/.test(k)))] : [];
             if (keys.length === 0) {
                 alert('Επιλέξτε τουλάχιστον έναν μήνα.');
                 return;
             }
-
+                
             const labels = keys.map(formatMonthKeyLabelEl);
-            const confirmText =
+                const confirmText =
                 'ΠΡΟΣΟΧΗ: Θα διαγραφούν ΟΛΕΣ οι υπηρεσίες για:\n\n' +
                 labels.map((l) => '• ' + l).join('\n') +
                 '\n\n(αναθέσεις, baseline, αιτίες, θέσεις περιστροφής — όλες οι ομάδες)\n\n' +
                 'Δεν αλλάζουν ομάδες, λίστες, αργίες ή ιεραρχίες.\n\nΣυνέχεια;';
-            if (!confirm(confirmText)) return;
+                if (!confirm(confirmText)) return;
 
-            const loadingAlert = document.createElement('div');
-            loadingAlert.className = 'alert alert-warning position-fixed top-50 start-50 translate-middle';
-            loadingAlert.style.zIndex = '9999';
+                const loadingAlert = document.createElement('div');
+                loadingAlert.className = 'alert alert-warning position-fixed top-50 start-50 translate-middle';
+                loadingAlert.style.zIndex = '9999';
             loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Καθαρισμός υπηρεσιών...';
-            document.body.appendChild(loadingAlert);
+                document.body.appendChild(loadingAlert);
 
             try {
                 if (typeof deleteSelectedMonthsFromDutyDocs === 'function') {
@@ -4047,7 +4070,7 @@
                     if (dateKeyInRange(dk)) delete dutyAssignments[dk];
                 }
                 if (calculationSteps && calculationSteps.tempAssignments) {
-                    calculationSteps.tempAssignments = null;
+                calculationSteps.tempAssignments = null;
                 }
 
                 saveDataToLocalStorage();
@@ -5286,7 +5309,7 @@
                         if (!byType || typeof byType !== 'object') continue;
                         for (const k in byType) {
                             if (!monthKeySet.has(k)) {
-                                out[dayType][k] = byType[k];
+                            out[dayType][k] = byType[k];
                                 continue;
                             }
                             if (!groupSet) continue;
@@ -5565,7 +5588,7 @@
                         const baselineRaw = rotationBaselineNormalAssignments?.[dk];
                         const baselinePerson = baselineRaw
                             ? parseAssignedPersonForGroupFromAssignment(baselineRaw, groupNum)
-                            : null;
+                    : null;
                         const finalAssigned = getPersonOnDateForNormalRotationContinuityLookup(dk, groupNum);
                         if (!baselinePerson && !finalAssigned) continue;
 
@@ -5622,7 +5645,14 @@
                     const assigned = getPersonOnDateForRotationContinuityLookup(type, lastKey, groupNum);
                     let continuity = assigned;
                     if (typeof getPersonForRotationContinuity === 'function') {
-                        continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
+                        const reason = getAssignmentReasonForGroupOnDate(lastKey, groupNum, assigned);
+                        // Excel επιλαχόντες: μετά από ημιαργία που κράτησε ο αντικαταστάτης, anchor = αυτός
+                        // (όχι ο conflicted που μετακινήθηκε σε καθημερινή — βλ. getPersonForRotationContinuity).
+                        if (type === 'semi' && reason?.meta?.semiConsecutiveHolidaySwap) {
+                            continuity = assigned;
+                        } else {
+                            continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
+                        }
                     } else {
                         const manual = findManualAlternateReplacementForGroup(lastKey, groupNum);
                         if (
@@ -6019,20 +6049,20 @@
                     </h5>
                     <div class="row g-3">
                         <div class="col-lg-8">
-                            <div class="table-responsive">
-                                <table class="table table-bordered" style="font-size: 12px;">
-                                    <thead>
-                                        <tr style="background-color: #428BCA; color: white;">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" style="font-size: 12px;">
+                            <thead>
+                                <tr style="background-color: #428BCA; color: white;">
                                             <th style="width: 13%; text-align: center; padding: 8px;">ΗΜΕΡ.</th>
-                                            <th style="width: 15%; text-align: center; padding: 8px;">ΗΜΕΡΑ</th>
+                                    <th style="width: 15%; text-align: center; padding: 8px;">ΗΜΕΡΑ</th>
                                             <th style="width: 52%; text-align: center; padding: 8px;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
                                             <th style="width: 20%; text-align: center; padding: 8px;">ΑΛΛΑΓΗ</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="previewGroup${groupNum}">
-                                        <!-- Rows will be inserted here -->
-                                    </tbody>
-                                </table>
+                                </tr>
+                            </thead>
+                            <tbody id="previewGroup${groupNum}">
+                                <!-- Rows will be inserted here -->
+                            </tbody>
+                        </table>
                             </div>
                         </div>
                         <div class="col-lg-4">
@@ -6528,74 +6558,61 @@ body.assignments-compare-print-body {
     break-after: page;
     page-break-inside: avoid;
     break-inside: avoid;
-    padding: 1.5mm 3mm 2mm;
+    padding: 4mm 6mm 5mm;
     margin: 0;
     border: none;
     border-radius: 0;
     background: #fff;
-    height: auto;
-    max-height: none;
-    overflow: visible;
-    display: block;
+    height: 190mm;
+    max-height: 190mm;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 .assignments-compare-print-page:last-child {
     page-break-after: auto;
     break-after: auto;
 }
 .assignments-compare-print-header {
-    margin-bottom: 1mm;
+    flex: 0 0 auto;
+    margin-bottom: 2mm;
 }
 .assignments-compare-print-title {
-    font-size: 8.5pt;
+    font-size: 10pt;
     font-weight: bold;
     color: #0d6efd;
     margin: 0;
-    line-height: 1.1;
+    line-height: 1.2;
 }
 .assignments-compare-print-table-wrap {
-    overflow: visible;
-    max-height: none;
+    flex: 1 1 auto;
+    overflow: hidden;
+    max-height: calc(190mm - 10mm);
 }
 .assignments-compare-print-table {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    font-size: 5.6pt;
-    line-height: 1.02;
+    font-size: 6.8pt;
+    line-height: 1.08;
 }
-.assignments-compare-print-table col.col-date { width: 7%; }
-.assignments-compare-print-table col.col-day { width: 8%; }
-.assignments-compare-print-table col.col-final-name { width: 24%; }
-.assignments-compare-print-table col.col-change { width: 11%; }
-.assignments-compare-print-table col.col-baseline-name { width: 50%; }
 .assignments-compare-print-table th,
 .assignments-compare-print-table td {
-    border: 0.3pt solid #999;
-    padding: 0.12mm 0.55mm;
+    border: 0.4pt solid #999;
+    padding: 0.6mm 1mm;
     vertical-align: middle;
-    word-wrap: normal;
-    overflow-wrap: normal;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.assignments-compare-print-table td.compare-cell-baseline {
-    font-size: 5.3pt;
-    line-height: 1.05;
-    white-space: nowrap;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
 }
 .assignments-compare-print-table thead th {
-    font-size: 5.5pt;
-    padding: 0.35mm 0.5mm;
-    white-space: normal;
+    font-size: 6.5pt;
+    padding: 0.8mm 1mm;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
 }
 .assignments-compare-print-table tbody tr {
     page-break-inside: avoid;
     break-inside: avoid;
-    height: 4.8mm;
-    max-height: 4.8mm;
 }
 .compare-diff-row td {
     background-color: rgba(255, 193, 7, 0.22) !important;
@@ -6610,11 +6627,6 @@ body.assignments-compare-print-body {
     color: #495057;
     font-weight: 600;
 }
-.compare-cell-daytype,
-.compare-cell-change {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-}
 .border, .rounded, .bg-white, .p-3, .mb-4 {
     border: none !important;
     border-radius: 0 !important;
@@ -6624,7 +6636,7 @@ body.assignments-compare-print-body {
 }
 @page {
     size: A4 landscape;
-    margin: 4mm 5mm;
+    margin: 6mm 8mm;
 }
 @media print {
     body.assignments-compare-print-body {
@@ -6633,12 +6645,6 @@ body.assignments-compare-print-body {
     .assignments-compare-print-doc-title,
     .assignments-compare-print-doc-meta {
         display: none;
-    }
-    .assignments-compare-print-page {
-        page-break-after: always;
-        break-after: page;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
     }
 }
 </style>
@@ -6652,32 +6658,9 @@ ${content.innerHTML}
             printWindow.document.close();
             printWindow.onload = function () {
                 setTimeout(() => {
-                    try {
-                        // A4 landscape usable height ≈ 210mm − margins (4+4) = 202mm
-                        const maxPx = (202 * 96) / 25.4;
-                        const pages = printWindow.document.querySelectorAll(
-                            '.assignments-compare-print-page'
-                        );
-                        pages.forEach((page) => {
-                            page.style.transform = '';
-                            page.style.zoom = '';
-                            page.style.marginBottom = '';
-                            page.style.width = '';
-                            const h = page.scrollHeight;
-                            if (h > maxPx && h > 0) {
-                                const scale = Math.min(1, (maxPx * 0.98) / h);
-                                if (scale < 0.999) {
-                                    page.style.transformOrigin = 'top left';
-                                    page.style.transform = `scale(${scale})`;
-                                    page.style.width = `${100 / scale}%`;
-                                    page.style.marginBottom = `${(scale - 1) * h}px`;
-                                }
-                            }
-                        });
-                    } catch (_) {}
                     printWindow.focus();
                     printWindow.print();
-                }, 450);
+                }, 400);
             };
         }
 
@@ -6715,29 +6698,21 @@ ${content.innerHTML}
                       : dayType === 'semi-normal-day'
                         ? 'semi'
                         : 'normal';
-            /** Γαλάζιο αντικατάστασης — εκτός παλέτας τύπου ημέρας (πράσινο/κίτρινο/πορτοκαλί/μοβ). */
-            const COMPARE_REPLACEMENT_BG = '#B3E5FC';
-            const COMPARE_REPLACEMENT_FG = '#01579B';
-            /**
-             * Παστέλ ζευγών ανταλλαγής — όχι πράσινο/κίτρινο/πορτοκαλί/μοβ ημέρας ούτε γαλάζιο αντικατάστασης.
-             */
-            const COMPARE_SWAP_PAIR_PALETTE = [
-                { bg: '#F8BBD0', fg: '#880E4F' }, // ροζ
-                { bg: '#B2DFDB', fg: '#004D40' }, // teal
-                { bg: '#FFCCBC', fg: '#BF360C' }, // κοραλί
-                { bg: '#C5CAE9', fg: '#1A237E' }, // indigo
-                { bg: '#D7CCC8', fg: '#3E2723' }, // καφέ-γκρι
-                { bg: '#80DEEA', fg: '#006064' }, // κυανό
-                { bg: '#F48FB1', fg: '#AD1457' }, // φούξια
-                { bg: '#A1887F', fg: '#FFFFFF' }, // καφέ
-                { bg: '#9FA8DA', fg: '#1A237E' }, // βιολετί-μπλε
-                { bg: '#FFAB91', fg: '#BF360C' }  // σομόν
-            ];
-            const COMPARE_OTHER_CHANGE_BG = '#ECEFF1';
-            const COMPARE_OTHER_CHANGE_FG = '#455A64';
-            const dayTypeRgbCss = (dayType) => {
-                const c = getDayTypeColor(dayType);
-                return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+            const hashColor = (seed) => {
+                let h = 0;
+                const str = String(seed || '');
+                for (let i = 0; i < str.length; i++) h = (h << 5) - h + str.charCodeAt(i);
+                const palette = [
+                    '#8e44ad',
+                    '#d35400',
+                    '#2980b9',
+                    '#16a085',
+                    '#c0392b',
+                    '#2c3e50',
+                    '#7f8c8d',
+                    '#27ae60'
+                ];
+                return palette[Math.abs(h) % palette.length];
             };
             const getOrderNo = (groupData, type, personName) => {
                 const list = (groupData?.[type] || []).map(normName);
@@ -6757,15 +6732,6 @@ ${content.innerHTML}
                 personName
                     ? `<span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}`
                     : '<span class="text-muted">—</span>';
-            /** Επόμενος στη λίστα περιστροφής (μόνο εμφάνιση compare — όχι λογική υπολογισμού). */
-            const nextPersonInDutyList = (groupData, typeKey, afterPerson) => {
-                const list = (groupData?.[typeKey] || []).filter(Boolean);
-                if (!list.length) return '';
-                if (!afterPerson) return list[0];
-                const idx = list.findIndex((p) => normName(p) === normName(afterPerson));
-                if (idx < 0) return list[0];
-                return list[(idx + 1) % list.length];
-            };
             const formatBaselinePersonCell = (
                 personName,
                 orderNo,
@@ -6774,100 +6740,57 @@ ${content.innerHTML}
                 typeKey,
                 monthStartKey,
                 monthEndKey,
-                lastListedBaselineByType,
-                finalPerson = null
+                consumedSubstitutes
             ) => {
-                const list = (groupData?.[typeKey] || []).filter(Boolean);
-                const inCurrentList = (name) =>
-                    !!name && list.some((p) => normName(p) === normName(name));
-                const canonicalFromList = (name) => {
-                    if (!name) return '';
-                    const hit = list.find((p) => normName(p) === normName(name));
-                    return hit || name;
-                };
-
-                const prevListed =
-                    lastListedBaselineByType && lastListedBaselineByType[typeKey]
-                        ? lastListedBaselineByType[typeKey]
-                        : null;
-
-                let displayBaseline = '';
-                if (!prevListed) {
-                    // Πρώτη μέρα αυτού του τύπου στον μήνα: σπόρος από αποθηκευμένο baseline (αν είναι στη λίστα).
-                    if (personName && inCurrentList(personName)) {
-                        displayBaseline = canonicalFromList(personName);
-                    } else {
-                        displayBaseline = nextPersonInDutyList(groupData, typeKey, null);
-                    }
-                } else {
-                    // Επόμενες μέρες: καθαρή συνέχεια λίστας (#12→#13→#14…), αγνοώντας gaps από αντικαταστάσεις στον υπολογισμό.
-                    displayBaseline = nextPersonInDutyList(groupData, typeKey, prevListed);
+                if (!personName) return '<span class="text-muted">—</span>';
+                const personNorm = normName(personName);
+                const unavailable = isPersonUnavailableWholeMonth(
+                    personName,
+                    groupNum,
+                    typeKey,
+                    monthStartKey,
+                    monthEndKey,
+                    groupData
+                );
+                const alreadyUsedAsSubstitute =
+                    consumedSubstitutes instanceof Set && consumedSubstitutes.has(personNorm);
+                if (!unavailable && !alreadyUsedAsSubstitute) {
+                    return formatPersonCell(personName, orderNo);
                 }
-
-                if (displayBaseline && lastListedBaselineByType) {
-                    lastListedBaselineByType[typeKey] = displayBaseline;
+                const nextPerson = findNextAvailableInRotationList(
+                    groupData,
+                    typeKey,
+                    personName,
+                    groupNum,
+                    monthStartKey,
+                    monthEndKey,
+                    consumedSubstitutes
+                );
+                if (nextPerson && consumedSubstitutes instanceof Set) {
+                    consumedSubstitutes.add(normName(nextPerson));
                 }
-
-                const displayOrder = displayBaseline
-                    ? getOrderNo(groupData, typeKey, displayBaseline)
-                    : null;
-                const finalNorm = finalPerson ? normName(finalPerson) : '';
-                const baseNorm = displayBaseline ? normName(displayBaseline) : '';
-                const finalMatchesBaseline = !!(finalNorm && baseNorm && finalNorm === baseNorm);
-                const willStrike = !!(displayBaseline && finalNorm && !finalMatchesBaseline);
-
-                if (!displayBaseline) {
-                    return finalPerson
-                        ? formatPersonCell(finalPerson, getOrderNo(groupData, typeKey, finalPerson))
-                        : '<span class="text-muted">—</span>';
-                }
-                if (!willStrike) {
-                    return formatPersonCell(displayBaseline, displayOrder);
-                }
-                const finalOrder = getOrderNo(groupData, typeKey, finalPerson);
-                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${displayOrder || '-'}</span>${escapeHtml(displayBaseline)}</span>`;
-                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${finalOrder || '-'}</span>${escapeHtml(finalPerson)})</span>`;
+                const nextOrder = nextPerson ? getOrderNo(groupData, typeKey, nextPerson) : null;
+                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
+                if (!nextPerson) return struck;
+                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${nextOrder || '-'}</span>${escapeHtml(nextPerson)})</span>`;
             };
             const buildChangeMarker = (reasonObj, pairKey, getSwapPairLabelNo) => {
-                if (!reasonObj) {
-                    return { text: '', bg: null, fg: null, style: '' };
-                }
-                if (reasonObj.type === 'swap') {
-                    const swapNo = getSwapPairLabelNo(pairKey);
-                    const paletteIdx =
-                        swapNo != null && swapNo > 0
-                            ? (swapNo - 1) % COMPARE_SWAP_PAIR_PALETTE.length
-                            : 0;
-                    const pal = COMPARE_SWAP_PAIR_PALETTE[paletteIdx];
-                    return {
-                        text: `Ανταλλαγή #${swapNo || '-'}`,
-                        bg: pal.bg,
-                        fg: pal.fg,
-                        style: `border-left: 4px solid ${pal.fg}; border-right: 4px solid ${pal.fg};`
-                    };
-                }
-                if (reasonObj.type === 'skip') {
-                    return {
-                        text: 'Αντικατάσταση',
-                        bg: COMPARE_REPLACEMENT_BG,
-                        fg: COMPARE_REPLACEMENT_FG,
-                        style: `border-left: 4px solid ${COMPARE_REPLACEMENT_FG};`
-                    };
-                }
-                if (reasonObj.type === 'shift') {
-                    return {
-                        text: 'Μετακίνηση',
-                        bg: COMPARE_OTHER_CHANGE_BG,
-                        fg: COMPARE_OTHER_CHANGE_FG,
-                        style: ''
-                    };
-                }
-                return {
-                    text: 'Χειροκίνητη αλλαγή',
-                    bg: COMPARE_OTHER_CHANGE_BG,
-                    fg: COMPARE_OTHER_CHANGE_FG,
-                    style: ''
-                };
+                if (!reasonObj) return { text: '', color: null, style: '' };
+                const swapNo = reasonObj.type === 'swap' ? getSwapPairLabelNo(pairKey) : null;
+                const text =
+                    reasonObj.type === 'swap'
+                        ? `Ανταλλαγή #${swapNo || '-'}`
+                        : reasonObj.type === 'skip'
+                          ? 'Αντικατάσταση'
+                          : reasonObj.type === 'shift'
+                            ? 'Μετακίνηση'
+                            : 'Χειροκίνητη αλλαγή';
+                const color = hashColor(pairKey);
+                const style =
+                    reasonObj.type === 'swap'
+                        ? `border-left: 4px solid ${color}; border-right: 4px solid ${color};`
+                        : '';
+                return { text, color: reasonObj.type === 'swap' ? color : '#6c757d', style };
             };
 
             let hasAnyGroup = false;
@@ -6923,23 +6846,16 @@ ${content.innerHTML}
                         </div>
                         <div class="table-responsive assignments-compare-print-table-wrap">
                             <table class="table table-bordered table-sm mb-0 assignments-compare-print-table">
-                                <colgroup>
-                                    <col class="col-date">
-                                    <col class="col-day">
-                                    <col class="col-final-name">
-                                    <col class="col-change">
-                                    <col class="col-baseline-name">
-                                </colgroup>
                                 <thead>
                                     <tr style="background-color:#428BCA;color:white;">
-                                        <th rowspan="2" style="text-align:center;vertical-align:middle;">ΗΜΕΡ.</th>
-                                        <th rowspan="2" style="text-align:center;vertical-align:middle;">ΗΜΕΡΑ</th>
+                                        <th rowspan="2" style="width:10%;text-align:center;vertical-align:middle;">ΗΜΕΡ.</th>
+                                        <th rowspan="2" style="width:9%;text-align:center;vertical-align:middle;">ΗΜΕΡΑ</th>
                                         <th colspan="2" style="text-align:center;">Τελικές αναθέσεις (μετά αλλαγές)</th>
-                                        <th style="text-align:center;vertical-align:middle;background:#5a6268;">Βασική σειρά</th>
+                                        <th style="width:24%;text-align:center;vertical-align:middle;background:#5a6268;">Βασική σειρά</th>
                                     </tr>
                                     <tr style="background-color:#5a9fd4;color:white;">
-                                        <th style="text-align:center;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
-                                        <th style="text-align:center;">ΑΛΛΑΓΗ</th>
+                                        <th style="width:30%;text-align:center;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
+                                        <th style="width:12%;text-align:center;">ΑΛΛΑΓΗ</th>
                                         <th style="text-align:center;background:#6c757d;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
                                     </tr>
                                 </thead>
@@ -6949,11 +6865,11 @@ ${content.innerHTML}
                     `;
                     monthSection.appendChild(groupBlock);
 
-                    const lastListedBaselineByType = {
-                        normal: null,
-                        semi: null,
-                        weekend: null,
-                        special: null
+                    const consumedBaselineSubstitutes = {
+                        normal: new Set(),
+                        semi: new Set(),
+                        weekend: new Set(),
+                        special: new Set()
                     };
 
                     const tbody = groupBlock.querySelector('tbody');
@@ -6963,7 +6879,7 @@ ${content.innerHTML}
                         const dayType = getDayType(date);
                         const dayName = getGreekDayNameUppercase(date);
                         const dateStr = `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
-                        const dayTypeBg = dayTypeRgbCss(dayType);
+                        const rgbColor = `rgb(${getDayTypeColor(dayType).join(', ')})`;
 
                         const finalPerson =
                             getAssignedPersonNameForGroupFromAssignment(
@@ -6982,27 +6898,22 @@ ${content.innerHTML}
                             ? getReasonForAssigned(dayKey, groupNum, finalPerson)
                             : null;
                         const pairKey =
-                            reasonObj?.type === 'swap'
-                                ? reasonObj.swapPairId != null && reasonObj.swapPairId !== ''
-                                    ? `pair:${reasonObj.swapPairId}`
-                                    : `swap:${[normName(finalPerson), normName(reasonObj.swappedWith)]
-                                          .filter(Boolean)
-                                          .sort()
-                                          .join('|')}:${groupNum}`
-                                : reasonObj
-                                  ? `${reasonObj.type}:${dayKey}:${groupNum}`
-                                  : '';
+                            reasonObj?.swapPairId ||
+                            `${reasonObj?.type || ''}:${reasonObj?.swappedWith || ''}:${dayKey}:${groupNum}`;
                         const change = buildChangeMarker(reasonObj, pairKey, getSwapPairLabelNo);
-                        const changeBg = change.bg || dayTypeBg;
-                        const changeFg = change.fg || '#212529';
+                        const differs =
+                            normName(finalPerson) !== normName(baselinePerson) &&
+                            (finalPerson || baselinePerson);
+                        const diffClass = differs ? ' compare-diff-row' : '';
 
                         const row = document.createElement('tr');
+                        row.className = diffClass;
                         row.innerHTML = `
-                            <td class="compare-cell-daytype" style="padding:4px;border:1px solid #ddd;background-color:${dayTypeBg} !important;">${dateStr}</td>
-                            <td class="compare-cell-daytype" style="padding:4px;border:1px solid #ddd;background-color:${dayTypeBg} !important;">${dayName}</td>
-                            <td class="compare-cell-daytype" style="padding:4px;border:1px solid #ddd;background-color:${dayTypeBg} !important;">${formatPersonCell(finalPerson, finalOrder)}</td>
-                            <td class="compare-cell-change" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;color:${changeFg};font-size:11px;font-weight:600;${change.style}">${escapeHtml(change.text)}</td>
-                            <td class="compare-cell-change compare-cell-baseline" style="padding:4px;border:1px solid #ddd;background-color:${changeBg} !important;${change.style}">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, lastListedBaselineByType, finalPerson)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dateStr}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dayName}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;${change.style}">${formatPersonCell(finalPerson, finalOrder)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey])}</td>
                         `;
                         tbody.appendChild(row);
                     }

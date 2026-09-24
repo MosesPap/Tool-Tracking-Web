@@ -772,7 +772,6 @@
 
         clearSpacingMarkersForDateKeys(normalDays);
 
-
         for (const thursdayKey of thursdayKeys) {
             if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(thursdayKey);
             const thuDate = new Date(thursdayKey + 'T00:00:00');
@@ -806,7 +805,6 @@
                 if (!person) continue;
 
                 let spacing = personPassesThursdaySpacing(person, groupNum, thursdayKey, assignments, runtimeLastThu);
-
 
                 if (spacing.eligible) {
                     setSpacingMarker(markers, thursdayKey, groupNum, person, {
@@ -847,7 +845,6 @@
                             assignments,
                             runtimeLastThu
                         );
-
 
                     if (!assignments[thursdayKey]) assignments[thursdayKey] = {};
                     if (!assignments[partnerKey]) assignments[partnerKey] = {};
@@ -986,7 +983,7 @@
                     runtimeLastThu[`${groupNum}:${normPerson(partnerPerson)}`] = thursdayKey;
 
                     // Άμεση αναδιάταξη ουράς ώστε οι επόμενες Πέμπτες να δουν τη σωστή συνέχεια
-                    const _reseqN = resequenceAfterSingleSpacingSwap(
+                    resequenceAfterSingleSpacingSwap(
                         assignments,
                         normalDays,
                         {
@@ -1473,7 +1470,6 @@
             calculationSteps.thursdaySpacingFails = lastResult.spacingFails || [];
             calculationSteps.thursdaySpacingIterativeSwaps = cumulativeSwaps;
         }
-
 
         return {
             assignments,

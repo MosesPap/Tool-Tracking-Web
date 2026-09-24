@@ -2,6 +2,7 @@
         // DUTY-SHIFTS-LOGIC.JS - Calculation & Business Logic
         // ============================================================================
 
+
         function computeDefaultVirtualDatesForArrival(arrivalDateKey) {
             const arrivalDate = new Date(arrivalDateKey + 'T00:00:00');
             if (isNaN(arrivalDate.getTime())) return { normal: null, semi: null, weekend: null, special: null };
@@ -1567,35 +1568,6 @@
                 .replace(/\s*,+$/, '')
                 .replace(/\s+/g, ' ');
         }
-
-        /** Δευτέρα ISO-εβδομάδας για dateKey (τοπική ημερομηνία). */
-        function getIsoWeekMondayTimeFromDateKey(dateKey) {
-            const d = new Date(String(dateKey || '') + 'T00:00:00');
-            if (isNaN(d.getTime())) return null;
-            const dow = d.getDay();
-            d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
-            d.setHours(0, 0, 0, 0);
-            return d.getTime();
-        }
-
-        function dateKeysShareIsoWeek(a, b) {
-            const ma = getIsoWeekMondayTimeFromDateKey(a);
-            const mb = getIsoWeekMondayTimeFromDateKey(b);
-            return ma != null && mb != null && ma === mb;
-        }
-
-        /**
-         * Μετά από week-pair ανταλλαγή: μην ξαναγράφεις όλη την ουρά όταν
-         * (α) ομάδα Νυχτερινών με αλλαγές — το Ν Πεμπτών κάνει δική του συνέχεια, ή
-         * (β) η ανταλλαγή είναι στην ίδια εβδομάδα — αρκεί το two-slot swap.
-         */
-        function shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey) {
-            if (typeof isNightChangesGroup === 'function' && isNightChangesGroup(groupNum)) {
-                return true;
-            }
-            return dateKeysShareIsoWeek(dateKey, swapDayKey);
-        }
-
         function storeAssignmentReason(dateKey, groupNum, personName, type, reason, swappedWith = null, swapPairId = null, meta = null) {
             const keyName = normalizePersonKey(personName);
             if (!keyName) return;
@@ -2381,10 +2353,17 @@
             return { rotationPosition, existingManualAlternate, deferFulfillment };
         }
 
-        /** Re-seed global rotation cursor at calendar month start (baseline continuity after manual alternate). */
+        /**
+         * Re-seed global rotation cursor at calendar month start (baseline continuity after manual alternate).
+         * When the cursor is already set from a previous month in the same calculation pass, keep it —
+         * reseeding from stored docs would rewind (e.g. after ΦΑΤΣΙΤΑΣ → Πετεβίνος, Oct wrongly got Μαρία).
+         */
         function reseedGlobalRotationPositionAtMonthStart(dayTypeCategory, dateInMonth, groupNum, groupPeople, globalPos) {
             const rotationDays = groupPeople.length;
             if (!rotationDays) return;
+            if (globalPos[groupNum] !== undefined && Number.isFinite(globalPos[groupNum])) {
+                return;
+            }
             const startDate = calculationSteps?.startDate;
             const isFebruary2026 = startDate && startDate.getFullYear() === 2026 && startDate.getMonth() === 1;
             const isAprilStart = startDate && startDate.getMonth() === 3;
@@ -2504,37 +2483,10 @@
                     }
                 }
                 if (reason.meta?.semiConsecutiveHolidaySwap && reason.meta?.conflictedName) {
-                    // Continue after the later person in the semi rotation list among the swap pair
-                    // (changer + conflicted). Otherwise e.g. Maria on last Friday yields next=Fakouras
-                    // who already served on the swapped penultimate semi.
-                    const resolveSemi = (name) =>
+                    const conflicted =
                         typeof resolvePersonInGroupRotationList === 'function'
-                            ? resolvePersonInGroupRotationList(name, groupNum, 'semi')
-                            : name;
-                    const conflicted = resolveSemi(reason.meta.conflictedName);
-                    const changer = reason.meta.changerName ? resolveSemi(reason.meta.changerName) : null;
-                    const norm =
-                        typeof normalizePersonKey === 'function'
-                            ? normalizePersonKey
-                            : (s) => String(s || '').trim();
-                    const list =
-                        (typeof groupsForDuty === 'function'
-                            ? groupsForDuty(groupNum)?.semi
-                            : null) ||
-                        groups[groupNum]?.semi ||
-                        [];
-                    const idxOf = (name) => {
-                        if (!name || !Array.isArray(list)) return -1;
-                        return list.findIndex((p) => norm(p) === norm(name));
-                    };
-                    if (changer && conflicted) {
-                        const iCh = idxOf(changer);
-                        const iCo = idxOf(conflicted);
-                        if (iCh >= 0 && iCo >= 0) {
-                            return iCh >= iCo ? changer : conflicted;
-                        }
-                        if (iCh >= 0) return changer;
-                    }
+                            ? resolvePersonInGroupRotationList(reason.meta.conflictedName, groupNum, 'semi')
+                            : reason.meta.conflictedName;
                     if (conflicted) return conflicted;
                 }
                 const otherKey = findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey);
@@ -5123,239 +5075,6 @@
             if (fromAssignments) return fromAssignments;
             return baselineByDate?.[otherDateKey]?.[groupNum] ?? null;
         }
-        /** Άτομο με προγραμματισμένο forward return-from-missing σε μεταγενέστερο ΣΚ — όχι νωρίτερα. */
-        function isPersonWaitingForForwardWeekendReturn(person, groupNum, dateKey) {
-            if (!person || !dateKey || !groupNum) return false;
-            const map = calculationSteps?.pendingForwardWeekendReturnByGroup?.[groupNum];
-            if (!map) return false;
-            const nk =
-                typeof normalizePersonKey === 'function'
-                    ? normalizePersonKey(person)
-                    : String(person || '').trim();
-            const targetKey = map[nk];
-            return !!(targetKey && dateKey < targetKey);
-        }
-        /** Μετά cascade/fallback/phase1: βγάλε όσους μπήκαν πριν τον ορισμένο στόχο return. */
-        function enforceNoEarlyPendingWeekendReturns(sortedWeekends, assignmentsByDate, assignedWeekendInMonth) {
-            const norm =
-                typeof normalizePersonKey === 'function'
-                    ? normalizePersonKey
-                    : (s) => String(s || '').trim();
-            const monthKeyOf = (dk) => {
-                const d = new Date(dk + 'T00:00:00');
-                return typeof getMonthKeyFromDate === 'function'
-                    ? getMonthKeyFromDate(d)
-                    : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-            };
-            for (const dateKey of sortedWeekends || []) {
-                if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
-                const date = new Date(dateKey + 'T00:00:00');
-                const monthKey = monthKeyOf(dateKey);
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const current = assignmentsByDate?.[dateKey]?.[groupNum];
-                    if (!current || !isPersonWaitingForForwardWeekendReturn(current, groupNum, dateKey)) {
-                        continue;
-                    }
-                    const groupData =
-                        (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || {
-                            weekend: []
-                        };
-                    const groupPeople = groupData.weekend || [];
-                    if (!groupPeople.length) continue;
-                    let currentIndex = groupPeople.indexOf(current);
-                    if (currentIndex === -1) currentIndex = 0;
-                    let replacement = null;
-                    for (let offset = 1; offset < groupPeople.length; offset++) {
-                        const candidate = groupPeople[(currentIndex + offset) % groupPeople.length];
-                        if (!candidate) continue;
-                        if (isPersonWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
-                        if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                        if (
-                            typeof isPersonDisabledForDuty === 'function' &&
-                            isPersonDisabledForDuty(candidate, groupNum, 'weekend', dateKey)
-                        ) {
-                            continue;
-                        }
-                        if (assignedWeekendInMonth?.[monthKey]?.[groupNum]?.has?.(candidate)) continue;
-                        let onEarlier = false;
-                        for (const dk of sortedWeekends) {
-                            if (dk >= dateKey) break;
-                            if (monthKeyOf(dk) !== monthKey) continue;
-                            if (norm(assignmentsByDate[dk]?.[groupNum]) === norm(candidate)) {
-                                onEarlier = true;
-                                break;
-                            }
-                        }
-                        if (onEarlier) continue;
-                        replacement = candidate;
-                        break;
-                    }
-                    if (replacement) {
-                        if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
-                        assignmentsByDate[dateKey][groupNum] = replacement;
-                        if (assignedWeekendInMonth) {
-                            if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
-                            if (!assignedWeekendInMonth[monthKey][groupNum]) {
-                                assignedWeekendInMonth[monthKey][groupNum] = new Set();
-                            }
-                            assignedWeekendInMonth[monthKey][groupNum].add(replacement);
-                        }
-                    }
-                }
-            }
-        }
-        /**
-         * Μετά cascade: διόρθωση διπλότυπων/κενών ΧΩΡΙΣ κλοπή από μελλοντικές θέσεις.
-         * Κρατά πρώτη εμφάνιση· γεμίζει κενά με επόμενο στη σειρά (αχρησιμοποίητος)· δεν μετακινεί άλλους.
-         */
-        function enforceUniqueWeekendAssigneePerMonth(sortedWeekends, assignmentsByDate, assignedWeekendInMonth) {
-            const norm =
-                typeof normalizePersonKey === 'function'
-                    ? normalizePersonKey
-                    : (s) => String(s || '').trim();
-            const monthKeyOf = (dk) => {
-                const d = new Date(dk + 'T00:00:00');
-                return typeof getMonthKeyFromDate === 'function'
-                    ? getMonthKeyFromDate(d)
-                    : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-            };
-            const isEligible = (candidate, groupNum, date, dateKey) => {
-                if (!candidate) return false;
-                if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) return false;
-                if (
-                    typeof isPersonDisabledForDuty === 'function' &&
-                    isPersonDisabledForDuty(candidate, groupNum, 'weekend', dateKey)
-                ) {
-                    return false;
-                }
-                return true;
-            };
-            const groupPeopleFor = (groupNum, dateKey) => {
-                const groupData =
-                    (typeof groupsForDuty === 'function'
-                        ? groupsForDuty(groupNum, dateKey)
-                        : groups[groupNum]) || { weekend: [] };
-                return groupData.weekend || [];
-            };
-            const indexOfPerson = (groupPeople, person) => {
-                if (!person || !groupPeople.length) return -1;
-                let i = groupPeople.indexOf(person);
-                if (i >= 0) return i;
-                const nk = norm(person);
-                return groupPeople.findIndex((p) => norm(p) === nk);
-            };
-            const weekendsInMonth = (monthKey) =>
-                (sortedWeekends || []).filter((dk) => monthKeyOf(dk) === monthKey);
-            const seenByMonthGroup = {};
-            const lastKeptByMonthGroup = {};
-            const replacements = [];
-
-            for (const dateKey of sortedWeekends || []) {
-                if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
-                const monthKey = monthKeyOf(dateKey);
-                if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
-                if (!seenByMonthGroup[monthKey]) seenByMonthGroup[monthKey] = {};
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    const current = assignmentsByDate?.[dateKey]?.[groupNum];
-                    if (!current) continue;
-                    if (!assignedWeekendInMonth[monthKey][groupNum]) {
-                        assignedWeekendInMonth[monthKey][groupNum] = new Set();
-                    }
-                    if (!seenByMonthGroup[monthKey][groupNum]) {
-                        seenByMonthGroup[monthKey][groupNum] = new Set();
-                    }
-                    const nk = norm(current);
-                    if (!seenByMonthGroup[monthKey][groupNum].has(nk)) {
-                        seenByMonthGroup[monthKey][groupNum].add(nk);
-                        assignedWeekendInMonth[monthKey][groupNum].add(current);
-                        lastKeptByMonthGroup[`${monthKey}|${groupNum}`] = current;
-                        continue;
-                    }
-                    delete assignmentsByDate[dateKey][groupNum];
-                    replacements.push({
-                        dateKey: dateKey,
-                        groupNum: groupNum,
-                        removed: current,
-                        replacement: null,
-                        cleared: true,
-                        reason: 'duplicate-later'
-                    });
-                }
-            }
-
-            for (const dateKey of sortedWeekends || []) {
-                if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
-                const date = new Date(dateKey + 'T00:00:00');
-                const monthKey = monthKeyOf(dateKey);
-                if (!seenByMonthGroup[monthKey]) seenByMonthGroup[monthKey] = {};
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
-                    if (assignmentsByDate?.[dateKey]?.[groupNum]) {
-                        lastKeptByMonthGroup[`${monthKey}|${groupNum}`] =
-                            assignmentsByDate[dateKey][groupNum];
-                        continue;
-                    }
-                    if (!seenByMonthGroup[monthKey][groupNum]) {
-                        seenByMonthGroup[monthKey][groupNum] = new Set();
-                    }
-                    const groupPeople = groupPeopleFor(groupNum, dateKey);
-                    if (!groupPeople.length) continue;
-                    const keys = weekendsInMonth(monthKey);
-                    const wIdx = keys.indexOf(dateKey);
-                    const prevPerson =
-                        wIdx > 0 ? assignmentsByDate?.[keys[wIdx - 1]]?.[groupNum] || null : null;
-                    const sequenceAnchor =
-                        lastKeptByMonthGroup[`${monthKey}|${groupNum}`] || prevPerson || null;
-                    let startIndex = 0;
-                    const hi = indexOfPerson(groupPeople, sequenceAnchor);
-                    if (hi >= 0) startIndex = hi;
-
-                    let fill = null;
-                    for (let offset = 1; offset <= groupPeople.length; offset++) {
-                        const candidate = groupPeople[(startIndex + offset) % groupPeople.length];
-                        if (!candidate) continue;
-                        if (seenByMonthGroup[monthKey][groupNum].has(norm(candidate))) continue;
-                        if (prevPerson && norm(candidate) === norm(prevPerson)) continue;
-                        if (!isEligible(candidate, groupNum, date, dateKey)) continue;
-                        fill = candidate;
-                        break;
-                    }
-                    if (!fill) {
-                        replacements.push({
-                            dateKey: dateKey,
-                            groupNum: groupNum,
-                            removed: null,
-                            replacement: null,
-                            cleared: true,
-                            reason: 'no-eligible-fill-no-steal',
-                            sequenceAnchor: sequenceAnchor,
-                            listLen: groupPeople.length,
-                            seenCount: seenByMonthGroup[monthKey][groupNum].size
-                        });
-                        continue;
-                    }
-                    if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
-                    assignmentsByDate[dateKey][groupNum] = fill;
-                    seenByMonthGroup[monthKey][groupNum].add(norm(fill));
-                    if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
-                    if (!assignedWeekendInMonth[monthKey][groupNum]) {
-                        assignedWeekendInMonth[monthKey][groupNum] = new Set();
-                    }
-                    assignedWeekendInMonth[monthKey][groupNum].add(fill);
-                    lastKeptByMonthGroup[`${monthKey}|${groupNum}`] = fill;
-                    replacements.push({
-                        dateKey: dateKey,
-                        groupNum: groupNum,
-                        removed: null,
-                        replacement: fill,
-                        filledEmpty: true,
-                        noSteal: true,
-                        sequenceAnchor: sequenceAnchor
-                    });
-                }
-            }
-            return replacements;
-        }
-
         function getSameMonthWeekendDateKeys(sortedWeekends, monthKey) {
             return sortedWeekends
                 .filter((dk) => {
@@ -5454,16 +5173,6 @@
             }
             const newAssignees = [absentPerson];
             for (let i = 1; i < n; i++) newAssignees.push(oldAssignees[i - 1]);
-            for (let i = 0; i < n; i++) {
-                const p = newAssignees[i];
-                if (
-                    p &&
-                    typeof isPersonWaitingForForwardWeekendReturn === 'function' &&
-                    isPersonWaitingForForwardWeekendReturn(p, groupNum, chain[i])
-                ) {
-                    return null;
-                }
-            }
             const cascadeId =
                 typeof getNextSwapPairIdForAssignmentReasons === 'function'
                     ? getNextSwapPairIdForAssignmentReasons()
@@ -5565,30 +5274,13 @@
             return results;
         }
         function applyWeekendMissingOneSidedFallback(sortedWeekends, assignmentsByDate, assignedWeekendInMonth) {
-            const norm =
-                typeof normalizePersonKey === 'function'
-                    ? normalizePersonKey
-                    : (s) => String(s || '').trim();
-            const samePerson = (a, b) => a && b && norm(a) === norm(b);
-            const monthKeyOf = (dk) => {
-                const d = new Date(dk + 'T00:00:00');
-                return typeof getMonthKeyFromDate === 'function'
-                    ? getMonthKeyFromDate(d)
-                    : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-            };
-            /** True if candidate already serves an earlier weekend/holiday in this month (not a later one). */
-            const assignedOnEarlierWeekendInMonth = (candidate, groupNum, dateKey, monthKey) => {
-                for (const dk of sortedWeekends) {
-                    if (dk >= dateKey) break;
-                    if (monthKeyOf(dk) !== monthKey) continue;
-                    if (samePerson(assignmentsByDate[dk]?.[groupNum], candidate)) return true;
-                }
-                return false;
-            };
             for (const dateKey of sortedWeekends) {
                 if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                 const date = new Date(dateKey + 'T00:00:00');
-                const monthKey = monthKeyOf(dateKey);
+                const monthKey =
+                    typeof getMonthKeyFromDate === 'function'
+                        ? getMonthKeyFromDate(date)
+                        : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                 if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
                 for (let groupNum = 1; groupNum <= 4; groupNum++) {
                     const groupData =
@@ -5607,15 +5299,7 @@
                         const nextIndex = (currentIndex + offset) % groupPeople.length;
                         const candidate = groupPeople[nextIndex];
                         if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                        if (isPersonWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
-                        if (
-                            typeof isPersonDisabledForDuty === 'function' &&
-                            isPersonDisabledForDuty(candidate, groupNum, 'weekend', dateKey)
-                        ) {
-                            continue;
-                        }
-                        // Μην αποκλείεις όσους μπήκαν σε ΜΕΤΑΓΕΝΕΣΤΕΡΕΣ αργίες — αλλιώς «γυρνάει» πίσω στη λίστα (π.χ. Μαρία αντί Σολωμού).
-                        if (assignedOnEarlierWeekendInMonth(candidate, groupNum, dateKey, monthKey)) continue;
+                        if (assignedWeekendInMonth[monthKey][groupNum].has(candidate)) continue;
                         swapPerson = candidate;
                         break;
                     }
@@ -5631,36 +5315,6 @@
                         'weekend'
                     );
                     assignedWeekendInMonth[monthKey][groupNum].add(swapPerson);
-                    // Αν ο αντικαταστάτης είχε ήδη επόμενη αργία τον ίδιο μήνα, μετακίνησε εκείνον τον δείκτη στον επόμενο διαθέσιμο.
-                    const swapIdx = groupPeople.indexOf(swapPerson);
-                    for (const laterKey of sortedWeekends) {
-                        if (laterKey <= dateKey) continue;
-                        if (monthKeyOf(laterKey) !== monthKey) continue;
-                        if (!samePerson(assignmentsByDate[laterKey]?.[groupNum], swapPerson)) continue;
-                        const laterDate = new Date(laterKey + 'T00:00:00');
-                        let moved = null;
-                        const startIdx = swapIdx >= 0 ? swapIdx : 0;
-                        for (let offset = 1; offset < groupPeople.length; offset++) {
-                            const ni = (startIdx + offset) % groupPeople.length;
-                            const cand = groupPeople[ni];
-                            if (!cand || isPersonMissingOnDate(cand, groupNum, laterDate, 'weekend')) continue;
-                            if (isPersonWaitingForForwardWeekendReturn(cand, groupNum, laterKey)) continue;
-                            if (
-                                typeof isPersonDisabledForDuty === 'function' &&
-                                isPersonDisabledForDuty(cand, groupNum, 'weekend', laterKey)
-                            ) {
-                                continue;
-                            }
-                            if (assignedOnEarlierWeekendInMonth(cand, groupNum, laterKey, monthKey)) continue;
-                            if (samePerson(cand, swapPerson)) continue;
-                            moved = cand;
-                            break;
-                        }
-                        if (moved) {
-                            assignmentsByDate[laterKey][groupNum] = moved;
-                            assignedWeekendInMonth[monthKey][groupNum].add(moved);
-                        }
-                    }
                 }
             }
         }
@@ -5833,12 +5487,7 @@
                         }
                         const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(currentPerson) || false;
                         const alreadyAssignedThisMonth = assignedWeekendInMonth[monthKey][groupNum].has(currentPerson);
-                        const waitingEarlyReturn = isPersonWaitingForForwardWeekendReturn(
-                            currentPerson,
-                            groupNum,
-                            dateKey
-                        );
-                        if (!hasSpecialHoliday && !alreadyAssignedThisMonth && !waitingEarlyReturn) {
+                        if (!hasSpecialHoliday && !alreadyAssignedThisMonth) {
                             assignedWeekendInMonth[monthKey][groupNum].add(currentPerson);
                             if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                 dutyWeekendDebug.logStep('phase1-ok', 'Χωρίς σύγκρουση ειδικής/διπλής ανάθεσης — διατήρηση.');
@@ -5852,22 +5501,19 @@
                                 'phase1-trigger',
                                 hasSpecialHoliday
                                     ? `${currentPerson}: ειδική αργία ίδιος μήνας.`
-                                    : waitingEarlyReturn
-                                      ? `${currentPerson}: αναμονή forward return-from-missing.`
-                                      : `${currentPerson}: ήδη ανατεθειμένος ΣΚ/αργία τον μήνα.`
+                                    : `${currentPerson}: ήδη ανατεθειμένος ΣΚ/αργία τον μήνα.`
                             );
                         }
                         const rotationDays = groupPeople.length;
                         let currentIndex = groupPeople.indexOf(currentPerson);
                         if (currentIndex === -1) currentIndex = 0;
                         let replacementPerson = null;
-                        // Next eligible person in weekend list order: not special this month, not already assigned this month, not missing, not disabled, not waiting for later return
+                        // Next eligible person in weekend list order: not special this month, not already assigned this month, not missing, not disabled
                         for (let offset = 1; offset < rotationDays; offset++) {
                             const nextIndex = (currentIndex + offset) % rotationDays;
                             const candidate = groupPeople[nextIndex];
                             if (!candidate) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                            if (isPersonWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
                             if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
                             const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
                             const candidateAlreadyAssigned = assignedWeekendInMonth[monthKey][groupNum].has(candidate);
@@ -5987,16 +5633,6 @@
                     }
                 });
                 applyWeekendMissingOneSidedFallback(
-                    sortedWeekends,
-                    updatedAssignments,
-                    assignedWeekendInMonth
-                );
-                enforceNoEarlyPendingWeekendReturns(
-                    sortedWeekends,
-                    updatedAssignments,
-                    assignedWeekendInMonth
-                );
-                enforceUniqueWeekendAssigneePerMonth(
                     sortedWeekends,
                     updatedAssignments,
                     assignedWeekendInMonth
@@ -8720,17 +8356,8 @@
                                 // Rotation continuity reflow only for Mon↔Wed / Tue↔Thu groups (week-pair logic).
                                 // Cursor continues after who actually serves on the later swap day (not the
                                 // conflicted baseline person) so e.g. Sun→Mon fill by Kaparis leaves Fatsitas next.
-                                // Skip for night-changes groups / same-ISO-week swaps: two-slot swap is enough;
-                                // full reflow wrongly rewrote Thu (e.g. ΨΩΜΑ on 08/10 after Mon↔Wed).
                                 try {
-                                    const _skipCont = shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey);
-                                    if (
-                                        applyWeekPairLogic &&
-                                        !isCrossMonthSwap &&
-                                        !_skipCont &&
-                                        Array.isArray(groupPeople) &&
-                                        groupPeople.length > 0
-                                    ) {
+                                    if (applyWeekPairLogic && !isCrossMonthSwap && Array.isArray(groupPeople) && groupPeople.length > 0) {
                                         const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
                                         const laterAssignedPerson =
                                             updatedAssignments[laterKey]?.[groupNum] ||
@@ -8774,7 +8401,7 @@
                                                             groupNum,
                                                             picked,
                                                             'shift',
-                                                            `Μετακίνηση συνέχειας μετά ανταλλαγή σύγκρουσης (αγκύλη ${laterKey}).`,
+                                                            '',
                                                             prevAssigned,
                                                             null,
                                                             { swapContinuity: true, anchorSwapDay: laterKey }
@@ -8784,11 +8411,6 @@
                                                 }
                                             }
                                         }
-                                    } else if (
-                                        applyWeekPairLogic &&
-                                        !isCrossMonthSwap &&
-                                        shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey)
-                                    ) {
                                     }
                                 } catch (contErr) {
                                     console.warn('[SWAP CONTINUITY] Failed to reflow future normal days after swap:', contErr);
@@ -9804,6 +9426,10 @@
 
                 // Track weekend assignments as we process them (for consecutive day checking)
                 const simulatedWeekendAssignments = {}; // dateKey -> { groupNum -> person name }
+                if (!calculationSteps._inProgressAssignmentsByType) {
+                    calculationSteps._inProgressAssignmentsByType = {};
+                }
+                calculationSteps._inProgressAssignmentsByType.weekend = simulatedWeekendAssignments;
                 if (typeof seedPreservedDutyAssignmentsIntoTemp === 'function') {
                     seedPreservedDutyAssignmentsIntoTemp(
                         simulatedWeekendAssignments,
@@ -9992,11 +9618,17 @@
                     if (isNaN(a.getTime()) || isNaN(b.getTime())) return Infinity;
                     return Math.round((b - a) / (1000 * 60 * 60 * 24));
                 };
-                /** Μετά τη λήξη απουσίας: επιλέξιμο από (λήξη + 3 ημερολογιακές ημέρες) — ίδιο με ημιαργίες. */
+                const isSaturdayOrSundayKey = (dateKey) => {
+                    const dow = new Date(dateKey + 'T00:00:00').getDay();
+                    return dow === 0 || dow === 6;
+                };
+                /** Μετά τη λήξη απουσίας: όχι Σάβ/Κυρ εντός 2 ημερολογιακών ημερών (π.χ. λήξη Παρ→ όχι Σάβ/Κυρ). */
                 const isWeekendTargetTooSoonAfterAbsenceEnd = (absenceEndKey, candidateWeekendKey) => {
                     if (!absenceEndKey || !candidateWeekendKey) return false;
                     const daysAfter = calendarDaysFromTo(absenceEndKey, candidateWeekendKey);
-                    return daysAfter < 3;
+                    if (daysAfter <= 0) return true;
+                    if (daysAfter > 2) return false;
+                    return isSaturdayOrSundayKey(candidateWeekendKey);
                 };
                 const findSameMonthReturnWeekendTarget = (
                     sorted,
@@ -10030,11 +9662,11 @@
                     const tryPick = (wk, isBackward) => {
                         if (missedSet.has(wk)) return null;
                         if (returnTargets[wk]?.[groupNum]) return null;
-                        const tooSoon =
+                        if (
                             !isBackward &&
                             absenceEndKey &&
-                            isWeekendTargetTooSoonAfterAbsenceEnd(absenceEndKey, wk);
-                        if (tooSoon) {
+                            isWeekendTargetTooSoonAfterAbsenceEnd(absenceEndKey, wk)
+                        ) {
                             return null;
                         }
                         const d = new Date(wk + 'T00:00:00');
@@ -10151,32 +9783,6 @@
                 if (calcStartKeyW && calcEndKeyW && sortedWeekends.length > 0) {
                     const processedWeekendReturn = new Set();
                     const normW = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-                    /** Ακόμα κι αν δεν χάθηκε baseline ΣΚ: μπλοκάρισμα ΣΚ πριν την πρώτη αργία στις/μετά λήξη+3. */
-                    const absenceEndEarliestWeekendByGroup = {};
-                    const noteAbsenceEndWeekendBlock = (groupNum, personName, absenceEndKey) => {
-                        const threshold = addDaysW(absenceEndKey, 3);
-                        if (!threshold) return null;
-                        let earliest = null;
-                        for (const wk of sortedWeekends) {
-                            if (calcStartKeyW && wk < calcStartKeyW) continue;
-                            if (calcEndKeyW && wk > calcEndKeyW) break;
-                            if (wk >= threshold) {
-                                earliest = wk;
-                                break;
-                            }
-                        }
-                        if (!earliest || !personName) return null;
-                        if (!absenceEndEarliestWeekendByGroup[groupNum]) {
-                            absenceEndEarliestWeekendByGroup[groupNum] = {};
-                        }
-                        const nk = normW(personName);
-                        const prev = absenceEndEarliestWeekendByGroup[groupNum][nk];
-                        if (!prev || earliest < prev) {
-                            absenceEndEarliestWeekendByGroup[groupNum][nk] = earliest;
-                        }
-                        return earliest;
-                    };
-                    calculationSteps.absenceEndEarliestWeekendByGroup = absenceEndEarliestWeekendByGroup;
                     for (let groupNum = 1; groupNum <= 4; groupNum++) {
                         const g = groups[groupNum];
                         const missingMap = g?.missingPeriods || {};
@@ -10245,8 +9851,6 @@
                                 const personReturnKey = `${groupNum}|${normW(rosterPersonName)}`;
                                 if (processedWeekendReturn.has(personReturnKey)) continue;
                                 processedWeekendReturn.add(personReturnKey);
-                                // Γενικό μπλοκ: καμία ΣΚ/αργία πριν την πρώτη στις/μετά λήξη+3 (ακόμα κι αν δεν χάθηκε baseline).
-                                noteAbsenceEndWeekendBlock(groupNum, rosterPersonName, pEndKey);
                                 const scanStartKey = periodEndsInPrevMonth ? maxKeyW(prevMonthStartKey, pStartKey) : maxKeyW(calcStartKeyW, pStartKey);
                                 const scanEndKey = periodEndsInPrevMonth ? pEndKey : minKeyW(pEndKey, calcEndKeyW);
                                 if (!scanStartKey || !scanEndKey || scanStartKey > scanEndKey) continue;
@@ -10463,7 +10067,7 @@
                                             `Χάθηκε ΣΚ: ${missedWeekendKeysForReturn.join(', ')}. Θα ανατεθεί στον ίδιο μήνα στην ${targetWeekendKey}` +
                                             (isBackwardAssignment
                                                 ? ' (πριν την απουσία)'
-                                                : ` (μετά την απουσία — πρώτη ΣΚ/αργία στις/μετά λήξη+3 από ${pEndKey})`) +
+                                                : ` (μετά την απουσία — όχι Σάβ/Κυρ εντός 2 ημ. από λήξη ${pEndKey})`) +
                                             '.'
                                     });
                                 }
@@ -10471,51 +10075,6 @@
                         }
                     }
                 }
-
-                // Forward return-from-missing: μην μπαίνουν σε ΣΚ πριν τον ορισμένο στόχο (π.χ. Πολυβίου όχι 17/18 αν στόχος 24).
-                // Επίσης: μπλοκ από λήξη απουσίας+3 ακόμα κι αν δεν υπάρχει designated return (δεν χάθηκε baseline ΣΚ).
-                const pendingForwardWeekendReturnByGroup = {};
-                const normPendingWeekendReturn = (s) =>
-                    typeof normalizePersonKey === 'function'
-                        ? normalizePersonKey(s)
-                        : String(s || '').trim();
-                const mergePendingEarliest = (g, nk, earliestKey) => {
-                    if (!g || !nk || !earliestKey) return;
-                    if (!pendingForwardWeekendReturnByGroup[g]) pendingForwardWeekendReturnByGroup[g] = {};
-                    const prev = pendingForwardWeekendReturnByGroup[g][nk];
-                    // Strictest (= latest) first-allowed weekend wins.
-                    if (!prev || earliestKey > prev) {
-                        pendingForwardWeekendReturnByGroup[g][nk] = earliestKey;
-                    }
-                };
-                const absenceEndMap =
-                    calculationSteps.absenceEndEarliestWeekendByGroup || {};
-                for (const gStr of Object.keys(absenceEndMap)) {
-                    const g = parseInt(gStr, 10);
-                    if (!g) continue;
-                    for (const [nk, earliest] of Object.entries(absenceEndMap[g] || {})) {
-                        mergePendingEarliest(g, nk, earliest);
-                    }
-                }
-                for (const targetKey of Object.keys(returnFromMissingWeekendTargets)) {
-                    const byGroup = returnFromMissingWeekendTargets[targetKey] || {};
-                    for (const gStr of Object.keys(byGroup)) {
-                        const meta = byGroup[gStr];
-                        if (!meta || meta.isBackwardAssignment) continue;
-                        const g = parseInt(gStr, 10);
-                        if (!g || !meta.personName) continue;
-                        mergePendingEarliest(g, normPendingWeekendReturn(meta.personName), targetKey);
-                    }
-                }
-                const isWaitingForForwardWeekendReturn = (person, groupNum, dateKey) => {
-                    if (!person || !dateKey) return false;
-                    const t = pendingForwardWeekendReturnByGroup[groupNum]?.[
-                        normPendingWeekendReturn(person)
-                    ];
-                    return !!(t && dateKey < t);
-                };
-                calculationSteps.pendingForwardWeekendReturnByGroup = pendingForwardWeekendReturnByGroup;
-                calculationSteps.returnFromMissingWeekendTargets = returnFromMissingWeekendTargets;
 
                 sortedWeekends.forEach((dateKey, weekendIndex) => {
                     const date = new Date(dateKey + 'T00:00:00');
@@ -10727,14 +10286,7 @@
                             let previewMissingSwapPerson = null;
                             
                             // Already assigned via return-from-missing (backward/forward): skip when their turn comes – they already had their duty
-                            // Also: waiting for a later forward return slot (end+3 target) — do not take earlier weekends via rotation
-                            const waitingForwardReturn =
-                                rotationPerson &&
-                                isWaitingForForwardWeekendReturn(rotationPerson, groupNum, dateKey);
-                            const wasAssignedByReturnFromMissingWeekend =
-                                (rotationPerson &&
-                                    assignedByReturnFromMissingWeekend[groupNum]?.has(rotationPerson)) ||
-                                waitingForwardReturn;
+                            const wasAssignedByReturnFromMissingWeekend = rotationPerson && assignedByReturnFromMissingWeekend[groupNum]?.has(rotationPerson);
                             if (wasAssignedByReturnFromMissingWeekend) {
                                 if (!assignedPeoplePreviewWeekend[monthKey][groupNum]) assignedPeoplePreviewWeekend[monthKey][groupNum] = {};
                                 let foundEligible = false;
@@ -10743,7 +10295,6 @@
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
                                     if (assignedByReturnFromMissingWeekend[groupNum]?.has(candidate)) continue;
-                                    if (isWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
                                     if (assignedPeoplePreviewWeekend[monthKey][groupNum][candidate]) {
@@ -10781,7 +10332,6 @@
                                     const candidate = groupPeople[idx];
                                     if (!candidate) continue;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
-                                    if (isWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
                                     if (assignedPeoplePreviewWeekend[monthKey][groupNum][candidate]) {
                                         const lastAssignmentDateKey = assignedPeoplePreviewWeekend[monthKey][groupNum][candidate];
@@ -10821,7 +10371,6 @@
                                         const nextIndex = (currentIndex + offset) % rotationDays;
                                         const candidate = groupPeople[nextIndex];
                                         if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                                        if (isWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
                                         if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
                                         const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
                                         const candidateAlreadyAssigned = assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate);
@@ -10863,63 +10412,22 @@
                                         assignedPerson = replacementPerson;
                                         wasReplaced = true;
                                         replacementIndex = groupPeople.indexOf(replacementPerson);
-                                    } else {
-                                        // Μην κρατάς διπλότυπο — το unique pass θα γεμίσει με τον επόμενο διαθέσιμο.
-                                        if (
-                                            typeof dutyWeekendDebug !== 'undefined' &&
-                                            dutyWeekendDebug.isEnabled()
-                                        ) {
-                                            dutyWeekendDebug.logStep(
-                                                'phase1-special-or-duplicate',
-                                                hasSpecialHoliday
-                                                    ? `${assignedPerson} έχει ειδική αργία τον ίδιο μήνα — δεν βρέθηκε αντικαταστάτης.`
-                                                    : `${assignedPerson} ήδη ανατεθειμένος τον μήνα — δεν βρέθηκε αντικαταστάτης.`
-                                            );
-                                        }
-                                        assignedPerson = null;
+                                    } else if (
+                                        typeof dutyWeekendDebug !== 'undefined' &&
+                                        dutyWeekendDebug.isEnabled()
+                                    ) {
+                                        dutyWeekendDebug.logStep(
+                                            'phase1-special-or-duplicate',
+                                            hasSpecialHoliday
+                                                ? `${assignedPerson} έχει ειδική αργία τον ίδιο μήνα — δεν βρέθηκε αντικαταστάτης.`
+                                                : `${assignedPerson} ήδη ανατεθειμένος τον μήνα — δεν βρέθηκε αντικαταστάτης.`
+                                        );
                                     }
                                 }
                             }
-                            // Phase 2: απουσία — cascade μετά το loop· αν είναι πρώτη αργία του μήνα (cascade αδύνατο), αντικατάσταση τώρα.
+                            // Phase 2: απουσία — cascade reflow τρέχει μετά το loop (όχi inline swap)
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'weekend')) {
-                                const monthWeekendsPreview = getSameMonthWeekendDateKeys(sortedWeekends, monthKey);
-                                const missedIdxPreview = monthWeekendsPreview.indexOf(dateKey);
-                                if (missedIdxPreview <= 0) {
-                                    let currentIndex = groupPeople.indexOf(assignedPerson);
-                                    if (currentIndex === -1) currentIndex = 0;
-                                    let replacementPerson = null;
-                                    let replacementIdx = null;
-                                    for (let offset = 1; offset < rotationDays; offset++) {
-                                        const nextIndex = (currentIndex + offset) % rotationDays;
-                                        const candidate = groupPeople[nextIndex];
-                                        if (!candidate) continue;
-                                        if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                                        if (isWaitingForForwardWeekendReturn(candidate, groupNum, dateKey)) continue;
-                                        if (
-                                            typeof isPersonDisabledForDuty === 'function' &&
-                                            isPersonDisabledForDuty(candidate, groupNum, 'weekend', dateKey)
-                                        ) {
-                                            continue;
-                                        }
-                                        if (assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate)) continue;
-                                        replacementPerson = candidate;
-                                        replacementIdx = nextIndex;
-                                        break;
-                                    }
-                                    if (replacementPerson) {
-                                        storeUnavailableReplacementReason(
-                                            dateKey,
-                                            groupNum,
-                                            replacementPerson,
-                                            assignedPerson,
-                                            date,
-                                            'weekend'
-                                        );
-                                        assignedPerson = replacementPerson;
-                                        wasReplaced = true;
-                                        replacementIndex = replacementIdx;
-                                    }
-                                } else if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                     dutyWeekendDebug.logStep(
                                         'phase2-missing',
                                         `Απουσία: ${assignedPerson} — cascade ΣΚ/αργιών μετά το preview loop.`
@@ -10941,14 +10449,6 @@
                                 if (normW(assignedPerson) === normW(existingManualAlternateWeekend.replacement)) {
                                     weekendRotationPersons[dateKey][groupNum] = existingManualAlternateWeekend.baseline;
                                 }
-                            }
-
-                            // Safety: never keep a person on a weekend before their designated forward return-from-missing
-                            if (
-                                assignedPerson &&
-                                isWaitingForForwardWeekendReturn(assignedPerson, groupNum, dateKey)
-                            ) {
-                                assignedPerson = null;
                             }
 
                             const displayPerson = assignedPerson;
@@ -11043,64 +10543,6 @@
                                         existingManualAlternate: existingManualAlternateWeekend
                                     }
                                 );
-                                // #region agent log
-                                try {
-                                    const watch =
-                                        (groupNum === 1 &&
-                                            ['2026-10-11', '2026-10-17', '2026-10-18', '2026-10-24', '2026-10-31'].includes(
-                                                dateKey
-                                            )) ||
-                                        (groupNum === 3 &&
-                                            ['2026-10-03', '2026-10-10', '2026-10-11', '2026-10-28', '2026-10-31'].includes(
-                                                dateKey
-                                            ));
-                                    if (watch) {
-                                        const row = {
-                                            sessionId: '8e8ea0',
-                                            runId: 'rot-seq',
-                                            hypothesisId: 'H-rot',
-                                            location: 'duty-shifts-logic.js:weekend-preview-slot',
-                                            message: 'weekend slot rotation decision',
-                                            data: {
-                                                build: '1.613',
-                                                dateKey: dateKey,
-                                                groupNum: groupNum,
-                                                rotPos: rotationPosition,
-                                                rotPerson: rotationPerson,
-                                                rotListIdx: groupPeople.indexOf(rotationPerson),
-                                                assigned: assignedPerson,
-                                                assignedIdx: assignedPerson
-                                                    ? groupPeople.indexOf(assignedPerson)
-                                                    : -1,
-                                                wasReplaced: wasReplaced,
-                                                replacementIndex: replacementIndex,
-                                                waiting: !!(
-                                                    rotationPerson &&
-                                                    isWaitingForForwardWeekendReturn(
-                                                        rotationPerson,
-                                                        groupNum,
-                                                        dateKey
-                                                    )
-                                                ),
-                                                cursorAfter: globalWeekendRotationPosition[groupNum],
-                                                listLen: groupPeople.length
-                                            },
-                                            timestamp: Date.now()
-                                        };
-                                        fetch(
-                                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                            {
-                                                method: 'POST',
-                                                headers: {
-                                                    'Content-Type': 'application/json',
-                                                    'X-Debug-Session-Id': '8e8ea0'
-                                                },
-                                                body: JSON.stringify(row)
-                                            }
-                                        ).catch(function () {});
-                                    }
-                                } catch (_) {}
-                                // #endregion
                             } else {
                                 globalWeekendRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                             }
@@ -11139,113 +10581,17 @@
                     simulatedWeekendAssignments,
                     baselineWeekendByDate
                 );
-                // #region agent log
-                let __agentAfterCascade = null;
-                try {
-                    const snap = { 1: [], 3: [] };
-                    for (const dk of (sortedWeekends || []).filter((k) => String(k).startsWith('2026-10'))) {
-                        snap[1].push({ dk: dk, p: simulatedWeekendAssignments?.[dk]?.[1] || null });
-                        snap[3].push({ dk: dk, p: simulatedWeekendAssignments?.[dk]?.[3] || null });
-                    }
-                    __agentAfterCascade = snap;
-                } catch (_) {}
-                // #endregion
                 applyWeekendMissingOneSidedFallback(
                     sortedWeekends,
                     simulatedWeekendAssignments,
                     assignedWeekendInMonthPreview
                 );
-                enforceNoEarlyPendingWeekendReturns(
-                    sortedWeekends,
-                    simulatedWeekendAssignments,
-                    assignedWeekendInMonthPreview
-                );
-                // #region agent log
-                let __agentAlexPreUnique = null;
-                try {
-                    const snapPre = { 1: [], 3: [] };
-                    for (const dk of (sortedWeekends || []).filter((k) => String(k).startsWith('2026-10'))) {
-                        snapPre[1].push({ dk: dk, p: simulatedWeekendAssignments?.[dk]?.[1] || null });
-                        snapPre[3].push({ dk: dk, p: simulatedWeekendAssignments?.[dk]?.[3] || null });
-                    }
-                    __agentAlexPreUnique = {
-                        afterCascade: __agentAfterCascade,
-                        beforeUnique: snapPre
-                    };
-                } catch (_) {}
-                // #endregion
-                const __agentAlexUniqueFixes = enforceUniqueWeekendAssigneePerMonth(
-                    sortedWeekends,
-                    simulatedWeekendAssignments,
-                    assignedWeekendInMonthPreview
-                );
-                // #region agent log
-                try {
-                    const octKeys = (sortedWeekends || []).filter((k) => String(k).startsWith('2026-10'));
-                    const postByGroup = { 1: [], 3: [] };
-                    const dupesByGroup = {};
-                    for (const dk of octKeys) {
-                        for (const g of [1, 3]) {
-                            const p = simulatedWeekendAssignments?.[dk]?.[g] || null;
-                            postByGroup[g].push({ dk: dk, p: p });
-                        }
-                    }
-                    for (const g of [1, 3]) {
-                        const counts = {};
-                        for (const row of postByGroup[g]) {
-                            if (!row.p) continue;
-                            const k = String(row.p);
-                            if (!counts[k]) counts[k] = [];
-                            counts[k].push(row.dk);
-                        }
-                        dupesByGroup[g] = Object.entries(counts)
-                            .filter(([, dates]) => dates.length > 1)
-                            .map(([person, dates]) => ({ person: person, dates: dates }));
-                    }
-                    const row = {
-                        sessionId: '8e8ea0',
-                        runId: 'seq-no-steal',
-                        hypothesisId: 'H-seq',
-                        location: 'duty-shifts-logic.js:weekend-unique-month',
-                        message: 'Oct weekend sequence after unique (no-steal)',
-                        data: {
-                            build: '1.613',
-                            runIdTag: 'post-fix-no-steal',
-                            emptySlots: {
-                                1: (postByGroup[1] || []).filter((r) => !r.p).map((r) => r.dk),
-                                3: (postByGroup[3] || []).filter((r) => !r.p).map((r) => r.dk)
-                            },
-                            stealFixesCount: (__agentAlexUniqueFixes || []).filter(
-                                (f) => f.reason === 'stolen-for-earlier-fill'
-                            ).length,
-                            afterCascadeG1: __agentAlexPreUnique?.afterCascade?.[1] || null,
-                            afterCascadeG3: __agentAlexPreUnique?.afterCascade?.[3] || null,
-                            beforeUniqueG1: __agentAlexPreUnique?.beforeUnique?.[1] || null,
-                            beforeUniqueG3: __agentAlexPreUnique?.beforeUnique?.[3] || null,
-                            postByGroup: postByGroup,
-                            dupesByGroup: dupesByGroup,
-                            fixesG3: (__agentAlexUniqueFixes || []).filter((f) => f.groupNum === 3),
-                            allFixesCount: (__agentAlexUniqueFixes || []).length
-                        },
-                        timestamp: Date.now()
-                    };
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Debug-Session-Id': '8e8ea0'
-                        },
-                        body: JSON.stringify(row)
-                    }).catch(function () {});
-                    const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                    arr.push(row);
-                    localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
-                    if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
-                } catch (_) {}
-                // #endregion
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
                 calculationSteps.tempWeekendAssignments = simulatedWeekendAssignments;
+                if (calculationSteps._inProgressAssignmentsByType) {
+                    calculationSteps._inProgressAssignmentsByType.weekend = simulatedWeekendAssignments;
+                }
                 finalizeWeekendPreview(
                     simulatedWeekendAssignments,
                     baselineWeekendByDate,
@@ -12166,41 +11512,6 @@
             calculationSteps.tempSemiAssignments = finalAssignments;
             calculationSteps.finalSemiAssignments = finalAssignments;
             calculationSteps.lastSemiRotationPositionsByMonth = lastSemiRotationPositionsByMonth;
-
-            // #region agent log
-            try {
-                const keys = ['2026-10-08', '2026-10-09', '2026-10-29', '2026-10-30'];
-                const snap = {};
-                keys.forEach((dk) => {
-                    const d = new Date(dk + 'T00:00:00');
-                    snap[dk] = {
-                        dayType: typeof getDayType === 'function' ? getDayType(d) : null,
-                        g1: finalAssignments?.[dk]?.[1] || null,
-                        g2: finalAssignments?.[dk]?.[2] || null
-                    };
-                });
-                const row = {
-                    sessionId: '8e8ea0',
-                    runId: 'consec-ns',
-                    hypothesisId: 'H3',
-                    location: 'duty-shifts-logic.js:semi-end',
-                    message: 'semi final Agapiou/Kouloutsides neighbors',
-                    data: { build: '1.607', snap: snap },
-                    timestamp: Date.now()
-                };
-                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Debug-Session-Id': '8e8ea0'
-                    },
-                    body: JSON.stringify(row)
-                }).catch(function () {});
-                const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                arr.push(row);
-                localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
-            } catch (_) {}
-            // #endregion
 
             // 5) Build table: baseline vs final (use precomputed dateStr/dayName from semiMeta)
             const periodLabel = (startDate && endDate) ? `${startDate.toLocaleDateString('el-GR')} – ${endDate.toLocaleDateString('el-GR')}` : '';
@@ -15169,16 +14480,9 @@
 
                             // Rotation continuity reflow in preview only for week-pair groups.
                             // Same as save path: continue after the person who remains on the later swap day.
-                            // Skip night-changes / same-ISO-week (two-slot swap only).
                             try {
                                 const isCrossMonthSwapPreview = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
-                                if (
-                                    applyWeekPairLogic &&
-                                    !isCrossMonthSwapPreview &&
-                                    !shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey) &&
-                                    Array.isArray(groupPeople) &&
-                                    groupPeople.length > 0
-                                ) {
+                                if (applyWeekPairLogic && !isCrossMonthSwapPreview && Array.isArray(groupPeople) && groupPeople.length > 0) {
                                     const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
                                     const laterAssignedPerson =
                                         normalAssignments[laterKey]?.[groupNum] ||
@@ -15220,7 +14524,7 @@
                                                             groupNum,
                                                             picked,
                                                             'shift',
-                                                            `Μετακίνηση συνέχειας μετά ανταλλαγή σύγκρουσης (αγκύλη ${laterKey}).`,
+                                                            '',
                                                             prevAssigned,
                                                             null,
                                                             { swapContinuity: true, anchorSwapDay: laterKey }
@@ -15230,11 +14534,6 @@
                                             }
                                         }
                                     }
-                                } else if (
-                                    applyWeekPairLogic &&
-                                    !isCrossMonthSwapPreview &&
-                                    shouldSkipSwapContinuityReflow(groupNum, dateKey, swapDayKey)
-                                ) {
                                 }
                             } catch (previewContErr) {
                                 console.warn('[PREVIEW SWAP CONTINUITY] Failed to reflow future normal days after swap:', previewContErr);
@@ -15783,112 +15082,6 @@
                 }
             }
             calculationSteps.lastNormalRotationPositionsByMonth = lastNormalRotationPositionsByMonth;
-
-            // #region agent log
-            try {
-                const sim = {
-                    special: calculationSteps.tempSpecialAssignments || {},
-                    weekend: calculationSteps.tempWeekendAssignments || {},
-                    semi: simulatedSemiAssignments || calculationSteps.tempSemiAssignments || {},
-                    normal: normalAssignments || {}
-                };
-                const check = (dk, g, label) => {
-                    const p = normalAssignments?.[dk]?.[g] || null;
-                    const semiP =
-                        simulatedSemiAssignments?.[dk]?.[g] ||
-                        calculationSteps.tempSemiAssignments?.[dk]?.[g] ||
-                        null;
-                    const d = new Date(dk + 'T00:00:00');
-                    const dayType = typeof getDayType === 'function' ? getDayType(d) : null;
-                    const conflict =
-                        p && typeof hasConsecutiveDuty === 'function'
-                            ? hasConsecutiveDuty(dk, p, g, sim)
-                            : null;
-                    const neighbor =
-                        p && typeof getConsecutiveConflictNeighborInfo === 'function'
-                            ? getConsecutiveConflictNeighborInfo(dk, p, g, sim)
-                            : null;
-                    return {
-                        label: label,
-                        dayType: dayType,
-                        normalPerson: p,
-                        semiPerson: semiP,
-                        hasConflict: conflict,
-                        neighbor: neighbor,
-                        isAgapiou: !!(p && String(p).includes('ΑΓΑΠΙΟΥ')),
-                        isKoul: !!(p && String(p).includes('ΚΟΥΛΟΥΤΣΙΔΗΣ')),
-                        semiIsAgapiou: !!(semiP && String(semiP).includes('ΑΓΑΠΙΟΥ')),
-                        semiIsKoul: !!(semiP && String(semiP).includes('ΚΟΥΛΟΥΤΣΙΔΗΣ'))
-                    };
-                };
-                const row = {
-                    sessionId: '8e8ea0',
-                    runId: 'consec-ns',
-                    hypothesisId: 'H1-H2-H3',
-                    location: 'duty-shifts-logic.js:normal-end-post-swap',
-                    message: 'consecutive normal/semi Oct 8-9 g2 and 29-30 g1',
-                    data: {
-                        build: '1.607',
-                        oct8g2: check('2026-10-08', 2, 'normal-8-g2'),
-                        oct9g2: check('2026-10-09', 2, 'semi-or-normal-9-g2'),
-                        oct29g1: check('2026-10-29', 1, 'day-29-g1'),
-                        oct30g1: check('2026-10-30', 1, 'day-30-g1'),
-                        semiMapHas09: !!(
-                            simulatedSemiAssignments?.['2026-10-09'] ||
-                            calculationSteps.tempSemiAssignments?.['2026-10-09']
-                        ),
-                        semiMapHas30: !!(
-                            simulatedSemiAssignments?.['2026-10-30'] ||
-                            calculationSteps.tempSemiAssignments?.['2026-10-30']
-                        ),
-                        semi09g2:
-                            simulatedSemiAssignments?.['2026-10-09']?.[2] ||
-                            calculationSteps.tempSemiAssignments?.['2026-10-09']?.[2] ||
-                            null,
-                        semi30g1:
-                            simulatedSemiAssignments?.['2026-10-30']?.[1] ||
-                            calculationSteps.tempSemiAssignments?.['2026-10-30']?.[1] ||
-                            null
-                    },
-                    timestamp: Date.now()
-                };
-                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Debug-Session-Id': '8e8ea0'
-                    },
-                    body: JSON.stringify(row)
-                }).catch(function () {});
-                const arr = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                arr.push(row);
-                localStorage.setItem('debug-8e8ea0', JSON.stringify(arr.slice(-200)));
-                window.__agentDbgFlush = function () {
-                    try {
-                        const stored = JSON.parse(localStorage.getItem('debug-8e8ea0') || '[]');
-                        const nd =
-                            stored.map(function (r) {
-                                return JSON.stringify(r);
-                            }).join('\n') + '\n';
-                        const blob = new Blob([nd], { type: 'application/x-ndjson' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'debug-8e8ea0.log';
-                        a.style.display = 'none';
-                        document.body.appendChild(a);
-                        a.click();
-                        setTimeout(function () {
-                            try {
-                                URL.revokeObjectURL(url);
-                                a.remove();
-                            } catch (_) {}
-                        }, 1500);
-                    } catch (_) {}
-                };
-                if (typeof window.__agentDbgFlush === 'function') window.__agentDbgFlush();
-            } catch (_) {}
-            // #endregion
             
             // Store preview swaps so they can be shown in popup (will be merged with runNormalSwapLogic results)
             calculationSteps.previewNormalSwaps = previewSwappedPeople;
