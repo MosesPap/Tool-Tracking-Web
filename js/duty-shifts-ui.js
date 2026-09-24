@@ -4674,7 +4674,7 @@
                         location: 'duty-shifts-ui.js:renderCalendar',
                         message: 'calendar Oct αργίες saved vs temp',
                         data: {
-                            build: '1.612',
+                            build: '1.613',
                             snap: snap,
                             alexSavedDates: Object.entries(snap)
                                 .filter(([, v]) => v.savedG3 && String(v.savedG3).includes('ΑΛΕΞΑΝΔΡΟΥ'))
