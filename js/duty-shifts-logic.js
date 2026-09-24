@@ -2515,9 +2515,58 @@
         }
 
         /**
+         * Among two people who both served (e.g. mutual two-day swap), return the one at the
+         * end of the shorter forward arc on the rotation list — so month seed continues after both.
+         * Example: Maria(16) & Fakouras(17) → Fakouras; next month starts at 18, not 17 again.
+         */
+        function pickRotationLaterOfTwo(groupPeople, personA, personB) {
+            if (!Array.isArray(groupPeople) || groupPeople.length === 0) return personA || personB || null;
+            const norm = (s) =>
+                typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
+            const findIdx = (name) => {
+                if (!name) return -1;
+                const n = norm(name);
+                let i = groupPeople.indexOf(name);
+                if (i >= 0) return i;
+                return groupPeople.findIndex((p) => norm(p) === n);
+            };
+            const iA = findIdx(personA);
+            const iB = findIdx(personB);
+            if (iA < 0 && iB < 0) return personA || personB || null;
+            if (iA < 0) return personB;
+            if (iB < 0) return personA;
+            if (iA === iB) return groupPeople[iA];
+            const len = groupPeople.length;
+            const distAtoB = (iB - iA + len) % len;
+            const distBtoA = (iA - iB + len) % len;
+            // End of the shorter forward arc covering both
+            if (distAtoB <= distBtoA) return groupPeople[iB];
+            return groupPeople[iA];
+        }
+
+        function getRotationListForContinuityDate(dateKey, groupNum) {
+            let cat = 'normal';
+            const d = dateKey ? new Date(dateKey + 'T00:00:00') : null;
+            if (d && !isNaN(d.getTime()) && typeof getDayType === 'function') {
+                const dt = getDayType(d);
+                if (dt === 'semi-normal-day') cat = 'semi';
+                else if (dt === 'weekend-holiday') cat = 'weekend';
+                else if (dt === 'special-holiday') cat = 'special';
+            }
+            const gd =
+                typeof groupsForDuty === 'function'
+                    ? groupsForDuty(groupNum, dateKey)
+                    : typeof groups !== 'undefined'
+                      ? groups[groupNum]
+                      : null;
+            return (gd && gd[cat]) || [];
+        }
+
+        /**
          * Person name to store in lastRotationPositions / month carry-over: after manual alternate (replacement for baseline),
          * use baseline (swappedWith) so the next slot is B,C,E… not the replacement's index again.
-         * Manual mutual two-day swap does not alter cross-month seed (uses assigned person on that date).
+         * Mutual two-day swap: continue after both people who served (later on the rotation arc), so the
+         * partner is not immediately re-seeded as next month's first duty.
          * Semi holiday-conflict swap: continue after conflictedName (moved person), not the filler on the last Friday.
          */
         function getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, assignmentsByDate) {
@@ -2533,6 +2582,40 @@
             }
             // Unavailable replacement (missing/disabled): replacement already served this slot — continue after them.
             if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
+                return assignedPerson;
+            }
+            // Αμοιβαία αλλαγή: και οι δύο έβγαλαν — συνέχεια μετά τον «μεταγενέστερο» στη λίστα, όχι μετά μόνο τον τελευταίο στο ημερολόγιο.
+            if (reason && reason.type === 'swap' && reason.meta?.mutualTwoDaySwap) {
+                const otherKey =
+                    (reason.meta?.otherDateKey && String(reason.meta.otherDateKey)) ||
+                    (reason.swapPairId != null
+                        ? findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey)
+                        : null);
+                let otherPerson = null;
+                if (otherKey) {
+                    otherPerson = getSemiAssignedPersonFromStore(assignmentsByDate, otherKey, groupNum);
+                    if (!otherPerson && reason.swappedWith) otherPerson = reason.swappedWith;
+                } else if (reason.swappedWith) {
+                    otherPerson = reason.swappedWith;
+                }
+                if (otherPerson) {
+                    const people = getRotationListForContinuityDate(dateKey, groupNum);
+                    const later = pickRotationLaterOfTwo(people, assignedPerson, otherPerson);
+                    if (later) {
+                        let cat = 'semi';
+                        const d = dateKey ? new Date(dateKey + 'T00:00:00') : null;
+                        if (d && !isNaN(d.getTime()) && typeof getDayType === 'function') {
+                            const dt = getDayType(d);
+                            if (dt === 'weekend-holiday') cat = 'weekend';
+                            else if (dt === 'special-holiday') cat = 'special';
+                            else if (dt === 'normal-day') cat = 'normal';
+                            else if (dt === 'semi-normal-day') cat = 'semi';
+                        }
+                        return typeof resolvePersonInGroupRotationList === 'function'
+                            ? resolvePersonInGroupRotationList(later, groupNum, cat) || later
+                            : later;
+                    }
+                }
                 return assignedPerson;
             }
             if (reason && reason.type === 'swap' && reason.swapPairId != null && !reason.meta?.mutualTwoDaySwap) {

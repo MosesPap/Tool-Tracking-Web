@@ -1628,7 +1628,56 @@
                     : fromAssignments || fromBaseline || fromStored;
             const continuityIdx = findIdx(lastContinuityPerson);
             if (lastContinuityPerson && continuityIdx >= 0) {
-                return (continuityIdx + 1) % len;
+                let cursor = (continuityIdx + 1) % len;
+                // Semi/weekend/special: if prev month ended on a mutual two-day swap, never
+                // land first on the partner who already served on the other date of the pair.
+                if (dayTypeCategory === 'semi' || dayTypeCategory === 'weekend' || dayTypeCategory === 'special') {
+                    const prevKeys = getSortedDutyDateKeysInCalendarMonth(prevMonthKey, dayTypeCategory);
+                    const lastKey = prevKeys.length ? prevKeys[prevKeys.length - 1] : null;
+                    if (lastKey && typeof getAssignmentReason === 'function') {
+                        const lastAssigned = getPersonOnDateForRotationContinuityLookup(
+                            dayTypeCategory,
+                            lastKey,
+                            groupNum
+                        );
+                        const reason =
+                            lastAssigned && typeof getAssignmentReasonForGroupOnDate === 'function'
+                                ? getAssignmentReasonForGroupOnDate(lastKey, groupNum, lastAssigned)
+                                : lastAssigned
+                                  ? getAssignmentReason(lastKey, groupNum, lastAssigned)
+                                  : null;
+                        if (reason?.type === 'swap' && reason.meta?.mutualTwoDaySwap) {
+                            const otherKey =
+                                reason.meta?.otherDateKey ||
+                                (typeof findSwapOtherDateKey === 'function' && reason.swapPairId != null
+                                    ? findSwapOtherDateKey(reason.swapPairId, groupNum, lastKey)
+                                    : null);
+                            const store =
+                                dayTypeCategory === 'normal'
+                                    ? buildNormalRotationContinuityStore()
+                                    : getAssignmentsForDayType(dayTypeCategory);
+                            const otherPerson = otherKey
+                                ? getPersonOnDateForRotationContinuityLookup(
+                                      dayTypeCategory,
+                                      otherKey,
+                                      groupNum
+                                  )
+                                : reason.swappedWith;
+                            const skip = new Set();
+                            if (lastAssigned) skip.add(norm(lastAssigned));
+                            if (otherPerson) skip.add(norm(otherPerson));
+                            let guard = 0;
+                            while (
+                                guard++ < len &&
+                                groupPeople[cursor] &&
+                                skip.has(norm(groupPeople[cursor]))
+                            ) {
+                                cursor = (cursor + 1) % len;
+                            }
+                        }
+                    }
+                }
+                return cursor;
             }
 
             // Fast path: no manual alternate in previous month -> nothing else to simulate.
