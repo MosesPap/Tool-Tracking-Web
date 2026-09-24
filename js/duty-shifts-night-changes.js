@@ -804,64 +804,23 @@
                 let person = getAssigneeOnDate(thursdayKey, groupNum, assignments);
                 if (!person) continue;
 
-                // Same 5-day rule as normal preview: do not leave someone on Πέμπτη if they
-                // already have a normal duty within 5 days (e.g. Τρίτη same week). Replace
-                // only this Thursday slot — does not change conflict / Ν partner rules.
-                if (isPersonOnNormalWithinDays(person, groupNum, thursdayKey, assignments, 5)) {
-                    const groupPeopleFix = getNightGroupNormalPeople(groupNum, thursdayKey);
-                    const fromIdxFix = findPersonIndexInList(groupPeopleFix, person);
-                    const replacement = pickNextEligibleNormalPerson(
-                        groupPeopleFix,
-                        fromIdxFix >= 0 ? fromIdxFix : -1,
-                        groupNum,
-                        thursdayKey,
-                        null,
-                        assignments
-                    );
-                    if (
-                        replacement.person &&
-                        normPerson(replacement.person) !== normPerson(person)
-                    ) {
-                        const prevThu = person;
-                        if (!assignments[thursdayKey]) assignments[thursdayKey] = {};
-                        assignments[thursdayKey][groupNum] = replacement.person;
-                        syncSimulatedNormalAssignee(
-                            simulated,
-                            thursdayKey,
-                            groupNum,
-                            replacement.person
-                        );
-                        if (typeof storeAssignmentReason === 'function') {
-                            if (
-                                typeof clearAssignmentReasonForPersonOnDate === 'function'
-                            ) {
-                                clearAssignmentReasonForPersonOnDate(
-                                    thursdayKey,
-                                    groupNum,
-                                    prevThu
-                                );
-                            }
-                            storeAssignmentReason(
-                                thursdayKey,
-                                groupNum,
-                                replacement.person,
-                                'skip',
-                                `Αντικατάσταση: ο/η ${prevThu} είχε ήδη καθημερινή εντός 5 ημερών.`,
-                                prevThu,
-                                null,
-                                {
-                                    fiveDayProximityReplacement: true,
-                                    skippedPerson: prevThu
-                                }
-                            );
-                        }
-                        person = replacement.person;
-                    }
-                }
+                let spacing = personPassesThursdaySpacing(
+                    person,
+                    groupNum,
+                    thursdayKey,
+                    assignments,
+                    runtimeLastThu
+                );
+                const fiveDayConflict = isPersonOnNormalWithinDays(
+                    person,
+                    groupNum,
+                    thursdayKey,
+                    assignments,
+                    5
+                );
 
-                let spacing = personPassesThursdaySpacing(person, groupNum, thursdayKey, assignments, runtimeLastThu);
-
-                if (spacing.eligible) {
+                // Πέμπτη OK μόνο αν περνάει Ν ΚΑΙ δεν έχει άλλη καθημερινή εντός 5 ημερών
+                if (spacing.eligible && !fiveDayConflict) {
                     setSpacingMarker(markers, thursdayKey, groupNum, person, {
                         status: 'ok',
                         nRequired: spacing.nRequired,
@@ -869,6 +828,37 @@
                     });
                     runtimeLastThu[`${groupNum}:${normPerson(person)}`] = thursdayKey;
                     continue;
+                }
+
+                // Διπλό ίδιο άτομο Πέμπτη + νωρίτερη μέρα (π.χ. 06 και 08 και οι δύο νο 8):
+                // ανταλλαγή με βασική σειρά Πέμπτης (π.χ. νο 10 ↔ νο 8), όχι μόνο αντικατάσταση Πέμπτης.
+                if (fiveDayConflict) {
+                    const exchanged = resolveDuplicateThursdayWithBaselineExchange(
+                        thursdayKey,
+                        groupNum,
+                        person,
+                        assignments,
+                        normalDays,
+                        simulated,
+                        runtimeLastThu,
+                        markers,
+                        spacingSwaps
+                    );
+                    if (exchanged) {
+                        resequenceAfterSingleSpacingSwap(
+                            assignments,
+                            normalDays,
+                            {
+                                thursdayKey,
+                                partnerKey: exchanged.earlierKey,
+                                groupNum,
+                                displacedFromThursday: exchanged.otherPerson,
+                                thursdayPerson: exchanged.person
+                            },
+                            simulated
+                        );
+                        continue;
+                    }
                 }
 
                 const diagnosis = diagnoseThursdaySpacingPartnerCandidates(
@@ -1136,38 +1126,7 @@
             calculationSteps.thursdaySpacingFails = spacingFails;
         }
 
-        // Ensure every Ν pair stays as exchanged: partner→Πέμπτη, displaced→ημέρα εταίρου
-        assertSpacingSwapPairIntegrity(assignments, spacingSwaps, simulated);
-
         return { assignments, markers, spacingSwaps, spacingFails };
-    }
-
-    /**
-     * After resequence / iterative passes, force each Ν-swap pair back to the exchanged people.
-     * Prevents e.g. #8 remaining on Tuesday after being moved to Thursday.
-     */
-    function assertSpacingSwapPairIntegrity(assignments, spacingSwaps, simulated) {
-        if (!assignments || !Array.isArray(spacingSwaps) || spacingSwaps.length === 0) return;
-        for (let i = 0; i < spacingSwaps.length; i++) {
-            const swap = spacingSwaps[i];
-            if (!swap) continue;
-            const groupNum = parseInt(swap.groupNum, 10);
-            const thu = swap.thursdayKey;
-            const partner = swap.partnerKey;
-            if (!Number.isFinite(groupNum) || !thu || !partner) continue;
-            const onThursday = swap.thursdayPerson || null;
-            const onPartner = swap.displacedFromThursday || swap.displacedPerson || null;
-            if (!assignments[thu]) assignments[thu] = {};
-            if (!assignments[partner]) assignments[partner] = {};
-            if (onThursday) {
-                assignments[thu][groupNum] = onThursday;
-                syncSimulatedNormalAssignee(simulated, thu, groupNum, onThursday);
-            }
-            if (onPartner) {
-                assignments[partner][groupNum] = onPartner;
-                syncSimulatedNormalAssignee(simulated, partner, groupNum, onPartner);
-            }
-        }
     }
 
     function findPersonIndexInList(groupPeople, personName) {
@@ -1186,6 +1145,200 @@
                   ? groups[groupNum]
                   : null;
         return (gd && gd.normal) || [];
+    }
+
+    /**
+     * Baseline καθημερινής (πριν Ν) — για ανταλλαγή όταν η Πέμπτη έχει ήδη το ίδιο
+     * άτομο με Τρίτη/Δευ/Τετ εντός 5 ημερών (π.χ. σειρά = νο 10, ήδη λάθος νο 8 και στις δύο).
+     */
+    function getNormalBaselinePersonForNight(dateKey, groupNum) {
+        if (!dateKey || !groupNum) return null;
+        const g = Number(groupNum);
+        const steps =
+            typeof calculationSteps !== 'undefined' && calculationSteps ? calculationSteps : null;
+        if (!steps) return null;
+        const fromMap = (map) => {
+            if (!map || typeof map !== 'object') return null;
+            return map[dateKey]?.[g] ?? map[dateKey]?.[groupNum] ?? map[dateKey]?.[String(g)] ?? null;
+        };
+        return (
+            fromMap(steps.tempNormalBaselineDisplay) ||
+            fromMap(steps.tempNormalBaselineAssignments) ||
+            null
+        );
+    }
+
+    /** Most recent earlier normal date (within maxDays) where this person is assigned. */
+    function findEarlierNormalDateWithPerson(person, groupNum, dateKey, assignments, maxDays) {
+        if (!person || !dateKey || !assignments) return null;
+        const current = new Date(dateKey + 'T00:00:00');
+        if (isNaN(current.getTime())) return null;
+        const pNorm = normPerson(person);
+        const g = Number(groupNum);
+        let best = null;
+        let bestDiff = Infinity;
+        for (const dk of Object.keys(assignments)) {
+            if (!dk || dk >= dateKey) continue;
+            const assigned = assignments[dk]?.[g] ?? assignments[dk]?.[groupNum];
+            if (!assigned || normPerson(assigned) !== pNorm) continue;
+            const other = new Date(dk + 'T00:00:00');
+            if (isNaN(other.getTime())) continue;
+            const daysDiff = Math.floor((current - other) / (1000 * 60 * 60 * 24));
+            if (daysDiff > 0 && daysDiff <= maxDays && daysDiff < bestDiff) {
+                bestDiff = daysDiff;
+                best = dk;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * When Πέμπτη and an earlier day (e.g. Τρίτη) both have the same person P (duplicate),
+     * restore swap semantics: earlier ← baseline/sequence person B, Πέμπτη ← P.
+     * Example: 06/10 and 08/10 both νο 8, baseline 08/10 = νο 10 → 06/10=10, 08/10=8.
+     */
+    function resolveDuplicateThursdayWithBaselineExchange(
+        thursdayKey,
+        groupNum,
+        person,
+        assignments,
+        normalDays,
+        simulated,
+        runtimeLastThu,
+        markers,
+        spacingSwaps
+    ) {
+        const earlierKey = findEarlierNormalDateWithPerson(
+            person,
+            groupNum,
+            thursdayKey,
+            assignments,
+            5
+        );
+        if (!earlierKey) return null;
+
+        let otherPerson = getNormalBaselinePersonForNight(thursdayKey, groupNum);
+        if (!otherPerson || normPerson(otherPerson) === normPerson(person)) {
+            const groupPeople = getNightGroupNormalPeople(groupNum, thursdayKey);
+            const fromIdx = findPersonIndexInList(groupPeople, person);
+            // Temporarily clear thursday so 5-day check sees only earlierKey occupancy
+            const savedThu = assignments[thursdayKey]?.[groupNum];
+            if (assignments[thursdayKey]) {
+                delete assignments[thursdayKey][groupNum];
+            }
+            const picked = pickNextEligibleNormalPerson(
+                groupPeople,
+                fromIdx >= 0 ? fromIdx : -1,
+                groupNum,
+                thursdayKey,
+                null,
+                assignments
+            );
+            if (savedThu != null) {
+                if (!assignments[thursdayKey]) assignments[thursdayKey] = {};
+                assignments[thursdayKey][groupNum] = savedThu;
+            }
+            otherPerson = picked.person;
+        }
+        if (!otherPerson || normPerson(otherPerson) === normPerson(person)) return null;
+
+        // otherPerson must be allowed on earlier day
+        const earlierDate = new Date(earlierKey + 'T00:00:00');
+        if (
+            typeof isPersonMissingOnDate === 'function' &&
+            !isNaN(earlierDate.getTime()) &&
+            isPersonMissingOnDate(otherPerson, groupNum, earlierDate, 'normal')
+        ) {
+            return null;
+        }
+
+        if (!assignments[thursdayKey]) assignments[thursdayKey] = {};
+        if (!assignments[earlierKey]) assignments[earlierKey] = {};
+        assignments[thursdayKey][groupNum] = person;
+        assignments[earlierKey][groupNum] = otherPerson;
+        syncSimulatedNormalAssignee(simulated, thursdayKey, groupNum, person);
+        syncSimulatedNormalAssignee(simulated, earlierKey, groupNum, otherPerson);
+
+        const spacing = personPassesThursdaySpacing(
+            person,
+            groupNum,
+            thursdayKey,
+            assignments,
+            runtimeLastThu
+        );
+        const reason =
+            `Ανταλλαγή Ν / 5 ημερών: ο/η ${person} κρατά την Πέμπτη ${formatDateKeyElGR(thursdayKey)}· ` +
+            `ο/η ${otherPerson} (βασική σειρά Πέμπτης) μεταφέρεται στην ${formatDateKeyElGR(earlierKey)}.`;
+        const pairId =
+            typeof getNextSwapPairIdForAssignmentReasons === 'function'
+                ? getNextSwapPairIdForAssignmentReasons()
+                : null;
+        const metaBase = {
+            thursdaySpacing: true,
+            thursdaySpacingFiveDayExchange: true,
+            displacedPerson: otherPerson,
+            replacementPerson: person,
+            thursdayDateKey: thursdayKey,
+            partnerDateKey: earlierKey,
+            nRequired: spacing.nRequired,
+            thursdaysSince: spacing.thursdaysSince,
+            lastThursday: spacing.lastThursday || null
+        };
+        if (typeof storeAssignmentReason === 'function') {
+            if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
+                clearAssignmentReasonForPersonOnDate(thursdayKey, groupNum, otherPerson);
+                clearAssignmentReasonForPersonOnDate(earlierKey, groupNum, person);
+            }
+            storeAssignmentReason(
+                thursdayKey,
+                groupNum,
+                person,
+                'swap',
+                reason,
+                otherPerson,
+                pairId,
+                metaBase
+            );
+            storeAssignmentReason(
+                earlierKey,
+                groupNum,
+                otherPerson,
+                'swap',
+                reason,
+                person,
+                pairId,
+                metaBase
+            );
+        }
+        setSpacingMarker(markers, thursdayKey, groupNum, person, {
+            status: 'swap',
+            partnerDateKey: earlierKey,
+            partnerPerson: otherPerson,
+            swapPairId: pairId,
+            nRequired: spacing.nRequired,
+            thursdaysSince: spacing.thursdaysSince,
+            reason
+        });
+        setSpacingMarker(markers, earlierKey, groupNum, otherPerson, {
+            status: 'swap',
+            partnerDateKey: thursdayKey,
+            partnerPerson: person,
+            swapPairId: pairId,
+            nRequired: spacing.nRequired,
+            thursdaysSince: spacing.thursdaysSince,
+            reason
+        });
+        spacingSwaps.push({
+            thursdayKey,
+            partnerKey: earlierKey,
+            groupNum,
+            thursdayPerson: person,
+            partnerPerson: otherPerson,
+            displacedFromThursday: otherPerson,
+            fiveDayExchange: true
+        });
+        runtimeLastThu[`${groupNum}:${normPerson(person)}`] = thursdayKey;
+        return { earlierKey, otherPerson, person };
     }
 
     /**
@@ -1271,12 +1424,8 @@
         const reason =
             typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, assignee) : null;
         if (!reason) return false;
+        // Μην παγώνεις Ν-swaps: μεταγενέστερα Ν πάνω σε παλιά ουρά πρέπει να ξαναγραφτούν.
         if (reason.meta?.manualAlternateReplacement || reason.meta?.preserveBaseline) return true;
-        // Freeze completed Ν Πέμπτης ↔ εταίρος pairs so later resequence cannot put
-        // e.g. #8 back on Tuesday after they were swapped onto Thursday.
-        if (reason.type === 'swap' && reason.meta?.thursdaySpacing && !reason.meta?.thursdaySpacingFail) {
-            return true;
-        }
         return false;
     }
 
@@ -1333,9 +1482,8 @@
 
             const prev = getAssigneeOnDate(dateKey, groupNum, assignments);
 
-            // Εταίρος / Πέμπτη Ν: κράτα το ζεύγος ανταλλαγής — μην ξαναγράψεις
+            // Εταίρος Ν μετά την Πέμπτη: κράτα assignment, μην μετακινείς δείκτη στον displaced εκεί
             if (frozen && frozen.has(dateKey)) {
-                if (prev) lastPerson = prev;
                 continue;
             }
 
@@ -1449,12 +1597,10 @@
         const afterDateKey = thu;
         const seedPerson = displacedPerson;
 
-        // Always freeze BOTH sides of the Ν pair (Tue↔Thu etc.). Previously only
-        // partner>thu was frozen, so an earlier Thursday's resequence could put the
-        // Thursday person back onto a prior partner day (e.g. #8 on 06/10 and 08/10).
+        // Always freeze the N-partner weekday so resequence never puts the Thursday
+        // person back on e.g. Tuesday after a 06↔08 exchange.
         const frozenDateKeys = new Set();
-        frozenDateKeys.add(thu);
-        frozenDateKeys.add(partner);
+        if (partner) frozenDateKeys.add(partner);
 
         const skipPersonNorms = new Set();
         if (thursdayPerson) skipPersonNorms.add(normPerson(thursdayPerson));
@@ -1474,19 +1620,8 @@
         );
         if (n > 0) {
             console.log(
-                `[THURSDAY SPACING] Mid-pass resequence group ${groupNum} after Thursday ${afterDateKey} (seed=displaced ${seedPerson}, skipPair=${[...skipPersonNorms].join('|')}, freeze=${thu}+${partner}): ${n} day(s)`
+                `[THURSDAY SPACING] Mid-pass resequence group ${groupNum} after Thursday ${afterDateKey} (seed=displaced ${seedPerson}, skipPair=${[...skipPersonNorms].join('|')}, freezePartner=${partner || '—'}): ${n} day(s)`
             );
-        }
-        // Re-assert swap pair after resequence (displaced on partner day, partner on Thursday)
-        if (!assignments[thu]) assignments[thu] = {};
-        if (!assignments[partner]) assignments[partner] = {};
-        if (thursdayPerson) {
-            assignments[thu][groupNum] = thursdayPerson;
-            syncSimulatedNormalAssignee(simulated, thu, groupNum, thursdayPerson);
-        }
-        if (displacedPerson) {
-            assignments[partner][groupNum] = displacedPerson;
-            syncSimulatedNormalAssignee(simulated, partner, groupNum, displacedPerson);
         }
         return n;
     }
@@ -1506,22 +1641,19 @@
             const thu = swap.thursdayKey;
             const partner = swap.partnerKey;
             if (!thu || !partner) continue;
-            if (!perGroup[groupNum]) {
+            if (!perGroup[groupNum] || thu < perGroup[groupNum].earliestThu) {
                 perGroup[groupNum] = {
                     earliestThu: thu,
                     partner,
                     displacedFromThursday: swap.displacedFromThursday || swap.displacedPerson || null,
-                    frozenPairDates: new Set()
+                    partnersAfter: new Set()
                 };
-            } else if (thu < perGroup[groupNum].earliestThu) {
-                perGroup[groupNum].earliestThu = thu;
-                perGroup[groupNum].partner = partner;
-                perGroup[groupNum].displacedFromThursday =
-                    swap.displacedFromThursday || swap.displacedPerson || null;
             }
-            if (!perGroup[groupNum].frozenPairDates) perGroup[groupNum].frozenPairDates = new Set();
-            perGroup[groupNum].frozenPairDates.add(thu);
-            perGroup[groupNum].frozenPairDates.add(partner);
+            if (partner > thu) {
+                (perGroup[groupNum].partnersAfter || (perGroup[groupNum].partnersAfter = new Set())).add(
+                    partner
+                );
+            }
         }
 
         let total = 0;
@@ -1548,7 +1680,7 @@
                 thu,
                 seedPerson,
                 simulated,
-                info.frozenPairDates || new Set(),
+                info.partnersAfter || new Set(),
                 skipPersonNorms
             );
             if (n > 0) {
@@ -1634,14 +1766,10 @@
             calculationSteps.thursdaySpacingIterativeSwaps = cumulativeSwaps;
         }
 
-        const finalSwaps = cumulativeSwaps.length ? cumulativeSwaps : lastResult.spacingSwaps || [];
-        const simulatedFinal = buildSimulatedForSpacing(assignments, dayTypeLists);
-        assertSpacingSwapPairIntegrity(assignments, finalSwaps, simulatedFinal);
-
         return {
             assignments,
             markers: lastResult.markers || {},
-            spacingSwaps: finalSwaps,
+            spacingSwaps: cumulativeSwaps.length ? cumulativeSwaps : lastResult.spacingSwaps || [],
             spacingFails: lastResult.spacingFails || []
         };
     }
