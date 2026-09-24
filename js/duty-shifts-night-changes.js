@@ -1136,7 +1136,38 @@
             calculationSteps.thursdaySpacingFails = spacingFails;
         }
 
+        // Ensure every Ν pair stays as exchanged: partner→Πέμπτη, displaced→ημέρα εταίρου
+        assertSpacingSwapPairIntegrity(assignments, spacingSwaps, simulated);
+
         return { assignments, markers, spacingSwaps, spacingFails };
+    }
+
+    /**
+     * After resequence / iterative passes, force each Ν-swap pair back to the exchanged people.
+     * Prevents e.g. #8 remaining on Tuesday after being moved to Thursday.
+     */
+    function assertSpacingSwapPairIntegrity(assignments, spacingSwaps, simulated) {
+        if (!assignments || !Array.isArray(spacingSwaps) || spacingSwaps.length === 0) return;
+        for (let i = 0; i < spacingSwaps.length; i++) {
+            const swap = spacingSwaps[i];
+            if (!swap) continue;
+            const groupNum = parseInt(swap.groupNum, 10);
+            const thu = swap.thursdayKey;
+            const partner = swap.partnerKey;
+            if (!Number.isFinite(groupNum) || !thu || !partner) continue;
+            const onThursday = swap.thursdayPerson || null;
+            const onPartner = swap.displacedFromThursday || swap.displacedPerson || null;
+            if (!assignments[thu]) assignments[thu] = {};
+            if (!assignments[partner]) assignments[partner] = {};
+            if (onThursday) {
+                assignments[thu][groupNum] = onThursday;
+                syncSimulatedNormalAssignee(simulated, thu, groupNum, onThursday);
+            }
+            if (onPartner) {
+                assignments[partner][groupNum] = onPartner;
+                syncSimulatedNormalAssignee(simulated, partner, groupNum, onPartner);
+            }
+        }
     }
 
     function findPersonIndexInList(groupPeople, personName) {
@@ -1240,8 +1271,12 @@
         const reason =
             typeof getAssignmentReason === 'function' ? getAssignmentReason(dateKey, groupNum, assignee) : null;
         if (!reason) return false;
-        // Μην παγώνεις Ν-swaps: μεταγενέστερα Ν πάνω σε παλιά ουρά πρέπει να ξαναγραφτούν.
         if (reason.meta?.manualAlternateReplacement || reason.meta?.preserveBaseline) return true;
+        // Freeze completed Ν Πέμπτης ↔ εταίρος pairs so later resequence cannot put
+        // e.g. #8 back on Tuesday after they were swapped onto Thursday.
+        if (reason.type === 'swap' && reason.meta?.thursdaySpacing && !reason.meta?.thursdaySpacingFail) {
+            return true;
+        }
         return false;
     }
 
@@ -1298,8 +1333,9 @@
 
             const prev = getAssigneeOnDate(dateKey, groupNum, assignments);
 
-            // Εταίρος Ν μετά την Πέμπτη: κράτα assignment, μην μετακινείς δείκτη στον displaced εκεί
+            // Εταίρος / Πέμπτη Ν: κράτα το ζεύγος ανταλλαγής — μην ξαναγράψεις
             if (frozen && frozen.has(dateKey)) {
+                if (prev) lastPerson = prev;
                 continue;
             }
 
@@ -1413,10 +1449,12 @@
         const afterDateKey = thu;
         const seedPerson = displacedPerson;
 
+        // Always freeze BOTH sides of the Ν pair (Tue↔Thu etc.). Previously only
+        // partner>thu was frozen, so an earlier Thursday's resequence could put the
+        // Thursday person back onto a prior partner day (e.g. #8 on 06/10 and 08/10).
         const frozenDateKeys = new Set();
-        if (partner > thu) {
-            frozenDateKeys.add(partner);
-        }
+        frozenDateKeys.add(thu);
+        frozenDateKeys.add(partner);
 
         const skipPersonNorms = new Set();
         if (thursdayPerson) skipPersonNorms.add(normPerson(thursdayPerson));
@@ -1436,8 +1474,19 @@
         );
         if (n > 0) {
             console.log(
-                `[THURSDAY SPACING] Mid-pass resequence group ${groupNum} after Thursday ${afterDateKey} (seed=displaced ${seedPerson}, skipPair=${[...skipPersonNorms].join('|')}, freezePartner=${partner > thu ? partner : '—'}): ${n} day(s)`
+                `[THURSDAY SPACING] Mid-pass resequence group ${groupNum} after Thursday ${afterDateKey} (seed=displaced ${seedPerson}, skipPair=${[...skipPersonNorms].join('|')}, freeze=${thu}+${partner}): ${n} day(s)`
             );
+        }
+        // Re-assert swap pair after resequence (displaced on partner day, partner on Thursday)
+        if (!assignments[thu]) assignments[thu] = {};
+        if (!assignments[partner]) assignments[partner] = {};
+        if (thursdayPerson) {
+            assignments[thu][groupNum] = thursdayPerson;
+            syncSimulatedNormalAssignee(simulated, thu, groupNum, thursdayPerson);
+        }
+        if (displacedPerson) {
+            assignments[partner][groupNum] = displacedPerson;
+            syncSimulatedNormalAssignee(simulated, partner, groupNum, displacedPerson);
         }
         return n;
     }
@@ -1457,19 +1506,22 @@
             const thu = swap.thursdayKey;
             const partner = swap.partnerKey;
             if (!thu || !partner) continue;
-            if (!perGroup[groupNum] || thu < perGroup[groupNum].earliestThu) {
+            if (!perGroup[groupNum]) {
                 perGroup[groupNum] = {
                     earliestThu: thu,
                     partner,
                     displacedFromThursday: swap.displacedFromThursday || swap.displacedPerson || null,
-                    partnersAfter: new Set()
+                    frozenPairDates: new Set()
                 };
+            } else if (thu < perGroup[groupNum].earliestThu) {
+                perGroup[groupNum].earliestThu = thu;
+                perGroup[groupNum].partner = partner;
+                perGroup[groupNum].displacedFromThursday =
+                    swap.displacedFromThursday || swap.displacedPerson || null;
             }
-            if (partner > thu) {
-                (perGroup[groupNum].partnersAfter || (perGroup[groupNum].partnersAfter = new Set())).add(
-                    partner
-                );
-            }
+            if (!perGroup[groupNum].frozenPairDates) perGroup[groupNum].frozenPairDates = new Set();
+            perGroup[groupNum].frozenPairDates.add(thu);
+            perGroup[groupNum].frozenPairDates.add(partner);
         }
 
         let total = 0;
@@ -1496,7 +1548,7 @@
                 thu,
                 seedPerson,
                 simulated,
-                info.partnersAfter || new Set(),
+                info.frozenPairDates || new Set(),
                 skipPersonNorms
             );
             if (n > 0) {
@@ -1582,10 +1634,14 @@
             calculationSteps.thursdaySpacingIterativeSwaps = cumulativeSwaps;
         }
 
+        const finalSwaps = cumulativeSwaps.length ? cumulativeSwaps : lastResult.spacingSwaps || [];
+        const simulatedFinal = buildSimulatedForSpacing(assignments, dayTypeLists);
+        assertSpacingSwapPairIntegrity(assignments, finalSwaps, simulatedFinal);
+
         return {
             assignments,
             markers: lastResult.markers || {},
-            spacingSwaps: cumulativeSwaps.length ? cumulativeSwaps : lastResult.spacingSwaps || [],
+            spacingSwaps: finalSwaps,
             spacingFails: lastResult.spacingFails || []
         };
     }
