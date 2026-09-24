@@ -1538,6 +1538,75 @@
             return false;
         }
 
+        /**
+         * Semi only: person has a missing period covering the entire calendar month of `date`.
+         * Used so whole-month absentees do not occupy / jump the ημιαργία rotation (e.g. #4,#6 out → #5 keeps their slot).
+         */
+        function isPersonAbsentEntireCalendarMonth(personName, groupNum, date) {
+            if (!personName || !date || typeof getMissingPeriodsForPersonNorm !== 'function') return false;
+            const y = date.getFullYear();
+            const m = date.getMonth();
+            const monthFirst = formatDateKey(new Date(y, m, 1));
+            const monthLast = formatDateKey(new Date(y, m + 1, 0));
+            if (!monthFirst || !monthLast) return false;
+            const periods = getMissingPeriodsForPersonNorm(groupNum, personName);
+            if (!Array.isArray(periods) || periods.length === 0) return false;
+            for (let i = 0; i < periods.length; i++) {
+                const p = periods[i];
+                if (!p) continue;
+                const sk = typeof inputValueToDateKey === 'function' ? inputValueToDateKey(p.start) : (p.start || null);
+                const ek = typeof inputValueToDateKey === 'function' ? inputValueToDateKey(p.end) : (p.end || null);
+                if (sk && ek && sk <= monthFirst && ek >= monthLast) return true;
+            }
+            return false;
+        }
+
+        /** Advance semi cursor forward while landing on whole-month-absent people. */
+        function snapSemiIndexPastWholeMonthAbsent(groupPeople, groupNum, date, index) {
+            if (!Array.isArray(groupPeople) || groupPeople.length === 0) return 0;
+            const len = groupPeople.length;
+            let idx = ((Number(index) || 0) % len + len) % len;
+            for (let n = 0; n < len; n++) {
+                const person = groupPeople[idx];
+                if (!person || !isPersonAbsentEntireCalendarMonth(person, groupNum, date)) return idx;
+                idx = (idx + 1) % len;
+            }
+            return idx;
+        }
+
+        /**
+         * Semi only: whole-month absentees do not keep a rotation slot.
+         * If cursor is on a whole-month-absent person, prefer a sandwiched available person
+         * immediately before that absent streak (e.g. #5 between #4 and #6), else snap forward.
+         * Short (non-whole-month) absences are unchanged — still handled by missing replacement.
+         */
+        function resolveSemiRotationIndexAroundWholeMonthAbsent(groupPeople, groupNum, date, index) {
+            if (!Array.isArray(groupPeople) || groupPeople.length === 0) return 0;
+            const len = groupPeople.length;
+            let idx = ((Number(index) || 0) % len + len) % len;
+            const atPerson = groupPeople[idx];
+            if (!atPerson || !isPersonAbsentEntireCalendarMonth(atPerson, groupNum, date)) return idx;
+
+            for (let back = 1; back < len; back++) {
+                const j = (idx - back + len) % len;
+                const p = groupPeople[j];
+                if (!p) continue;
+                if (isPersonAbsentEntireCalendarMonth(p, groupNum, date)) continue;
+                const beforePerson = groupPeople[(j - 1 + len) % len];
+                const sandwiched =
+                    !!beforePerson && isPersonAbsentEntireCalendarMonth(beforePerson, groupNum, date);
+                if (
+                    sandwiched &&
+                    !(typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(p, groupNum, 'semi')) &&
+                    !(typeof isPersonMissingOnDate === 'function' && isPersonMissingOnDate(p, groupNum, date, 'semi'))
+                ) {
+                    return j;
+                }
+                break;
+            }
+            return snapSemiIndexPastWholeMonthAbsent(groupPeople, groupNum, date, idx);
+        }
+
         /** First eligible semi on/after threshold: prefer same calendar month as threshold, then any later semi in range. */
         function pickSemiReturnFromMissingTargetKey(sortedSemi, thirdDayAfterEnd, calcStartKey, calcEndKey, occupiedMap, groupNum) {
             if (!thirdDayAfterEnd || !Array.isArray(sortedSemi) || sortedSemi.length === 0 || !calcStartKey || !calcEndKey) return null;
@@ -11236,6 +11305,9 @@
                             }
                         }
                     }
+                    // Whole-month absentees must not hold ημιαργία slots (e.g. #4+#6 out → #5 keeps place between them)
+                    pos = resolveSemiRotationIndexAroundWholeMonthAbsent(groupPeople, groupNum, date, pos);
+                    globalSemiPos[groupNum] = pos;
                     let person = groupPeople[pos];
                     const rotationPersonAtSlot = person;
                     let nextPos = (pos + 1) % rotationDays; // default: next slot goes to person after current pos
@@ -11377,6 +11449,8 @@
                         normSemiRun(baseline[dateKey][groupNum]) === normSemiRun(existingManualAlternateSemiRun.replacement)) {
                         nextPos = (pos + 1) % rotationDays;
                     }
+                    // Skip whole-month absentees so next ημιαργία is e.g. after #5 → #7 (not #6)
+                    nextPos = snapSemiIndexPastWholeMonthAbsent(groupPeople, groupNum, date, nextPos);
                     globalSemiPos[groupNum] = nextPos;
                 }
             }
@@ -12112,6 +12186,14 @@
                             );
                             let rotationPosition = manualAltResolvedSemi.rotationPosition;
                             const existingManualAlternateSemi = manualAltResolvedSemi.existingManualAlternate;
+                            // Whole-month absentees must not hold ημιαργία slots (e.g. #4+#6 out → #5 keeps place between them)
+                            rotationPosition = resolveSemiRotationIndexAroundWholeMonthAbsent(
+                                groupPeople,
+                                groupNum,
+                                date,
+                                rotationPosition
+                            );
+                            globalSemiRotationPosition[groupNum] = rotationPosition;
                             
                             // IMPORTANT: Track the rotation person (who SHOULD be assigned according to rotation)
                             // This is the person BEFORE any swap/cross-month logic
@@ -12150,7 +12232,12 @@
                                     wasReplaced = true;
                                     wasDisabledOnlySkippedSemi = true;
                                     foundEligible = true;
-                                    globalSemiRotationPosition[groupNum] = (idx + 1) % rotationDays;
+                                    globalSemiRotationPosition[groupNum] = snapSemiIndexPastWholeMonthAbsent(
+                                        groupPeople,
+                                        groupNum,
+                                        date,
+                                        (idx + 1) % rotationDays
+                                    );
                                     break;
                                 }
                                 if (!foundEligible) assignedPerson = null;
@@ -12245,7 +12332,12 @@
                                     assignedPerson = pendingPerson;
                                     delete pendingSwaps[monthKey][groupNum];
                                     // Advance rotation normally from this position
-                                    globalSemiRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                    globalSemiRotationPosition[groupNum] = snapSemiIndexPastWholeMonthAbsent(
+                                        groupPeople,
+                                        groupNum,
+                                        date,
+                                        (rotationPosition + 1) % rotationDays
+                                    );
                                 } else {
                                     // Pending swap person is disabled/missing - skip them
                                     delete pendingSwaps[monthKey][groupNum];
@@ -12319,6 +12411,13 @@
                                         replacementIndex,
                                         isManualAlternateReplacement: isManualAltSemi
                                     }
+                                );
+                                // Skip whole-month absentees so next ημιαργία is e.g. after #5 → #7 (not #6)
+                                globalSemiRotationPosition[groupNum] = snapSemiIndexPastWholeMonthAbsent(
+                                    groupPeople,
+                                    groupNum,
+                                    date,
+                                    globalSemiRotationPosition[groupNum]
                                 );
                             }
                             
