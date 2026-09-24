@@ -5762,7 +5762,8 @@
             };
 
             /** Final assignees as shown in Excel preview (calendar days of this duty type). */
-            const collectAssignedChronoForType = (type) => {
+            const collectAssignedChronoEntriesForType = (type) => {
+                const orderList = orderListForType(type);
                 const out = [];
                 const dim =
                     Number.isFinite(daysInMonth) && daysInMonth > 0
@@ -5773,10 +5774,19 @@
                     const dk = formatDateKey(date);
                     if (getDutyCategoryForDateKeyLocal(dk) !== type) continue;
                     const person = finalAssignedOnDate(dk);
-                    if (person) out.push(normName(person));
+                    if (!person) continue;
+                    const name = normName(person);
+                    const idx = findIdxInList(orderList, name);
+                    out.push({
+                        dateKey: dk,
+                        person: name,
+                        orderNo: idx >= 0 ? idx + 1 : null
+                    });
                 }
                 return out;
             };
+            const collectAssignedChronoForType = (type) =>
+                collectAssignedChronoEntriesForType(type).map((e) => e.person);
 
             const splitAssignedIntoLapsByOrderWrap = (chronoNames, orderList) => {
                 const laps = [];
@@ -5838,15 +5848,37 @@
             const resolveAscendingAnchorFromLastLap = (type, chronoNames) => {
                 const orderList = orderListForType(type);
                 const laps = splitAssignedIntoLapsByOrderWrap(chronoNames, orderList);
-                if (!laps.length) return { person: '', idx: -1 };
+                const empty = {
+                    person: '',
+                    idx: -1,
+                    method: 'none',
+                    lapsOrderNos: [],
+                    lastLapOrderNos: [],
+                    chainOrderNos: []
+                };
+                if (!laps.length) return empty;
                 const lastLap = laps[laps.length - 1];
                 const indices = lastLap
                     .map((name) => ({ name, idx: findIdxInList(orderList, name) }))
                     .filter((x) => x.idx >= 0);
+                const lapsOrderNos = laps.map((lap) =>
+                    lap.map((name) => {
+                        const i = findIdxInList(orderList, name);
+                        return i >= 0 ? i + 1 : '?';
+                    })
+                );
+                const lastLapOrderNos = indices.map((x) => x.idx + 1);
 
                 if (!indices.length) {
                     const fallback = normName(lastLap[lastLap.length - 1] || '');
-                    return { person: fallback, idx: findIdxInList(orderList, fallback) };
+                    return {
+                        person: fallback,
+                        idx: findIdxInList(orderList, fallback),
+                        method: 'fallback-last',
+                        lapsOrderNos,
+                        lastLapOrderNos,
+                        chainOrderNos: []
+                    };
                 }
 
                 const firstIdx = indices[0].idx;
@@ -5854,22 +5886,68 @@
                 const restartedNearStart = firstIdx <= 1;
                 const chain = ascendingPlusOneChain(indices, orderList);
                 const byMax = maxIndexInLap(indices, orderList);
+                const chainOrderNos = [];
+                if (chain) {
+                    for (let i = firstIdx; i <= chain.idx; i++) chainOrderNos.push(i + 1);
+                }
 
                 // Only +1 chain when new lap restarts near list start (#1/#2), e.g. αργίες 1→2→3→4.
                 // Mid-list restart (e.g. καθημερινές #16→#3) must use max of the lap (#14), not early chain stop.
                 if (hadPriorLap && restartedNearStart && chain) {
-                    return chain;
+                    return {
+                        person: chain.person,
+                        idx: chain.idx,
+                        method: 'ascending-chain',
+                        lapsOrderNos,
+                        lastLapOrderNos,
+                        chainOrderNos
+                    };
                 }
-                if (byMax) return byMax;
+                if (byMax) {
+                    return {
+                        person: byMax.person,
+                        idx: byMax.idx,
+                        method: 'max-in-lap',
+                        lapsOrderNos,
+                        lastLapOrderNos,
+                        chainOrderNos
+                    };
+                }
                 const fallback = normName(lastLap[lastLap.length - 1] || '');
-                return { person: fallback, idx: findIdxInList(orderList, fallback) };
+                return {
+                    person: fallback,
+                    idx: findIdxInList(orderList, fallback),
+                    method: 'fallback-last',
+                    lapsOrderNos,
+                    lastLapOrderNos,
+                    chainOrderNos
+                };
             };
 
+            const debugByType = {};
+            const typeLabels = {
+                normal: 'Καθημερινές',
+                semi: 'Ημιαργίες',
+                weekend: 'Αργίες',
+                special: 'Ειδικές Αργίες'
+            };
             for (const t of ['normal', 'semi', 'weekend', 'special']) {
-                const chrono = collectAssignedChronoForType(t);
+                const entries = collectAssignedChronoEntriesForType(t);
+                const chrono = entries.map((e) => e.person);
                 const resolved = resolveAscendingAnchorFromLastLap(t, chrono);
                 lastAssigned[t] = resolved.person || '';
                 lastAssignedIdx[t] = Number.isFinite(resolved.idx) ? resolved.idx : -1;
+                debugByType[t] = {
+                    label: typeLabels[t],
+                    chrono: entries,
+                    chronoOrderNos: entries.map((e) => e.orderNo),
+                    lapsOrderNos: resolved.lapsOrderNos || [],
+                    lastLapOrderNos: resolved.lastLapOrderNos || [],
+                    chainOrderNos: resolved.chainOrderNos || [],
+                    method: resolved.method || 'none',
+                    anchorOrderNo: resolved.idx >= 0 ? resolved.idx + 1 : null,
+                    anchorPerson: resolved.person || ''
+                };
             }
 
             const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
@@ -5999,18 +6077,29 @@
                 return { names: outNames, notes: outNotes };
             };
             const specialNext = nextThreeForSpecial();
+            const nextResult = {
+                normal: nextTwoForType('normal'),
+                semi: nextTwoForType('semi'),
+                weekend: nextTwoForType('weekend'),
+                special: specialNext.names
+            };
+            for (const t of ['normal', 'semi', 'weekend', 'special']) {
+                if (!debugByType[t]) continue;
+                const orderList = orderListForType(t);
+                debugByType[t].nextPeople = nextResult[t] || [];
+                debugByType[t].nextOrderNos = (nextResult[t] || []).map((p) => {
+                    const i = findIdxInList(orderList, p);
+                    return i >= 0 ? i + 1 : null;
+                });
+            }
 
             return {
                 lastAssigned,
-                next: {
-                    normal: nextTwoForType('normal'),
-                    semi: nextTwoForType('semi'),
-                    weekend: nextTwoForType('weekend'),
-                    special: specialNext.names
-                },
+                next: nextResult,
                 nextNotes: {
                     special: specialNext.notes
-                }
+                },
+                debug: debugByType
             };
         }
 
@@ -6224,7 +6313,8 @@
                     },
                     nextNotes: {
                         special: [...(rotationInfo.nextNotes?.special || [])]
-                    }
+                    },
+                    debug: rotationInfo.debug || null
                 };
                 _excelAlternateOverrides[groupNum] = {
                     normal: [..._excelAlternateAutoByGroup[groupNum].next.normal],
@@ -6360,6 +6450,10 @@
                                 ${renderAlternateRows('semi', rotationInfo.next.semi)}
                                 ${renderAlternateRows('weekend', rotationInfo.next.weekend)}
                                 ${renderAlternateRows('special', rotationInfo.next.special, rotationInfo.nextNotes?.special || [])}
+                                <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2 excel-alt-debug-btn" data-group="${groupNum}">
+                                    <i class="fas fa-list-ol me-1"></i>Σειρά αναθέσεων (debug)
+                                </button>
+                                <div class="excel-alt-debug-panel mt-2 small border rounded bg-white p-2" data-group="${groupNum}" style="display:none; max-height:320px; overflow:auto;"></div>
                             </div>
                         </div>
                     </div>
@@ -6495,6 +6589,65 @@
                             sel.value = '';
                         }
                     });
+                });
+            });
+            previewContent.querySelectorAll('.excel-alt-debug-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const g = Number(btn.getAttribute('data-group'));
+                    const panel = previewContent.querySelector(`.excel-alt-debug-panel[data-group="${g}"]`);
+                    const debug = _excelAlternateAutoByGroup?.[g]?.debug;
+                    if (!panel) return;
+                    if (panel.style.display !== 'none') {
+                        panel.style.display = 'none';
+                        return;
+                    }
+                    if (!debug) {
+                        panel.innerHTML = '<div class="text-muted">Δεν υπάρχουν δεδομένα σειράς.</div>';
+                        panel.style.display = 'block';
+                        return;
+                    }
+                    const methodLabel = {
+                        'ascending-chain': 'αλυσίδα +1 (γύρος από #1/#2)',
+                        'max-in-lap': 'μέγιστη θέση τελευταίου γύρου',
+                        'fallback-last': 'τελευταίος χρονολογικά',
+                        none: '—'
+                    };
+                    const blocks = ['normal', 'semi', 'weekend', 'special'].map((t) => {
+                        const d = debug[t];
+                        if (!d) return '';
+                        const chronoLine = (d.chrono || [])
+                            .map((e) => {
+                                const n = e.orderNo != null ? `#${e.orderNo}` : '#?';
+                                const dk = e.dateKey ? e.dateKey.slice(8) + '/' + e.dateKey.slice(5, 7) : '';
+                                return `<span title="${escapeHtml(e.person || '')}">${n}${dk ? `(${dk})` : ''}</span>`;
+                            })
+                            .join(' → ');
+                        const lapsLine = (d.lapsOrderNos || [])
+                            .map((lap, i) => `Γύρος ${i + 1}: ${(lap || []).map((n) => `#${n}`).join(', ')}`)
+                            .join('<br>');
+                        const lastLap = (d.lastLapOrderNos || []).map((n) => `#${n}`).join(', ') || '—';
+                        const chain = (d.chainOrderNos || []).map((n) => `#${n}`).join('→') || '—';
+                        const nextLine = (d.nextOrderNos || [])
+                            .map((n, i) => {
+                                const p = d.nextPeople?.[i] || '';
+                                return n != null ? `#${n} ${escapeHtml(p)}` : escapeHtml(p || '—');
+                            })
+                            .join(' · ');
+                        return `
+                            <div class="mb-2 pb-2 border-bottom">
+                                <div class="fw-semibold">${escapeHtml(d.label || t)}</div>
+                                <div class="text-muted mb-1">Χρονολογικά: ${chronoLine || '—'}</div>
+                                <div class="mb-1">${lapsLine || 'Ένας γύρος'}</div>
+                                <div>Τελευταίος γύρος: <strong>${lastLap}</strong></div>
+                                <div>Μέθοδος: <strong>${escapeHtml(methodLabel[d.method] || d.method)}</strong>
+                                    ${d.method === 'ascending-chain' ? ` (${chain})` : ''}</div>
+                                <div>Άγκυρα: <strong>${d.anchorOrderNo != null ? '#' + d.anchorOrderNo : '—'}</strong>
+                                    ${d.anchorPerson ? escapeHtml(d.anchorPerson) : ''}</div>
+                                <div>Αναπληρωματικοί: ${nextLine || '—'}</div>
+                            </div>`;
+                    }).join('');
+                    panel.innerHTML = blocks || '<div class="text-muted">Κενό</div>';
+                    panel.style.display = 'block';
                 });
             });
             
