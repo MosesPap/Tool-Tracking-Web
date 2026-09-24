@@ -5672,13 +5672,14 @@
 
         /**
          * Excel ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ (background, όλοι οι τύποι):
-         * χρονολογικές αναθέσεις → γύροι όταν η σειρά ξαναρχίζει (υψηλή θέση → χαμηλή)
-         * → στον τελευταίο γύρο: αν άρχισε κοντά στην αρχή (#1/#2) κράτα αύξουσα +1
-         *   (αγνοεί εκτός σειράς π.χ. #16)· αλλιώς μεγαλύτερη θέση του γύρου
-         * → επόμενοι διαθέσιμοι μετά την άγκυρα· αν έφυγε από ομάδα → επόμενος διαθέσιμος.
+         * τελικές αναθέσεις όπως στον πίνακα → γύροι όταν η σειρά ξαναρχίζει (#17→#1)
+         * → τελευταίος γύρος: αύξουσα +1 από την επανεκκίνηση (αγνοεί εκτός σειράς π.χ. #16)
+         *   αλλιώς max θέση· επόμενοι στην ΙΔΙΑ λίστα με τα # του πίνακα
+         * → φίλτρο διαθεσιμότητας για επόμενο μήνα· αν άγκυρα έφυγε → επόμενος διαθέσιμος.
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
+            const lastAssignedIdx = { normal: -1, semi: -1, weekend: -1, special: -1 };
             const normName = (s) => String(s || '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '').replace(/\s+/g, ' ');
             const firstDayOfNextMonth = new Date(year, month + 1, 1);
             const lastDayOfNextMonth = new Date(year, month + 2, 0);
@@ -5686,7 +5687,6 @@
             const nextMonthStartKey = formatDateKey(firstDayOfNextMonth);
             const nextMonthEndKey = formatDateKey(lastDayOfNextMonth);
             const exportMonthEndKey = formatDateKey(lastDayOfExportMonth);
-            const exportMonthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
             const rotationListForType = (type, dateKey) => {
                 if (typeof groupsForDuty === 'function' && dateKey) {
@@ -5696,8 +5696,12 @@
                 }
                 return (groupData?.[type] || []).filter(Boolean);
             };
-            const orderListForType = (type) => rotationListForType(type, exportMonthEndKey);
-            const nextListForType = (type) => rotationListForType(type, nextMonthStartKey);
+            // Same list the preview uses for #N (groupData), so anchor index matches on-screen numbers.
+            const orderListForType = (type) => {
+                const fromGroup = (groupData?.[type] || []).filter(Boolean);
+                if (fromGroup.length) return fromGroup;
+                return rotationListForType(type, exportMonthEndKey);
+            };
 
             const findIdxInList = (list, personName) => {
                 if (!personName || !Array.isArray(list)) return -1;
@@ -5705,6 +5709,13 @@
                 let i = list.indexOf(personName);
                 if (i >= 0) return i;
                 return list.findIndex((p) => normName(p) === n);
+            };
+
+            const finalAssignedOnDate = (dk) => {
+                const assignment =
+                    (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dk) : null) ??
+                    (dutyAssignments?.[dk] || null);
+                return getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
             };
 
             const isDisabledForTypeAtDate = (personName, dutyType, dateKey) => {
@@ -5750,39 +5761,23 @@
                 return true;
             };
 
-            /** Chronological final assignees for this duty type in the export month. */
+            /** Final assignees as shown in Excel preview (calendar days of this duty type). */
             const collectAssignedChronoForType = (type) => {
                 const out = [];
-                if (type === 'normal') {
-                    const sortedDays = getSortedNormalCalendarDateKeysInMonth(year, month);
-                    for (const dk of sortedDays) {
-                        let person =
-                            typeof getPersonOnDateForNormalRotationContinuityLookup === 'function'
-                                ? getPersonOnDateForNormalRotationContinuityLookup(dk, groupNum)
-                                : null;
-                        if (!person) {
-                            const assignment =
-                                (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dk) : null) ??
-                                (dutyAssignments?.[dk] || null);
-                            person = getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
-                        }
-                        if (person) out.push(normName(person));
-                    }
-                    return out;
-                }
-                const dateKeys = collectDateKeysForRotationContinuityScan(type, exportMonthKey);
-                for (const dk of dateKeys) {
+                const dim =
+                    Number.isFinite(daysInMonth) && daysInMonth > 0
+                        ? daysInMonth
+                        : new Date(year, month + 1, 0).getDate();
+                for (let day = 1; day <= dim; day++) {
+                    const date = new Date(year, month, day);
+                    const dk = formatDateKey(date);
                     if (getDutyCategoryForDateKeyLocal(dk) !== type) continue;
-                    const person = getPersonOnDateForRotationContinuityLookup(type, dk, groupNum);
+                    const person = finalAssignedOnDate(dk);
                     if (person) out.push(normName(person));
                 }
                 return out;
             };
 
-            /**
-             * Split when rotation restarts: high list position → low (e.g. #17 → #1).
-             * Small decreases from swaps do not start a lap unless they look like a wrap.
-             */
             const splitAssignedIntoLapsByOrderWrap = (chronoNames, orderList) => {
                 const laps = [];
                 let current = [];
@@ -5809,47 +5804,25 @@
                 return laps;
             };
 
-            /**
-             * After wrap near list start (#1/#2): strict ascending +1 chain (skip out-of-order).
-             * Otherwise (single lap / restart mid-list): highest position in the lap.
-             */
-            const resolveAscendingAnchorFromLastLap = (type, chronoNames) => {
-                const orderList = orderListForType(type);
-                const laps = splitAssignedIntoLapsByOrderWrap(chronoNames, orderList);
-                if (!laps.length) return '';
-                const lastLap = laps[laps.length - 1];
-                const indices = lastLap
-                    .map((name) => ({ name, idx: findIdxInList(orderList, name) }))
-                    .filter((x) => x.idx >= 0);
-
-                if (!indices.length) {
-                    return normName(lastLap[lastLap.length - 1] || '');
-                }
-
-                const firstIdx = indices[0].idx;
-                const restartedNearStart = firstIdx <= 1;
-                const hadPriorLap = laps.length > 1;
-
-                if (hadPriorLap && restartedNearStart) {
-                    let chainIdx = -1;
-                    let chainPerson = '';
-                    for (const { name, idx } of indices) {
-                        if (chainIdx < 0) {
-                            chainIdx = idx;
-                            chainPerson = name;
-                            continue;
-                        }
-                        if (idx === chainIdx + 1) {
-                            chainIdx = idx;
-                            chainPerson = name;
-                        }
-                        // else skip out-of-order (e.g. #16 inside 1→2→3→4)
+            const ascendingPlusOneChain = (indices, orderList) => {
+                let chainIdx = -1;
+                let chainPerson = '';
+                for (const { name, idx } of indices) {
+                    if (chainIdx < 0) {
+                        chainIdx = idx;
+                        chainPerson = name;
+                        continue;
                     }
-                    if (chainIdx >= 0) {
-                        return normName(orderList[chainIdx] || chainPerson);
+                    if (idx === chainIdx + 1) {
+                        chainIdx = idx;
+                        chainPerson = name;
                     }
                 }
+                if (chainIdx < 0) return null;
+                return { idx: chainIdx, person: normName(orderList[chainIdx] || chainPerson) };
+            };
 
+            const maxIndexInLap = (indices, orderList) => {
                 let bestIdx = -1;
                 let bestPerson = '';
                 for (const { name, idx } of indices) {
@@ -5858,13 +5831,46 @@
                         bestPerson = orderList[idx] || name;
                     }
                 }
-                if (bestIdx >= 0) return normName(bestPerson);
-                return normName(lastLap[lastLap.length - 1] || '');
+                if (bestIdx < 0) return null;
+                return { idx: bestIdx, person: normName(bestPerson) };
+            };
+
+            const resolveAscendingAnchorFromLastLap = (type, chronoNames) => {
+                const orderList = orderListForType(type);
+                const laps = splitAssignedIntoLapsByOrderWrap(chronoNames, orderList);
+                if (!laps.length) return { person: '', idx: -1 };
+                const lastLap = laps[laps.length - 1];
+                const indices = lastLap
+                    .map((name) => ({ name, idx: findIdxInList(orderList, name) }))
+                    .filter((x) => x.idx >= 0);
+
+                if (!indices.length) {
+                    const fallback = normName(lastLap[lastLap.length - 1] || '');
+                    return { person: fallback, idx: findIdxInList(orderList, fallback) };
+                }
+
+                const firstIdx = indices[0].idx;
+                const hadPriorLap = laps.length > 1;
+                const restartedNearStart = firstIdx <= 1;
+                const chain = ascendingPlusOneChain(indices, orderList);
+                const byMax = maxIndexInLap(indices, orderList);
+
+                if (hadPriorLap && restartedNearStart && chain) {
+                    return chain;
+                }
+                if (hadPriorLap && chain && byMax && chain.idx < byMax.idx && chain.idx >= firstIdx) {
+                    return chain;
+                }
+                if (byMax) return byMax;
+                const fallback = normName(lastLap[lastLap.length - 1] || '');
+                return { person: fallback, idx: findIdxInList(orderList, fallback) };
             };
 
             for (const t of ['normal', 'semi', 'weekend', 'special']) {
                 const chrono = collectAssignedChronoForType(t);
-                lastAssigned[t] = resolveAscendingAnchorFromLastLap(t, chrono);
+                const resolved = resolveAscendingAnchorFromLastLap(t, chrono);
+                lastAssigned[t] = resolved.person || '';
+                lastAssignedIdx[t] = Number.isFinite(resolved.idx) ? resolved.idx : -1;
             }
 
             const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
@@ -5883,13 +5889,20 @@
                 return '';
             };
 
-            const resolveStartIndexAfterAnchor = (type, rawList, anchorRaw) => {
+            const resolveStartIndexAfterAnchor = (type, rawList) => {
                 if (!rawList.length) return 0;
-                const anchor = anchorRaw ? normName(anchorRaw) : '';
+                const storedIdx = lastAssignedIdx[type];
+                if (storedIdx >= 0 && storedIdx < rawList.length) {
+                    const anchor = lastAssigned[type];
+                    const atStored = rawList[storedIdx];
+                    if (!anchor || normName(atStored) === normName(anchor)) {
+                        return (storedIdx + 1) % rawList.length;
+                    }
+                }
+                const anchor = lastAssigned[type] ? normName(lastAssigned[type]) : '';
                 if (!anchor) return 0;
                 const lastIdx = findIdxInList(rawList, anchor);
                 if (lastIdx >= 0) return (lastIdx + 1) % rawList.length;
-                // Anchor left this group — continue at next still-in-list after them
                 if (typeof resolveMonthStartIndexAfterDepartedContinuityPerson === 'function') {
                     const recovered = resolveMonthStartIndexAfterDepartedContinuityPerson(
                         type,
@@ -5900,24 +5913,21 @@
                     );
                     if (recovered != null && recovered >= 0) return recovered % rawList.length;
                 }
-                // Fallback: walk export-month order list after anchor's old index
-                const orderList = orderListForType(type);
-                const oldIdx = findIdxInList(orderList, anchor);
-                if (oldIdx >= 0 && orderList.length) {
-                    for (let off = 1; off <= orderList.length; off++) {
-                        const cand = orderList[(oldIdx + off) % orderList.length];
-                        const curIdx = findIdxInList(rawList, cand);
-                        if (curIdx >= 0 && normName(cand) !== anchor) return curIdx;
+                if (storedIdx >= 0) {
+                    for (let off = 1; off <= rawList.length; off++) {
+                        const candIdx = (storedIdx + off) % rawList.length;
+                        const cand = rawList[candIdx];
+                        if (cand && normName(cand) !== anchor) return candIdx;
                     }
                 }
                 return 0;
             };
 
             const nextNFromRotationListAfterAnchor = (type, count, { allowIneligible = false } = {}) => {
-                const rawList = nextListForType(type);
+                const rawList = orderListForType(type);
                 if (rawList.length === 0) return Array(count).fill('');
 
-                let startIdx = resolveStartIndexAfterAnchor(type, rawList, lastAssigned[type] || '');
+                let startIdx = resolveStartIndexAfterAnchor(type, rawList);
                 const picks = [];
                 let cursor = startIdx;
                 let checked = 0;
@@ -5941,7 +5951,7 @@
             };
 
             const nextTwoForType = (type) => {
-                const rawList = nextListForType(type);
+                const rawList = orderListForType(type);
                 if (rawList.length === 0) return ['', ''];
                 const eligibleCount = rawList.filter((p) => isAvailableForNextMonth(p, type)).length;
                 if (eligibleCount === 0) return ['', ''];
@@ -5950,7 +5960,7 @@
             };
 
             const nextThreeForSpecial = () => {
-                const rawList = nextListForType('special');
+                const rawList = orderListForType('special');
                 if (rawList.length === 0) return { names: ['', '', ''], notes: ['', '', ''] };
                 const outNames = nextNFromRotationListAfterAnchor('special', 3, { allowIneligible: true });
                 const findNextSpecialDates = (count = 3, maxDays = 3650) => {
