@@ -2565,9 +2565,8 @@
         /**
          * Person name to store in lastRotationPositions / month carry-over: after manual alternate (replacement for baseline),
          * use baseline (swappedWith) so the next slot is B,C,E… not the replacement's index again.
-         * Mutual two-day swap: continue after both people who served (later on the rotation arc), so the
-         * partner is not immediately re-seeded as next month's first duty.
-         * Semi holiday-conflict swap: continue after conflictedName (moved person), not the filler on the last Friday.
+         * Mutual / semi holiday-conflict two-day swap: continue after both people who served
+         * (later on the rotation arc), so the partner is not immediately re-seeded next month.
          */
         function getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, assignmentsByDate) {
             if (!assignedPerson) return null;
@@ -2584,19 +2583,44 @@
             if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
                 return assignedPerson;
             }
-            // Αμοιβαία αλλαγή: και οι δύο έβγαλαν — συνέχεια μετά τον «μεταγενέστερο» στη λίστα, όχι μετά μόνο τον τελευταίο στο ημερολόγιο.
-            if (reason && reason.type === 'swap' && reason.meta?.mutualTwoDaySwap) {
+            // Two-person semi/weekend swap (αμοιβαία ή σύγκρουση ημιαργίας): και οι δύο έβγαλαν —
+            // συνέχεια μετά τον «μεταγενέστερο» στη λίστα, ώστε να μην ξαναμπεί ο εταίρος αμέσως.
+            if (
+                reason &&
+                reason.type === 'swap' &&
+                (reason.meta?.mutualTwoDaySwap || reason.meta?.semiConsecutiveHolidaySwap)
+            ) {
                 const otherKey =
                     (reason.meta?.otherDateKey && String(reason.meta.otherDateKey)) ||
+                    (reason.meta?.semiConsecutiveHolidaySwap
+                        ? dateKey === reason.meta.conflictDateKey
+                            ? reason.meta.placementDateKey
+                            : dateKey === reason.meta.placementDateKey
+                              ? reason.meta.conflictDateKey
+                              : null
+                        : null) ||
                     (reason.swapPairId != null
                         ? findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey)
                         : null);
                 let otherPerson = null;
                 if (otherKey) {
                     otherPerson = getSemiAssignedPersonFromStore(assignmentsByDate, otherKey, groupNum);
-                    if (!otherPerson && reason.swappedWith) otherPerson = reason.swappedWith;
-                } else if (reason.swappedWith) {
-                    otherPerson = reason.swappedWith;
+                }
+                if (!otherPerson && reason.swappedWith) otherPerson = reason.swappedWith;
+                if (
+                    !otherPerson &&
+                    reason.meta?.semiConsecutiveHolidaySwap &&
+                    reason.meta.changerName &&
+                    reason.meta.conflictedName
+                ) {
+                    const n = (s) =>
+                        typeof normalizePersonKey === 'function'
+                            ? normalizePersonKey(s)
+                            : String(s || '').trim();
+                    otherPerson =
+                        n(assignedPerson) === n(reason.meta.conflictedName)
+                            ? reason.meta.changerName
+                            : reason.meta.conflictedName;
                 }
                 if (otherPerson) {
                     const people = getRotationListForContinuityDate(dateKey, groupNum);
@@ -2633,13 +2657,6 @@
                             ? resolvePersonInGroupRotationList(reason.swappedWith, groupNum, 'normal')
                             : reason.swappedWith;
                     }
-                }
-                if (reason.meta?.semiConsecutiveHolidaySwap && reason.meta?.conflictedName) {
-                    const conflicted =
-                        typeof resolvePersonInGroupRotationList === 'function'
-                            ? resolvePersonInGroupRotationList(reason.meta.conflictedName, groupNum, 'semi')
-                            : reason.meta.conflictedName;
-                    if (conflicted) return conflicted;
                 }
                 const otherKey = findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey);
                 if (otherKey) {

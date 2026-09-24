@@ -1629,8 +1629,8 @@
             const continuityIdx = findIdx(lastContinuityPerson);
             if (lastContinuityPerson && continuityIdx >= 0) {
                 let cursor = (continuityIdx + 1) % len;
-                // Semi/weekend/special: if prev month ended on a mutual two-day swap, never
-                // land first on the partner who already served on the other date of the pair.
+                // Semi/weekend/special: if prev month ended on a two-person swap (αμοιβαία ή
+                // σύγκρουση ημιαργίας), never land first on either person who already served.
                 if (dayTypeCategory === 'semi' || dayTypeCategory === 'weekend' || dayTypeCategory === 'special') {
                     const prevKeys = getSortedDutyDateKeysInCalendarMonth(prevMonthKey, dayTypeCategory);
                     const lastKey = prevKeys.length ? prevKeys[prevKeys.length - 1] : null;
@@ -1646,26 +1646,46 @@
                                 : lastAssigned
                                   ? getAssignmentReason(lastKey, groupNum, lastAssigned)
                                   : null;
-                        if (reason?.type === 'swap' && reason.meta?.mutualTwoDaySwap) {
+                        const isPairSwap =
+                            reason?.type === 'swap' &&
+                            (reason.meta?.mutualTwoDaySwap || reason.meta?.semiConsecutiveHolidaySwap);
+                        if (isPairSwap) {
                             const otherKey =
                                 reason.meta?.otherDateKey ||
+                                (reason.meta?.semiConsecutiveHolidaySwap
+                                    ? lastKey === reason.meta.conflictDateKey
+                                        ? reason.meta.placementDateKey
+                                        : lastKey === reason.meta.placementDateKey
+                                          ? reason.meta.conflictDateKey
+                                          : null
+                                    : null) ||
                                 (typeof findSwapOtherDateKey === 'function' && reason.swapPairId != null
                                     ? findSwapOtherDateKey(reason.swapPairId, groupNum, lastKey)
                                     : null);
-                            const store =
-                                dayTypeCategory === 'normal'
-                                    ? buildNormalRotationContinuityStore()
-                                    : getAssignmentsForDayType(dayTypeCategory);
-                            const otherPerson = otherKey
+                            let otherPerson = otherKey
                                 ? getPersonOnDateForRotationContinuityLookup(
                                       dayTypeCategory,
                                       otherKey,
                                       groupNum
                                   )
-                                : reason.swappedWith;
+                                : null;
+                            if (!otherPerson && reason.swappedWith) otherPerson = reason.swappedWith;
+                            if (
+                                !otherPerson &&
+                                reason.meta?.semiConsecutiveHolidaySwap &&
+                                reason.meta.changerName &&
+                                reason.meta.conflictedName
+                            ) {
+                                otherPerson =
+                                    norm(lastAssigned) === norm(reason.meta.conflictedName)
+                                        ? reason.meta.changerName
+                                        : reason.meta.conflictedName;
+                            }
                             const skip = new Set();
                             if (lastAssigned) skip.add(norm(lastAssigned));
                             if (otherPerson) skip.add(norm(otherPerson));
+                            if (reason.meta?.changerName) skip.add(norm(reason.meta.changerName));
+                            if (reason.meta?.conflictedName) skip.add(norm(reason.meta.conflictedName));
                             let guard = 0;
                             while (
                                 guard++ < len &&
