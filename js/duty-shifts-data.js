@@ -5855,10 +5855,9 @@
                 const chain = ascendingPlusOneChain(indices, orderList);
                 const byMax = maxIndexInLap(indices, orderList);
 
+                // Only +1 chain when new lap restarts near list start (#1/#2), e.g. αργίες 1→2→3→4.
+                // Mid-list restart (e.g. καθημερινές #16→#3) must use max of the lap (#14), not early chain stop.
                 if (hadPriorLap && restartedNearStart && chain) {
-                    return chain;
-                }
-                if (hadPriorLap && chain && byMax && chain.idx < byMax.idx && chain.idx >= firstIdx) {
                     return chain;
                 }
                 if (byMax) return byMax;
