@@ -5671,9 +5671,11 @@
         }
 
         /**
-         * Excel ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ (background): χρονολογικές αναθέσεις → γύροι (επανάληψη ατόμου = νέος γύρος)
-         * → στον τελευταίο γύρο άγκυρα = μεγαλύτερη θέση στην αύξουσα σειρά της λίστας
-         * → επόμενοι διαθέσιμοι μετά την άγκυρα· αν έφυγε από ομάδα → επόμενος διαθέσιμος (όχι reset 0).
+         * Excel ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ (background, όλοι οι τύποι):
+         * χρονολογικές αναθέσεις → γύροι όταν η σειρά ξαναρχίζει (υψηλή θέση → χαμηλή)
+         * → στον τελευταίο γύρο: αν άρχισε κοντά στην αρχή (#1/#2) κράτα αύξουσα +1
+         *   (αγνοεί εκτός σειράς π.χ. #16)· αλλιώς μεγαλύτερη θέση του γύρου
+         * → επόμενοι διαθέσιμοι μετά την άγκυρα· αν έφυγε από ομάδα → επόμενος διαθέσιμος.
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
@@ -5777,46 +5779,86 @@
                 return out;
             };
 
-            /** New lap when a person reappears in the current lap (rotation wrapped). */
-            const splitAssignedIntoLaps = (chronoNames) => {
+            /**
+             * Split when rotation restarts: high list position → low (e.g. #17 → #1).
+             * Small decreases from swaps do not start a lap unless they look like a wrap.
+             */
+            const splitAssignedIntoLapsByOrderWrap = (chronoNames, orderList) => {
                 const laps = [];
                 let current = [];
-                const seen = new Set();
+                let prevIdx = -1;
+                const len = Math.max(1, orderList.length);
                 for (const raw of chronoNames || []) {
                     const n = normName(raw);
                     if (!n) continue;
-                    if (seen.has(n)) {
-                        if (current.length) laps.push(current);
-                        current = [];
-                        seen.clear();
+                    const idx = findIdxInList(orderList, n);
+                    if (idx >= 0 && prevIdx >= 0) {
+                        const looksLikeWrap =
+                            idx < prevIdx &&
+                            prevIdx >= Math.floor(len / 2) &&
+                            idx <= Math.floor(prevIdx / 2);
+                        if (looksLikeWrap && current.length) {
+                            laps.push(current);
+                            current = [];
+                        }
                     }
-                    current.push(raw);
-                    seen.add(n);
+                    current.push(n);
+                    if (idx >= 0) prevIdx = idx;
                 }
                 if (current.length) laps.push(current);
                 return laps;
             };
 
             /**
-             * Anchor = person with highest position in the official rotation list among the last lap.
-             * (Ascending series — not chronological last of the whole month.)
+             * After wrap near list start (#1/#2): strict ascending +1 chain (skip out-of-order).
+             * Otherwise (single lap / restart mid-list): highest position in the lap.
              */
             const resolveAscendingAnchorFromLastLap = (type, chronoNames) => {
-                const laps = splitAssignedIntoLaps(chronoNames);
+                const orderList = orderListForType(type);
+                const laps = splitAssignedIntoLapsByOrderWrap(chronoNames, orderList);
                 if (!laps.length) return '';
                 const lastLap = laps[laps.length - 1];
-                const orderList = orderListForType(type);
+                const indices = lastLap
+                    .map((name) => ({ name, idx: findIdxInList(orderList, name) }))
+                    .filter((x) => x.idx >= 0);
+
+                if (!indices.length) {
+                    return normName(lastLap[lastLap.length - 1] || '');
+                }
+
+                const firstIdx = indices[0].idx;
+                const restartedNearStart = firstIdx <= 1;
+                const hadPriorLap = laps.length > 1;
+
+                if (hadPriorLap && restartedNearStart) {
+                    let chainIdx = -1;
+                    let chainPerson = '';
+                    for (const { name, idx } of indices) {
+                        if (chainIdx < 0) {
+                            chainIdx = idx;
+                            chainPerson = name;
+                            continue;
+                        }
+                        if (idx === chainIdx + 1) {
+                            chainIdx = idx;
+                            chainPerson = name;
+                        }
+                        // else skip out-of-order (e.g. #16 inside 1→2→3→4)
+                    }
+                    if (chainIdx >= 0) {
+                        return normName(orderList[chainIdx] || chainPerson);
+                    }
+                }
+
                 let bestIdx = -1;
                 let bestPerson = '';
-                for (const name of lastLap) {
-                    const idx = findIdxInList(orderList, name);
-                    if (idx >= 0 && idx > bestIdx) {
+                for (const { name, idx } of indices) {
+                    if (idx > bestIdx) {
                         bestIdx = idx;
                         bestPerson = orderList[idx] || name;
                     }
                 }
                 if (bestIdx >= 0) return normName(bestPerson);
-                // Last lap people all left the order list — keep last chrono name as departed anchor
                 return normName(lastLap[lastLap.length - 1] || '');
             };
 
