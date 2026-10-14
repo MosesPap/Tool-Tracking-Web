@@ -380,6 +380,134 @@
             return d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
         }
 
+        function getDayTypeCategoryForLastNext(dateObj) {
+            if (!dateObj || isNaN(dateObj.getTime())) return 'normal';
+            if (typeof isSpecialHoliday === 'function' && isSpecialHoliday(dateObj)) return 'special';
+            const dayType = typeof getDayType === 'function' ? getDayType(dateObj) : 'normal-day';
+            if (dayType === 'semi-normal-day') return 'semi';
+            if (dayType === 'weekend-holiday') return 'weekend';
+            if (dayType === 'special-holiday') return 'special';
+            return 'normal';
+        }
+
+        function isUnavailableForLastNextPreview(person, groupNum, listType, dateObj) {
+            if (
+                typeof isPersonExcludedFromDuties === 'function' &&
+                isPersonExcludedFromDuties(person, groupNum)
+            ) {
+                return true;
+            }
+            if (
+                typeof isPersonDisabledForDuty === 'function' &&
+                isPersonDisabledForDuty(person, groupNum, listType, dateObj)
+            ) {
+                return true;
+            }
+            return false;
+        }
+
+        function getRotationListForLastNext(groupNum, listType) {
+            if (typeof getSortedGroupListForRotation === 'function') {
+                return getSortedGroupListForRotation(groupNum, listType) || [];
+            }
+            const gd =
+                typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum] || {};
+            return gd[listType] || [];
+        }
+
+        /**
+         * Next duty of listType after lastDateKey, following basic rotation and skipping
+         * disabled/excluded people. If allowPast, may return dates before today (for rolling Last).
+         */
+        function computeNextDutyDateKeyFromLast(person, groupNum, listType, lastDateKey, opts) {
+            const allowPast = !!(opts && opts.allowPast);
+            const list = getRotationListForLastNext(groupNum, listType);
+            if (!Array.isArray(list) || list.length === 0) return null;
+            const target = normalizePersonKey(person);
+            const personIndex = list.findIndex((p) => normalizePersonKey(p) === target);
+            if (personIndex < 0) return null;
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayKey = typeof formatDateKey === 'function' ? formatDateKey(today) : null;
+
+            let cursor;
+            let pos;
+            if (lastDateKey && /^\d{4}-\d{2}-\d{2}$/.test(lastDateKey)) {
+                cursor = new Date(lastDateKey + 'T00:00:00');
+                if (isNaN(cursor.getTime())) return null;
+                cursor.setDate(cursor.getDate() + 1);
+                pos = (personIndex + 1) % list.length;
+            } else {
+                cursor = new Date(today);
+                pos = 0;
+            }
+            cursor.setHours(0, 0, 0, 0);
+
+            const maxDays = 3650;
+            for (let checked = 0; checked < maxDays; checked++) {
+                if (getDayTypeCategoryForLastNext(cursor) === listType) {
+                    let assigned = null;
+                    let assignedOffset = -1;
+                    for (let offset = 0; offset < list.length; offset++) {
+                        const idx = (pos + offset) % list.length;
+                        const cand = list[idx];
+                        if (!cand) continue;
+                        if (isUnavailableForLastNextPreview(cand, groupNum, listType, cursor)) continue;
+                        assigned = cand;
+                        assignedOffset = offset;
+                        break;
+                    }
+                    if (assigned && assignedOffset >= 0) {
+                        pos = (pos + assignedOffset + 1) % list.length;
+                        const dk =
+                            typeof formatDateKey === 'function' ? formatDateKey(cursor) : null;
+                        if (dk && normalizePersonKey(assigned) === target) {
+                            if (allowPast || !todayKey || dk >= todayKey) {
+                                return dk;
+                            }
+                        }
+                    }
+                }
+                cursor.setDate(cursor.getDate() + 1);
+            }
+            return null;
+        }
+
+        /**
+         * Effective Last: max(stored, calendar assignment ≤ today), then roll predicted
+         * next duties that have already arrived (Next → Last as days pass).
+         */
+        function resolveEffectiveLastDutyDateKey(person, groupNum, listType) {
+            const stored = getStoredLastDutyRawForPerson(groupNum, person, listType);
+            const storedKey = parseLastDutyDateToKey(stored.value);
+            const assignedKey = getMostRecentAssignmentDateKeyForPerson(
+                person,
+                groupNum,
+                listType,
+                new Date()
+            );
+            let lastKey = storedKey;
+            if (assignedKey && (!lastKey || assignedKey > lastKey)) {
+                lastKey = assignedKey;
+            }
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayKey = typeof formatDateKey === 'function' ? formatDateKey(today) : null;
+            if (!todayKey) return lastKey;
+
+            let guard = 0;
+            while (guard++ < 400) {
+                const nextKey = computeNextDutyDateKeyFromLast(person, groupNum, listType, lastKey, {
+                    allowPast: true
+                });
+                if (!nextKey || nextKey > todayKey) break;
+                lastKey = nextKey;
+            }
+            return lastKey;
+        }
+
         function captureLastDutiesSnapshot(reason) {
             const data = {};
             for (let g = 1; g <= 4; g++) {
@@ -401,16 +529,14 @@
         }
 
         /**
-         * Update lastDuties from calendar assignments.
-         * Manual values stay until a later real assignment exists; empty slots get written when assigned.
+         * Update lastDuties from calendar + rolling Next→Last as days pass.
+         * Manual values stay until a later effective last exists.
          * Always snapshots first so restoreLastDutiesFromBackup() can undo.
          */
         function syncLastDutiesFromAssignments(opts) {
             const options = opts && typeof opts === 'object' ? opts : {};
             const reason = options.reason || 'auto-sync-from-assignments';
             const listTypes = ['special', 'weekend', 'semi', 'normal'];
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
             let changed = 0;
             captureLastDutiesSnapshot(reason);
             for (let groupNum = 1; groupNum <= 4; groupNum++) {
@@ -423,22 +549,17 @@
                 }
                 for (const person of people) {
                     for (const listType of listTypes) {
-                        const list = g[listType] || [];
+                        const list = getRotationListForLastNext(groupNum, listType);
                         const inList = list.some((p) => normalizePersonKey(p) === normalizePersonKey(person));
                         if (!inList) continue;
-                        const assignedKey = getMostRecentAssignmentDateKeyForPerson(
-                            person,
-                            groupNum,
-                            listType,
-                            today
-                        );
-                        if (!assignedKey) continue;
+                        const effectiveKey = resolveEffectiveLastDutyDateKey(person, groupNum, listType);
+                        if (!effectiveKey) continue;
                         const stored = getStoredLastDutyRawForPerson(groupNum, person, listType);
                         const storedKey = parseLastDutyDateToKey(stored.value);
-                        if (storedKey && assignedKey <= storedKey) continue;
+                        if (storedKey && effectiveKey <= storedKey) continue;
                         const writeKey = stored.key || person;
                         if (!g.lastDuties[writeKey]) g.lastDuties[writeKey] = {};
-                        g.lastDuties[writeKey][listType] = assignedKey;
+                        g.lastDuties[writeKey][listType] = effectiveKey;
                         changed += 1;
                     }
                 }
@@ -489,9 +610,10 @@
         async function syncLastDutiesFromAssignmentsWithUi() {
             if (
                 !confirm(
-                    'Ενημέρωση ημερομηνιών «Τελευταία» από το ημερολόγιο;\n\n' +
-                        '• Χειροκίνητες τιμές αλλάζουν μόνο αν υπάρχει μεταγενέστερη πραγματική ανάθεση.\n' +
-                        '• Όσοι δεν έχουν τιμή παίρνουν την πιο πρόσφατη ανάθεση.\n\n' +
+                    'Ενημέρωση ημερομηνιών «Τελευταία»;\n\n' +
+                        '• Από πραγματικές αναθέσεις ημερολογίου.\n' +
+                        '• Και από προβλεπόμενες επόμενες που έχουν ήδη έρθει (βασική σειρά, χωρίς απενεργοποιημένους/εξαιρούμενους).\n' +
+                        '• Χειροκίνητες τιμές αλλάζουν μόνο αν η νέα Τελευταία είναι μεταγενέστερη.\n\n' +
                         'Πριν την αλλαγή αποθηκεύεται σημείο επαναφοράς.'
                 )
             ) {
@@ -507,77 +629,34 @@
             alert(
                 result.changed > 0
                     ? `Ενημερώθηκαν ${result.changed} ημερομηνίες «Τελευταία».\nΜπορείτε να τις επαναφέρετε με «Επαναφορά Τελευταίων».`
-                    : 'Δεν χρειάστηκε καμία αλλαγή (οι τιμές ήταν ήδη ενημερωμένες ή δεν υπάρχουν νεότερες αναθέσεις).'
+                    : 'Δεν χρειάστηκε καμία αλλαγή (οι τιμές ήταν ήδη ενημερωμένες).'
             );
         }
 
         function getLastAndNextDutyDates(person, groupNum, listType, listArrayLength) {
-            const stored = getStoredLastDutyRawForPerson(groupNum, person, listType);
-            const storedKey = parseLastDutyDateToKey(stored.value);
-            const assignedKey = getMostRecentAssignmentDateKeyForPerson(person, groupNum, listType, new Date());
-            let effectiveKey = storedKey;
-            if (assignedKey && (!storedKey || assignedKey > storedKey)) {
-                effectiveKey = assignedKey;
+            const list = getRotationListForLastNext(groupNum, listType);
+            if (!list.length && !(listArrayLength > 0)) {
+                return { lastDuty: 'Δεν έχει', nextDuty: 'Δεν έχει' };
             }
-            const lastDutyFormatted = effectiveKey ? formatDateKeyAsElGr(effectiveKey) : 'Δεν έχει';
 
-            // Calculate next duty date based on rotation order (not person's last duty)
+            const effectiveLastKey = resolveEffectiveLastDutyDateKey(person, groupNum, listType);
+            const lastDutyFormatted = effectiveLastKey
+                ? formatDateKeyAsElGr(effectiveLastKey)
+                : 'Δεν έχει';
+
+            const nextKey = computeNextDutyDateKeyFromLast(
+                person,
+                groupNum,
+                listType,
+                effectiveLastKey,
+                { allowPast: false }
+            );
             let nextDutyFormatted = 'Δεν έχει';
-
-            if (listArrayLength > 0) {
-                const gd =
-                    typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum] || {};
-                const list = gd[listType] || [];
-                const personIndex = list.findIndex((p) => normalizePersonKey(p) === normalizePersonKey(person));
-
-                if (personIndex === -1) {
-                    return { lastDuty: lastDutyFormatted, nextDuty: 'Δεν έχει' };
-                }
-
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-
-                const upcomingDays = [];
-                const checkDate = new Date(today);
-                const maxDaysAhead = 3650;
-                let daysChecked = 0;
-
-                while (daysChecked < maxDaysAhead && upcomingDays.length < listArrayLength * 3) {
-                    let dayTypeCategory = 'normal';
-                    const isSpecial = isSpecialHoliday(checkDate);
-                    if (isSpecial) {
-                        dayTypeCategory = 'special';
-                    } else {
-                        const dayType = getDayType(checkDate);
-                        if (dayType === 'semi-normal-day') {
-                            dayTypeCategory = 'semi';
-                        } else if (dayType === 'weekend-holiday') {
-                            dayTypeCategory = 'weekend';
-                        }
-                    }
-
-                    if (dayTypeCategory === listType) {
-                        upcomingDays.push(new Date(checkDate));
-                    }
-
-                    checkDate.setDate(checkDate.getDate() + 1);
-                    daysChecked++;
-                }
-
-                for (let i = 0; i < upcomingDays.length; i++) {
-                    if (i % listArrayLength === personIndex) {
-                        nextDutyFormatted = upcomingDays[i].toLocaleDateString('el-GR', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric'
-                        });
-                        break;
-                    }
-                }
-
-                if (nextDutyFormatted === 'Δεν έχει' && upcomingDays.length > 0) {
-                    nextDutyFormatted = 'Δεν βρέθηκε';
-                }
+            if (nextKey) {
+                nextDutyFormatted = formatDateKeyAsElGr(nextKey);
+            } else if (list.length > 0) {
+                const inList = list.some((p) => normalizePersonKey(p) === normalizePersonKey(person));
+                if (inList) nextDutyFormatted = 'Δεν βρέθηκε';
             }
 
             return { lastDuty: lastDutyFormatted, nextDuty: nextDutyFormatted };
