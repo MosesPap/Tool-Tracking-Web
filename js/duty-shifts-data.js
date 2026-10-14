@@ -31,6 +31,8 @@
         let rotationBaselineLastByType = { normal: {}, semi: {}, weekend: {}, special: {} };
         // Legacy: Keep dutyAssignments for backward compatibility during migration
         let dutyAssignments = {};
+        /** Previous lastDuties snapshot for undo after auto-sync from calendar assignments. */
+        let lastDutiesRestorePoint = null;
         
         // Track skip/swap reasons for each assignment
         // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap'|'shift', reason: '...', swappedWith: '...', swapPairId, meta? }
@@ -3230,6 +3232,29 @@
                 
                 // IMPORTANT: Do not auto-rebuild/restore critical assignments into the schedule.
                 // criticalAssignments are kept as history only and must not affect the current calendar.
+
+                try {
+                    const restoreDoc = await dutyShifts.doc('lastDutiesRestorePoint').get();
+                    if (restoreDoc.exists) {
+                        const rd = restoreDoc.data() || {};
+                        delete rd.lastUpdated;
+                        delete rd.updatedBy;
+                        lastDutiesRestorePoint =
+                            rd && rd.data && typeof rd.data === 'object'
+                                ? { at: rd.at || null, reason: rd.reason || null, data: rd.data }
+                                : null;
+                    } else {
+                        lastDutiesRestorePoint = null;
+                    }
+                } catch (e) {
+                    console.warn('load lastDutiesRestorePoint:', e);
+                    try {
+                        const raw = localStorage.getItem('dutyShiftsLastDutiesRestorePoint');
+                        lastDutiesRestorePoint = raw ? JSON.parse(raw) : null;
+                    } catch (_) {
+                        lastDutiesRestorePoint = null;
+                    }
+                }
                 
                 console.log('Data loaded from Firebase');
             } catch (error) {
@@ -3468,6 +3493,13 @@
             
             // Deprecated: legacy dutyShiftsAssignments (dutyAssignments) is no longer used.
             dutyAssignments = {};
+
+            try {
+                const savedRestore = localStorage.getItem('dutyShiftsLastDutiesRestorePoint');
+                lastDutiesRestorePoint = savedRestore ? JSON.parse(savedRestore) : null;
+            } catch (_) {
+                lastDutiesRestorePoint = null;
+            }
             
             // Load critical assignments
             const savedCriticalAssignments = localStorage.getItem('dutyShiftsCriticalAssignments');
@@ -3739,6 +3771,26 @@
                 }
 
                 try {
+                    if (lastDutiesRestorePoint && lastDutiesRestorePoint.data) {
+                        await db.collection('dutyShifts').doc('lastDutiesRestorePoint').set({
+                            at: lastDutiesRestorePoint.at || null,
+                            reason: lastDutiesRestorePoint.reason || null,
+                            data: sanitizeForFirestore(lastDutiesRestorePoint.data),
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedBy: user.uid
+                        });
+                        try {
+                            localStorage.setItem(
+                                'dutyShiftsLastDutiesRestorePoint',
+                                JSON.stringify(lastDutiesRestorePoint)
+                            );
+                        } catch (_) {}
+                    }
+                } catch (error) {
+                    console.error('Error saving lastDutiesRestorePoint to Firestore:', error);
+                }
+
+                try {
                     ensurePersonStatusScheduleSeeded();
                     if (typeof sanitizePersonStatusScheduleEffectiveDates === 'function') {
                         sanitizePersonStatusScheduleEffectiveDates();
@@ -3984,6 +4036,14 @@
             localStorage.setItem('dutyShiftsGroups', JSON.stringify(groups));
             localStorage.setItem('dutyShiftsHolidays', JSON.stringify(holidays));
             localStorage.setItem('dutyShiftsSpecialHolidays', JSON.stringify(specialHolidays));
+            try {
+                if (lastDutiesRestorePoint) {
+                    localStorage.setItem(
+                        'dutyShiftsLastDutiesRestorePoint',
+                        JSON.stringify(lastDutiesRestorePoint)
+                    );
+                }
+            } catch (_) {}
             // Save separate day-type assignments
             localStorage.setItem('dutyShiftsNormalDayAssignments', JSON.stringify(normalDayAssignments));
             localStorage.setItem('dutyShiftsSemiNormalAssignments', JSON.stringify(semiNormalAssignments));

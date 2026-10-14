@@ -284,169 +284,309 @@
                 </div>
             `;
         }
+        function parseLastDutyDateToKey(raw) {
+            if (!raw) return null;
+            const s = String(raw).trim();
+            if (!s) return null;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+                const d = new Date(s + 'T00:00:00');
+                return isNaN(d.getTime()) ? null : s;
+            }
+            if (s.includes('/')) {
+                const parts = s.split('/');
+                if (parts.length === 3) {
+                    let year = parseInt(parts[2], 10);
+                    const month = parseInt(parts[1], 10);
+                    const day = parseInt(parts[0], 10);
+                    if (year < 100) year = year < 50 ? 2000 + year : 1900 + year;
+                    if (
+                        !isNaN(year) &&
+                        !isNaN(month) &&
+                        !isNaN(day) &&
+                        month >= 1 &&
+                        month <= 12 &&
+                        day >= 1 &&
+                        day <= 31
+                    ) {
+                        const d = new Date(year, month - 1, day);
+                        if (!isNaN(d.getTime())) {
+                            return typeof formatDateKey === 'function' ? formatDateKey(d) : null;
+                        }
+                    }
+                }
+            }
+            const fallback = new Date(s);
+            if (!isNaN(fallback.getTime())) {
+                return typeof formatDateKey === 'function' ? formatDateKey(fallback) : null;
+            }
+            return null;
+        }
+
+        function getAssignmentStoreForListType(listType) {
+            if (listType === 'special') return specialHolidayAssignments || {};
+            if (listType === 'weekend') return weekendAssignments || {};
+            if (listType === 'semi') return semiNormalAssignments || {};
+            if (listType === 'normal') return normalDayAssignments || {};
+            return {};
+        }
+
+        function personMatchesAssignmentEntry(person, groupNum, assignedPersons) {
+            if (!Array.isArray(assignedPersons) || !person) return false;
+            const target = normalizePersonKey(person);
+            return assignedPersons.some(
+                (p) => p && p.group === groupNum && normalizePersonKey(p.name) === target
+            );
+        }
+
+        /** Most recent past (or today) assignment dateKey of this list type for person/group. */
+        function getMostRecentAssignmentDateKeyForPerson(person, groupNum, listType, asOfDate) {
+            const store = getAssignmentStoreForListType(listType);
+            const today = asOfDate instanceof Date && !isNaN(asOfDate.getTime()) ? new Date(asOfDate) : new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayKey = typeof formatDateKey === 'function' ? formatDateKey(today) : null;
+            const keys = Object.keys(store || {})
+                .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k))
+                .sort()
+                .reverse();
+            for (const dateKey of keys) {
+                if (todayKey && dateKey > todayKey) continue;
+                const assignment = store[dateKey];
+                if (!assignment) continue;
+                const assignedPersons =
+                    typeof extractAllPersonNames === 'function' ? extractAllPersonNames(assignment) : [];
+                if (personMatchesAssignmentEntry(person, groupNum, assignedPersons)) {
+                    return dateKey;
+                }
+            }
+            return null;
+        }
+
+        function getStoredLastDutyRawForPerson(groupNum, person, listType) {
+            const ld = groups?.[groupNum]?.lastDuties || {};
+            if (ld[person] && ld[person][listType]) return { key: person, value: ld[person][listType] };
+            const target = normalizePersonKey(person);
+            for (const k of Object.keys(ld)) {
+                if (normalizePersonKey(k) === target && ld[k]?.[listType]) {
+                    return { key: k, value: ld[k][listType] };
+                }
+            }
+            return { key: person, value: null };
+        }
+
+        function formatDateKeyAsElGr(dateKey) {
+            if (!dateKey) return 'Δεν έχει';
+            const d = new Date(dateKey + 'T00:00:00');
+            if (isNaN(d.getTime())) return 'Δεν έχει';
+            return d.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+
+        function captureLastDutiesSnapshot(reason) {
+            const data = {};
+            for (let g = 1; g <= 4; g++) {
+                try {
+                    data[g] = JSON.parse(JSON.stringify(groups?.[g]?.lastDuties || {}));
+                } catch (_) {
+                    data[g] = groups?.[g]?.lastDuties || {};
+                }
+            }
+            lastDutiesRestorePoint = {
+                at: new Date().toISOString(),
+                reason: reason || 'manual',
+                data
+            };
+            try {
+                localStorage.setItem('dutyShiftsLastDutiesRestorePoint', JSON.stringify(lastDutiesRestorePoint));
+            } catch (_) {}
+            return lastDutiesRestorePoint;
+        }
+
+        /**
+         * Update lastDuties from calendar assignments.
+         * Manual values stay until a later real assignment exists; empty slots get written when assigned.
+         * Always snapshots first so restoreLastDutiesFromBackup() can undo.
+         */
+        function syncLastDutiesFromAssignments(opts) {
+            const options = opts && typeof opts === 'object' ? opts : {};
+            const reason = options.reason || 'auto-sync-from-assignments';
+            const listTypes = ['special', 'weekend', 'semi', 'normal'];
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            let changed = 0;
+            captureLastDutiesSnapshot(reason);
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const g = groups[groupNum];
+                if (!g) continue;
+                if (!g.lastDuties) g.lastDuties = {};
+                const people = new Set();
+                for (const lt of listTypes) {
+                    (g[lt] || []).forEach((p) => people.add(p));
+                }
+                for (const person of people) {
+                    for (const listType of listTypes) {
+                        const list = g[listType] || [];
+                        const inList = list.some((p) => normalizePersonKey(p) === normalizePersonKey(person));
+                        if (!inList) continue;
+                        const assignedKey = getMostRecentAssignmentDateKeyForPerson(
+                            person,
+                            groupNum,
+                            listType,
+                            today
+                        );
+                        if (!assignedKey) continue;
+                        const stored = getStoredLastDutyRawForPerson(groupNum, person, listType);
+                        const storedKey = parseLastDutyDateToKey(stored.value);
+                        if (storedKey && assignedKey <= storedKey) continue;
+                        const writeKey = stored.key || person;
+                        if (!g.lastDuties[writeKey]) g.lastDuties[writeKey] = {};
+                        g.lastDuties[writeKey][listType] = assignedKey;
+                        changed += 1;
+                    }
+                }
+            }
+            return { changed, restoreAt: lastDutiesRestorePoint?.at || null };
+        }
+
+        async function restoreLastDutiesFromBackup() {
+            let snap = lastDutiesRestorePoint;
+            if (!snap || !snap.data) {
+                try {
+                    const raw = localStorage.getItem('dutyShiftsLastDutiesRestorePoint');
+                    if (raw) snap = JSON.parse(raw);
+                } catch (_) {}
+            }
+            if (!snap || !snap.data) {
+                alert('Δεν υπάρχει αποθηκευμένο σημείο επαναφοράς για τις ημερομηνίες «Τελευταία».');
+                return false;
+            }
+            const whenLabel = snap.at
+                ? new Date(snap.at).toLocaleString('el-GR')
+                : '(άγνωστη ώρα)';
+            if (
+                !confirm(
+                    `Επαναφορά προηγούμενων ημερομηνιών «Τελευταία»;\n\nΣημείο επαναφοράς: ${whenLabel}\nΛόγος: ${snap.reason || '—'}\n\nΟι τρέχουσες τιμές θα αντικατασταθούν.`
+                )
+            ) {
+                return false;
+            }
+            for (let g = 1; g <= 4; g++) {
+                if (!groups[g]) continue;
+                try {
+                    groups[g].lastDuties = JSON.parse(JSON.stringify(snap.data[g] || {}));
+                } catch (_) {
+                    groups[g].lastDuties = snap.data[g] || {};
+                }
+            }
+            try {
+                if (typeof saveData === 'function') await saveData();
+            } catch (e) {
+                console.error('restoreLastDutiesFromBackup saveData:', e);
+            }
+            if (typeof renderGroups === 'function') renderGroups();
+            alert('Οι ημερομηνίες «Τελευταία» επαναφέρθηκαν στην προηγούμενη κατάσταση.');
+            return true;
+        }
+
+        async function syncLastDutiesFromAssignmentsWithUi() {
+            if (
+                !confirm(
+                    'Ενημέρωση ημερομηνιών «Τελευταία» από το ημερολόγιο;\n\n' +
+                        '• Χειροκίνητες τιμές αλλάζουν μόνο αν υπάρχει μεταγενέστερη πραγματική ανάθεση.\n' +
+                        '• Όσοι δεν έχουν τιμή παίρνουν την πιο πρόσφατη ανάθεση.\n\n' +
+                        'Πριν την αλλαγή αποθηκεύεται σημείο επαναφοράς.'
+                )
+            ) {
+                return;
+            }
+            const result = syncLastDutiesFromAssignments({ reason: 'manual-ui-sync' });
+            try {
+                if (typeof saveData === 'function') await saveData();
+            } catch (e) {
+                console.error('syncLastDutiesFromAssignmentsWithUi saveData:', e);
+            }
+            if (typeof renderGroups === 'function') renderGroups();
+            alert(
+                result.changed > 0
+                    ? `Ενημερώθηκαν ${result.changed} ημερομηνίες «Τελευταία».\nΜπορείτε να τις επαναφέρετε με «Επαναφορά Τελευταίων».`
+                    : 'Δεν χρειάστηκε καμία αλλαγή (οι τιμές ήταν ήδη ενημερωμένες ή δεν υπάρχουν νεότερες αναθέσεις).'
+            );
+        }
+
         function getLastAndNextDutyDates(person, groupNum, listType, listArrayLength) {
-            const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [], lastDuties: {} };
-            const lastDuties = groupData.lastDuties?.[person] || {};
-            const lastDutyDateStr = lastDuties[listType];
-            
-            let lastDutyDate = null;
-            let lastDutyFormatted = 'Δεν έχει';
-            
-            // First check manually entered last duty date
-            if (lastDutyDateStr) {
-                // Parse the date string - handle both YYYY-MM-DD and DD/MM/YYYY formats
-                let parsedDate = null;
-                if (lastDutyDateStr.includes('/')) {
-                    // DD/MM/YYYY or DD/MM/YY format
-                    const parts = lastDutyDateStr.split('/');
-                    if (parts.length === 3) {
-                        let year = parseInt(parts[2]);
-                        const month = parseInt(parts[1]);
-                        const day = parseInt(parts[0]);
-                        // Handle 2-digit years: if year < 50, assume 20XX, else assume 19XX
-                        if (year < 100) {
-                            year = year < 50 ? 2000 + year : 1900 + year;
-                        }
-                        // Validate the date components
-                        if (!isNaN(year) && !isNaN(month) && !isNaN(day) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                            parsedDate = new Date(year, month - 1, day);
-                        }
-                    }
-                } else {
-                    // YYYY-MM-DD format
-                    parsedDate = new Date(lastDutyDateStr + 'T00:00:00');
-                }
-                if (parsedDate && !isNaN(parsedDate.getTime())) {
-                    // Create a fresh Date object to avoid any reference issues
-                    lastDutyDate = new Date(parsedDate.getTime());
-                    lastDutyDate.setHours(0, 0, 0, 0);
-                    lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                }
+            const stored = getStoredLastDutyRawForPerson(groupNum, person, listType);
+            const storedKey = parseLastDutyDateToKey(stored.value);
+            const assignedKey = getMostRecentAssignmentDateKeyForPerson(person, groupNum, listType, new Date());
+            let effectiveKey = storedKey;
+            if (assignedKey && (!storedKey || assignedKey > storedKey)) {
+                effectiveKey = assignedKey;
             }
-            
-            // If no manually entered date, check actual assignments to find most recent duty of THIS SPECIFIC TYPE
-            if (!lastDutyDate) {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                
-                // Look through assignments to find most recent duty of this SPECIFIC type
-                const sortedDateKeys = Object.keys(dutyAssignments).sort().reverse();
-                
-                for (const dateKey of sortedDateKeys) {
-                    const assignment = dutyAssignments[dateKey];
-                    if (!assignment) continue;
-                    
-                    // Use extractAllPersonNames to properly parse the assignment string
-                    const assignedPersons = extractAllPersonNames(assignment);
-                    
-                    // Check if this person is assigned on this date
-                    const isPersonAssigned = assignedPersons.some(p => 
-                        p.name === person && p.group === groupNum
-                    );
-                    
-                    if (!isPersonAssigned) continue;
-                    
-                    const assignmentDate = new Date(dateKey + 'T00:00:00');
-                    if (isNaN(assignmentDate.getTime())) continue; // Skip invalid dates
-                    assignmentDate.setHours(0, 0, 0, 0);
-                    if (assignmentDate > today) continue; // Skip future dates
-                    
-                    // Check for special holidays FIRST using isSpecialHoliday() directly
-                    let dayTypeCategory = 'normal';
-                    const isSpecial = isSpecialHoliday(assignmentDate);
-                    if (isSpecial) {
-                        dayTypeCategory = 'special';
-                    } else {
-                        // For non-special holidays, use getDayType()
-                        const dayType = getDayType(assignmentDate);
-                        if (dayType === 'semi-normal-day') {
-                            dayTypeCategory = 'semi';
-                        } else if (dayType === 'weekend-holiday') {
-                            dayTypeCategory = 'weekend';
-                        }
-                        // else remains 'normal'
-                    }
-                    
-                    // Only consider assignments that match the EXACT listType we're looking for
-                    if (dayTypeCategory === listType) {
-                        // Create a fresh Date object to avoid any reference issues
-                        lastDutyDate = new Date(assignmentDate.getTime());
-                        lastDutyDate.setHours(0, 0, 0, 0);
-                        lastDutyFormatted = lastDutyDate.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                        break; // Found the most recent one, stop searching
-                    }
-                }
-            }
-            
+            const lastDutyFormatted = effectiveKey ? formatDateKeyAsElGr(effectiveKey) : 'Δεν έχει';
+
             // Calculate next duty date based on rotation order (not person's last duty)
             let nextDutyFormatted = 'Δεν έχει';
-            
+
             if (listArrayLength > 0) {
-                // Get the person's index in the list (their rotation position)
                 const gd =
                     typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum] || {};
                 const list = gd[listType] || [];
-                const personIndex = list.indexOf(person);
-                
+                const personIndex = list.findIndex((p) => normalizePersonKey(p) === normalizePersonKey(person));
+
                 if (personIndex === -1) {
                     return { lastDuty: lastDutyFormatted, nextDuty: 'Δεν έχει' };
                 }
-                
-                // Find all upcoming days of this type starting from today
+
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-                
+
                 const upcomingDays = [];
                 const checkDate = new Date(today);
-                const maxDaysAhead = 3650; // 10 years limit
+                const maxDaysAhead = 3650;
                 let daysChecked = 0;
-                
-                // Collect all upcoming days of the matching type
+
                 while (daysChecked < maxDaysAhead && upcomingDays.length < listArrayLength * 3) {
-                    // Check for special holidays FIRST using isSpecialHoliday() directly
                     let dayTypeCategory = 'normal';
                     const isSpecial = isSpecialHoliday(checkDate);
                     if (isSpecial) {
                         dayTypeCategory = 'special';
                     } else {
-                        // For non-special holidays, use getDayType()
                         const dayType = getDayType(checkDate);
                         if (dayType === 'semi-normal-day') {
                             dayTypeCategory = 'semi';
                         } else if (dayType === 'weekend-holiday') {
                             dayTypeCategory = 'weekend';
                         }
-                        // else remains 'normal'
                     }
-                    
-                    // If this day matches the list type, add it
+
                     if (dayTypeCategory === listType) {
                         upcomingDays.push(new Date(checkDate));
                     }
-                    
-                    // Move to next day
+
                     checkDate.setDate(checkDate.getDate() + 1);
                     daysChecked++;
                 }
-                
-                // Find the next day that matches this person's rotation position
-                // Person at index 0 gets days: 0, listLength, 2*listLength, ...
-                // Person at index 1 gets days: 1, listLength+1, 2*listLength+1, ...
-                // Person at index 2 gets days: 2, listLength+2, 2*listLength+2, ...
+
                 for (let i = 0; i < upcomingDays.length; i++) {
                     if (i % listArrayLength === personIndex) {
-                        nextDutyFormatted = upcomingDays[i].toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        nextDutyFormatted = upcomingDays[i].toLocaleDateString('el-GR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric'
+                        });
                         break;
                     }
                 }
-                
+
                 if (nextDutyFormatted === 'Δεν έχει' && upcomingDays.length > 0) {
                     nextDutyFormatted = 'Δεν βρέθηκε';
                 }
             }
-            
+
             return { lastDuty: lastDutyFormatted, nextDuty: nextDutyFormatted };
         }
+
+        window.syncLastDutiesFromAssignments = syncLastDutiesFromAssignments;
+        window.syncLastDutiesFromAssignmentsWithUi = syncLastDutiesFromAssignmentsWithUi;
+        window.restoreLastDutiesFromBackup = restoreLastDutiesFromBackup;
+        window.captureLastDutiesSnapshot = captureLastDutiesSnapshot;
         function isPersonDisabledForDuty(person, groupNum, dutyCategory, asOfDate) {
             if (
                 typeof isPersonExcludedFromDuties === 'function' &&
@@ -9524,6 +9664,15 @@
                     console.error('Error saving lastRotationPositions:', error);
                 }
                 
+                // Sync «Τελευταία» from calendar (snapshot first for undo)
+                try {
+                    if (typeof syncLastDutiesFromAssignments === 'function') {
+                        syncLastDutiesFromAssignments({ reason: 'after-calculation' });
+                    }
+                } catch (e) {
+                    console.warn('syncLastDutiesFromAssignments after calculation:', e);
+                }
+
                 // Save all assignments to Firebase
                 if (loadingAlert && loadingAlert.parentNode) {
                     loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Αποθήκευση στο Firebase...';
