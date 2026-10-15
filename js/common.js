@@ -551,14 +551,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Initial status check
     updateOnlineStatus();
     
-    // Register service worker
-    if ('serviceWorker' in navigator) {
+    // Register service worker (required for Add to Home Screen / install on phones)
+    if ((window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && 'serviceWorker' in navigator) {
         try {
-            const registration = await navigator.serviceWorker.register('/service-worker.js');
-            console.log('Service Worker registered:', registration);
+            // Prefer site-root SW so scope covers all pages (duty-shifts, main-menu, etc.)
+            const registration = await navigator.serviceWorker.register('./service-worker.js', { scope: './' });
+            console.log('Service Worker registered:', registration.scope);
             
             navigator.serviceWorker.addEventListener('message', event => {
-                if (event.data.type === 'OFFLINE_SYNC_COMPLETE') {
+                if (event.data && event.data.type === 'OFFLINE_SYNC_COMPLETE') {
                     showNotification(`Synced ${event.data.syncedCount} offline tools`, 'success');
                 }
             });

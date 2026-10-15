@@ -390,6 +390,138 @@
             return 'normal';
         }
 
+        /** Parse missing-period start/end (string, Date, or Firestore Timestamp). */
+        function parseMissingPeriodBoundDate(value) {
+            if (value == null || value === '') return null;
+            if (value instanceof Date && !isNaN(value.getTime())) {
+                const d = new Date(value.getTime());
+                d.setHours(0, 0, 0, 0);
+                return d;
+            }
+            if (typeof value === 'object') {
+                try {
+                    if (typeof value.toDate === 'function') {
+                        const d = value.toDate();
+                        if (d instanceof Date && !isNaN(d.getTime())) {
+                            d.setHours(0, 0, 0, 0);
+                            return d;
+                        }
+                    }
+                    if (typeof value.seconds === 'number') {
+                        const d = new Date(value.seconds * 1000);
+                        if (!isNaN(d.getTime())) {
+                            d.setHours(0, 0, 0, 0);
+                            return d;
+                        }
+                    }
+                } catch (_) {}
+            }
+            if (typeof inputValueToDateKey === 'function') {
+                const key = inputValueToDateKey(value);
+                if (key) {
+                    const d = new Date(key + 'T00:00:00');
+                    if (!isNaN(d.getTime())) return d;
+                }
+            }
+            const s = String(value).trim();
+            if (!s) return null;
+            if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+                const d = new Date(s.slice(0, 10) + 'T00:00:00');
+                if (!isNaN(d.getTime())) return d;
+            }
+            const dmY = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            if (dmY) {
+                const d = new Date(
+                    parseInt(dmY[3], 10),
+                    parseInt(dmY[2], 10) - 1,
+                    parseInt(dmY[1], 10)
+                );
+                if (!isNaN(d.getTime())) {
+                    d.setHours(0, 0, 0, 0);
+                    return d;
+                }
+            }
+            const d = new Date(s);
+            if (isNaN(d.getTime())) return null;
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }
+
+        /** Collect missing periods for person (exact key + normalized), from group and home group. */
+        function collectMissingPeriodsForLastNext(person, groupNum, dateObj) {
+            const out = [];
+            const seen = new Set();
+            const pushPeriods = (arr) => {
+                if (!Array.isArray(arr)) return;
+                for (const p of arr) {
+                    if (!p || typeof p !== 'object') continue;
+                    const id = `${p.start}|${p.end}|${p.reason || ''}`;
+                    if (seen.has(id)) continue;
+                    seen.add(id);
+                    out.push(p);
+                }
+            };
+            const readFromGroup = (gNum) => {
+                if (!Number.isFinite(gNum)) return;
+                const mp = groups?.[gNum]?.missingPeriods || {};
+                if (mp[person]) pushPeriods(mp[person]);
+                const target =
+                    typeof normalizePersonKey === 'function'
+                        ? normalizePersonKey(person)
+                        : String(person || '').trim();
+                if (!target) return;
+                for (const k of Object.keys(mp)) {
+                    const nk =
+                        typeof normalizePersonKey === 'function'
+                            ? normalizePersonKey(k)
+                            : String(k || '').trim();
+                    if (nk === target) pushPeriods(mp[k]);
+                }
+            };
+            readFromGroup(groupNum);
+            const dateKey =
+                dateObj && typeof formatDateKey === 'function' && !isNaN(dateObj.getTime())
+                    ? formatDateKey(dateObj)
+                    : null;
+            const homeGroup =
+                typeof getPersonHomeGroupAtDate === 'function' && dateKey
+                    ? getPersonHomeGroupAtDate(person, dateKey)
+                    : null;
+            if (Number.isFinite(homeGroup) && homeGroup !== groupNum) {
+                readFromGroup(homeGroup);
+            }
+            return out;
+        }
+
+        function personHasAbsenceOnDateForLastNext(person, groupNum, dateObj) {
+            if (!person || !dateObj || isNaN(dateObj.getTime())) return false;
+            const check = new Date(dateObj.getTime());
+            check.setHours(0, 0, 0, 0);
+            const periods = collectMissingPeriodsForLastNext(person, groupNum, dateObj);
+            return periods.some((period) => {
+                const start = parseMissingPeriodBoundDate(period.start);
+                const end = parseMissingPeriodBoundDate(period.end);
+                if (!start || !end) return false;
+                return check >= start && check <= end;
+            });
+        }
+
+        /** True if person has a missing period overlapping the calendar month of dateObj. */
+        function personHasAbsenceAffectingMonth(person, groupNum, dateObj) {
+            if (!person || !dateObj || isNaN(dateObj.getTime())) return false;
+            const monthStart = new Date(dateObj.getFullYear(), dateObj.getMonth(), 1);
+            const monthEnd = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0);
+            monthStart.setHours(0, 0, 0, 0);
+            monthEnd.setHours(0, 0, 0, 0);
+            const periods = collectMissingPeriodsForLastNext(person, groupNum, dateObj);
+            return periods.some((period) => {
+                const start = parseMissingPeriodBoundDate(period.start);
+                const end = parseMissingPeriodBoundDate(period.end);
+                if (!start || !end) return false;
+                return start <= monthEnd && end >= monthStart;
+            });
+        }
+
         function isUnavailableForLastNextPreview(person, groupNum, listType, dateObj) {
             if (
                 typeof isPersonExcludedFromDuties === 'function' &&
@@ -401,6 +533,13 @@
                 typeof isPersonDisabledForDuty === 'function' &&
                 isPersonDisabledForDuty(person, groupNum, listType, dateObj)
             ) {
+                return true;
+            }
+            // Direct period checks (same source as UI badge) — do not rely only on isPersonMissingOnDate
+            if (personHasAbsenceOnDateForLastNext(person, groupNum, dateObj)) {
+                return true;
+            }
+            if (personHasAbsenceAffectingMonth(person, groupNum, dateObj)) {
                 return true;
             }
             return false;
@@ -417,7 +556,8 @@
 
         /**
          * Next duty of listType after lastDateKey, following basic rotation and skipping
-         * disabled/excluded people. If allowPast, may return dates before today (for rolling Last).
+         * disabled / excluded / absent (on date or absence overlapping that month).
+         * If allowPast, may return dates before today (for rolling Last).
          */
         function computeNextDutyDateKeyFromLast(person, groupNum, listType, lastDateKey, opts) {
             const allowPast = !!(opts && opts.allowPast);
@@ -666,6 +806,9 @@
         window.syncLastDutiesFromAssignmentsWithUi = syncLastDutiesFromAssignmentsWithUi;
         window.restoreLastDutiesFromBackup = restoreLastDutiesFromBackup;
         window.captureLastDutiesSnapshot = captureLastDutiesSnapshot;
+        window.collectMissingPeriodsForLastNext = collectMissingPeriodsForLastNext;
+        window.parseMissingPeriodBoundDate = parseMissingPeriodBoundDate;
+        window.isUnavailableForLastNextPreview = isUnavailableForLastNextPreview;
         function isPersonDisabledForDuty(person, groupNum, dutyCategory, asOfDate) {
             if (
                 typeof isPersonExcludedFromDuties === 'function' &&

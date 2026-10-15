@@ -883,12 +883,22 @@
                 typeof isPersonExcludedFromDuties === 'function' &&
                 isPersonExcludedFromDuties(person, groupNum);
             const st = getDisabledState(groupNum, person);
-            const missingPeriods = groupData.missingPeriods?.[person] || [];
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            const isCurrentlyMissing = missingPeriods.some(period => {
-                const start = new Date(period.start + 'T00:00:00');
-                const end = new Date(period.end + 'T00:00:00');
+            const missingPeriods =
+                typeof collectMissingPeriodsForLastNext === 'function'
+                    ? collectMissingPeriodsForLastNext(person, groupNum, today)
+                    : groupData.missingPeriods?.[person] || [];
+            const isCurrentlyMissing = (Array.isArray(missingPeriods) ? missingPeriods : []).some((period) => {
+                if (typeof parseMissingPeriodBoundDate === 'function') {
+                    const start = parseMissingPeriodBoundDate(period.start);
+                    const end = parseMissingPeriodBoundDate(period.end);
+                    if (!start || !end) return false;
+                    return today >= start && today <= end;
+                }
+                const start = new Date(String(period.start || '') + 'T00:00:00');
+                const end = new Date(String(period.end || '') + 'T00:00:00');
+                if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
                 return today >= start && today <= end;
             });
             const disabledTitle = (() => {
