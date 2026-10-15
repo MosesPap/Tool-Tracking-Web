@@ -338,7 +338,19 @@
             );
         }
 
-        /** Most recent past (or today) assignment dateKey of this list type for person/group. */
+        /** Match person by name in any group (for Last duty after transfers). */
+        function personMatchesAssignmentEntryAnyGroup(person, assignedPersons) {
+            if (!Array.isArray(assignedPersons) || !person) return false;
+            const target = normalizePersonKey(person);
+            return assignedPersons.some(
+                (p) => p && normalizePersonKey(p.name) === target
+            );
+        }
+
+        /**
+         * Most recent past (or today) assignment dateKey of this list type for person.
+         * Searches calendar across all groups so a duty done before a transfer still counts.
+         */
         function getMostRecentAssignmentDateKeyForPerson(person, groupNum, listType, asOfDate) {
             const store = getAssignmentStoreForListType(listType);
             const today = asOfDate instanceof Date && !isNaN(asOfDate.getTime()) ? new Date(asOfDate) : new Date();
@@ -354,7 +366,8 @@
                 if (!assignment) continue;
                 const assignedPersons =
                     typeof extractAllPersonNames === 'function' ? extractAllPersonNames(assignment) : [];
-                if (personMatchesAssignmentEntry(person, groupNum, assignedPersons)) {
+                // Match by person name in any group (duty before transfer still counts as Last).
+                if (personMatchesAssignmentEntryAnyGroup(person, assignedPersons)) {
                     return dateKey;
                 }
             }
@@ -371,6 +384,21 @@
                 }
             }
             return { key: person, value: null };
+        }
+
+        /** Best stored Last date for person across all groups (transfer / leftover data). */
+        function getBestStoredLastDutyDateKeyAcrossGroups(person, listType) {
+            const target = normalizePersonKey(person);
+            let bestKey = null;
+            for (let g = 1; g <= 4; g++) {
+                const ld = groups?.[g]?.lastDuties || {};
+                for (const k of Object.keys(ld)) {
+                    if (normalizePersonKey(k) !== target) continue;
+                    const dk = parseLastDutyDateToKey(ld[k]?.[listType]);
+                    if (dk && (!bestKey || dk > bestKey)) bestKey = dk;
+                }
+            }
+            return bestKey;
         }
 
         function formatDateKeyAsElGr(dateKey) {
@@ -620,7 +648,12 @@
          */
         function resolveEffectiveLastDutyDateKey(person, groupNum, listType) {
             const stored = getStoredLastDutyRawForPerson(groupNum, person, listType);
-            const storedKey = parseLastDutyDateToKey(stored.value);
+            const storedInGroupKey = parseLastDutyDateToKey(stored.value);
+            const storedAnyGroupKey = getBestStoredLastDutyDateKeyAcrossGroups(person, listType);
+            let storedKey = storedInGroupKey;
+            if (storedAnyGroupKey && (!storedKey || storedAnyGroupKey > storedKey)) {
+                storedKey = storedAnyGroupKey;
+            }
             const assignedKey = getMostRecentAssignmentDateKeyForPerson(
                 person,
                 groupNum,
