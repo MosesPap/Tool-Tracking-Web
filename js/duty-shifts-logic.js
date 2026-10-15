@@ -347,29 +347,126 @@
             );
         }
 
-        /**
-         * Most recent past (or today) assignment dateKey of this list type for person.
-         * Searches calendar across all groups so a duty done before a transfer still counts.
-         */
-        function getMostRecentAssignmentDateKeyForPerson(person, groupNum, listType, asOfDate) {
-            const store = getAssignmentStoreForListType(listType);
-            const today = asOfDate instanceof Date && !isNaN(asOfDate.getTime()) ? new Date(asOfDate) : new Date();
+        function getTodayDateKeyForLastNext() {
+            const today = new Date();
             today.setHours(0, 0, 0, 0);
-            const todayKey = typeof formatDateKey === 'function' ? formatDateKey(today) : null;
+            return typeof formatDateKey === 'function' ? formatDateKey(today) : null;
+        }
+
+        /**
+         * Most recent calendar assignment of this list type for person (any group).
+         * opts.beforeDateKey: only dates strictly before this key (default: today).
+         */
+        function getMostRecentAssignmentDateKeyForPerson(person, groupNum, listType, asOfDate, opts) {
+            const store = getAssignmentStoreForListType(listType);
+            const options = opts && typeof opts === 'object' ? opts : {};
+            let beforeKey = options.beforeDateKey || null;
+            if (!beforeKey) {
+                const today =
+                    asOfDate instanceof Date && !isNaN(asOfDate.getTime()) ? new Date(asOfDate) : new Date();
+                today.setHours(0, 0, 0, 0);
+                beforeKey = typeof formatDateKey === 'function' ? formatDateKey(today) : null;
+            }
             const keys = Object.keys(store || {})
                 .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k))
                 .sort()
                 .reverse();
             for (const dateKey of keys) {
-                if (todayKey && dateKey > todayKey) continue;
+                // Last = before today (strict)
+                if (beforeKey && dateKey >= beforeKey) continue;
                 const assignment = store[dateKey];
                 if (!assignment) continue;
                 const assignedPersons =
                     typeof extractAllPersonNames === 'function' ? extractAllPersonNames(assignment) : [];
-                // Match by person name in any group (duty before transfer still counts as Last).
                 if (personMatchesAssignmentEntryAnyGroup(person, assignedPersons)) {
                     return dateKey;
                 }
+            }
+            return null;
+        }
+
+        /**
+         * Earliest calendar assignment of this list type for person after a date (default: today).
+         * Used for Next when the month is already calculated.
+         */
+        function getNextAssignmentDateKeyForPerson(person, groupNum, listType, afterDateKey) {
+            const store = getAssignmentStoreForListType(listType);
+            const afterKey = afterDateKey || getTodayDateKeyForLastNext();
+            const keys = Object.keys(store || {})
+                .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k))
+                .sort();
+            for (const dateKey of keys) {
+                if (afterKey && dateKey <= afterKey) continue;
+                const assignment = store[dateKey];
+                if (!assignment) continue;
+                const assignedPersons =
+                    typeof extractAllPersonNames === 'function' ? extractAllPersonNames(assignment) : [];
+                if (personMatchesAssignmentEntryAnyGroup(person, assignedPersons)) {
+                    return dateKey;
+                }
+            }
+            return null;
+        }
+
+        function getBaselineStoreForListType(listType) {
+            if (listType === 'special') return rotationBaselineSpecialAssignments || {};
+            if (listType === 'weekend') return rotationBaselineWeekendAssignments || {};
+            if (listType === 'semi') return rotationBaselineSemiAssignments || {};
+            if (listType === 'normal') return rotationBaselineNormalAssignments || {};
+            return {};
+        }
+
+        function personAssignedOnDateInStore(person, store, dateKey) {
+            if (!store || !dateKey) return false;
+            const assignment = store[dateKey];
+            if (!assignment) return false;
+            const assignedPersons =
+                typeof extractAllPersonNames === 'function' ? extractAllPersonNames(assignment) : [];
+            return personMatchesAssignmentEntryAnyGroup(person, assignedPersons);
+        }
+
+        /**
+         * Most recent baseline (basic rotation) date for person, strictly before beforeDateKey.
+         * Baseline is used as seed for Next prediction (not final calendar Last / swaps).
+         */
+        function getMostRecentBaselineDateKeyForPerson(person, groupNum, listType, beforeDateKey) {
+            const store = getBaselineStoreForListType(listType);
+            const beforeKey = beforeDateKey || getTodayDateKeyForLastNext();
+            const keys = Object.keys(store || {})
+                .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k))
+                .sort()
+                .reverse();
+            for (const dateKey of keys) {
+                if (beforeKey && dateKey >= beforeKey) continue;
+                if (personAssignedOnDateInStore(person, store, dateKey)) {
+                    return dateKey;
+                }
+            }
+            return null;
+        }
+
+        /** Last baseline slot for a group (any person), for seeding prediction when person has no baseline history. */
+        function getMostRecentBaselineAnchorForGroup(groupNum, listType, beforeDateKey) {
+            const store = getBaselineStoreForListType(listType);
+            const beforeKey = beforeDateKey || getTodayDateKeyForLastNext();
+            const keys = Object.keys(store || {})
+                .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k))
+                .sort()
+                .reverse();
+            for (const dateKey of keys) {
+                if (beforeKey && dateKey >= beforeKey) continue;
+                const assignment = store[dateKey];
+                if (!assignment) continue;
+                let name = null;
+                if (typeof parseAssignedPersonForGroupFromAssignment === 'function') {
+                    name = parseAssignedPersonForGroupFromAssignment(assignment, groupNum);
+                }
+                if (!name && typeof extractAllPersonNames === 'function') {
+                    const persons = extractAllPersonNames(assignment) || [];
+                    const hit = persons.find((p) => p && Number(p.group) === Number(groupNum));
+                    if (hit) name = hit.name;
+                }
+                if (name) return { dateKey, personName: name };
             }
             return null;
         }
@@ -585,19 +682,19 @@
         /**
          * Next duty of listType after lastDateKey, following basic rotation and skipping
          * disabled / excluded / absent (on date or absence overlapping that month).
-         * If allowPast, may return dates before today (for rolling Last).
+         * Returns only dates strictly after today unless allowPast is set.
+         * seedPersonIndex: if set with lastDateKey, continue after that person's turn (group anchor).
          */
         function computeNextDutyDateKeyFromLast(person, groupNum, listType, lastDateKey, opts) {
-            const allowPast = !!(opts && opts.allowPast);
+            const options = opts && typeof opts === 'object' ? opts : {};
+            const allowPast = !!options.allowPast;
             const list = getRotationListForLastNext(groupNum, listType);
             if (!Array.isArray(list) || list.length === 0) return null;
             const target = normalizePersonKey(person);
             const personIndex = list.findIndex((p) => normalizePersonKey(p) === target);
             if (personIndex < 0) return null;
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const todayKey = typeof formatDateKey === 'function' ? formatDateKey(today) : null;
+            const todayKey = getTodayDateKeyForLastNext();
 
             let cursor;
             let pos;
@@ -605,9 +702,20 @@
                 cursor = new Date(lastDateKey + 'T00:00:00');
                 if (isNaN(cursor.getTime())) return null;
                 cursor.setDate(cursor.getDate() + 1);
-                pos = (personIndex + 1) % list.length;
+                let seedIdx = personIndex;
+                if (options.seedPersonName) {
+                    const si = list.findIndex(
+                        (p) => normalizePersonKey(p) === normalizePersonKey(options.seedPersonName)
+                    );
+                    if (si >= 0) seedIdx = si;
+                } else if (Number.isFinite(options.seedPersonIndex)) {
+                    seedIdx = options.seedPersonIndex;
+                }
+                pos = (seedIdx + 1) % list.length;
             } else {
-                cursor = new Date(today);
+                cursor = new Date();
+                cursor.setHours(0, 0, 0, 0);
+                cursor.setDate(cursor.getDate() + 1);
                 pos = 0;
             }
             cursor.setHours(0, 0, 0, 0);
@@ -631,7 +739,8 @@
                         const dk =
                             typeof formatDateKey === 'function' ? formatDateKey(cursor) : null;
                         if (dk && normalizePersonKey(assigned) === target) {
-                            if (allowPast || !todayKey || dk >= todayKey) {
+                            // Next = after today (strict), unless allowPast
+                            if (allowPast || !todayKey || dk > todayKey) {
                                 return dk;
                             }
                         }
@@ -643,10 +752,49 @@
         }
 
         /**
-         * Effective Last: max(stored, calendar assignment ≤ today), then roll predicted
-         * next duties that have already arrived (Next → Last as days pass).
+         * Predict Next from basic rotation baseline (not from calendar Last / swaps).
+         */
+        function computePredictedNextDutyDateKeyFromBaseline(person, groupNum, listType) {
+            const todayKey = getTodayDateKeyForLastNext();
+            const baselineLast = getMostRecentBaselineDateKeyForPerson(
+                person,
+                groupNum,
+                listType,
+                todayKey
+            );
+            if (baselineLast) {
+                return computeNextDutyDateKeyFromLast(person, groupNum, listType, baselineLast, {
+                    allowPast: false
+                });
+            }
+            const anchor = getMostRecentBaselineAnchorForGroup(groupNum, listType, todayKey);
+            if (anchor && anchor.dateKey && anchor.personName) {
+                return computeNextDutyDateKeyFromLast(person, groupNum, listType, anchor.dateKey, {
+                    allowPast: false,
+                    seedPersonName: anchor.personName
+                });
+            }
+            // No baseline history: walk forward from tomorrow without a false calendar-Last seed
+            return computeNextDutyDateKeyFromLast(person, groupNum, listType, null, {
+                allowPast: false
+            });
+        }
+
+        /**
+         * Effective Last: calendar assignment before today, or manual stored value before today.
+         * Does NOT roll predicted Next into Last. Ignores stored dates that contradict the calendar
+         * (stale prediction / sync artifacts).
          */
         function resolveEffectiveLastDutyDateKey(person, groupNum, listType) {
+            const todayKey = getTodayDateKeyForLastNext();
+            const assignedKey = getMostRecentAssignmentDateKeyForPerson(
+                person,
+                groupNum,
+                listType,
+                new Date(),
+                { beforeDateKey: todayKey }
+            );
+
             const stored = getStoredLastDutyRawForPerson(groupNum, person, listType);
             const storedInGroupKey = parseLastDutyDateToKey(stored.value);
             const storedAnyGroupKey = getBestStoredLastDutyDateKeyAcrossGroups(person, listType);
@@ -654,29 +802,24 @@
             if (storedAnyGroupKey && (!storedKey || storedAnyGroupKey > storedKey)) {
                 storedKey = storedAnyGroupKey;
             }
-            const assignedKey = getMostRecentAssignmentDateKeyForPerson(
-                person,
-                groupNum,
-                listType,
-                new Date()
-            );
-            let lastKey = storedKey;
-            if (assignedKey && (!lastKey || assignedKey > lastKey)) {
-                lastKey = assignedKey;
+            // Manual/stored only counts if before today
+            if (storedKey && todayKey && storedKey >= todayKey) {
+                storedKey = null;
+            }
+            // Drop stored if that date exists in the calendar store but person was not assigned
+            // (prevents predicted/synced wrong Last like a swapped weekend).
+            if (storedKey) {
+                const finalStore = getAssignmentStoreForListType(listType);
+                if (finalStore && finalStore[storedKey] != null) {
+                    if (!personAssignedOnDateInStore(person, finalStore, storedKey)) {
+                        storedKey = null;
+                    }
+                }
             }
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const todayKey = typeof formatDateKey === 'function' ? formatDateKey(today) : null;
-            if (!todayKey) return lastKey;
-
-            let guard = 0;
-            while (guard++ < 400) {
-                const nextKey = computeNextDutyDateKeyFromLast(person, groupNum, listType, lastKey, {
-                    allowPast: true
-                });
-                if (!nextKey || nextKey > todayKey) break;
-                lastKey = nextKey;
+            let lastKey = assignedKey || null;
+            if (storedKey && (!lastKey || storedKey > lastKey)) {
+                lastKey = storedKey;
             }
             return lastKey;
         }
@@ -702,8 +845,8 @@
         }
 
         /**
-         * Update lastDuties from calendar + rolling Next→Last as days pass.
-         * Manual values stay until a later effective last exists.
+         * Update lastDuties from real calendar assignments before today (any group).
+         * Does not write predicted rotation dates. Clears stored Last that contradict the calendar.
          * Always snapshots first so restoreLastDutiesFromBackup() can undo.
          */
         function syncLastDutiesFromAssignments(opts) {
@@ -725,15 +868,22 @@
                         const list = getRotationListForLastNext(groupNum, listType);
                         const inList = list.some((p) => normalizePersonKey(p) === normalizePersonKey(person));
                         if (!inList) continue;
-                        const effectiveKey = resolveEffectiveLastDutyDateKey(person, groupNum, listType);
-                        if (!effectiveKey) continue;
                         const stored = getStoredLastDutyRawForPerson(groupNum, person, listType);
-                        const storedKey = parseLastDutyDateToKey(stored.value);
-                        if (storedKey && effectiveKey <= storedKey) continue;
                         const writeKey = stored.key || person;
-                        if (!g.lastDuties[writeKey]) g.lastDuties[writeKey] = {};
-                        g.lastDuties[writeKey][listType] = effectiveKey;
-                        changed += 1;
+                        const effectiveKey = resolveEffectiveLastDutyDateKey(person, groupNum, listType);
+                        const currentKey = parseLastDutyDateToKey(
+                            g.lastDuties?.[writeKey]?.[listType] || stored.value
+                        );
+                        if (effectiveKey) {
+                            if (currentKey === effectiveKey) continue;
+                            if (!g.lastDuties[writeKey]) g.lastDuties[writeKey] = {};
+                            g.lastDuties[writeKey][listType] = effectiveKey;
+                            changed += 1;
+                        } else if (currentKey && g.lastDuties[writeKey]) {
+                            // Effective empty after rejecting stale stored — clear
+                            delete g.lastDuties[writeKey][listType];
+                            changed += 1;
+                        }
                     }
                 }
             }
@@ -784,9 +934,9 @@
             if (
                 !confirm(
                     'Ενημέρωση ημερομηνιών «Τελευταία»;\n\n' +
-                        '• Από πραγματικές αναθέσεις ημερολογίου.\n' +
-                        '• Και από προβλεπόμενες επόμενες που έχουν ήδη έρθει (βασική σειρά, χωρίς απενεργοποιημένους/εξαιρούμενους).\n' +
-                        '• Χειροκίνητες τιμές αλλάζουν μόνο αν η νέα Τελευταία είναι μεταγενέστερη.\n\n' +
+                        '• Μόνο από πραγματικές αναθέσεις ημερολογίου (πριν από σήμερα).\n' +
+                        '• Καθαρίζει λανθασμένες αποθηκευμένες τιμές που δεν ταιριάζουν με το ημερολόγιο.\n' +
+                        '• Δεν χρησιμοποιεί πρόβλεψη βασικής σειράς.\n\n' +
                         'Πριν την αλλαγή αποθηκεύεται σημείο επαναφοράς.'
                 )
             ) {
@@ -812,18 +962,18 @@
                 return { lastDuty: 'Δεν έχει', nextDuty: 'Δεν έχει' };
             }
 
+            // Last: calendar (or valid manual) before today — never predicted
             const effectiveLastKey = resolveEffectiveLastDutyDateKey(person, groupNum, listType);
             const lastDutyFormatted = effectiveLastKey
                 ? formatDateKeyAsElGr(effectiveLastKey)
                 : 'Δεν έχει';
 
-            const nextKey = computeNextDutyDateKeyFromLast(
-                person,
-                groupNum,
-                listType,
-                effectiveLastKey,
-                { allowPast: false }
-            );
+            // Next: future calendar assignment if already calculated; else predict from baseline
+            const todayKey = getTodayDateKeyForLastNext();
+            let nextKey = getNextAssignmentDateKeyForPerson(person, groupNum, listType, todayKey);
+            if (!nextKey) {
+                nextKey = computePredictedNextDutyDateKeyFromBaseline(person, groupNum, listType);
+            }
             let nextDutyFormatted = 'Δεν έχει';
             if (nextKey) {
                 nextDutyFormatted = formatDateKeyAsElGr(nextKey);
