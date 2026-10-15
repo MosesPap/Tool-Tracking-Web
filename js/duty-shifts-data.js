@@ -33,6 +33,12 @@
         let dutyAssignments = {};
         /** Previous lastDuties snapshot for undo after auto-sync from calendar assignments. */
         let lastDutiesRestorePoint = null;
+        /**
+         * Bookmarks for returning a transferred person to their previous group
+         * in the same list order per duty type.
+         * Key: personScheduleKey / normalizePersonKey → { personName, homeGroup, slots, ... }
+         */
+        let transferReturnSlots = {};
         
         // Track skip/swap reasons for each assignment
         // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap'|'shift', reason: '...', swappedWith: '...', swapPairId, meta? }
@@ -3255,6 +3261,30 @@
                         lastDutiesRestorePoint = null;
                     }
                 }
+
+                try {
+                    const slotsDoc = await dutyShifts.doc('transferReturnSlots').get();
+                    if (slotsDoc.exists) {
+                        const sd = slotsDoc.data() || {};
+                        transferReturnSlots =
+                            sd.slots && typeof sd.slots === 'object' ? sd.slots : {};
+                    } else {
+                        try {
+                            const raw = localStorage.getItem('dutyShiftsTransferReturnSlots');
+                            transferReturnSlots = raw ? JSON.parse(raw) : {};
+                        } catch (_) {
+                            transferReturnSlots = {};
+                        }
+                    }
+                } catch (e) {
+                    console.warn('load transferReturnSlots:', e);
+                    try {
+                        const raw = localStorage.getItem('dutyShiftsTransferReturnSlots');
+                        transferReturnSlots = raw ? JSON.parse(raw) : {};
+                    } catch (_) {
+                        transferReturnSlots = {};
+                    }
+                }
                 
                 console.log('Data loaded from Firebase');
             } catch (error) {
@@ -3499,6 +3529,12 @@
                 lastDutiesRestorePoint = savedRestore ? JSON.parse(savedRestore) : null;
             } catch (_) {
                 lastDutiesRestorePoint = null;
+            }
+            try {
+                const savedSlots = localStorage.getItem('dutyShiftsTransferReturnSlots');
+                transferReturnSlots = savedSlots ? JSON.parse(savedSlots) : {};
+            } catch (_) {
+                transferReturnSlots = {};
             }
             
             // Load critical assignments
@@ -3791,6 +3827,22 @@
                 }
 
                 try {
+                    await db.collection('dutyShifts').doc('transferReturnSlots').set({
+                        slots: sanitizeForFirestore(transferReturnSlots || {}),
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    try {
+                        localStorage.setItem(
+                            'dutyShiftsTransferReturnSlots',
+                            JSON.stringify(transferReturnSlots || {})
+                        );
+                    } catch (_) {}
+                } catch (error) {
+                    console.error('Error saving transferReturnSlots to Firestore:', error);
+                }
+
+                try {
                     ensurePersonStatusScheduleSeeded();
                     if (typeof sanitizePersonStatusScheduleEffectiveDates === 'function') {
                         sanitizePersonStatusScheduleEffectiveDates();
@@ -4043,6 +4095,12 @@
                         JSON.stringify(lastDutiesRestorePoint)
                     );
                 }
+            } catch (_) {}
+            try {
+                localStorage.setItem(
+                    'dutyShiftsTransferReturnSlots',
+                    JSON.stringify(transferReturnSlots || {})
+                );
             } catch (_) {}
             // Save separate day-type assignments
             localStorage.setItem('dutyShiftsNormalDayAssignments', JSON.stringify(normalDayAssignments));
@@ -4549,6 +4607,8 @@
 
         // Undo support for last group transfer
         let lastTransferUndo = null; // { person, fromGroup, toGroup, fromSnapshot, toSnapshot, createdAt }
+        // Session list of recent transfers (for multi-select return-to-previous-group undo)
+        let recentTransferUndoEntries = []; // [{ personKey, personName, homeGroup, toGroup, slots, ... }]
 
         function deepClonePlain(obj) {
             if (!obj) return obj;
@@ -4577,6 +4637,7 @@
         }
 
         function showTransferUndoToast() {
+            // Overridden by duty-shifts-ui.js (multi-select return). Kept as fallback.
             if (!lastTransferUndo) return;
             ensureTransferUndoToastExists();
             const toastEl = document.getElementById('transferUndoToast');
@@ -4589,17 +4650,19 @@
             const toName = getGroupName(lastTransferUndo.toGroup);
             bodyEl.innerHTML = `<strong>Μεταφορά:</strong> ${p}<br><small class="text-white-50">${fromName} → ${toName}</small>`;
 
-            // Re-bind click handler each time (safe)
             const newBtn = btnEl.cloneNode(true);
             btnEl.parentNode.replaceChild(newBtn, btnEl);
             newBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                undoLastGroupTransfer();
                 const toast = bootstrap.Toast.getInstance(toastEl) || new bootstrap.Toast(toastEl);
                 toast.hide();
+                if (typeof openTransferReturnSelectModal === 'function') {
+                    openTransferReturnSelectModal();
+                } else {
+                    undoLastGroupTransfer();
+                }
             });
 
-            // Keep visible until user clicks Undo or closes it.
             const toast = bootstrap.Toast.getInstance(toastEl) || new bootstrap.Toast(toastEl, { autohide: false });
             toast.show();
         }

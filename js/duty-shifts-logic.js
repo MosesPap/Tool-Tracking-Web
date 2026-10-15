@@ -1445,6 +1445,7 @@
             document.body.insertAdjacentHTML('beforeend', html);
         }
         function showTransferUndoToast() {
+            // Overridden by duty-shifts-ui.js (multi-select return). Kept as fallback.
             if (!lastTransferUndo) return;
             ensureTransferUndoToastExists();
             const toastEl = document.getElementById('transferUndoToast');
@@ -1457,17 +1458,19 @@
             const toName = getGroupName(lastTransferUndo.toGroup);
             bodyEl.innerHTML = `<strong>Μεταφορά:</strong> ${p}<br><small class="text-white-50">${fromName} → ${toName}</small>`;
 
-            // Re-bind click handler each time (safe)
             const newBtn = btnEl.cloneNode(true);
             btnEl.parentNode.replaceChild(newBtn, btnEl);
             newBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                undoLastGroupTransfer();
                 const toast = bootstrap.Toast.getInstance(toastEl) || new bootstrap.Toast(toastEl);
                 toast.hide();
+                if (typeof openTransferReturnSelectModal === 'function') {
+                    openTransferReturnSelectModal();
+                } else {
+                    undoLastGroupTransfer();
+                }
             });
 
-            // Keep visible until user clicks Undo or closes it.
             const toast = bootstrap.Toast.getInstance(toastEl) || new bootstrap.Toast(toastEl, { autohide: false });
             toast.show();
         }

@@ -1759,6 +1759,7 @@
             } catch (_) {}
 
             updateExcludeFromDutiesActionButton(groupNum, personName);
+            updateReturnToSavedGroupSlotButton(groupNum, personName);
 
             const modalEl = document.getElementById('personActionsModal');
             const existing = bootstrap.Modal.getInstance(modalEl);
@@ -2666,6 +2667,529 @@
                 currentPersonActionsName,
                 true
             );
+        }
+
+        function personKeyForTransferReturn(personName) {
+            return typeof normalizePersonKey === 'function'
+                ? normalizePersonKey(personName)
+                : String(personName || '').trim();
+        }
+
+        function getTransferReturnSlot(personName) {
+            const pk = personKeyForTransferReturn(personName);
+            if (!pk || !transferReturnSlots || typeof transferReturnSlots !== 'object') return null;
+            return transferReturnSlots[pk] || null;
+        }
+
+        function buildTransferReturnBookmark(personName, homeGroup, toGroup) {
+            const pk = personKeyForTransferReturn(personName);
+            if (!pk || !Number.isFinite(homeGroup)) return null;
+            const g = groups[homeGroup];
+            if (!g) return null;
+            const listTypes = ['special', 'weekend', 'semi', 'normal'];
+            const slots = {};
+            for (const lt of listTypes) {
+                const list = g[lt] || [];
+                const idx = list.findIndex(
+                    (p) => personKeyForTransferReturn(p) === pk || p === personName
+                );
+                if (idx < 0) {
+                    slots[lt] = null;
+                    continue;
+                }
+                slots[lt] = {
+                    index: idx,
+                    beforePerson: list[idx - 1] || null,
+                    afterPerson: list[idx + 1] || null
+                };
+            }
+            let lastDuties = null;
+            let missingPeriods = null;
+            try {
+                lastDuties = g.lastDuties?.[personName]
+                    ? JSON.parse(JSON.stringify(g.lastDuties[personName]))
+                    : null;
+            } catch (_) {
+                lastDuties = g.lastDuties?.[personName] || null;
+            }
+            try {
+                missingPeriods = g.missingPeriods?.[personName]
+                    ? JSON.parse(JSON.stringify(g.missingPeriods[personName]))
+                    : null;
+            } catch (_) {
+                missingPeriods = g.missingPeriods?.[personName] || null;
+            }
+            const exclMap = g.excludedFromDuties || {};
+            const wasExcluded = exclMap[personName] === true || exclMap[pk] === true;
+            return {
+                personKey: pk,
+                personName,
+                homeGroup,
+                toGroup: Number.isFinite(toGroup) ? toGroup : null,
+                slots,
+                lastDuties,
+                missingPeriods,
+                excluded: !!wasExcluded,
+                savedAt: new Date().toISOString()
+            };
+        }
+
+        function persistTransferReturnSlotsLocal() {
+            try {
+                localStorage.setItem(
+                    'dutyShiftsTransferReturnSlots',
+                    JSON.stringify(transferReturnSlots || {})
+                );
+            } catch (_) {}
+        }
+
+        function rememberRecentTransferUndoEntry(bookmark) {
+            if (!bookmark || !bookmark.personKey) return;
+            if (!Array.isArray(recentTransferUndoEntries)) recentTransferUndoEntries = [];
+            recentTransferUndoEntries = recentTransferUndoEntries.filter(
+                (e) => e && e.personKey !== bookmark.personKey
+            );
+            recentTransferUndoEntries.unshift(bookmark);
+            // Keep a reasonable session history
+            if (recentTransferUndoEntries.length > 40) {
+                recentTransferUndoEntries = recentTransferUndoEntries.slice(0, 40);
+            }
+        }
+
+        function captureTransferReturnSlot(personName, homeGroup, toGroup) {
+            const bookmark = buildTransferReturnBookmark(personName, homeGroup, toGroup);
+            if (!bookmark) return null;
+            if (!transferReturnSlots || typeof transferReturnSlots !== 'object') {
+                transferReturnSlots = {};
+            }
+            transferReturnSlots[bookmark.personKey] = bookmark;
+            persistTransferReturnSlotsLocal();
+            rememberRecentTransferUndoEntry(bookmark);
+            return bookmark;
+        }
+
+        function clearTransferReturnBookmark(personNameOrKey) {
+            const pk = personKeyForTransferReturn(personNameOrKey);
+            if (pk && transferReturnSlots && typeof transferReturnSlots === 'object') {
+                delete transferReturnSlots[pk];
+                persistTransferReturnSlotsLocal();
+            }
+            if (Array.isArray(recentTransferUndoEntries)) {
+                recentTransferUndoEntries = recentTransferUndoEntries.filter(
+                    (e) => e && e.personKey !== pk
+                );
+            }
+        }
+
+        function findPersonGroupByKey(personName) {
+            const pk = personKeyForTransferReturn(personName);
+            const byExact = typeof getPersonGroup === 'function' ? getPersonGroup(personName) : null;
+            if (byExact) return byExact;
+            if (!pk) return null;
+            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                const group = groups[groupNum];
+                if (!group) continue;
+                for (const lt of ['special', 'weekend', 'semi', 'normal']) {
+                    const list = group[lt] || [];
+                    if (list.some((p) => personKeyForTransferReturn(p) === pk)) return groupNum;
+                }
+            }
+            return null;
+        }
+
+        function listEligibleTransferReturnEntries() {
+            const byKey = new Map();
+            if (transferReturnSlots && typeof transferReturnSlots === 'object') {
+                Object.values(transferReturnSlots).forEach((slot) => {
+                    if (slot && slot.personKey) byKey.set(slot.personKey, slot);
+                });
+            }
+            if (Array.isArray(recentTransferUndoEntries)) {
+                recentTransferUndoEntries.forEach((slot) => {
+                    if (slot && slot.personKey && !byKey.has(slot.personKey)) {
+                        byKey.set(slot.personKey, slot);
+                    }
+                });
+            }
+            const entries = [];
+            byKey.forEach((slot) => {
+                if (!slot || !Number.isFinite(slot.homeGroup)) return;
+                const personName = slot.personName || slot.personKey;
+                const currentGroup = findPersonGroupByKey(personName);
+                if (currentGroup != null && Number(currentGroup) === Number(slot.homeGroup)) return;
+                entries.push({
+                    ...slot,
+                    personName,
+                    currentGroup
+                });
+            });
+            // Recent first
+            const recentOrder = Array.isArray(recentTransferUndoEntries)
+                ? recentTransferUndoEntries.map((e) => e.personKey)
+                : [];
+            entries.sort((a, b) => {
+                const ai = recentOrder.indexOf(a.personKey);
+                const bi = recentOrder.indexOf(b.personKey);
+                if (ai === -1 && bi === -1) {
+                    return String(a.personName).localeCompare(String(b.personName), 'el');
+                }
+                if (ai === -1) return 1;
+                if (bi === -1) return -1;
+                return ai - bi;
+            });
+            return entries;
+        }
+
+        function insertPersonAtTransferReturnSlot(list, personName, slot) {
+            const pk = personKeyForTransferReturn(personName);
+            for (let i = list.length - 1; i >= 0; i--) {
+                if (list[i] === personName || personKeyForTransferReturn(list[i]) === pk) {
+                    list.splice(i, 1);
+                }
+            }
+            if (!slot) {
+                list.push(personName);
+                return;
+            }
+            if (slot.beforePerson) {
+                const bi = list.findIndex(
+                    (p) =>
+                        p === slot.beforePerson ||
+                        personKeyForTransferReturn(p) === personKeyForTransferReturn(slot.beforePerson)
+                );
+                if (bi >= 0) {
+                    list.splice(bi + 1, 0, personName);
+                    return;
+                }
+            }
+            if (slot.afterPerson) {
+                const ai = list.findIndex(
+                    (p) =>
+                        p === slot.afterPerson ||
+                        personKeyForTransferReturn(p) === personKeyForTransferReturn(slot.afterPerson)
+                );
+                if (ai >= 0) {
+                    list.splice(ai, 0, personName);
+                    return;
+                }
+            }
+            const idx = Math.max(0, Math.min(Number(slot.index) || 0, list.length));
+            list.splice(idx, 0, personName);
+        }
+
+        function updateReturnToSavedGroupSlotButton(groupNum, personName) {
+            const btn = document.getElementById('returnToSavedGroupSlotButton');
+            const textEl = document.getElementById('returnToSavedGroupSlotButtonText');
+            if (!btn) return;
+            const slot = getTransferReturnSlot(personName);
+            if (!slot || !Number.isFinite(slot.homeGroup)) {
+                btn.classList.add('d-none');
+                return;
+            }
+            // Show when person is not currently in the saved home group (or always if bookmark exists)
+            const inHome = Number(groupNum) === Number(slot.homeGroup);
+            if (inHome) {
+                btn.classList.add('d-none');
+                return;
+            }
+            btn.classList.remove('d-none');
+            const homeName =
+                typeof getGroupName === 'function' ? getGroupName(slot.homeGroup) : `Ομάδα ${slot.homeGroup}`;
+            if (textEl) {
+                textEl.textContent = `Επιστροφή στην ${homeName} (ίδια σειρά)`;
+            }
+        }
+
+        function applyPersonReturnToSavedSlot(personName, bookmark, effKey) {
+            if (!personName || !bookmark || !Number.isFinite(bookmark.homeGroup)) return false;
+            const homeGroup = bookmark.homeGroup;
+            const listTypes = ['special', 'weekend', 'semi', 'normal'];
+            const pk = personKeyForTransferReturn(personName);
+
+            for (let g = 1; g <= 4; g++) {
+                if (!groups[g]) continue;
+                for (const lt of listTypes) {
+                    const list = groups[g][lt] || [];
+                    for (let i = list.length - 1; i >= 0; i--) {
+                        if (list[i] === personName || personKeyForTransferReturn(list[i]) === pk) {
+                            list.splice(i, 1);
+                        }
+                    }
+                    list.forEach((p, idx) => {
+                        if (!groups[g].priorities) groups[g].priorities = {};
+                        if (!groups[g].priorities[p]) groups[g].priorities[p] = {};
+                        groups[g].priorities[p][lt] = idx + 1;
+                    });
+                }
+                if (groups[g].lastDuties) {
+                    delete groups[g].lastDuties[personName];
+                }
+                if (groups[g].missingPeriods) {
+                    delete groups[g].missingPeriods[personName];
+                }
+                if (groups[g].excludedFromDuties) {
+                    delete groups[g].excludedFromDuties[personName];
+                    if (pk) delete groups[g].excludedFromDuties[pk];
+                }
+            }
+
+            if (!groups[homeGroup]) {
+                groups[homeGroup] = {
+                    special: [],
+                    weekend: [],
+                    semi: [],
+                    normal: [],
+                    lastDuties: {},
+                    missingPeriods: {},
+                    priorities: {},
+                    disabledPersons: {},
+                    excludedFromDuties: {}
+                };
+            }
+            if (!groups[homeGroup].priorities) groups[homeGroup].priorities = {};
+
+            for (const lt of listTypes) {
+                if (!groups[homeGroup][lt]) groups[homeGroup][lt] = [];
+                insertPersonAtTransferReturnSlot(
+                    groups[homeGroup][lt],
+                    personName,
+                    bookmark.slots?.[lt] || null
+                );
+                groups[homeGroup][lt].forEach((p, idx) => {
+                    if (!groups[homeGroup].priorities[p]) groups[homeGroup].priorities[p] = {};
+                    groups[homeGroup].priorities[p][lt] = idx + 1;
+                });
+            }
+
+            if (!groups[homeGroup].lastDuties) groups[homeGroup].lastDuties = {};
+            if (bookmark.lastDuties) {
+                groups[homeGroup].lastDuties[personName] = bookmark.lastDuties;
+            }
+            if (!groups[homeGroup].missingPeriods) groups[homeGroup].missingPeriods = {};
+            if (bookmark.missingPeriods) {
+                groups[homeGroup].missingPeriods[personName] = bookmark.missingPeriods;
+            }
+            if (bookmark.excluded) {
+                if (!groups[homeGroup].excludedFromDuties) groups[homeGroup].excludedFromDuties = {};
+                groups[homeGroup].excludedFromDuties[pk || personName] = true;
+            }
+
+            if (typeof scheduleMembershipChange === 'function') {
+                scheduleMembershipChange(personName, homeGroup, effKey);
+            }
+            clearTransferReturnBookmark(pk || personName);
+            return true;
+        }
+
+        async function finalizeTransferReturns(returnedNames) {
+            try {
+                if (typeof persistPersonStatusSchedule === 'function') {
+                    await persistPersonStatusSchedule();
+                }
+            } catch (_) {}
+            await saveData();
+            renderGroups();
+            updateStatistics();
+            if (lastTransferUndo && returnedNames && returnedNames.length) {
+                const lastPk = personKeyForTransferReturn(lastTransferUndo.person);
+                if (returnedNames.some((n) => personKeyForTransferReturn(n) === lastPk)) {
+                    lastTransferUndo = null;
+                }
+            }
+        }
+
+        async function returnSelectedPeopleToSavedSlots(selectedEntries, effKey) {
+            if (!Array.isArray(selectedEntries) || !selectedEntries.length) return;
+            const returnedNames = [];
+            for (const entry of selectedEntries) {
+                const personName = entry.personName || entry.personKey;
+                const bookmark =
+                    getTransferReturnSlot(personName) ||
+                    (Array.isArray(recentTransferUndoEntries)
+                        ? recentTransferUndoEntries.find(
+                              (e) => e && e.personKey === personKeyForTransferReturn(personName)
+                          )
+                        : null) ||
+                    entry;
+                if (applyPersonReturnToSavedSlot(personName, bookmark, effKey)) {
+                    returnedNames.push(personName);
+                }
+            }
+            if (typeof scheduleListOrdersForGroup === 'function') {
+                for (let g = 1; g <= 4; g++) scheduleListOrdersForGroup(g, effKey);
+            }
+            await finalizeTransferReturns(returnedNames);
+            if (returnedNames.length === 1) {
+                const homeName = getGroupName(
+                    selectedEntries[0].homeGroup || getTransferReturnSlot(returnedNames[0])?.homeGroup
+                );
+                alert(`Το άτομο "${returnedNames[0]}" επέστρεψε στην ομάδα "${homeName}" στην αποθηκευμένη σειρά.`);
+            } else if (returnedNames.length > 1) {
+                alert(`Επέστρεψαν ${returnedNames.length} άτομα στις προηγούμενες ομάδες τους (ίδια σειρά).`);
+            }
+        }
+
+        function runTransferReturnWithEffectiveDate(selectedEntries) {
+            const apply = (effKey) => {
+                returnSelectedPeopleToSavedSlots(selectedEntries, effKey);
+            };
+            if (typeof isFlexibleStatusEffectiveDatesEnabled === 'function' && isFlexibleStatusEffectiveDatesEnabled()) {
+                openStatusChangeEffectiveModal({
+                    title: 'Ισχύς επιστροφής ομάδας',
+                    introHtml:
+                        '<p class="mb-0">Η επιστροφή στην προηγούμενη ομάδα/σειρά ισχύει από την ημερομηνία που επιλέγετε.</p>',
+                    suggestedDateKey:
+                        typeof getSuggestedStatusEffectiveFromDateKey === 'function'
+                            ? getSuggestedStatusEffectiveFromDateKey(new Date())
+                            : undefined,
+                    onConfirm: (effKey) => {
+                        apply(effKey);
+                    },
+                    onCancel: () => {}
+                });
+                return;
+            }
+            if (typeof assertStatusChangeWindowOrAlert === 'function' && !assertStatusChangeWindowOrAlert()) {
+                return;
+            }
+            apply();
+        }
+
+        function setAllTransferReturnSelectChecks(checked) {
+            document.querySelectorAll('#transferReturnSelectList input[type="checkbox"]').forEach((el) => {
+                el.checked = !!checked;
+            });
+        }
+
+        function openTransferReturnSelectModal(options) {
+            const opts = options || {};
+            const listEl = document.getElementById('transferReturnSelectList');
+            const emptyEl = document.getElementById('transferReturnSelectEmpty');
+            const confirmBtn = document.getElementById('transferReturnSelectConfirmBtn');
+            const modalEl = document.getElementById('transferReturnSelectModal');
+            if (!listEl || !modalEl) {
+                if (lastTransferUndo) {
+                    undoLastGroupTransfer();
+                } else {
+                    alert('Δεν υπάρχουν αποθηκευμένες μεταφορές για επιστροφή.');
+                }
+                return;
+            }
+
+            const entries = listEligibleTransferReturnEntries();
+            if (!entries.length) {
+                if (lastTransferUndo) {
+                    if (confirm('Δεν υπάρχει αποθηκευμένη σειρά. Να αναιρεθεί η τελευταία μεταφορά;')) {
+                        undoLastGroupTransfer();
+                    }
+                } else {
+                    alert('Δεν υπάρχουν αποθηκευμένες μεταφορές για επιστροφή.');
+                }
+                return;
+            }
+
+            const preselect = new Set();
+            if (Array.isArray(opts.preselectKeys)) {
+                opts.preselectKeys.forEach((k) => preselect.add(personKeyForTransferReturn(k)));
+            } else if (Array.isArray(recentTransferUndoEntries) && recentTransferUndoEntries.length) {
+                // Default: pre-check recent session transfers that appear in the list
+                recentTransferUndoEntries.forEach((e) => {
+                    if (e && e.personKey) preselect.add(e.personKey);
+                });
+            } else if (lastTransferUndo && lastTransferUndo.person) {
+                preselect.add(personKeyForTransferReturn(lastTransferUndo.person));
+            }
+
+            listEl.innerHTML = entries
+                .map((e) => {
+                    const homeName = getGroupName(e.homeGroup);
+                    const curName =
+                        e.currentGroup != null ? getGroupName(e.currentGroup) : '—';
+                    const id = `transferReturnCheck_${String(e.personKey).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+                    const checked = preselect.size === 0 || preselect.has(e.personKey) ? 'checked' : '';
+                    return `
+                        <label class="list-group-item list-group-item-action d-flex gap-2 align-items-start" for="${id}">
+                            <input class="form-check-input flex-shrink-0 mt-1" type="checkbox" value="${e.personKey}" id="${id}" ${checked}>
+                            <span>
+                                <strong>${e.personName}</strong><br>
+                                <small class="text-muted">${curName} → ${homeName} (ίδια σειρά)</small>
+                            </span>
+                        </label>
+                    `;
+                })
+                .join('');
+
+            if (emptyEl) emptyEl.classList.add('d-none');
+            listEl.classList.remove('d-none');
+            if (confirmBtn) confirmBtn.disabled = false;
+
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        }
+
+        function confirmTransferReturnSelection() {
+            const checks = Array.from(
+                document.querySelectorAll('#transferReturnSelectList input[type="checkbox"]:checked')
+            );
+            if (!checks.length) {
+                alert('Επιλέξτε τουλάχιστον ένα άτομο.');
+                return;
+            }
+            const selectedKeys = new Set(checks.map((c) => c.value));
+            const selectedEntries = listEligibleTransferReturnEntries().filter((e) =>
+                selectedKeys.has(e.personKey)
+            );
+            if (!selectedEntries.length) {
+                alert('Δεν βρέθηκαν έγκυρες επιλογές για επιστροφή.');
+                return;
+            }
+            const names = selectedEntries.map((e) => e.personName).join(', ');
+            if (
+                !confirm(
+                    selectedEntries.length === 1
+                        ? `Επιστροφή του/της "${names}" στην προηγούμενη ομάδα (ίδια σειρά);`
+                        : `Επιστροφή ${selectedEntries.length} ατόμων στις προηγούμενες ομάδες τους (ίδια σειρά);\n\n${names}`
+                )
+            ) {
+                return;
+            }
+            const modal = bootstrap.Modal.getInstance(document.getElementById('transferReturnSelectModal'));
+            if (modal) modal.hide();
+            runTransferReturnWithEffectiveDate(selectedEntries);
+        }
+
+        async function returnPersonToSavedGroupSlotFromActions() {
+            const personName = currentPersonActionsName;
+            const currentGroup = currentPersonActionsGroup;
+            if (!personName || !currentGroup) return;
+            const bookmark = getTransferReturnSlot(personName);
+            if (!bookmark || !Number.isFinite(bookmark.homeGroup)) {
+                alert('Δεν υπάρχει αποθηκευμένη σειρά επιστροφής για αυτό το άτομο.');
+                return;
+            }
+            const homeName = getGroupName(bookmark.homeGroup);
+            if (
+                !confirm(
+                    `Επιστροφή του/της "${personName}" στην ομάδα "${homeName}" στην αποθηκευμένη σειρά για κάθε τύπο υπηρεσίας;`
+                )
+            ) {
+                return;
+            }
+
+            const modal = bootstrap.Modal.getInstance(document.getElementById('personActionsModal'));
+            if (modal) modal.hide();
+
+            runTransferReturnWithEffectiveDate([
+                {
+                    personKey: personKeyForTransferReturn(personName),
+                    personName,
+                    homeGroup: bookmark.homeGroup,
+                    slots: bookmark.slots,
+                    lastDuties: bookmark.lastDuties,
+                    missingPeriods: bookmark.missingPeriods,
+                    excluded: bookmark.excluded
+                }
+            ]);
         }
         function openTransferTargetGroupModal(fromGroup, index, listType, personName, reopenActionsOnCancel = false) {
             const availableGroups = [1, 2, 3, 4].filter(g => g !== fromGroup);
@@ -3631,26 +4155,37 @@
             document.body.insertAdjacentHTML('beforeend', html);
         }
         function showTransferUndoToast() {
-            if (!lastTransferUndo) return;
+            if (!lastTransferUndo && !listEligibleTransferReturnEntries().length) return;
             ensureTransferUndoToastExists();
             const toastEl = document.getElementById('transferUndoToast');
             const bodyEl = document.getElementById('transferUndoToastBody');
             const btnEl = document.getElementById('transferUndoToastButton');
             if (!toastEl || !bodyEl || !btnEl) return;
 
-            const p = lastTransferUndo.person || '';
-            const fromName = getGroupName(lastTransferUndo.fromGroup);
-            const toName = getGroupName(lastTransferUndo.toGroup);
-            bodyEl.innerHTML = `<strong>Μεταφορά:</strong> ${p}<br><small class="text-white-50">${fromName} → ${toName}</small>`;
+            const eligibleCount = listEligibleTransferReturnEntries().length;
+            if (lastTransferUndo) {
+                const p = lastTransferUndo.person || '';
+                const fromName = getGroupName(lastTransferUndo.fromGroup);
+                const toName = getGroupName(lastTransferUndo.toGroup);
+                const extra =
+                    eligibleCount > 1
+                        ? `<br><small class="text-white-50">Διαθέσιμες επιστροφές: ${eligibleCount} άτομα</small>`
+                        : '';
+                bodyEl.innerHTML = `<strong>Μεταφορά:</strong> ${p}<br><small class="text-white-50">${fromName} → ${toName}</small>${extra}`;
+            } else {
+                bodyEl.innerHTML = `<strong>Αναίρεση μεταφοράς</strong><br><small class="text-white-50">Επιλέξτε ποια άτομα θα επιστρέψουν</small>`;
+            }
+            btnEl.textContent = eligibleCount > 1 ? 'Επιλογή…' : 'Αναίρεση';
 
             // Re-bind click handler each time (safe)
             const newBtn = btnEl.cloneNode(true);
             btnEl.parentNode.replaceChild(newBtn, btnEl);
             newBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                undoLastGroupTransfer();
                 const toast = bootstrap.Toast.getInstance(toastEl) || new bootstrap.Toast(toastEl);
                 toast.hide();
+                // Pre-checks all recent session transfers; user unchecks those to keep.
+                openTransferReturnSelectModal();
             });
 
             // Keep visible until user clicks Undo or closes it.
@@ -3898,6 +4433,31 @@
             const undoPerson = transferData.person;
             const undoFromSnapshot = deepClonePlain(groups[undoFromGroup]);
             const undoToSnapshot = deepClonePlain(groups[undoToGroup]);
+
+            // Optional: remember exact list positions in source group for later return
+            const saveReturnSlotEl = document.getElementById('transferSaveReturnSlotCheck');
+            const shouldSaveReturnSlot = !saveReturnSlotEl || saveReturnSlotEl.checked === true;
+            try {
+                // Always keep a session bookmark so multi-select undo works for concurrent transfers.
+                // Persist to transferReturnSlots only when the checkbox is on.
+                const sessionBookmark = buildTransferReturnBookmark(
+                    undoPerson,
+                    undoFromGroup,
+                    undoToGroup
+                );
+                if (sessionBookmark) {
+                    rememberRecentTransferUndoEntry(sessionBookmark);
+                    if (shouldSaveReturnSlot) {
+                        if (!transferReturnSlots || typeof transferReturnSlots !== 'object') {
+                            transferReturnSlots = {};
+                        }
+                        transferReturnSlots[sessionBookmark.personKey] = sessionBookmark;
+                        persistTransferReturnSlotsLocal();
+                    }
+                }
+            } catch (e) {
+                console.warn('transfer return bookmark:', e);
+            }
 
             // Remove from current group's all lists
             const allListTypes = ['special', 'weekend', 'semi', 'normal'];
