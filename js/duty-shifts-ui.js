@@ -4285,10 +4285,8 @@
             document.getElementById('transferFromGroup').textContent = getGroupName(transferData.fromGroup);
             document.getElementById('transferToGroup').textContent = getGroupName(transferData.toGroup);
             
-            // Auto-suggest positions based on the CURRENT month and rankings:
-            // - Find dates in the current month where person A (fromGroup) had duty
-            // - For each such date, find the person B (toGroup) who had duty on the SAME date
-            // - Compare hierarchy (rankings): if A is higher rank -> place AFTER B, else place ABOVE B
+            // Auto-suggest: last duty day per type for A (final assignment first, then baseline/critical),
+            // then B on the same date in destination group (same source priority). Rankings decide above/below.
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth(); // 0-11
             const matchesByType = findTransferMatchesBackwards(transferData.person, transferData.fromGroup, transferData.toGroup, year, month, 36);
@@ -4320,19 +4318,31 @@
                 const r = transferData.auto?.ranksByType?.[type] || {};
                 const totalMatches = matchesByType?.[type]?.length || 0;
 
+                const selfPos = chosen?.listPosition || r?.listPosition || pos?.listPosition;
                 const matchText = chosen
-                    ? `${chosen.dayName} ${chosen.dateStr} — ${chosen.personB} (${chosen.monthLabel || chosen.monthKey || ''}, A:${chosen.sourceA || ''}, B:${chosen.sourceB || ''})`
+                    ? chosen.isSelfMatch || selfPos
+                        ? `${chosen.dayName} ${chosen.dateStr} — ίδιος (θέση λίστας ${selfPos || '?'}) · ${chosen.monthLabel || chosen.monthKey || ''}`
+                        : `${chosen.dayName} ${chosen.dateStr} — ${chosen.personB} (${chosen.monthLabel || chosen.monthKey || ''}, A:${chosen.sourceA || ''}, B:${chosen.sourceB || ''})`
                     : 'Δεν βρέθηκε κοινή υπηρεσία';
 
                 let intended = 'Δεν έχει επιλεγεί';
                 if (pos) {
-                    if (pos.position === 'end') intended = 'Στο τέλος';
+                    if (pos.listPosition && (chosen?.isSelfMatch || r?.selfMatch)) {
+                        intended = `Θέση ${pos.listPosition} στη λίστα`;
+                        if (pos.referencePerson) {
+                            intended += ` (${pos.position === 'above' ? 'πάνω από' : 'κάτω από'} ${pos.referencePerson})`;
+                        } else if (pos.position === 'end') {
+                            intended += ' (στο τέλος — η λίστα είναι μικρότερη)';
+                        }
+                    } else if (pos.position === 'end') intended = 'Στο τέλος';
                     else if (pos.referencePerson) intended = `${pos.position === 'above' ? 'Πάνω από' : 'Κάτω από'} ${pos.referencePerson}`;
                 }
 
-                const rankText = chosen
-                    ? `A:${r.rankA ?? ''} / B:${r.rankB ?? ''}`
-                    : `A:${r.rankA ?? ''}`;
+                const rankText = chosen?.isSelfMatch || r?.selfMatch
+                    ? `Θέση:${selfPos ?? '?'}`
+                    : chosen
+                        ? `A:${r.rankA ?? ''} / B:${r.rankB ?? ''}`
+                        : `A:${r.rankA ?? ''}`;
 
                 return `<tr>
                     <td><strong>${label}</strong></td>
@@ -4346,7 +4356,7 @@
                 <div class="alert alert-light border">
                     <div class="mb-2">
                         <strong>Αυτόματη πρόταση τοποθέτησης (αφετηρία μήνας: ${monthStr})</strong>
-                        <div class="text-muted small">Αν δεν υπάρχει κοινή υπηρεσία στον μήνα, γίνεται αναζήτηση σε προηγούμενους μήνες (baseline docs πρώτα). Μπορείτε να αλλάξετε χειροκίνητα παρακάτω.</div>
+                        <div class="text-muted small">Ανά τύπο: τελευταία μέρα του Α από τελική ανάθεση (αλλιώς baseline/critical). Αν το Β είναι ο ίδιος, τοποθέτηση στη θέση λίστας (αριθμός σε παρένθεση). Αλλιώς σύγκριση ιεραρχίας με το Β. Μπορείτε να αλλάξετε χειροκίνητα παρακάτω.</div>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered mb-0">

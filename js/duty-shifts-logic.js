@@ -1695,17 +1695,36 @@
             const types = ['special', 'weekend', 'semi', 'normal'];
 
             const monthLabelFor = (y, m) => new Date(y, m, 1).toLocaleDateString('el-GR', { month: 'long', year: 'numeric' });
-
-            const findPersonBOnDate = (dayKey) => {
-                const baseline = getRotationBaselineAssignmentForDate(dayKey);
-                if (baseline) {
-                    const b = parseAssignedPersonForGroupFromAssignment(baseline, toGroup);
-                    if (b) return { personB: b, sourceB: 'baseline' };
+            const samePerson = (a, b) => {
+                if (!a || !b) return false;
+                if (a === b) return true;
+                if (typeof normalizePersonKey === 'function') {
+                    return normalizePersonKey(a) === normalizePersonKey(b);
                 }
-                const finalAssignment = getAssignmentForDate(dayKey);
+                return false;
+            };
+
+            const getFinalRawForType = (type, dayKey) => {
+                if (typeof getFinalAssignmentForType === 'function') {
+                    return getFinalAssignmentForType(type, dayKey);
+                }
+                return typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dayKey) : null;
+            };
+
+            // Person B on a date: final assignment first, then baseline, then critical
+            const findPersonBOnDate = (dayKey, type) => {
+                const finalAssignment = getFinalRawForType(type, dayKey);
                 if (finalAssignment) {
                     const b = parseAssignedPersonForGroupFromAssignment(finalAssignment, toGroup);
                     if (b) return { personB: b, sourceB: 'final' };
+                }
+                const baseline =
+                    typeof getRotationBaselineAssignmentForType === 'function'
+                        ? getRotationBaselineAssignmentForType(type, dayKey)
+                        : getRotationBaselineAssignmentForDate(dayKey);
+                if (baseline) {
+                    const b = parseAssignedPersonForGroupFromAssignment(baseline, toGroup);
+                    if (b) return { personB: b, sourceB: 'baseline' };
                 }
                 const criticalAssignment = getCriticalAssignmentForDate(dayKey);
                 if (criticalAssignment) {
@@ -1715,7 +1734,22 @@
                 return { personB: null, sourceB: null };
             };
 
-            const findLastBaselineDateForA = (type) => {
+            /** Find personA on a day in any group (prefer fromGroup, then toGroup, then others). */
+            const findPersonAOnRaw = (raw) => {
+                if (!raw) return null;
+                const order = [fromGroup, toGroup, 1, 2, 3, 4].filter(
+                    (g, i, arr) => Number.isFinite(g) && arr.indexOf(g) === i
+                );
+                for (const g of order) {
+                    const a = parseAssignedPersonForGroupFromAssignment(raw, g);
+                    if (a && samePerson(a, personA)) {
+                        return { personName: a, groupNum: g };
+                    }
+                }
+                return null;
+            };
+
+            const scanMonthsForA = (type, getRaw, sourceA) => {
                 for (let back = 0; back < maxMonthsBack; back++) {
                     const monthStart = new Date(startYear, startMonth - back, 1);
                     const y = monthStart.getFullYear();
@@ -1727,16 +1761,17 @@
                         const cat = getDayTypeCategoryFromDayType(getDayType(d));
                         if (cat !== type) continue;
                         const dayKey = formatDateKey(d);
-                        const baseline = getRotationBaselineAssignmentForDate(dayKey);
-                        if (!baseline) continue;
-                        const a = parseAssignedPersonForGroupFromAssignment(baseline, fromGroup);
-                        if (a && a === personA) {
+                        const raw = getRaw(dayKey);
+                        if (!raw) continue;
+                        const hit = findPersonAOnRaw(raw);
+                        if (hit) {
                             return {
                                 dateKey: dayKey,
-                                dateObj: new Date(d),
+                                dateObj: new Date(d.getTime()),
                                 monthKey: `${y}-${m}`,
                                 monthLabel: monthLabelFor(y, m),
-                                sourceA: 'baseline'
+                                sourceA,
+                                assignedGroup: hit.groupNum
                             };
                         }
                     }
@@ -1744,57 +1779,142 @@
                 return null;
             };
 
-            const findLastCriticalDateForA = (type) => {
-                for (let back = 0; back < maxMonthsBack; back++) {
-                    const monthStart = new Date(startYear, startMonth - back, 1);
-                    const y = monthStart.getFullYear();
-                    const m = monthStart.getMonth();
-                    const firstDay = new Date(y, m, 1);
-                    const lastDay = new Date(y, m + 1, 0);
-
-                    for (let d = new Date(lastDay); d >= firstDay; d.setDate(d.getDate() - 1)) {
-                        const cat = getDayTypeCategoryFromDayType(getDayType(d));
-                        if (cat !== type) continue;
-                        const dayKey = formatDateKey(d);
-                        const critical = getCriticalAssignmentForDate(dayKey);
-                        if (!critical) continue;
-                        const a = parseAssignedPersonForGroupFromAssignment(critical, fromGroup);
-                        if (a && a === personA) {
-                            return {
-                                dateKey: dayKey,
-                                dateObj: new Date(d),
-                                monthKey: `${y}-${m}`,
-                                monthLabel: monthLabelFor(y, m),
-                                sourceA: 'critical'
-                            };
-                        }
-                    }
+            // Person A: last day of this type — final first, then baseline, then critical
+            const findLastDateForA = (type) => {
+                let ref = scanMonthsForA(type, (dk) => getFinalRawForType(type, dk), 'final');
+                if (!ref) {
+                    ref = scanMonthsForA(
+                        type,
+                        (dk) =>
+                            typeof getRotationBaselineAssignmentForType === 'function'
+                                ? getRotationBaselineAssignmentForType(type, dk)
+                                : getRotationBaselineAssignmentForDate(dk),
+                        'baseline'
+                    );
                 }
-                return null;
+                if (!ref) {
+                    ref = scanMonthsForA(type, (dk) => getCriticalAssignmentForDate(dk), 'critical');
+                }
+                return ref;
             };
 
             for (const type of types) {
-                let ref = findLastBaselineDateForA(type);
-                if (!ref) ref = findLastCriticalDateForA(type);
+                const ref = findLastDateForA(type);
                 if (!ref) continue;
 
-                const { personB, sourceB } = findPersonBOnDate(ref.dateKey);
+                const { personB, sourceB } = findPersonBOnDate(ref.dateKey, type);
                 if (!personB) continue;
+
+                const isSelf = samePerson(personB, personA);
+                let listPosition = null;
+                if (isSelf) {
+                    // Same number shown in calendar parentheses (σειρά/προτεραιότητα)
+                    listPosition = resolveTransferSelfListPosition(
+                        toGroup,
+                        personA,
+                        type,
+                        ref.dateKey
+                    );
+                }
 
                 matches[type].push({
                     dateKey: ref.dateKey,
-                    dateStr: ref.dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                    dateStr: ref.dateObj.toLocaleDateString('el-GR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                    }),
                     dayName: getGreekDayName(ref.dateObj),
                     personB,
                     monthKey: ref.monthKey,
                     monthLabel: ref.monthLabel,
                     sourceA: ref.sourceA,
-                    sourceB
+                    sourceB,
+                    assignedGroup: ref.assignedGroup,
+                    isSelfMatch: isSelf,
+                    listPosition
                 });
             }
 
             return matches;
         }
+
+        /**
+         * List order number (calendar parenthesis) for person in group/type as of dateKey.
+         * Prefers historical schedule order, then current priorities / live list.
+         */
+        function resolveTransferSelfListPosition(groupNum, personName, listType, dateKey) {
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) => String(s || '').trim();
+            const target = norm(personName);
+
+            if (typeof getListOrderAtDate === 'function' && dateKey) {
+                const order = getListOrderAtDate(groupNum, listType, dateKey) || [];
+                for (let i = 0; i < order.length; i++) {
+                    if (norm(order[i]) === target) return i + 1;
+                }
+            }
+            if (typeof getPersonDutyListPosition === 'function') {
+                const pos = getPersonDutyListPosition(groupNum, personName, listType, dateKey);
+                if (pos) return pos;
+            }
+            // Fallback: priorities / live list even if helper not loaded yet
+            const g = groups?.[groupNum];
+            if (!g) return null;
+            let priority = g.priorities?.[personName]?.[listType];
+            if (priority == null && g.priorities) {
+                for (const key of Object.keys(g.priorities)) {
+                    if (norm(key) === target) {
+                        priority = g.priorities[key]?.[listType];
+                        break;
+                    }
+                }
+            }
+            if (typeof priority === 'number' && priority > 0 && priority < 999) return priority;
+            const list =
+                typeof getSortedGroupListForRotation === 'function'
+                    ? getSortedGroupListForRotation(groupNum, listType) || []
+                    : g[listType] || [];
+            for (let i = 0; i < list.length; i++) {
+                if (norm(list[i]) === target) return i + 1;
+            }
+            return null;
+        }
+
+        /** Place returning person at historical list slot N using current destination roster. */
+        function buildTransferPositionFromListSlot(toGroup, listType, slotNumber, personA) {
+            if (!Number.isFinite(slotNumber) || slotNumber < 1) return null;
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) => String(s || '').trim();
+            const target = norm(personA);
+            let list =
+                typeof getSortedGroupListForRotation === 'function'
+                    ? getSortedGroupListForRotation(toGroup, listType) || []
+                    : (groups[toGroup] || {})[listType] || [];
+            list = (list || []).filter((p) => p && norm(p) !== target);
+            if (!list.length) {
+                return { referencePerson: null, position: 'end', listPosition: slotNumber };
+            }
+            // Insert as the slotNumber-th person: above whoever is currently at that index
+            const idx = Math.min(slotNumber - 1, list.length - 1);
+            if (slotNumber - 1 >= list.length) {
+                return {
+                    referencePerson: null,
+                    position: 'end',
+                    listPosition: slotNumber
+                };
+            }
+            return {
+                referencePerson: list[idx],
+                position: 'above',
+                listPosition: slotNumber
+            };
+        }
+
         function getRankValue(personName) {
             const v = rankings?.[personName];
             const n = parseInt(v, 10);
@@ -1804,7 +1924,16 @@
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth();
             const personA = transferData.person;
+            const toGroup = transferData.toGroup;
             const rankA = getRankValue(personA);
+            const samePerson = (a, b) => {
+                if (!a || !b) return false;
+                if (a === b) return true;
+                if (typeof normalizePersonKey === 'function') {
+                    return normalizePersonKey(a) === normalizePersonKey(b);
+                }
+                return false;
+            };
 
             const chosenByType = {};
             const ranksByType = {};
@@ -1825,6 +1954,37 @@
                 }
 
                 const personB = chosen.personB;
+                const isSelf = chosen.isSelfMatch || samePerson(personB, personA);
+
+                // Self-match: restore using calendar list-order number (parentheses), not rank vs self
+                if (isSelf) {
+                    let listPos = chosen.listPosition;
+                    if (!listPos) {
+                        listPos = resolveTransferSelfListPosition(
+                            toGroup,
+                            personA,
+                            type,
+                            chosen.dateKey
+                        );
+                    }
+                    ranksByType[type] = { rankA, rankB: rankA, listPosition: listPos, selfMatch: true };
+                    if (!transferData.positions[type]) {
+                        const slotPos = buildTransferPositionFromListSlot(
+                            toGroup,
+                            type,
+                            listPos,
+                            personA
+                        );
+                        transferData.positions[type] = slotPos || {
+                            referencePerson: null,
+                            position: 'end',
+                            listPosition: listPos
+                        };
+                    }
+                    if (chosen && listPos) chosen.listPosition = listPos;
+                    return;
+                }
+
                 const rankB = getRankValue(personB);
                 ranksByType[type] = { rankA, rankB };
 
