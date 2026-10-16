@@ -1840,8 +1840,8 @@
         }
 
         /**
-         * List order number (calendar parenthesis) for person in group/type as of dateKey.
-         * Prefers historical schedule order, then current priorities / live list.
+         * List order number (calendar parenthesis) for person in group/type.
+         * Same as calendar: prefer stored priorities[person][listType], then list index.
          */
         function resolveTransferSelfListPosition(groupNum, personName, listType, dateKey) {
             const norm =
@@ -1850,29 +1850,48 @@
                     : (s) => String(s || '').trim();
             const target = norm(personName);
 
+            const readPriorityFromGroup = (gNum) => {
+                const g = groups?.[gNum];
+                if (!g?.priorities) return null;
+                let priority = g.priorities[personName]?.[listType];
+                if (priority == null) {
+                    for (const key of Object.keys(g.priorities)) {
+                        if (norm(key) === target) {
+                            priority = g.priorities[key]?.[listType];
+                            break;
+                        }
+                    }
+                }
+                if (typeof priority === 'number' && priority > 0 && priority < 999) return priority;
+                return null;
+            };
+
+            // 1) Same source as calendar parenthesis: priorities value (e.g. 7)
+            //    Destination group first, then any group (priority often moves with the person).
+            let priority = readPriorityFromGroup(groupNum);
+            if (priority == null) {
+                for (let g = 1; g <= 4; g++) {
+                    if (g === groupNum) continue;
+                    priority = readPriorityFromGroup(g);
+                    if (priority != null) break;
+                }
+            }
+            if (priority != null) return priority;
+
+            if (typeof getPersonDutyListPosition === 'function') {
+                const pos = getPersonDutyListPosition(groupNum, personName, listType, dateKey);
+                if (pos) return pos;
+            }
+
+            // 2) Fallback only if priority missing: 1-based index in list order
             if (typeof getListOrderAtDate === 'function' && dateKey) {
                 const order = getListOrderAtDate(groupNum, listType, dateKey) || [];
                 for (let i = 0; i < order.length; i++) {
                     if (norm(order[i]) === target) return i + 1;
                 }
             }
-            if (typeof getPersonDutyListPosition === 'function') {
-                const pos = getPersonDutyListPosition(groupNum, personName, listType, dateKey);
-                if (pos) return pos;
-            }
-            // Fallback: priorities / live list even if helper not loaded yet
             const g = groups?.[groupNum];
             if (!g) return null;
-            let priority = g.priorities?.[personName]?.[listType];
-            if (priority == null && g.priorities) {
-                for (const key of Object.keys(g.priorities)) {
-                    if (norm(key) === target) {
-                        priority = g.priorities[key]?.[listType];
-                        break;
-                    }
-                }
-            }
-            if (typeof priority === 'number' && priority > 0 && priority < 999) return priority;
             const list =
                 typeof getSortedGroupListForRotation === 'function'
                     ? getSortedGroupListForRotation(groupNum, listType) || []
