@@ -789,6 +789,10 @@
          * Does NOT roll predicted Next into Last. Ignores stored dates that contradict the calendar
          * (stale prediction / sync artifacts).
          */
+        /**
+         * Last duty dateKey: calendar assignment before today (any group), else manual stored.
+         * Same rule for list display and edit-person form fields.
+         */
         function resolveEffectiveLastDutyDateKey(person, groupNum, listType) {
             const todayKey = getTodayDateKeyForLastNext();
             const assignedKey = getMostRecentAssignmentDateKeyForPerson(
@@ -798,6 +802,8 @@
                 new Date(),
                 { beforeDateKey: todayKey }
             );
+            // Prefer real calendar assignment before today
+            if (assignedKey) return assignedKey;
 
             const stored = getStoredLastDutyRawForPerson(groupNum, person, listType);
             const storedInGroupKey = parseLastDutyDateToKey(stored.value);
@@ -811,7 +817,6 @@
                 storedKey = null;
             }
             // Drop stored if that date exists in the calendar store but person was not assigned
-            // (prevents predicted/synced wrong Last like a swapped weekend).
             if (storedKey) {
                 const finalStore = getAssignmentStoreForListType(listType);
                 if (finalStore && finalStore[storedKey] != null) {
@@ -820,12 +825,7 @@
                     }
                 }
             }
-
-            let lastKey = assignedKey || null;
-            if (storedKey && (!lastKey || storedKey > lastKey)) {
-                lastKey = storedKey;
-            }
-            return lastKey;
+            return storedKey || null;
         }
 
         function captureLastDutiesSnapshot(reason) {

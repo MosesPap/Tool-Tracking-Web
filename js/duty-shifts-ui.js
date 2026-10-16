@@ -1150,6 +1150,26 @@
             const modal = new bootstrap.Modal(document.getElementById('addPersonModal'));
             modal.show();
         }
+        function lastDutyDateKeyForEditField(personName, groupNumber, listType, storedRaw) {
+            // Same as lists: calendar before today, else manual stored
+            if (typeof resolveEffectiveLastDutyDateKey === 'function') {
+                const effective = resolveEffectiveLastDutyDateKey(personName, groupNumber, listType);
+                if (effective && /^\d{4}-\d{2}-\d{2}$/.test(effective)) return effective;
+            }
+            if (typeof parseLastDutyDateToKey === 'function') {
+                const parsed = parseLastDutyDateToKey(storedRaw);
+                if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+                    const todayKey =
+                        typeof getTodayDateKeyForLastNext === 'function'
+                            ? getTodayDateKeyForLastNext()
+                            : null;
+                    if (!todayKey || parsed < todayKey) return parsed;
+                }
+            }
+            const s = storedRaw != null ? String(storedRaw).trim() : '';
+            return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
+        }
+
         function editPerson(groupNumber, personName) {
             isEditingPerson = true;
             editingPersonName = personName;
@@ -1159,27 +1179,38 @@
             const lastDuties = groupData.lastDuties?.[personName] || {};
             const priorities = groupData.priorities?.[personName] || {};
             
-            // Debug: Log what we're loading
-            console.log(`Edit person: ${personName} in group ${groupNumber}`);
-            console.log(`Group data lastDuties:`, groupData.lastDuties);
-            console.log(`Person lastDuties:`, lastDuties);
-            console.log(`Special: ${lastDuties.special}, Weekend: ${lastDuties.weekend}, Semi: ${lastDuties.semi}, Normal: ${lastDuties.normal}`);
-            
             document.getElementById('modalTitle').innerHTML = `Επεξεργασία Στοιχείων: ${personName}`;
             document.getElementById('personName').value = personName;
             document.getElementById('personName').readOnly = false;
-            document.getElementById('lastSpecialDuty').value = lastDuties.special || '';
-            document.getElementById('lastWeekendDuty').value = lastDuties.weekend || '';
-            document.getElementById('lastSemiDuty').value = lastDuties.semi || '';
-            document.getElementById('lastNormalDuty').value = lastDuties.normal || '';
+            document.getElementById('lastSpecialDuty').value = lastDutyDateKeyForEditField(
+                personName,
+                groupNumber,
+                'special',
+                lastDuties.special
+            );
+            document.getElementById('lastWeekendDuty').value = lastDutyDateKeyForEditField(
+                personName,
+                groupNumber,
+                'weekend',
+                lastDuties.weekend
+            );
+            document.getElementById('lastSemiDuty').value = lastDutyDateKeyForEditField(
+                personName,
+                groupNumber,
+                'semi',
+                lastDuties.semi
+            );
+            document.getElementById('lastNormalDuty').value = lastDutyDateKeyForEditField(
+                personName,
+                groupNumber,
+                'normal',
+                lastDuties.normal
+            );
             document.getElementById('prioritySpecial').value = priorities.special || '';
             document.getElementById('priorityWeekend').value = priorities.weekend || '';
             document.getElementById('prioritySemi').value = priorities.semi || '';
             document.getElementById('priorityNormal').value = priorities.normal || '';
             document.getElementById('savePersonButton').textContent = 'Αποθήκευση Αλλαγών';
-            
-            // Debug: Verify values were set
-            console.log(`Form values set - Special: ${document.getElementById('lastSpecialDuty').value}, Weekend: ${document.getElementById('lastWeekendDuty').value}, Semi: ${document.getElementById('lastSemiDuty').value}, Normal: ${document.getElementById('lastNormalDuty').value}`);
             
             const modal = new bootstrap.Modal(document.getElementById('addPersonModal'));
             modal.show();
