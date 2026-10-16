@@ -39,7 +39,8 @@
                 autoAddRankPickerSearch: 'Φιλτράρει τη λίστα ιεραρχίας για γρήγορη επιλογή βαθμού κατά την αυτόματη προσθήκη ατόμου.',
                 alternateReplacementApplyBtn: 'Εφαρμόζει χειροκίνητη αντικατάσταση επιλαχόντα στην επιλεγμένη ημερομηνία με ελέγχους εγκυρότητας.',
                 alternateReplacementModalCloseBtn: 'Κλείνει το παράθυρο αντικατάστασης επιλαχόντα χωρίς νέα εφαρμογή αλλαγής.',
-                confirmModalOkButton: 'Επιβεβαιώνει την ενέργεια που απαιτεί ρητή αποδοχή και συνεχίζει τη λειτουργία.'
+                confirmModalOkButton: 'Επιβεβαιώνει την ενέργεια που απαιτεί ρητή αποδοχή και συνεχίζει τη λειτουργία.',
+                openTransferReturnSelectBtn: 'Ανοίγει λίστα μεταφερθέντων ατόμων για επιλογή ποιοι θα επιστρέψουν στην προηγούμενη ομάδα με την ίδια σειρά.'
             };
             if (descriptionById[id]) return descriptionById[id];
 
@@ -3092,6 +3093,10 @@
             });
         }
 
+        function openTransferReturnSelectFromToolbar() {
+            openTransferReturnSelectModal({ preselectMode: 'none' });
+        }
+
         function openTransferReturnSelectModal(options) {
             const opts = options || {};
             const listEl = document.getElementById('transferReturnSelectList');
@@ -3119,17 +3124,24 @@
                 return;
             }
 
+            const preselectMode = opts.preselectMode || 'recent'; // 'none' | 'recent' | 'all'
             const preselect = new Set();
             if (Array.isArray(opts.preselectKeys)) {
                 opts.preselectKeys.forEach((k) => preselect.add(personKeyForTransferReturn(k)));
-            } else if (Array.isArray(recentTransferUndoEntries) && recentTransferUndoEntries.length) {
-                // Default: pre-check recent session transfers that appear in the list
-                recentTransferUndoEntries.forEach((e) => {
+            } else if (preselectMode === 'recent') {
+                if (Array.isArray(recentTransferUndoEntries) && recentTransferUndoEntries.length) {
+                    recentTransferUndoEntries.forEach((e) => {
+                        if (e && e.personKey) preselect.add(e.personKey);
+                    });
+                } else if (lastTransferUndo && lastTransferUndo.person) {
+                    preselect.add(personKeyForTransferReturn(lastTransferUndo.person));
+                }
+            } else if (preselectMode === 'all') {
+                entries.forEach((e) => {
                     if (e && e.personKey) preselect.add(e.personKey);
                 });
-            } else if (lastTransferUndo && lastTransferUndo.person) {
-                preselect.add(personKeyForTransferReturn(lastTransferUndo.person));
             }
+            // preselectMode === 'none' → leave set empty; nothing pre-checked
 
             listEl.innerHTML = entries
                 .map((e) => {
@@ -3137,7 +3149,12 @@
                     const curName =
                         e.currentGroup != null ? getGroupName(e.currentGroup) : '—';
                     const id = `transferReturnCheck_${String(e.personKey).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-                    const checked = preselect.size === 0 || preselect.has(e.personKey) ? 'checked' : '';
+                    const checked =
+                        preselectMode === 'all' ||
+                        (preselectMode !== 'none' && preselect.size === 0) ||
+                        preselect.has(e.personKey)
+                            ? 'checked'
+                            : '';
                     return `
                         <label class="list-group-item list-group-item-action d-flex gap-2 align-items-start" for="${id}">
                             <input class="form-check-input flex-shrink-0 mt-1" type="checkbox" value="${e.personKey}" id="${id}" ${checked}>
