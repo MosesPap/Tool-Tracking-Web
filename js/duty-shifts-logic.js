@@ -2249,7 +2249,8 @@
 
         /**
          * True when the absence fully covers at least one calendar month (day 1 through last day).
-         * Whole-month absences resume normal rotation when the person's turn comes — no return-from-missing placement.
+         * Whole-month absences: no return-from-missing for weekend/special/semi/normal —
+         * person serves again only when their turn comes in the basic series.
          */
         function absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey) {
             if (!pStartKey || !pEndKey || pStartKey > pEndKey) return false;
@@ -5048,6 +5049,8 @@
                             const pStartKey = inputValueToDateKey(period?.start);
                             const pEndKey = inputValueToDateKey(period?.end);
                             if (!pStartKey || !pEndKey) continue;
+                            // Whole-month absence: no return-from-missing — wait for basic-series turn
+                            if (absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey)) continue;
                             const dedupeKey = `${personName}|${groupNum}`;
                             if (addedReturnFromPrevMonths.has(dedupeKey)) break;
                             const pStart = new Date(pStartKey + 'T00:00:00');
@@ -8389,6 +8392,24 @@
                                     const periodOverlapsRange = (pStartKey <= calcEndKey && pEndKey >= calcStartKey);
                                     const acceptPeriod = endInRange || endInPrevMonth || returnInRange || periodOverlapsRange;
                                     if (!acceptPeriod) continue;
+                                    // Whole-month absence: no return-from-missing — wait for basic-series turn
+                                    if (absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey)) {
+                                        if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                            dutyNormalDebug.recordReturnFromMissingPlan({
+                                                personName,
+                                                groupNum,
+                                                pStartKey,
+                                                pEndKey,
+                                                targetKey: null,
+                                                status: 'skipped',
+                                                reasonCode: 'RETURN_WHOLE_CALENDAR_MONTH',
+                                                message:
+                                                    `Απουσία καλύπτει ολόκληρο(ους) ημερολογιακό(ύς) μήνα(ες) — χωρίς ειδική τοποθέτηση· ` +
+                                                    `καθημερινή όταν ξαναέρθει η σειρά στη ροή.`
+                                            });
+                                        }
+                                        continue;
+                                    }
                                     const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                     if (processed.has(dedupeKey)) continue;
                                     processed.add(dedupeKey);
@@ -10816,6 +10837,22 @@
                                 const pStartKey = period.start;
                                 const pEndKey = period.end;
                                 if (!pStartKey || !pEndKey) continue;
+                                // Whole-month absence: no return-from-missing — wait for basic-series turn (e.g. list #8/#9)
+                                if (absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey)) {
+                                    if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
+                                        dutyWeekendDebug.recordAbsentPlacement({
+                                            groupNum,
+                                            personName: rosterPersonName,
+                                            absenceEndKey: pEndKey,
+                                            status: 'skipped',
+                                            reasonCode: 'RETURN_WHOLE_CALENDAR_MONTH',
+                                            message:
+                                                `Απουσία καλύπτει ολόκληρο(ους) ημερολογιακό(ύς) μήνα(ες) — χωρίς ειδική τοποθέτηση ΣΚ· ` +
+                                                `αργία όταν ξαναέρθει η σειρά στη ροή.`
+                                        });
+                                    }
+                                    continue;
+                                }
                                 const calcStartDateObj = calcStartKeyW ? new Date(calcStartKeyW + 'T00:00:00') : null;
                                 const prevMonthStart = calcStartDateObj ? new Date(calcStartDateObj.getFullYear(), calcStartDateObj.getMonth() - 1, 1) : null;
                                 const prevMonthStartKey = prevMonthStart ? formatDateKey(prevMonthStart) : null;
@@ -12845,6 +12882,8 @@
                                 const pStartKey = inputValueToDateKey(period?.start);
                                 const pEndKey = inputValueToDateKey(period?.end);
                                 if (!pStartKey || !pEndKey) continue;
+                                // Whole-month absence: no return-from-missing — wait for basic-series turn
+                                if (absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey)) continue;
                                 // Allow periods that ended within calculation range OR in the month immediately before calcStartKey
                                 // (e.g., if calculating March, also check periods ending in February)
                                 const pEndDate = new Date(pEndKey + 'T00:00:00');
@@ -13862,6 +13901,24 @@
                         const periodOverlapsRange = pStartKey <= calcEndKey && pEndKey >= calcStartKey;
                         const acceptPeriod = endInRange || endInPrevMonth || returnInRange || periodOverlapsRange;
                         if (!acceptPeriod) continue;
+                        // Whole-month absence: no return-from-missing — wait for basic-series turn
+                        if (absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey)) {
+                            if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                dutyNormalDebug.recordReturnFromMissingPlan({
+                                    personName,
+                                    groupNum,
+                                    pStartKey,
+                                    pEndKey,
+                                    targetKey: null,
+                                    status: 'skipped',
+                                    reasonCode: 'RETURN_WHOLE_CALENDAR_MONTH',
+                                    message:
+                                        `Απουσία καλύπτει ολόκληρο(ους) ημερολογιακό(ύς) μήνα(ες) — χωρίς ειδική τοποθέτηση· ` +
+                                        `καθημερινή όταν ξαναέρθει η σειρά στη ροή.`
+                                });
+                            }
+                            continue;
+                        }
                         const dedupeKey = `${groupNum}|${norm(personName)}|${pEndKey}`;
                         if (processed.has(dedupeKey)) continue;
                         processed.add(dedupeKey);
