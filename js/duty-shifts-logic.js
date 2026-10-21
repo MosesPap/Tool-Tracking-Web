@@ -14967,14 +14967,25 @@
 
                             // Final-only replacement when baseline person cannot serve (disabled or absent).
                             // Does NOT advance the basic series past intermediate people.
-                            // Too-soon uses normal-day steps (almost a full list cycle), not calendar ≤5.
-                            const minStepsBeforeReassign = Math.max(2, rotationDays - 1);
+                            // Too-soon = normal-day steps (not calendar ≤5). Prefer a near-full-cycle gap;
+                            // relax then allow any eligible so days are not left blank.
+                            const minStepsFullCycle = Math.max(2, rotationDays - 1);
+                            const minStepsNearby = 6; // blocks e.g. 24→30 (3 normal steps) without emptying roster
                             if (baselineIsDisabled || baselineIsMissing) {
                                 let foundReplacement = false;
-                                const tryCandidate = (candidate, idx) => {
+                                const tryCandidate = (candidate, idx, minSteps) => {
                                     if (!candidate || candidate === originalRotationPerson) return false;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) return false;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) return false;
+                                    // Strict/nearby passes: do not steal the next few people still due in series
+                                    // (e.g. Τηλεμάχου right after Ονησιφόρου) — only the final relax pass may.
+                                    if (minSteps > 0 && Number.isFinite(idx) && idx >= 0) {
+                                        const forwardDist =
+                                            (idx - rotationPosition + rotationDays) % rotationDays;
+                                        if (forwardDist > 0 && forwardDist < minStepsNearby) {
+                                            return false;
+                                        }
+                                    }
                                     if (
                                         assignedPeoplePreview[monthKey][groupNum] &&
                                         assignedPeoplePreview[monthKey][groupNum][candidate]
@@ -14986,7 +14997,7 @@
                                                 sortedNormal,
                                                 lastAssignmentDateKey,
                                                 dateKey,
-                                                minStepsBeforeReassign
+                                                minSteps
                                             )
                                         ) {
                                             return false;
@@ -15001,17 +15012,28 @@
                                     return true;
                                 };
 
-                                if (precomputedFinal && tryCandidate(precomputedFinal, groupPeople.indexOf(precomputedFinal))) {
-                                    foundReplacement = true;
-                                }
-                                if (!foundReplacement) {
-                                    for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
-                                        const idx = (rotationPosition + offset) % rotationDays;
-                                        if (tryCandidate(groupPeople[idx], idx)) {
-                                            foundReplacement = true;
-                                        }
+                                const searchWithMinSteps = (minSteps) => {
+                                    if (
+                                        precomputedFinal &&
+                                        tryCandidate(
+                                            precomputedFinal,
+                                            groupPeople.indexOf(precomputedFinal),
+                                            minSteps
+                                        )
+                                    ) {
+                                        return true;
                                     }
-                                }
+                                    for (let offset = 1; offset <= rotationDays * 2; offset++) {
+                                        const idx = (rotationPosition + offset) % rotationDays;
+                                        if (tryCandidate(groupPeople[idx], idx, minSteps)) return true;
+                                    }
+                                    return false;
+                                };
+
+                                foundReplacement =
+                                    searchWithMinSteps(minStepsFullCycle) ||
+                                    searchWithMinSteps(minStepsNearby) ||
+                                    searchWithMinSteps(0);
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 } else if (!getAssignmentReason(dateKey, groupNum, assignedPerson)) {
@@ -15063,8 +15085,9 @@
                                     : originalRotationPerson;
                             normalRotationPersons[dateKey][groupNum] = baselineForDisplay;
                             
-                            // If assigned person was already assigned too soon (by normal-day gap), skip to next.
-                            // Skip this check if we just replaced a disabled/missing baseline (handled above with same gap).
+                            // If assigned person was already assigned too soon (nearby normal days), try next.
+                            // Use nearby threshold only (not full cycle) so months are not left blank.
+                            // If no alternate exists, KEEP the original assignee (never null the day).
                             let wasReplacedDueToFiveDayRule = false;
                             if (
                                 !wasDisabledPersonSkipped &&
@@ -15078,9 +15101,10 @@
                                         sortedNormal,
                                         lastAssignmentDateKey,
                                         dateKey,
-                                        minStepsBeforeReassign
+                                        minStepsNearby
                                     )
                                 ) {
+                                    const keepPerson = assignedPerson;
                                     let foundReplacement = false;
                                     for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                         const nextIndex = (rotationPosition + offset) % rotationDays;
@@ -15098,7 +15122,7 @@
                                                     sortedNormal,
                                                     candidateLastDateKey,
                                                     dateKey,
-                                                    minStepsBeforeReassign
+                                                    minStepsNearby
                                                 )
                                             ) {
                                                 continue;
@@ -15109,7 +15133,7 @@
                                         wasReplacedDueToFiveDayRule = true;
                                     }
                                     if (!foundReplacement) {
-                                        assignedPerson = null;
+                                        assignedPerson = keepPerson;
                                     }
                                 }
                             }
