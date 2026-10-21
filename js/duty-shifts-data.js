@@ -1974,8 +1974,6 @@
                 return null;
             }
         }
-        window.getRotationSeedPersonForMonthStart = getRotationSeedPersonForMonthStart;
-        window.computeExpectedRotationPersonForDate = computeExpectedRotationPersonForDate;
         
         // Helper functions to get/set assignments based on day type
         function getAssignmentsForDayType(dayTypeCategory) {

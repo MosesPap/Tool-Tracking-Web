@@ -3455,7 +3455,58 @@
             }
             return 0;
         }
-        window.resolveNormalRotationStartPosition = resolveNormalRotationStartPosition;
+
+        /**
+         * Next baseline index after the last person who took a baseline slot.
+         * Uses person identity (not a stale numeric cursor) so mid-month list reshuffles
+         * (transfers / scheduled order) cannot re-pick the same person two normal days later.
+         */
+        function resolveNormalBaselinePositionAfterLastPerson(groupPeople, lastBaselinePersonName, fallbackIndex) {
+            const rotationDays = Array.isArray(groupPeople) ? groupPeople.length : 0;
+            if (!rotationDays) return 0;
+            const norm =
+                typeof normRotPersonName === 'function'
+                    ? normRotPersonName
+                    : (n) =>
+                          typeof normalizePersonKey === 'function'
+                              ? normalizePersonKey(n)
+                              : String(n || '').trim();
+            if (lastBaselinePersonName) {
+                const lastIdx = groupPeople.findIndex((p) => norm(p) === norm(lastBaselinePersonName));
+                if (lastIdx >= 0) return (lastIdx + 1) % rotationDays;
+            }
+            const fb = Number.isFinite(fallbackIndex) ? fallbackIndex : 0;
+            return ((fb % rotationDays) + rotationDays) % rotationDays;
+        }
+
+        /**
+         * True if person already holds a normal slot on another day within `windowDays`
+         * before `dateKey` (used by swap-continuity reflow to avoid Tue+Thu duplicates).
+         */
+        function personHasNearbyNormalAssignment(assignmentsByDate, sortedNormalKeys, dateKey, groupNum, personName, windowDays = 5) {
+            if (!personName || !dateKey || !Array.isArray(sortedNormalKeys)) return false;
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) => String(s || '').trim();
+            const target = norm(personName);
+            if (!target) return false;
+            const idx = sortedNormalKeys.indexOf(dateKey);
+            if (idx < 0) return false;
+            const dateObj = new Date(dateKey + 'T00:00:00');
+            if (isNaN(dateObj.getTime())) return false;
+            for (let i = idx - 1; i >= 0; i--) {
+                const prevKey = sortedNormalKeys[i];
+                const prevDate = new Date(prevKey + 'T00:00:00');
+                if (isNaN(prevDate.getTime())) continue;
+                const daysDiff = Math.floor((dateObj - prevDate) / (1000 * 60 * 60 * 24));
+                if (daysDiff > windowDays) break;
+                if (daysDiff <= 0) continue;
+                const prevPerson = assignmentsByDate?.[prevKey]?.[groupNum] || null;
+                if (prevPerson && norm(prevPerson) === target) return true;
+            }
+            return false;
+        }
 
         function hasDutyOnDay(dayKey, person, groupNum) {
             // Determine which document to check based on day type
@@ -9385,6 +9436,18 @@
                                                         if (!cand) continue;
                                                         if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
                                                         if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) continue;
+                                                        if (
+                                                            personHasNearbyNormalAssignment(
+                                                                updatedAssignments,
+                                                                sortedNormal,
+                                                                nextKey,
+                                                                groupNum,
+                                                                cand,
+                                                                5
+                                                            )
+                                                        ) {
+                                                            continue;
+                                                        }
                                                         picked = cand;
                                                         cursorIdx = (candIdx + 1) % groupPeople.length;
                                                         break;
@@ -14153,6 +14216,10 @@
             let deferManualAlternateSkipNormal = {};
             let prevMonthKeyNormalAlternateDefer = null;
             let prevNormalSeedMonthKey = null;
+            /** Last person who received a pure-baseline slot (identity continuity within month). */
+            const lastNormalBaselinePersonByGroup = {}; // groupNum -> personName
+            /** Frozen normal list per group+calendar month — baseline does not chase mid-month reshuffles. */
+            const frozenNormalBaselineListByGroup = {}; // groupNum -> { monthKey, list }
             
             // Track baseline assignments for this preview to detect cascading shifts
             const baselineNormalByDate = {}; // dateKey -> { groupNum -> personName }
@@ -14684,11 +14751,24 @@
                             }
                             continue;
                         }
-                        const groupData =
-                            (typeof groupsForDuty === 'function'
-                                ? groupsForDuty(groupNum, dateKey)
-                                : groups[groupNum]) || { normal: [] };
-                        const groupPeople = groupData.normal || [];
+                        // Freeze roster at first normal day of each calendar month so baseline
+                        // advances month-by-month (same as other groups) and mid-month transfers /
+                        // list-order schedules cannot reshuffle the cursor onto someone who just served.
+                        if (
+                            !frozenNormalBaselineListByGroup[groupNum] ||
+                            frozenNormalBaselineListByGroup[groupNum].monthKey !== calMonthKey
+                        ) {
+                            const seedList =
+                                (typeof groupsForDuty === 'function'
+                                    ? groupsForDuty(groupNum, dateKey)
+                                    : groups[groupNum]
+                                )?.normal || [];
+                            frozenNormalBaselineListByGroup[groupNum] = {
+                                monthKey: calMonthKey,
+                                list: Array.isArray(seedList) ? seedList.slice() : []
+                            };
+                        }
+                        const groupPeople = frozenNormalBaselineListByGroup[groupNum].list || [];
                         
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
@@ -14704,6 +14784,8 @@
                                     groupPeople,
                                     sortedNormal
                                 );
+                                // New month (or first seed): resume from month-start index, not a stale name.
+                                delete lastNormalBaselinePersonByGroup[groupNum];
                             }
                             
                             let assignedPerson = null;
@@ -14717,6 +14799,17 @@
                                     groupNum,
                                     groupPeople,
                                     sortedNormal
+                                );
+                                delete lastNormalBaselinePersonByGroup[groupNum];
+                            }
+
+                            // Identity continuity: next slot is always "after last baseline person"
+                            // on the frozen month list (prevents index drift / duplicate baseline).
+                            if (lastNormalBaselinePersonByGroup[groupNum]) {
+                                globalNormalRotationPosition[groupNum] = resolveNormalBaselinePositionAfterLastPerson(
+                                    groupPeople,
+                                    lastNormalBaselinePersonByGroup[groupNum],
+                                    globalNormalRotationPosition[groupNum]
                                 );
                             }
                             
@@ -14742,43 +14835,7 @@
                             if (originalRotationPerson) {
                                 if (!pureNormalRotationByDate[dateKey]) pureNormalRotationByDate[dateKey] = {};
                                 pureNormalRotationByDate[dateKey][groupNum] = originalRotationPerson;
-                            }
-
-                            if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled() && dutyNormalDebug.recordBaselineStep) {
-                                let seedPersonForTrace = null;
-                                if (shouldSeedNormalRotation) {
-                                    seedPersonForTrace =
-                                        typeof getRotationSeedPersonForMonthStart === 'function'
-                                            ? getRotationSeedPersonForMonthStart('normal', date, groupNum)
-                                            : typeof getLastRotationPersonForDate === 'function'
-                                              ? getLastRotationPersonForDate('normal', date, groupNum)
-                                              : null;
-                                }
-                                dutyNormalDebug.recordBaselineStep({
-                                    dateKey,
-                                    groupNum,
-                                    rotationPosition,
-                                    listLength: rotationDays,
-                                    purePerson: originalRotationPerson,
-                                    displayBaselinePerson: null,
-                                    finalAssignedPerson: null,
-                                    seedPerson: seedPersonForTrace,
-                                    seededThisDay: !!shouldSeedNormalRotation,
-                                    advancedFromPosition:
-                                        globalNormalRotationPosition[groupNum] !== undefined
-                                            ? (rotationPosition - 1 + rotationDays) % rotationDays
-                                            : null,
-                                    manualAlternate: existingManualAlternate
-                                        ? {
-                                              baseline: existingManualAlternate.baseline || existingManualAlternate.baselinePerson || null,
-                                              replacement:
-                                                  existingManualAlternate.replacement ||
-                                                  existingManualAlternate.replacementPerson ||
-                                                  null
-                                          }
-                                        : null,
-                                    note: deferFulfillmentNormal ? 'manual-alternate-defer' : null
-                                });
+                                lastNormalBaselinePersonByGroup[groupNum] = originalRotationPerson;
                             }
 
                             const rotationPerson = originalRotationPerson;
@@ -15083,19 +15140,6 @@
                             // Track that this person has been assigned (to prevent nearby duplicate assignments)
                             if (assignedPerson && assignedPeoplePreview[monthKey] && assignedPeoplePreview[monthKey][groupNum]) {
                                 assignedPeoplePreview[monthKey][groupNum][assignedPerson] = dateKey;
-                            }
-
-                            if (
-                                typeof dutyNormalDebug !== 'undefined' &&
-                                dutyNormalDebug.isEnabled() &&
-                                typeof dutyNormalDebug.patchBaselineStep === 'function'
-                            ) {
-                                dutyNormalDebug.patchBaselineStep(dateKey, groupNum, {
-                                    displayBaselinePerson:
-                                        normalRotationPersons[dateKey]?.[groupNum] || originalRotationPerson,
-                                    finalAssignedPerson: assignedPerson,
-                                    pendingSwapApplied: !!rotationAlreadyAdvanced
-                                });
                             }
                             
                             // CRITICAL: If assigned person differs from baseline (rotationPerson), check if this is a cascading shift
@@ -15682,6 +15726,18 @@
                                                     if (!cand) continue;
                                                     if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
                                                     if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) continue;
+                                                    if (
+                                                        personHasNearbyNormalAssignment(
+                                                            normalAssignments,
+                                                            sortedNormal,
+                                                            nextKey,
+                                                            groupNum,
+                                                            cand,
+                                                            5
+                                                        )
+                                                    ) {
+                                                        continue;
+                                                    }
                                                     picked = cand;
                                                     cursorIdx = (candIdx + 1) % groupPeople.length;
                                                     break;
@@ -16234,9 +16290,6 @@
                     console.log(`[NORMAL ROTATION] Storing last rotation continuity person ${lastPersonForRotation} for group ${g}`);
                 }
             }
-
-            // Keep pure +1 series for baseline inspector (Firebase vs pure)
-            calculationSteps.tempNormalPureBaseline = pureNormalRotationByDate;
 
             // Store last rotation person per month (for correct recalculation of individual months)
             const sortedNormalKeysForMonth = [...normalDays].sort();
