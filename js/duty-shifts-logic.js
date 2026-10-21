@@ -3410,7 +3410,7 @@
                 headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '73ad17' },
                 body: JSON.stringify({
                     sessionId: '73ad17',
-                    runId: 'pre-fix',
+                    runId: 'post-fix',
                     hypothesisId,
                     location,
                     message,
@@ -3431,31 +3431,32 @@
         }
         // #endregion
 
-        /** True if person already holds a pure baseline slot in the previous `lookback` normal days. */
-        function personHasRecentPureNormalBaseline(
-            pureByDate,
-            groupNum,
-            personName,
-            beforeDateKey,
-            sortedNormalKeys,
-            lookback
-        ) {
-            if (!personName || !beforeDateKey || !Array.isArray(sortedNormalKeys) || lookback <= 0) return false;
-            const norm =
-                typeof normalizePersonKey === 'function'
-                    ? normalizePersonKey
-                    : (s) => String(s || '').trim();
-            const target = norm(personName);
-            if (!target) return false;
-            const at = sortedNormalKeys.indexOf(beforeDateKey);
-            if (at <= 0) return false;
-            let seen = 0;
-            for (let i = at - 1; i >= 0 && seen < lookback; i--) {
-                seen++;
-                const p = pureByDate?.[sortedNormalKeys[i]]?.[groupNum];
-                if (p && norm(p) === target) return true;
+        /**
+         * Steps between two keys on the sorted normal-day list (0 = same day).
+         * Used so "too soon to reassign" counts καθημερινές, not calendar days
+         * (e.g. 24→30 can be 6 calendar days but only 3 normal slots).
+         */
+        function countNormalStepsBetween(sortedNormalKeys, dateKeyA, dateKeyB) {
+            if (!Array.isArray(sortedNormalKeys) || !dateKeyA || !dateKeyB) return null;
+            const i = sortedNormalKeys.indexOf(dateKeyA);
+            const j = sortedNormalKeys.indexOf(dateKeyB);
+            if (i < 0 || j < 0) return null;
+            return Math.abs(j - i);
+        }
+
+        /** True if last normal assignment was fewer than minSteps normal days before dateKey. */
+        function isNormalReassignTooSoon(sortedNormalKeys, lastDateKey, dateKey, minSteps) {
+            if (!lastDateKey || !dateKey || !(minSteps > 1)) return false;
+            const steps = countNormalStepsBetween(sortedNormalKeys, lastDateKey, dateKey);
+            if (steps == null) {
+                // Fallback: calendar days when keys are outside current sorted range
+                const a = new Date(lastDateKey + 'T00:00:00');
+                const b = new Date(dateKey + 'T00:00:00');
+                if (isNaN(a.getTime()) || isNaN(b.getTime())) return false;
+                const daysDiff = Math.abs(Math.floor((b - a) / (1000 * 60 * 60 * 24)));
+                return daysDiff > 0 && daysDiff <= 5;
             }
-            return false;
+            return steps > 0 && steps < minSteps;
         }
 
         /** True if person is already assigned on a normal day within ±5 calendar days of dateKey. */
@@ -14918,28 +14919,7 @@
                             // IMPORTANT: Baseline slot = who the basic series points to (before final replacement).
                             // Basic series skips ONLY εξαίρεση (already filtered from groupPeople).
                             // Disabled / absent KEEP their baseline slot; final calendar may replace them.
-                            let originalRotationPerson = groupPeople[rotationPosition] || null;
-                            // Guard: never repeat a pure-baseline person before a full list cycle.
-                            if (originalRotationPerson && rotationDays > 1) {
-                                for (let guard = 0; guard < rotationDays; guard++) {
-                                    if (
-                                        !personHasRecentPureNormalBaseline(
-                                            pureNormalRotationByDate,
-                                            groupNum,
-                                            originalRotationPerson,
-                                            dateKey,
-                                            sortedNormal,
-                                            rotationDays - 1
-                                        )
-                                    ) {
-                                        break;
-                                    }
-                                    rotationPosition = (rotationPosition + 1) % rotationDays;
-                                    originalRotationPerson = groupPeople[rotationPosition] || null;
-                                    globalNormalRotationPosition[groupNum] = rotationPosition;
-                                    if (!originalRotationPerson) break;
-                                }
-                            }
+                            const originalRotationPerson = groupPeople[rotationPosition] || null;
                             if (originalRotationPerson) {
                                 if (!pureNormalRotationByDate[dateKey]) pureNormalRotationByDate[dateKey] = {};
                                 pureNormalRotationByDate[dateKey][groupNum] = originalRotationPerson;
@@ -14987,6 +14967,8 @@
 
                             // Final-only replacement when baseline person cannot serve (disabled or absent).
                             // Does NOT advance the basic series past intermediate people.
+                            // Too-soon uses normal-day steps (almost a full list cycle), not calendar ≤5.
+                            const minStepsBeforeReassign = Math.max(2, rotationDays - 1);
                             if (baselineIsDisabled || baselineIsMissing) {
                                 let foundReplacement = false;
                                 const tryCandidate = (candidate, idx) => {
@@ -14999,12 +14981,16 @@
                                     ) {
                                         const lastAssignmentDateKey =
                                             assignedPeoplePreview[monthKey][groupNum][candidate];
-                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
-                                        const currentDate = new Date(dateKey + 'T00:00:00');
-                                        const daysDiff = Math.floor(
-                                            (currentDate - lastDate) / (1000 * 60 * 60 * 24)
-                                        );
-                                        if (daysDiff <= 5 && daysDiff > 0) return false;
+                                        if (
+                                            isNormalReassignTooSoon(
+                                                sortedNormal,
+                                                lastAssignmentDateKey,
+                                                dateKey,
+                                                minStepsBeforeReassign
+                                            )
+                                        ) {
+                                            return false;
+                                        }
                                     }
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
@@ -15077,44 +15063,51 @@
                                     : originalRotationPerson;
                             normalRotationPersons[dateKey][groupNum] = baselineForDisplay;
                             
-                            // If assigned person was already assigned recently (due to swap), skip to next person
-                            // BUT: Skip this check if we just replaced a disabled person - swap logic will handle duplicates
-                            // Check if assigned within 5 days (too close)
+                            // If assigned person was already assigned too soon (by normal-day gap), skip to next.
+                            // Skip this check if we just replaced a disabled/missing baseline (handled above with same gap).
                             let wasReplacedDueToFiveDayRule = false;
-                            if (!wasDisabledPersonSkipped && assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal') && assignedPeoplePreview[monthKey][groupNum][assignedPerson]) {
+                            if (
+                                !wasDisabledPersonSkipped &&
+                                assignedPerson &&
+                                !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal') &&
+                                assignedPeoplePreview[monthKey][groupNum][assignedPerson]
+                            ) {
                                 const lastAssignmentDateKey = assignedPeoplePreview[monthKey][groupNum][assignedPerson];
-                                const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
-                                const currentDate = new Date(dateKey + 'T00:00:00');
-                                const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
-                                // Only skip if assigned within 5 days (too close)
-                                if (daysDiff <= 5 && daysDiff > 0) {
-                                    // This person was already assigned recently (swapped), find next available person in rotation
-                                    // Keep searching through entire rotation until we find someone not disabled and not already assigned recently
+                                if (
+                                    isNormalReassignTooSoon(
+                                        sortedNormal,
+                                        lastAssignmentDateKey,
+                                        dateKey,
+                                        minStepsBeforeReassign
+                                    )
+                                ) {
                                     let foundReplacement = false;
                                     for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                         const nextIndex = (rotationPosition + offset) % rotationDays;
                                         const candidate = groupPeople[nextIndex];
-                                        
                                         if (!candidate) continue;
                                         if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
-                                        // Check if candidate was assigned recently (within 5 days)
+                                        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'normal')) {
+                                            continue;
+                                        }
                                         if (assignedPeoplePreview[monthKey][groupNum][candidate]) {
-                                            const candidateLastDateKey = assignedPeoplePreview[monthKey][groupNum][candidate];
-                                            const candidateLastDate = new Date(candidateLastDateKey + 'T00:00:00');
-                                            const candidateDaysDiff = Math.floor((currentDate - candidateLastDate) / (1000 * 60 * 60 * 24));
-                                            if (candidateDaysDiff <= 5 && candidateDaysDiff > 0) {
-                                                continue; // Too close
+                                            const candidateLastDateKey =
+                                                assignedPeoplePreview[monthKey][groupNum][candidate];
+                                            if (
+                                                isNormalReassignTooSoon(
+                                                    sortedNormal,
+                                                    candidateLastDateKey,
+                                                    dateKey,
+                                                    minStepsBeforeReassign
+                                                )
+                                            ) {
+                                                continue;
                                             }
                                         }
-                                    
-                                        // Found available person
                                         assignedPerson = candidate;
                                         foundReplacement = true;
                                         wasReplacedDueToFiveDayRule = true;
                                     }
-                                    
-                                    // If still no replacement found after checking everyone twice, leave unassigned
-                                    // (This should be extremely rare - only if everyone is disabled or already assigned recently)
                                     if (!foundReplacement) {
                                         assignedPerson = null;
                                     }
