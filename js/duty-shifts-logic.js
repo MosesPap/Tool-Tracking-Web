@@ -9098,6 +9098,7 @@
                                         assignments: updatedAssignments,
                                         swappedPeopleSet,
                                         swapInvolvedPersons: normalSwapInvolvedPersons,
+                                        disallowEarlierPartner: true,
                                         validateSwapFn: (candidateKey) => {
                                             const result = tryEarliestSwapCandidate(candidateKey);
                                             if (!result) return null;
@@ -9486,6 +9487,7 @@
                                     assignments: updatedAssignments,
                                     swappedPeopleSet,
                                     swapInvolvedPersons: normalSwapInvolvedPersons,
+                                    disallowEarlierPartner: true,
                                     validateSwapFn: (candidateKey) => {
                                         const result = tryEarliestSwapCandidate(candidateKey);
                                         if (!result) return null;
@@ -14857,37 +14859,33 @@
                             html += '<td class="text-muted">-</td>';
                         } else {
                             const rotationDays = groupPeople.length;
-                            const shouldSeedNormalRotation =
-                                (typeof shouldRecalculateDutyGroup !== 'function' || shouldRecalculateDutyGroup(groupNum)) &&
-                                (isNormalMonthStartInRange || globalNormalRotationPosition[groupNum] === undefined);
-                            if (shouldSeedNormalRotation) {
-                                globalNormalRotationPosition[groupNum] = resolveNormalRotationStartPosition(
-                                    date,
-                                    groupNum,
-                                    groupPeople,
-                                    sortedNormal
-                                );
-                                // Fresh month seed owns the cursor; do not remap from prior month's last person.
-                                delete lastPureNormalBaselinePerson[groupNum];
-                            }
-                            
-                            let assignedPerson = null;
-                            let rotationAlreadyAdvanced = false; // Track if rotation was already advanced (e.g., by pending swap)
-                            
-                            // Ensure globalNormalRotationPosition is initialized
+                            // Seed ONLY when this group has no cursor yet (first day in calc).
+                            // Do NOT reseed on each calendar month — that rewinds from Firebase and
+                            // breaks continuity from the previous month in the same calculation pass.
                             if (globalNormalRotationPosition[groupNum] === undefined) {
-                                console.error(`[ERROR] globalNormalRotationPosition[${groupNum}] is undefined! This should have been initialized above.`);
                                 globalNormalRotationPosition[groupNum] = resolveNormalRotationStartPosition(
                                     date,
                                     groupNum,
                                     groupPeople,
                                     sortedNormal
                                 );
-                                delete lastPureNormalBaselinePerson[groupNum];
+                                // #region agent log
+                                if (groupNum === 2) {
+                                    _dbgAgentLog('F', 'duty-shifts-logic.js:monthSeed', 'initial normal seed g2', {
+                                        dateKey,
+                                        calMonthKey,
+                                        seedPos: globalNormalRotationPosition[groupNum],
+                                        seedPerson: groupPeople[globalNormalRotationPosition[groupNum]] || null
+                                    });
+                                }
+                                // #endregion
                             }
 
+                            let assignedPerson = null;
+                            let rotationAlreadyAdvanced = false; // Track if rotation was already advanced (e.g., by pending swap)
+
                             // Person-relative cursor: next after last pure baseline holder on today's list.
-                            // Prevents raw index drift when groupsForDuty list order/membership changes mid-month.
+                            // Also carries continuity across month boundaries within the same calc pass.
                             if (lastPureNormalBaselinePerson[groupNum]) {
                                 const remapped = indexAfterPersonInRotationList(
                                     groupPeople,
@@ -14899,6 +14897,13 @@
                                     globalNormalRotationPosition[groupNum] =
                                         globalNormalRotationPosition[groupNum] % rotationDays;
                                 }
+                            } else if (
+                                isNormalMonthStartInRange &&
+                                Number.isFinite(globalNormalRotationPosition[groupNum])
+                            ) {
+                                // Month boundary without in-pass lastPure (shouldn't happen mid-pass): keep cursor
+                                globalNormalRotationPosition[groupNum] =
+                                    globalNormalRotationPosition[groupNum] % rotationDays;
                             }
                             
                             let existingManualAlternate = findExistingManualAlternateOnDateGroup(dateKey, groupNum);
@@ -14966,26 +14971,14 @@
                                 isPersonMissingOnDate(originalRotationPerson, groupNum, date, 'normal');
 
                             // Final-only replacement when baseline person cannot serve (disabled or absent).
-                            // Does NOT advance the basic series past intermediate people.
-                            // Too-soon = normal-day steps (not calendar ≤5). Prefer a near-full-cycle gap;
-                            // relax then allow any eligible so days are not left blank.
-                            const minStepsFullCycle = Math.max(2, rotationDays - 1);
-                            const minStepsNearby = 6; // blocks e.g. 24→30 (3 normal steps) without emptying roster
+                            // Too-soon uses normal-day steps (≥6), not calendar ≤5 (which allowed 24→30).
+                            const minStepsNearby = 6;
                             if (baselineIsDisabled || baselineIsMissing) {
                                 let foundReplacement = false;
-                                const tryCandidate = (candidate, idx, minSteps) => {
+                                const tryCandidate = (candidate, idx) => {
                                     if (!candidate || candidate === originalRotationPerson) return false;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) return false;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) return false;
-                                    // Strict/nearby passes: do not steal the next few people still due in series
-                                    // (e.g. Τηλεμάχου right after Ονησιφόρου) — only the final relax pass may.
-                                    if (minSteps > 0 && Number.isFinite(idx) && idx >= 0) {
-                                        const forwardDist =
-                                            (idx - rotationPosition + rotationDays) % rotationDays;
-                                        if (forwardDist > 0 && forwardDist < minStepsNearby) {
-                                            return false;
-                                        }
-                                    }
                                     if (
                                         assignedPeoplePreview[monthKey][groupNum] &&
                                         assignedPeoplePreview[monthKey][groupNum][candidate]
@@ -14997,7 +14990,7 @@
                                                 sortedNormal,
                                                 lastAssignmentDateKey,
                                                 dateKey,
-                                                minSteps
+                                                minStepsNearby
                                             )
                                         ) {
                                             return false;
@@ -15012,28 +15005,17 @@
                                     return true;
                                 };
 
-                                const searchWithMinSteps = (minSteps) => {
-                                    if (
-                                        precomputedFinal &&
-                                        tryCandidate(
-                                            precomputedFinal,
-                                            groupPeople.indexOf(precomputedFinal),
-                                            minSteps
-                                        )
-                                    ) {
-                                        return true;
-                                    }
-                                    for (let offset = 1; offset <= rotationDays * 2; offset++) {
+                                if (precomputedFinal && tryCandidate(precomputedFinal, groupPeople.indexOf(precomputedFinal))) {
+                                    foundReplacement = true;
+                                }
+                                if (!foundReplacement) {
+                                    for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                         const idx = (rotationPosition + offset) % rotationDays;
-                                        if (tryCandidate(groupPeople[idx], idx, minSteps)) return true;
+                                        if (tryCandidate(groupPeople[idx], idx)) {
+                                            foundReplacement = true;
+                                        }
                                     }
-                                    return false;
-                                };
-
-                                foundReplacement =
-                                    searchWithMinSteps(minStepsFullCycle) ||
-                                    searchWithMinSteps(minStepsNearby) ||
-                                    searchWithMinSteps(0);
+                                }
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 } else if (!getAssignmentReason(dateKey, groupNum, assignedPerson)) {
@@ -15486,6 +15468,7 @@
                                     assignments: normalAssignments,
                                     swappedPeopleSet,
                                     swapInvolvedPersons: normalSwapInvolvedPersonsPreview,
+                                    disallowEarlierPartner: true,
                                     validateSwapFn: (candidateKey) => {
                                         const result = tryPreviewEarliestSwapCandidate(candidateKey);
                                         if (!result) return null;
@@ -15791,6 +15774,7 @@
                                     assignments: normalAssignments,
                                     swappedPeopleSet,
                                     swapInvolvedPersons: normalSwapInvolvedPersonsPreview,
+                                    disallowEarlierPartner: true,
                                     validateSwapFn: (candidateKey) => {
                                         const result = tryPreviewEarliestSwapCandidate(candidateKey);
                                         if (!result) return null;
@@ -15982,6 +15966,7 @@
                                 swappedPeopleSet,
                                 swapInvolvedPersons: normalSwapInvolvedPersonsPreview,
                                 maxCalendarDays: 62,
+                                disallowEarlierPartner: true,
                                 validateSwapFn: (candidateKey) => {
                                     if (!candidateKey || candidateKey === dateKey) return null;
                                     const d = new Date(candidateKey + 'T00:00:00');
@@ -16189,6 +16174,7 @@
                                 swappedPeopleSet: new Set(),
                                 swapInvolvedPersons: new Set(),
                                 maxCalendarDays: 62,
+                                disallowEarlierPartner: true,
                                 validateSwapFn: (candidateKey) => {
                                     if (!candidateKey || candidateKey === dateKey) return null;
                                     const d = new Date(candidateKey + 'T00:00:00');
@@ -16830,6 +16816,8 @@
         /**
          * Groups without Mon↔Wed / Tue↔Thu logic: shortest valid two-slot swap.
          * Prefer mutual exchange when both assignees have consecutive conflicts; skip people already swapped.
+         * disallowEarlierPartner: do not move the conflicted person onto an earlier normal day
+         * (e.g. pure turn on 30 must not ASAP onto 26 because of αργία).
          */
         function findNormalAsapSwapPartner({
             dateKey,
@@ -16840,7 +16828,8 @@
             swappedPeopleSet,
             swapInvolvedPersons,
             validateSwapFn,
-            maxCalendarDays = NORMAL_ASAP_SWAP_MAX_CALENDAR_DAYS
+            maxCalendarDays = NORMAL_ASAP_SWAP_MAX_CALENDAR_DAYS,
+            disallowEarlierPartner = false
         }) {
             if (!dateKey || !currentPerson || !Array.isArray(sortedNormal) || !assignments || typeof validateSwapFn !== 'function') {
                 return null;
@@ -16857,6 +16846,8 @@
 
             for (const otherKey of sortedNormal) {
                 if (otherKey === dateKey) continue;
+                // Conflicted person would move to otherKey — never pull them earlier than their conflict day.
+                if (disallowEarlierPartner && otherKey < dateKey) continue;
                 const dist = calendarDayDistanceAbs(dateKey, otherKey);
                 if (dist > limit) continue;
 
