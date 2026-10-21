@@ -3377,214 +3377,6 @@
             return getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, normalAssignmentsByDate);
         }
 
-        /**
-         * Index of the person after lastPersonName in groupPeople (wraps).
-         * Remaps the basic-series cursor onto today's list so mid-month list
-         * reorder / membership changes cannot re-select the same slot holder.
-         */
-        function indexAfterPersonInRotationList(groupPeople, lastPersonName) {
-            if (!Array.isArray(groupPeople) || groupPeople.length === 0 || !lastPersonName) return null;
-            const norm =
-                typeof normalizePersonKey === 'function'
-                    ? normalizePersonKey
-                    : (s) => String(s || '').trim();
-            const target = norm(lastPersonName);
-            if (!target) return null;
-            let idx = groupPeople.indexOf(lastPersonName);
-            if (idx < 0) {
-                idx = groupPeople.findIndex((p) => norm(p) === target);
-            }
-            if (idx < 0) return null;
-            return (idx + 1) % groupPeople.length;
-        }
-
-        // #region agent log
-        const _dbgNovG2Watch = new Set(['2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27', '2026-11-30']);
-        function _dbgIsTilemachou(name) {
-            const s = String(name || '');
-            return /ΤΗΛΕΜΑΧΟΥ|Τηλεμάχου|ΤΗΛΕΜΑΧΟΥ/i.test(s) || s.toUpperCase().includes('TILEMACH');
-        }
-        function _dbgAgentLog(hypothesisId, location, message, data) {
-            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '73ad17' },
-                body: JSON.stringify({
-                    sessionId: '73ad17',
-                    runId: 'post-fix',
-                    hypothesisId,
-                    location,
-                    message,
-                    data: data || {},
-                    timestamp: Date.now()
-                })
-            }).catch(() => {});
-        }
-        function _dbgSnapG2(assignments, pureMap, label) {
-            const out = {};
-            for (const dk of _dbgNovG2Watch) {
-                out[dk] = {
-                    assigned: assignments?.[dk]?.[2] || null,
-                    pure: pureMap?.[dk]?.[2] || null
-                };
-            }
-            _dbgAgentLog('E', 'duty-shifts-logic.js:snapG2', label, out);
-        }
-        // #endregion
-
-        /**
-         * Steps between two keys on the sorted normal-day list (0 = same day).
-         * Used so "too soon to reassign" counts καθημερινές, not calendar days
-         * (e.g. 24→30 can be 6 calendar days but only 3 normal slots).
-         */
-        function countNormalStepsBetween(sortedNormalKeys, dateKeyA, dateKeyB) {
-            if (!Array.isArray(sortedNormalKeys) || !dateKeyA || !dateKeyB) return null;
-            const i = sortedNormalKeys.indexOf(dateKeyA);
-            const j = sortedNormalKeys.indexOf(dateKeyB);
-            if (i < 0 || j < 0) return null;
-            return Math.abs(j - i);
-        }
-
-        /** True if last normal assignment was fewer than minSteps normal days before dateKey. */
-        function isNormalReassignTooSoon(sortedNormalKeys, lastDateKey, dateKey, minSteps) {
-            if (!lastDateKey || !dateKey || !(minSteps > 1)) return false;
-            const steps = countNormalStepsBetween(sortedNormalKeys, lastDateKey, dateKey);
-            if (steps == null) {
-                // Fallback: calendar days when keys are outside current sorted range
-                const a = new Date(lastDateKey + 'T00:00:00');
-                const b = new Date(dateKey + 'T00:00:00');
-                if (isNaN(a.getTime()) || isNaN(b.getTime())) return false;
-                const daysDiff = Math.abs(Math.floor((b - a) / (1000 * 60 * 60 * 24)));
-                return daysDiff > 0 && daysDiff <= 5;
-            }
-            return steps > 0 && steps < minSteps;
-        }
-
-        /** True if person is already assigned on a normal day within ±5 calendar days of dateKey. */
-        function personHasNearbyNormalAssignment(assignmentsByDate, sortedNormalKeys, groupNum, personName, dateKey, windowDays = 5) {
-            if (!personName || !dateKey || !Array.isArray(sortedNormalKeys)) return false;
-            const norm =
-                typeof normalizePersonKey === 'function'
-                    ? normalizePersonKey
-                    : (s) => String(s || '').trim();
-            const target = norm(personName);
-            if (!target) return false;
-            const center = new Date(dateKey + 'T00:00:00');
-            if (isNaN(center.getTime())) return false;
-            for (const dk of sortedNormalKeys) {
-                if (dk === dateKey) continue;
-                const p = assignmentsByDate?.[dk]?.[groupNum];
-                if (!p || norm(p) !== target) continue;
-                const d = new Date(dk + 'T00:00:00');
-                if (isNaN(d.getTime())) continue;
-                const daysDiff = Math.abs(Math.floor((center - d) / (1000 * 60 * 60 * 24)));
-                if (daysDiff > 0 && daysDiff <= windowDays) return true;
-            }
-            return false;
-        }
-
-        /**
-         * After a week-pair two-slot swap, rewrite days after the earlier endpoint so the
-         * intervening weekday is not left stale (which duplicated e.g. Tue when Mon↔Wed swapped).
-         * Preserves both swap endpoints; skips RFM-marked days; avoids ≤5-day repeats.
-         */
-        function reflowNormalAssignmentsAfterWeekPairSwap({
-            assignmentsByDate,
-            sortedNormalKeys,
-            groupNum,
-            groupPeople,
-            dateKey,
-            swapDayKey
-        }) {
-            if (!assignmentsByDate || !Array.isArray(sortedNormalKeys) || !Array.isArray(groupPeople) || groupPeople.length === 0) {
-                return;
-            }
-            if (!dateKey || !swapDayKey || dateKey === swapDayKey) return;
-            const earlierKey = dateKey < swapDayKey ? dateKey : swapDayKey;
-            const laterKey = dateKey > swapDayKey ? dateKey : swapDayKey;
-            const earlierAssigned = assignmentsByDate[earlierKey]?.[groupNum] || null;
-            const laterAssigned = assignmentsByDate[laterKey]?.[groupNum] || null;
-            if (!earlierAssigned || !laterAssigned) return;
-
-            const earlierIdx = indexAfterPersonInRotationList(groupPeople, earlierAssigned);
-            if (earlierIdx == null) return;
-            let cursorIdx = earlierIdx;
-            const startPos = sortedNormalKeys.indexOf(earlierKey);
-            if (startPos < 0) return;
-
-            const norm =
-                typeof normalizePersonKey === 'function'
-                    ? normalizePersonKey
-                    : (s) => String(s || '').trim();
-
-            for (let ni = startPos + 1; ni < sortedNormalKeys.length; ni++) {
-                const nextKey = sortedNormalKeys[ni];
-                const nextDateObj = new Date(nextKey + 'T00:00:00');
-                if (isNaN(nextDateObj.getTime())) continue;
-
-                if (nextKey === laterKey) {
-                    const laterListIdx = groupPeople.findIndex((p) => norm(p) === norm(laterAssigned));
-                    if (laterListIdx >= 0) {
-                        cursorIdx = (laterListIdx + 1) % groupPeople.length;
-                    }
-                    continue;
-                }
-
-                const existingPerson = assignmentsByDate?.[nextKey]?.[groupNum] || null;
-                const existingReason = existingPerson ? getAssignmentReason(nextKey, groupNum, existingPerson) : null;
-                if (
-                    existingReason &&
-                    existingReason.meta &&
-                    (existingReason.meta.returnFromMissing || existingReason.meta.shiftedByReturnFromMissing)
-                ) {
-                    const existingIdx = groupPeople.findIndex((p) => norm(p) === norm(existingPerson));
-                    if (existingIdx >= 0) cursorIdx = (existingIdx + 1) % groupPeople.length;
-                    continue;
-                }
-
-                let picked = null;
-                for (let off = 0; off < groupPeople.length; off++) {
-                    const candIdx = (cursorIdx + off) % groupPeople.length;
-                    const cand = groupPeople[candIdx];
-                    if (!cand) continue;
-                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) {
-                        continue;
-                    }
-                    if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) continue;
-                    if (
-                        personHasNearbyNormalAssignment(
-                            assignmentsByDate,
-                            sortedNormalKeys,
-                            groupNum,
-                            cand,
-                            nextKey,
-                            5
-                        )
-                    ) {
-                        continue;
-                    }
-                    picked = cand;
-                    cursorIdx = (candIdx + 1) % groupPeople.length;
-                    break;
-                }
-                if (!picked) continue;
-                const prevAssigned = assignmentsByDate?.[nextKey]?.[groupNum] || null;
-                if (!assignmentsByDate[nextKey]) assignmentsByDate[nextKey] = {};
-                assignmentsByDate[nextKey][groupNum] = picked;
-                if (prevAssigned && prevAssigned !== picked) {
-                    storeAssignmentReason(
-                        nextKey,
-                        groupNum,
-                        picked,
-                        'shift',
-                        '',
-                        prevAssigned,
-                        null,
-                        { swapContinuity: true, anchorSwapDay: laterKey }
-                    );
-                }
-            }
-        }
-
         /** Rotation cursor at the start of a calendar month (index of next assignee in groupPeople). */
         function resolveNormalRotationStartPosition(date, groupNum, groupPeople, sortedNormalKeys) {
             const rotationDays = groupPeople.length;
@@ -3663,6 +3455,7 @@
             }
             return 0;
         }
+        window.resolveNormalRotationStartPosition = resolveNormalRotationStartPosition;
 
         function hasDutyOnDay(dayKey, person, groupNum) {
             // Determine which document to check based on day type
@@ -9098,7 +8891,6 @@
                                         assignments: updatedAssignments,
                                         swappedPeopleSet,
                                         swapInvolvedPersons: normalSwapInvolvedPersons,
-                                        disallowEarlierPartner: true,
                                         validateSwapFn: (candidateKey) => {
                                             const result = tryEarliestSwapCandidate(candidateKey);
                                             if (!result) return null;
@@ -9487,7 +9279,6 @@
                                     assignments: updatedAssignments,
                                     swappedPeopleSet,
                                     swapInvolvedPersons: normalSwapInvolvedPersons,
-                                    disallowEarlierPartner: true,
                                     validateSwapFn: (candidateKey) => {
                                         const result = tryEarliestSwapCandidate(candidateKey);
                                         if (!result) return null;
@@ -9561,17 +9352,63 @@
                                 const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
 
                                 // Rotation continuity reflow only for Mon↔Wed / Tue↔Thu groups (week-pair logic).
-                                // Starts after the earlier swap day so the intervening weekday is rewritten too.
+                                // Cursor continues after who actually serves on the later swap day (not the
+                                // conflicted baseline person) so e.g. Sun→Mon fill by Kaparis leaves Fatsitas next.
                                 try {
                                     if (applyWeekPairLogic && !isCrossMonthSwap && Array.isArray(groupPeople) && groupPeople.length > 0) {
-                                        reflowNormalAssignmentsAfterWeekPairSwap({
-                                            assignmentsByDate: updatedAssignments,
-                                            sortedNormalKeys: sortedNormal,
-                                            groupNum,
-                                            groupPeople,
-                                            dateKey,
-                                            swapDayKey
-                                        });
+                                        const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
+                                        const laterAssignedPerson =
+                                            updatedAssignments[laterKey]?.[groupNum] ||
+                                            ((laterKey === dateKey) ? swapCandidate : currentPerson);
+                                        const laterAssignedIdx = groupPeople.indexOf(laterAssignedPerson);
+                                        if (laterAssignedIdx >= 0) {
+                                            let cursorIdx = (laterAssignedIdx + 1) % groupPeople.length;
+                                            const laterPos = sortedNormal.indexOf(laterKey);
+                                            if (laterPos >= 0) {
+                                                for (let ni = laterPos + 1; ni < sortedNormal.length; ni++) {
+                                                    const nextKey = sortedNormal[ni];
+                                                    const nextDateObj = new Date(nextKey + 'T00:00:00');
+                                                    if (isNaN(nextDateObj.getTime())) continue;
+
+                                                    const existingPerson = updatedAssignments?.[nextKey]?.[groupNum] || null;
+                                                    const existingReason = existingPerson ? getAssignmentReason(nextKey, groupNum, existingPerson) : null;
+                                                    if (existingReason && existingReason.meta && (existingReason.meta.returnFromMissing || existingReason.meta.shiftedByReturnFromMissing)) {
+                                                        const existingIdx = groupPeople.indexOf(existingPerson);
+                                                        if (existingIdx >= 0) cursorIdx = (existingIdx + 1) % groupPeople.length;
+                                                        continue;
+                                                    }
+
+                                                    let picked = null;
+                                                    for (let off = 0; off < groupPeople.length; off++) {
+                                                        const candIdx = (cursorIdx + off) % groupPeople.length;
+                                                        const cand = groupPeople[candIdx];
+                                                        if (!cand) continue;
+                                                        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
+                                                        if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) continue;
+                                                        picked = cand;
+                                                        cursorIdx = (candIdx + 1) % groupPeople.length;
+                                                        break;
+                                                    }
+                                                    if (picked) {
+                                                    const prevAssigned = updatedAssignments?.[nextKey]?.[groupNum] || null;
+                                                        if (!updatedAssignments[nextKey]) updatedAssignments[nextKey] = {};
+                                                        updatedAssignments[nextKey][groupNum] = picked;
+                                                    if (prevAssigned && prevAssigned !== picked) {
+                                                        storeAssignmentReason(
+                                                            nextKey,
+                                                            groupNum,
+                                                            picked,
+                                                            'shift',
+                                                            '',
+                                                            prevAssigned,
+                                                            null,
+                                                            { swapContinuity: true, anchorSwapDay: laterKey }
+                                                        );
+                                                    }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 } catch (contErr) {
                                     console.warn('[SWAP CONTINUITY] Failed to reflow future normal days after swap:', contErr);
@@ -14312,8 +14149,6 @@
             
             // Declare at function level to avoid scope issues
             const globalNormalRotationPosition = {}; // groupNum -> global position (continues across months)
-            // Last pure-baseline person per group — remap cursor onto each day's list (not a raw index).
-            const lastPureNormalBaselinePerson = {};
             // After "Αντικατάσταση Επιλαχών", skip the replacement's next natural turn in this month (D then B,C,E…).
             let deferManualAlternateSkipNormal = {};
             let prevMonthKeyNormalAlternateDefer = null;
@@ -14859,51 +14694,30 @@
                             html += '<td class="text-muted">-</td>';
                         } else {
                             const rotationDays = groupPeople.length;
-                            // Seed ONLY when this group has no cursor yet (first day in calc).
-                            // Do NOT reseed on each calendar month — that rewinds from Firebase and
-                            // breaks continuity from the previous month in the same calculation pass.
-                            if (globalNormalRotationPosition[groupNum] === undefined) {
+                            const shouldSeedNormalRotation =
+                                (typeof shouldRecalculateDutyGroup !== 'function' || shouldRecalculateDutyGroup(groupNum)) &&
+                                (isNormalMonthStartInRange || globalNormalRotationPosition[groupNum] === undefined);
+                            if (shouldSeedNormalRotation) {
                                 globalNormalRotationPosition[groupNum] = resolveNormalRotationStartPosition(
                                     date,
                                     groupNum,
                                     groupPeople,
                                     sortedNormal
                                 );
-                                // #region agent log
-                                if (groupNum === 2) {
-                                    _dbgAgentLog('F', 'duty-shifts-logic.js:monthSeed', 'initial normal seed g2', {
-                                        dateKey,
-                                        calMonthKey,
-                                        seedPos: globalNormalRotationPosition[groupNum],
-                                        seedPerson: groupPeople[globalNormalRotationPosition[groupNum]] || null
-                                    });
-                                }
-                                // #endregion
                             }
-
+                            
                             let assignedPerson = null;
                             let rotationAlreadyAdvanced = false; // Track if rotation was already advanced (e.g., by pending swap)
-
-                            // Person-relative cursor: next after last pure baseline holder on today's list.
-                            // Also carries continuity across month boundaries within the same calc pass.
-                            if (lastPureNormalBaselinePerson[groupNum]) {
-                                const remapped = indexAfterPersonInRotationList(
+                            
+                            // Ensure globalNormalRotationPosition is initialized
+                            if (globalNormalRotationPosition[groupNum] === undefined) {
+                                console.error(`[ERROR] globalNormalRotationPosition[${groupNum}] is undefined! This should have been initialized above.`);
+                                globalNormalRotationPosition[groupNum] = resolveNormalRotationStartPosition(
+                                    date,
+                                    groupNum,
                                     groupPeople,
-                                    lastPureNormalBaselinePerson[groupNum]
+                                    sortedNormal
                                 );
-                                if (remapped != null) {
-                                    globalNormalRotationPosition[groupNum] = remapped;
-                                } else if (Number.isFinite(globalNormalRotationPosition[groupNum])) {
-                                    globalNormalRotationPosition[groupNum] =
-                                        globalNormalRotationPosition[groupNum] % rotationDays;
-                                }
-                            } else if (
-                                isNormalMonthStartInRange &&
-                                Number.isFinite(globalNormalRotationPosition[groupNum])
-                            ) {
-                                // Month boundary without in-pass lastPure (shouldn't happen mid-pass): keep cursor
-                                globalNormalRotationPosition[groupNum] =
-                                    globalNormalRotationPosition[groupNum] % rotationDays;
                             }
                             
                             let existingManualAlternate = findExistingManualAlternateOnDateGroup(dateKey, groupNum);
@@ -14924,25 +14738,48 @@
                             // IMPORTANT: Baseline slot = who the basic series points to (before final replacement).
                             // Basic series skips ONLY εξαίρεση (already filtered from groupPeople).
                             // Disabled / absent KEEP their baseline slot; final calendar may replace them.
-                            const originalRotationPerson = groupPeople[rotationPosition] || null;
+                            const originalRotationPerson = groupPeople[rotationPosition];
                             if (originalRotationPerson) {
                                 if (!pureNormalRotationByDate[dateKey]) pureNormalRotationByDate[dateKey] = {};
                                 pureNormalRotationByDate[dateKey][groupNum] = originalRotationPerson;
-                                lastPureNormalBaselinePerson[groupNum] = originalRotationPerson;
                             }
-                            // #region agent log
-                            if (groupNum === 2 && _dbgNovG2Watch.has(dateKey)) {
-                                _dbgAgentLog('A', 'duty-shifts-logic.js:pureBaseline', 'pure baseline slot g2', {
+
+                            if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled() && dutyNormalDebug.recordBaselineStep) {
+                                let seedPersonForTrace = null;
+                                if (shouldSeedNormalRotation) {
+                                    seedPersonForTrace =
+                                        typeof getRotationSeedPersonForMonthStart === 'function'
+                                            ? getRotationSeedPersonForMonthStart('normal', date, groupNum)
+                                            : typeof getLastRotationPersonForDate === 'function'
+                                              ? getLastRotationPersonForDate('normal', date, groupNum)
+                                              : null;
+                                }
+                                dutyNormalDebug.recordBaselineStep({
                                     dateKey,
-                                    pure: originalRotationPerson || null,
-                                    isTilemachou: _dbgIsTilemachou(originalRotationPerson),
+                                    groupNum,
                                     rotationPosition,
-                                    listLen: rotationDays,
-                                    lastPure: lastPureNormalBaselinePerson[groupNum] || null,
-                                    listSlice: (groupPeople || []).slice(0, 16).map((p, i) => `${i}:${String(p || '').slice(0, 40)}`)
+                                    listLength: rotationDays,
+                                    purePerson: originalRotationPerson,
+                                    displayBaselinePerson: null,
+                                    finalAssignedPerson: null,
+                                    seedPerson: seedPersonForTrace,
+                                    seededThisDay: !!shouldSeedNormalRotation,
+                                    advancedFromPosition:
+                                        globalNormalRotationPosition[groupNum] !== undefined
+                                            ? (rotationPosition - 1 + rotationDays) % rotationDays
+                                            : null,
+                                    manualAlternate: existingManualAlternate
+                                        ? {
+                                              baseline: existingManualAlternate.baseline || existingManualAlternate.baselinePerson || null,
+                                              replacement:
+                                                  existingManualAlternate.replacement ||
+                                                  existingManualAlternate.replacementPerson ||
+                                                  null
+                                          }
+                                        : null,
+                                    note: deferFulfillmentNormal ? 'manual-alternate-defer' : null
                                 });
                             }
-                            // #endregion
 
                             const rotationPerson = originalRotationPerson;
                             let wasReplacedFromBaseline = false;
@@ -14971,8 +14808,7 @@
                                 isPersonMissingOnDate(originalRotationPerson, groupNum, date, 'normal');
 
                             // Final-only replacement when baseline person cannot serve (disabled or absent).
-                            // Too-soon uses normal-day steps (≥6), not calendar ≤5 (which allowed 24→30).
-                            const minStepsNearby = 6;
+                            // Does NOT advance the basic series past intermediate people.
                             if (baselineIsDisabled || baselineIsMissing) {
                                 let foundReplacement = false;
                                 const tryCandidate = (candidate, idx) => {
@@ -14985,16 +14821,12 @@
                                     ) {
                                         const lastAssignmentDateKey =
                                             assignedPeoplePreview[monthKey][groupNum][candidate];
-                                        if (
-                                            isNormalReassignTooSoon(
-                                                sortedNormal,
-                                                lastAssignmentDateKey,
-                                                dateKey,
-                                                minStepsNearby
-                                            )
-                                        ) {
-                                            return false;
-                                        }
+                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        const currentDate = new Date(dateKey + 'T00:00:00');
+                                        const daysDiff = Math.floor(
+                                            (currentDate - lastDate) / (1000 * 60 * 60 * 24)
+                                        );
+                                        if (daysDiff <= 5 && daysDiff > 0) return false;
                                     }
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
@@ -15067,55 +14899,46 @@
                                     : originalRotationPerson;
                             normalRotationPersons[dateKey][groupNum] = baselineForDisplay;
                             
-                            // If assigned person was already assigned too soon (nearby normal days), try next.
-                            // Use nearby threshold only (not full cycle) so months are not left blank.
-                            // If no alternate exists, KEEP the original assignee (never null the day).
+                            // If assigned person was already assigned recently (due to swap), skip to next person
+                            // BUT: Skip this check if we just replaced a disabled person - swap logic will handle duplicates
+                            // Check if assigned within 5 days (too close)
                             let wasReplacedDueToFiveDayRule = false;
-                            if (
-                                !wasDisabledPersonSkipped &&
-                                assignedPerson &&
-                                !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal') &&
-                                assignedPeoplePreview[monthKey][groupNum][assignedPerson]
-                            ) {
+                            if (!wasDisabledPersonSkipped && assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal') && assignedPeoplePreview[monthKey][groupNum][assignedPerson]) {
                                 const lastAssignmentDateKey = assignedPeoplePreview[monthKey][groupNum][assignedPerson];
-                                if (
-                                    isNormalReassignTooSoon(
-                                        sortedNormal,
-                                        lastAssignmentDateKey,
-                                        dateKey,
-                                        minStepsNearby
-                                    )
-                                ) {
-                                    const keepPerson = assignedPerson;
+                                const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                const currentDate = new Date(dateKey + 'T00:00:00');
+                                const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                                // Only skip if assigned within 5 days (too close)
+                                if (daysDiff <= 5 && daysDiff > 0) {
+                                    // This person was already assigned recently (swapped), find next available person in rotation
+                                    // Keep searching through entire rotation until we find someone not disabled and not already assigned recently
                                     let foundReplacement = false;
                                     for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
                                         const nextIndex = (rotationPosition + offset) % rotationDays;
                                         const candidate = groupPeople[nextIndex];
+                                        
                                         if (!candidate) continue;
                                         if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
-                                        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'normal')) {
-                                            continue;
-                                        }
+                                        // Check if candidate was assigned recently (within 5 days)
                                         if (assignedPeoplePreview[monthKey][groupNum][candidate]) {
-                                            const candidateLastDateKey =
-                                                assignedPeoplePreview[monthKey][groupNum][candidate];
-                                            if (
-                                                isNormalReassignTooSoon(
-                                                    sortedNormal,
-                                                    candidateLastDateKey,
-                                                    dateKey,
-                                                    minStepsNearby
-                                                )
-                                            ) {
-                                                continue;
+                                            const candidateLastDateKey = assignedPeoplePreview[monthKey][groupNum][candidate];
+                                            const candidateLastDate = new Date(candidateLastDateKey + 'T00:00:00');
+                                            const candidateDaysDiff = Math.floor((currentDate - candidateLastDate) / (1000 * 60 * 60 * 24));
+                                            if (candidateDaysDiff <= 5 && candidateDaysDiff > 0) {
+                                                continue; // Too close
                                             }
                                         }
+                                    
+                                        // Found available person
                                         assignedPerson = candidate;
                                         foundReplacement = true;
                                         wasReplacedDueToFiveDayRule = true;
                                     }
+                                    
+                                    // If still no replacement found after checking everyone twice, leave unassigned
+                                    // (This should be extremely rare - only if everyone is disabled or already assigned recently)
                                     if (!foundReplacement) {
-                                        assignedPerson = keepPerson;
+                                        assignedPerson = null;
                                     }
                                 }
                             }
@@ -15241,20 +15064,6 @@
                                 normalAssignments[dateKey] = {};
                             }
                             normalAssignments[dateKey][groupNum] = assignedPerson;
-                            // #region agent log
-                            if (groupNum === 2 && _dbgNovG2Watch.has(dateKey)) {
-                                _dbgAgentLog('B', 'duty-shifts-logic.js:initialAssign', 'initial final assign g2 (pre-swap)', {
-                                    dateKey,
-                                    assigned: assignedPerson || null,
-                                    pure: originalRotationPerson || null,
-                                    assignedIsTilemachou: _dbgIsTilemachou(assignedPerson),
-                                    pureIsTilemachou: _dbgIsTilemachou(originalRotationPerson),
-                                    wasDisabledPersonSkipped: !!wasDisabledPersonSkipped,
-                                    wasReplacedDueToFiveDayRule: !!wasReplacedDueToFiveDayRule,
-                                    reason: assignedPerson ? (getAssignmentReason(dateKey, groupNum, assignedPerson)?.type || null) : null
-                                });
-                            }
-                            // #endregion
                             
                             if (
                                 assignedPerson &&
@@ -15274,6 +15083,19 @@
                             // Track that this person has been assigned (to prevent nearby duplicate assignments)
                             if (assignedPerson && assignedPeoplePreview[monthKey] && assignedPeoplePreview[monthKey][groupNum]) {
                                 assignedPeoplePreview[monthKey][groupNum][assignedPerson] = dateKey;
+                            }
+
+                            if (
+                                typeof dutyNormalDebug !== 'undefined' &&
+                                dutyNormalDebug.isEnabled() &&
+                                typeof dutyNormalDebug.patchBaselineStep === 'function'
+                            ) {
+                                dutyNormalDebug.patchBaselineStep(dateKey, groupNum, {
+                                    displayBaselinePerson:
+                                        normalRotationPersons[dateKey]?.[groupNum] || originalRotationPerson,
+                                    finalAssignedPerson: assignedPerson,
+                                    pendingSwapApplied: !!rotationAlreadyAdvanced
+                                });
                             }
                             
                             // CRITICAL: If assigned person differs from baseline (rotationPerson), check if this is a cascading shift
@@ -15387,9 +15209,6 @@
             if (normalDays.length > 0 && sortedNormal) {
                 const swappedPeopleSet = new Set(); // Format: "dateKey:groupNum:personName"
                 const normalSwapInvolvedPersonsPreview = new Set();
-                // #region agent log
-                _dbgSnapG2(normalAssignments, pureNormalRotationByDate, 'before main preview swaps g2');
-                // #endregion
                 
                 // Apply swap logic to normalAssignments BEFORE displaying
                 sortedNormal.forEach((dateKey) => {
@@ -15468,7 +15287,6 @@
                                     assignments: normalAssignments,
                                     swappedPeopleSet,
                                     swapInvolvedPersons: normalSwapInvolvedPersonsPreview,
-                                    disallowEarlierPartner: true,
                                     validateSwapFn: (candidateKey) => {
                                         const result = tryPreviewEarliestSwapCandidate(candidateKey);
                                         if (!result) return null;
@@ -15774,7 +15592,6 @@
                                     assignments: normalAssignments,
                                     swappedPeopleSet,
                                     swapInvolvedPersons: normalSwapInvolvedPersonsPreview,
-                                    disallowEarlierPartner: true,
                                     validateSwapFn: (candidateKey) => {
                                         const result = tryPreviewEarliestSwapCandidate(candidateKey);
                                         if (!result) return null;
@@ -15832,39 +15649,63 @@
                             // Perform the swap
                             normalAssignments[dateKey][groupNum] = swapCandidate;
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
-                            // #region agent log
-                            if (
-                                groupNum === 2 &&
-                                (_dbgNovG2Watch.has(dateKey) ||
-                                    _dbgNovG2Watch.has(swapDayKey) ||
-                                    _dbgIsTilemachou(currentPerson) ||
-                                    _dbgIsTilemachou(swapCandidate))
-                            ) {
-                                _dbgAgentLog('C', 'duty-shifts-logic.js:previewSwap', 'preview swap applied g2/tilemachou', {
-                                    dateKey,
-                                    swapDayKey,
-                                    currentPerson,
-                                    swapCandidate,
-                                    applyWeekPairLogic: !!applyWeekPairLogic,
-                                    usedAsapFallbackPreview: !!usedAsapFallbackPreview,
-                                    afterDateKey: normalAssignments[dateKey]?.[groupNum] || null,
-                                    afterSwapDay: normalAssignments[swapDayKey]?.[groupNum] || null
-                                });
-                            }
-                            // #endregion
 
                             // Rotation continuity reflow in preview only for week-pair groups.
+                            // Same as save path: continue after the person who remains on the later swap day.
                             try {
                                 const isCrossMonthSwapPreview = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
                                 if (applyWeekPairLogic && !isCrossMonthSwapPreview && Array.isArray(groupPeople) && groupPeople.length > 0) {
-                                    reflowNormalAssignmentsAfterWeekPairSwap({
-                                        assignmentsByDate: normalAssignments,
-                                        sortedNormalKeys: sortedNormal,
-                                        groupNum,
-                                        groupPeople,
-                                        dateKey,
-                                        swapDayKey
-                                    });
+                                    const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
+                                    const laterAssignedPerson =
+                                        normalAssignments[laterKey]?.[groupNum] ||
+                                        ((laterKey === dateKey) ? swapCandidate : currentPerson);
+                                    const laterAssignedIdx = groupPeople.indexOf(laterAssignedPerson);
+                                    if (laterAssignedIdx >= 0) {
+                                        let cursorIdx = (laterAssignedIdx + 1) % groupPeople.length;
+                                        const laterPos = sortedNormal.indexOf(laterKey);
+                                        if (laterPos >= 0) {
+                                            for (let ni = laterPos + 1; ni < sortedNormal.length; ni++) {
+                                                const nextKey = sortedNormal[ni];
+                                                const nextDateObj = new Date(nextKey + 'T00:00:00');
+                                                if (isNaN(nextDateObj.getTime())) continue;
+                                                const existingPerson = normalAssignments?.[nextKey]?.[groupNum] || null;
+                                                const existingReason = existingPerson ? getAssignmentReason(nextKey, groupNum, existingPerson) : null;
+                                                if (existingReason && existingReason.meta && (existingReason.meta.returnFromMissing || existingReason.meta.shiftedByReturnFromMissing)) {
+                                                    const existingIdx = groupPeople.indexOf(existingPerson);
+                                                    if (existingIdx >= 0) cursorIdx = (existingIdx + 1) % groupPeople.length;
+                                                    continue;
+                                                }
+                                                let picked = null;
+                                                for (let off = 0; off < groupPeople.length; off++) {
+                                                    const candIdx = (cursorIdx + off) % groupPeople.length;
+                                                    const cand = groupPeople[candIdx];
+                                                    if (!cand) continue;
+                                                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
+                                                    if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) continue;
+                                                    picked = cand;
+                                                    cursorIdx = (candIdx + 1) % groupPeople.length;
+                                                    break;
+                                                }
+                                                if (picked) {
+                                                    const prevAssigned = normalAssignments?.[nextKey]?.[groupNum] || null;
+                                                    if (!normalAssignments[nextKey]) normalAssignments[nextKey] = {};
+                                                    normalAssignments[nextKey][groupNum] = picked;
+                                                    if (prevAssigned && prevAssigned !== picked) {
+                                                        storeAssignmentReason(
+                                                            nextKey,
+                                                            groupNum,
+                                                            picked,
+                                                            'shift',
+                                                            '',
+                                                            prevAssigned,
+                                                            null,
+                                                            { swapContinuity: true, anchorSwapDay: laterKey }
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             } catch (previewContErr) {
                                 console.warn('[PREVIEW SWAP CONTINUITY] Failed to reflow future normal days after swap:', previewContErr);
@@ -15923,9 +15764,6 @@
                     }
                 }
                 });
-                // #region agent log
-                _dbgSnapG2(normalAssignments, pureNormalRotationByDate, 'after main preview swaps g2');
-                // #endregion
 
                 // Δεύτερο πέρασμα: όσες συγκρούσεις έμειναν (π.χ. λόγω απουσιών / τέλος μήνα)
                 // ψάξε εταίρο σε ΟΛΟ τον μήνα (όχι μόνο ±10 ημέρες).
@@ -15966,7 +15804,6 @@
                                 swappedPeopleSet,
                                 swapInvolvedPersons: normalSwapInvolvedPersonsPreview,
                                 maxCalendarDays: 62,
-                                disallowEarlierPartner: true,
                                 validateSwapFn: (candidateKey) => {
                                     if (!candidateKey || candidateKey === dateKey) return null;
                                     const d = new Date(candidateKey + 'T00:00:00');
@@ -16046,23 +15883,6 @@
                             normalAssignments[dateKey][groupNum] = swapCandidate;
                             if (!normalAssignments[swapDayKey]) normalAssignments[swapDayKey] = {};
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
-                            // #region agent log
-                            if (
-                                groupNum === 2 &&
-                                (_dbgNovG2Watch.has(dateKey) ||
-                                    _dbgNovG2Watch.has(swapDayKey) ||
-                                    _dbgIsTilemachou(currentPerson) ||
-                                    _dbgIsTilemachou(swapCandidate))
-                            ) {
-                                _dbgAgentLog('D', 'duty-shifts-logic.js:residualSwap', 'residual ASAP swap g2/tilemachou', {
-                                    dateKey,
-                                    swapDayKey,
-                                    currentPerson,
-                                    swapCandidate,
-                                    pass: residualPass
-                                });
-                            }
-                            // #endregion
                             const conflictNeighborInfoPreview = getConsecutiveConflictNeighborInfo(
                                 dateKey,
                                 currentPerson,
@@ -16174,7 +15994,6 @@
                                 swappedPeopleSet: new Set(),
                                 swapInvolvedPersons: new Set(),
                                 maxCalendarDays: 62,
-                                disallowEarlierPartner: true,
                                 validateSwapFn: (candidateKey) => {
                                     if (!candidateKey || candidateKey === dateKey) return null;
                                     const d = new Date(candidateKey + 'T00:00:00');
@@ -16225,22 +16044,6 @@
                             normalAssignments[dateKey][groupNum] = swapCandidate;
                             if (!normalAssignments[swapDayKey]) normalAssignments[swapDayKey] = {};
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
-                            // #region agent log
-                            if (
-                                groupNum === 2 &&
-                                (_dbgNovG2Watch.has(dateKey) ||
-                                    _dbgNovG2Watch.has(swapDayKey) ||
-                                    _dbgIsTilemachou(currentPerson) ||
-                                    _dbgIsTilemachou(swapCandidate))
-                            ) {
-                                _dbgAgentLog('D', 'duty-shifts-logic.js:postRfmSwap', 'post-RFM ASAP swap g2/tilemachou', {
-                                    dateKey,
-                                    swapDayKey,
-                                    currentPerson,
-                                    swapCandidate
-                                });
-                            }
-                            // #endregion
                             const info = getConsecutiveConflictNeighborInfo(
                                 dateKey,
                                 currentPerson,
@@ -16404,9 +16207,6 @@
             calculationSteps.tempNormalAssignments = normalAssignments;
             calculationSteps.normalStep4PreviewProcessed = true;
             calculationSteps.tempNormalBaselineDisplay = normalRotationPersons;
-            // #region agent log
-            _dbgSnapG2(normalAssignments, pureNormalRotationByDate, 'before finalizeNormalPreview g2');
-            // #endregion
             finalizeNormalPreview(normalAssignments, pureNormalRotationByDate, normalRotationPersons);
             if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
                 dutyNormalDebug.finalizeMissedNormalAbsences({
@@ -16434,6 +16234,9 @@
                     console.log(`[NORMAL ROTATION] Storing last rotation continuity person ${lastPersonForRotation} for group ${g}`);
                 }
             }
+
+            // Keep pure +1 series for baseline inspector (Firebase vs pure)
+            calculationSteps.tempNormalPureBaseline = pureNormalRotationByDate;
 
             // Store last rotation person per month (for correct recalculation of individual months)
             const sortedNormalKeysForMonth = [...normalDays].sort();
@@ -16816,8 +16619,6 @@
         /**
          * Groups without Mon↔Wed / Tue↔Thu logic: shortest valid two-slot swap.
          * Prefer mutual exchange when both assignees have consecutive conflicts; skip people already swapped.
-         * disallowEarlierPartner: do not move the conflicted person onto an earlier normal day
-         * (e.g. pure turn on 30 must not ASAP onto 26 because of αργία).
          */
         function findNormalAsapSwapPartner({
             dateKey,
@@ -16828,8 +16629,7 @@
             swappedPeopleSet,
             swapInvolvedPersons,
             validateSwapFn,
-            maxCalendarDays = NORMAL_ASAP_SWAP_MAX_CALENDAR_DAYS,
-            disallowEarlierPartner = false
+            maxCalendarDays = NORMAL_ASAP_SWAP_MAX_CALENDAR_DAYS
         }) {
             if (!dateKey || !currentPerson || !Array.isArray(sortedNormal) || !assignments || typeof validateSwapFn !== 'function') {
                 return null;
@@ -16846,8 +16646,6 @@
 
             for (const otherKey of sortedNormal) {
                 if (otherKey === dateKey) continue;
-                // Conflicted person would move to otherKey — never pull them earlier than their conflict day.
-                if (disallowEarlierPartner && otherKey < dateKey) continue;
                 const dist = calendarDayDistanceAbs(dateKey, otherKey);
                 if (dist > limit) continue;
 

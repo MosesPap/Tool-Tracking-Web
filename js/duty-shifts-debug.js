@@ -1294,6 +1294,8 @@
         enabled: false,
         unavailableReplacements: [],
         returnPlans: [],
+        /** Step-4 live trace: one row per normal day × group while preview builds pure baseline */
+        baselineTrace: [],
         filter: { dateKey: null, groupNum: null, personName: null }
     };
 
@@ -1320,6 +1322,385 @@
     function clear() {
         state.unavailableReplacements = [];
         state.returnPlans = [];
+        state.baselineTrace = [];
+    }
+
+    /**
+     * Called from Step 4 for every group/day while building pure baseline.
+     * Lets you see exact cursor index + person that became Firebase baseline.
+     */
+    function recordBaselineStep(rec) {
+        if (!isEnabled() || !rec) return;
+        state.baselineTrace.push({
+            t: Date.now(),
+            dateKey: rec.dateKey || null,
+            groupNum: rec.groupNum != null ? Number(rec.groupNum) : null,
+            rotationPosition: rec.rotationPosition,
+            listLength: rec.listLength,
+            purePerson: rec.purePerson || null,
+            displayBaselinePerson: rec.displayBaselinePerson || null,
+            finalAssignedPerson: rec.finalAssignedPerson || null,
+            seedPerson: rec.seedPerson || null,
+            seededThisDay: !!rec.seededThisDay,
+            advancedFromPosition: rec.advancedFromPosition,
+            manualAlternate: rec.manualAlternate || null,
+            pendingSwapApplied: !!rec.pendingSwapApplied,
+            note: rec.note || null
+        });
+    }
+
+    function patchBaselineStep(dateKey, groupNum, patch) {
+        if (!isEnabled() || !dateKey || !patch) return;
+        const g = Number(groupNum);
+        for (let i = state.baselineTrace.length - 1; i >= 0; i--) {
+            const row = state.baselineTrace[i];
+            if (row.dateKey === dateKey && Number(row.groupNum) === g) {
+                Object.assign(row, patch);
+                return;
+            }
+        }
+    }
+
+    function parsePersonFromBaselineRaw(raw, groupNum) {
+        if (!raw) return null;
+        if (typeof raw === 'object' && !Array.isArray(raw)) {
+            return raw[groupNum] || raw[String(groupNum)] || null;
+        }
+        if (typeof parseAssignedPersonForGroupFromAssignment === 'function') {
+            return parseAssignedPersonForGroupFromAssignment(raw, groupNum);
+        }
+        return null;
+    }
+
+    function getStoredBaselinePerson(dateKey, groupNum) {
+        let raw = null;
+        if (typeof getRotationBaselineAssignmentForType === 'function') {
+            raw = getRotationBaselineAssignmentForType('normal', dateKey);
+        } else if (typeof rotationBaselineNormalAssignments !== 'undefined') {
+            raw = rotationBaselineNormalAssignments?.[dateKey] || null;
+        }
+        return parsePersonFromBaselineRaw(raw, groupNum);
+    }
+
+    function getFinalAssignedPerson(dateKey, groupNum) {
+        if (typeof getAssignmentForDate === 'function') {
+            const raw = getAssignmentForDate(dateKey);
+            return parsePersonFromBaselineRaw(raw, groupNum);
+        }
+        if (typeof normalDayAssignments !== 'undefined') {
+            return parsePersonFromBaselineRaw(normalDayAssignments?.[dateKey], groupNum);
+        }
+        return null;
+    }
+
+    function getNormalListForGroup(groupNum, dateKey) {
+        if (typeof getSortedGroupListForRotation === 'function') {
+            return getSortedGroupListForRotation(groupNum, 'normal') || [];
+        }
+        if (typeof groupsForDuty === 'function') {
+            return (groupsForDuty(groupNum, dateKey)?.normal || []).slice();
+        }
+        return (typeof groups !== 'undefined' ? groups?.[groupNum]?.normal : []) || [];
+    }
+
+    function collectNormalDateKeysInMonth(year, monthIndex0) {
+        const keys = [];
+        const cur = new Date(year, monthIndex0, 1);
+        const endM = new Date(year, monthIndex0 + 1, 0);
+        while (cur <= endM) {
+            const dk =
+                typeof formatDateKey === 'function'
+                    ? formatDateKey(cur)
+                    : cur.toISOString().slice(0, 10);
+            let isNormal = true;
+            if (typeof getDayType === 'function') {
+                const dt = getDayType(cur);
+                isNormal = dt === 'normal-day';
+            }
+            if (isNormal) keys.push(dk);
+            cur.setDate(cur.getDate() + 1);
+        }
+        return keys.sort();
+    }
+
+    /**
+     * Independent replay of pure +1 series for one group/month (what baseline SHOULD be).
+     */
+    function replayPureNormalBaselineMonth(year, monthIndex0, groupNum) {
+        const keys = collectNormalDateKeysInMonth(year, monthIndex0);
+        const firstKey = keys[0] || null;
+        const people = getNormalListForGroup(groupNum, firstKey);
+        const rows = [];
+        if (!people.length || !keys.length) {
+            return { keys, people, seedPerson: null, startPosition: 0, rows };
+        }
+        const monthSeedDate = new Date(year, monthIndex0, 1);
+        let seedPerson = null;
+        if (typeof getRotationSeedPersonForMonthStart === 'function') {
+            seedPerson = getRotationSeedPersonForMonthStart('normal', monthSeedDate, groupNum);
+        } else if (typeof getLastRotationPersonForDate === 'function') {
+            seedPerson = getLastRotationPersonForDate('normal', monthSeedDate, groupNum);
+        }
+        let pos = 0;
+        if (typeof resolveNormalRotationStartPosition === 'function') {
+            pos = resolveNormalRotationStartPosition(monthSeedDate, groupNum, people, keys) % people.length;
+        } else if (typeof computeRotationPositionAtMonthStart === 'function') {
+            const recovered = computeRotationPositionAtMonthStart('normal', monthSeedDate, groupNum, people);
+            if (Number.isFinite(recovered)) pos = recovered % people.length;
+        } else if (seedPerson) {
+            const si = people.findIndex((p) => normPerson(p) === normPerson(seedPerson));
+            if (si >= 0) pos = (si + 1) % people.length;
+        }
+        const startPosition = pos;
+        for (const dk of keys) {
+            const person = people[pos] || null;
+            const gPriorities =
+                typeof groups !== 'undefined' && groups?.[groupNum]?.priorities
+                    ? groups[groupNum].priorities
+                    : null;
+            const priority = person && gPriorities?.[person]?.normal != null ? gPriorities[person].normal : null;
+            rows.push({
+                dateKey: dk,
+                index: pos,
+                person,
+                priority,
+                listOrder: pos + 1
+            });
+            pos = (pos + 1) % people.length;
+        }
+        return { keys, people, seedPerson, startPosition, rows };
+    }
+
+    function findDuplicatesInRows(rows) {
+        const byPerson = {};
+        (rows || []).forEach((r) => {
+            if (!r?.person) return;
+            const k = normPerson(r.person);
+            if (!byPerson[k]) byPerson[k] = [];
+            byPerson[k].push(r.dateKey);
+        });
+        return Object.entries(byPerson)
+            .filter(([, dates]) => dates.length > 1)
+            .map(([person, dates]) => ({ person, dates }));
+    }
+
+    /**
+     * Full inspect report for one date + group — compare Firebase / final / replay / live trace.
+     */
+    function inspectBaselineSlot(dateKey, groupNum, personNameFilter) {
+        const g = Number(groupNum);
+        const d = new Date((dateKey || '') + 'T00:00:00');
+        if (!dateKey || isNaN(d.getTime()) || !g) {
+            return { ok: false, error: 'Χρειάζεται έγκυρη ημερομηνία (YYYY-MM-DD) και ομάδα 1–4.' };
+        }
+        const year = d.getFullYear();
+        const month = d.getMonth();
+        const replay = replayPureNormalBaselineMonth(year, month, g);
+        const replayRow = replay.rows.find((r) => r.dateKey === dateKey) || null;
+        const firebasePerson = getStoredBaselinePerson(dateKey, g);
+        const finalPerson = getFinalAssignedPerson(dateKey, g);
+        let expectedFn = null;
+        if (typeof computeExpectedRotationPersonForDate === 'function') {
+            expectedFn = computeExpectedRotationPersonForDate('normal', dateKey, g);
+        }
+        const tempBaseline =
+            typeof calculationSteps !== 'undefined'
+                ? calculationSteps?.tempNormalBaselineAssignments?.[dateKey]?.[g] ||
+                  calculationSteps?.tempNormalBaselineAssignments?.[dateKey]?.[String(g)] ||
+                  null
+                : null;
+        const tempDisplay =
+            typeof calculationSteps !== 'undefined'
+                ? calculationSteps?.tempNormalBaselineDisplay?.[dateKey]?.[g] ||
+                  calculationSteps?.tempNormalBaselineDisplay?.[dateKey]?.[String(g)] ||
+                  null
+                : null;
+        const pureFromTemp =
+            typeof calculationSteps !== 'undefined' && calculationSteps?.tempNormalPureBaseline
+                ? calculationSteps.tempNormalPureBaseline?.[dateKey]?.[g] ||
+                  calculationSteps.tempNormalPureBaseline?.[dateKey]?.[String(g)] ||
+                  null
+                : null;
+
+        const monthFirebaseRows = replay.keys.map((dk) => ({
+            dateKey: dk,
+            firebase: getStoredBaselinePerson(dk, g),
+            final: getFinalAssignedPerson(dk, g),
+            replay: replay.rows.find((r) => r.dateKey === dk)?.person || null,
+            replayIndex: replay.rows.find((r) => r.dateKey === dk)?.index ?? null
+        }));
+
+        const firebaseDupes = findDuplicatesInRows(
+            monthFirebaseRows.map((r) => ({ dateKey: r.dateKey, person: r.firebase }))
+        );
+        const replayDupes = findDuplicatesInRows(replay.rows);
+
+        const targetPerson = personNameFilter || firebasePerson || replayRow?.person || finalPerson;
+        const appearances = {
+            firebase: monthFirebaseRows.filter((r) => r.firebase && normPerson(r.firebase) === normPerson(targetPerson)).map((r) => r.dateKey),
+            final: monthFirebaseRows.filter((r) => r.final && normPerson(r.final) === normPerson(targetPerson)).map((r) => r.dateKey),
+            replay: monthFirebaseRows.filter((r) => r.replay && normPerson(r.replay) === normPerson(targetPerson)).map((r) => r.dateKey)
+        };
+
+        const liveTrace = state.baselineTrace.filter(
+            (t) => Number(t.groupNum) === g && (!personNameFilter || normPerson(t.purePerson) === normPerson(personNameFilter) || t.dateKey === dateKey)
+        );
+        const liveTraceDay = state.baselineTrace.find((t) => t.dateKey === dateKey && Number(t.groupNum) === g) || null;
+
+        let reason = null;
+        if (typeof getAssignmentReason === 'function' && finalPerson) {
+            reason = getAssignmentReason(dateKey, g, finalPerson);
+        }
+
+        const mismatches = monthFirebaseRows.filter(
+            (r) => r.firebase && r.replay && normPerson(r.firebase) !== normPerson(r.replay)
+        );
+
+        const verdictParts = [];
+        if (firebasePerson && replayRow?.person && normPerson(firebasePerson) !== normPerson(replayRow.person)) {
+            verdictParts.push(
+                `Το Firebase baseline έχει «${firebasePerson}» αλλά η καθαρή επανάληψη σειράς δίνει «${replayRow.person}» (index ${replayRow.index}).`
+            );
+        } else if (firebasePerson && replayRow?.person) {
+            verdictParts.push(
+                `Firebase baseline συμφωνεί με καθαρή επανάληψη: «${firebasePerson}» (index ${replayRow.index}).`
+            );
+        }
+        if (appearances.firebase.length > 1) {
+            verdictParts.push(
+                `Το ίδιο άτομο εμφανίζεται στο Firebase baseline σε πολλές μέρες: ${appearances.firebase.join(', ')} — αυτό δεν έπρεπε να συμβαίνει στην καθαρή +1 σειρά.`
+            );
+        }
+        if (appearances.replay.length > 1) {
+            verdictParts.push(
+                `ΠΡΟΣΟΧΗ: και η καθαρή επανάληψη έχει διπλότυπο (${appearances.replay.join(', ')}) — πρόβλημα στο seed/λίστα.`
+            );
+        } else if (appearances.firebase.length > 1 && appearances.replay.length <= 1) {
+            verdictParts.push(
+                `Η καθαρή επανάληψη ΔΕΝ έχει διπλότυπο — το λάθος μπήκε κατά τον αποθηκευμένο baseline (π.χ. παλιό save / merge / όχι pure σειρά).`
+            );
+        }
+        if (finalPerson && firebasePerson && normPerson(finalPerson) !== normPerson(firebasePerson)) {
+            verdictParts.push(
+                `Τελική ανάθεση («${finalPerson}») ≠ baseline Firebase («${firebasePerson}») — μετά το baseline μπήκαν swaps/RFM.`
+            );
+        }
+
+        return {
+            ok: true,
+            dateKey,
+            groupNum: g,
+            targetPerson,
+            firebasePerson,
+            finalPerson,
+            expectedFn,
+            tempBaseline,
+            tempDisplay,
+            pureFromTemp,
+            replayRow,
+            seedPerson: replay.seedPerson,
+            startPosition: replay.startPosition,
+            listLength: replay.people.length,
+            listPreview: replay.people.map((p, i) => ({
+                index: i,
+                order: i + 1,
+                person: p,
+                priority:
+                    typeof groups !== 'undefined' && groups?.[g]?.priorities?.[p]?.normal != null
+                        ? groups[g].priorities[p].normal
+                        : null
+            })),
+            monthRows: monthFirebaseRows,
+            firebaseDupes,
+            replayDupes,
+            appearances,
+            mismatches,
+            liveTraceDay,
+            liveTrace,
+            reason,
+            verdict: verdictParts.join(' ')
+        };
+    }
+
+    function renderInspectReportHtml(report) {
+        if (!report?.ok) {
+            return `<div class="alert alert-warning">${escapeHtml(report?.error || 'Σφάλμα')}</div>`;
+        }
+        let html = '';
+        html += `<div class="alert alert-info small"><strong>Συμπέρασμα:</strong> ${escapeHtml(report.verdict || '—')}</div>`;
+        html += '<div class="table-responsive mb-3"><table class="table table-sm table-bordered">';
+        html += '<tbody>';
+        html += `<tr><th>Ημερομηνία / Ομάδα</th><td>${escapeHtml(report.dateKey)} · ομάδα ${report.groupNum}</td></tr>`;
+        html += `<tr><th>Firebase baseline</th><td><strong>${escapeHtml(report.firebasePerson || '—')}</strong></td></tr>`;
+        html += `<tr><th>Τελική ανάθεση</th><td>${escapeHtml(report.finalPerson || '—')}</td></tr>`;
+        html += `<tr><th>Καθαρή επανάληψη (+1)</th><td><strong>${escapeHtml(report.replayRow?.person || '—')}</strong> · index ${report.replayRow?.index ?? '—'} · σειρά λίστας ${report.replayRow ? report.replayRow.index + 1 : '—'}</td></tr>`;
+        html += `<tr><th>computeExpected…</th><td>${escapeHtml(report.expectedFn || '—')}</td></tr>`;
+        html += `<tr><th>Seed μήνα (τελευταίος πριν)</th><td>${escapeHtml(report.seedPerson || '—')} → start index ${report.startPosition}</td></tr>`;
+        html += `<tr><th>Temp baseline (τρέχων υπολογισμός)</th><td>${escapeHtml(report.tempBaseline || '—')}</td></tr>`;
+        html += `<tr><th>Temp display baseline</th><td>${escapeHtml(report.tempDisplay || '—')}</td></tr>`;
+        html += `<tr><th>Εμφανίσεις στόχου στο Firebase</th><td>${escapeHtml((report.appearances.firebase || []).join(', ') || '—')}</td></tr>`;
+        html += `<tr><th>Εμφανίσεις στην καθαρή επανάληψη</th><td>${escapeHtml((report.appearances.replay || []).join(', ') || '—')}</td></tr>`;
+        if (report.liveTraceDay) {
+            html += `<tr><th>Live Step-4 trace</th><td>pos=${report.liveTraceDay.rotationPosition} · pure=${escapeHtml(report.liveTraceDay.purePerson || '—')} · final=${escapeHtml(report.liveTraceDay.finalAssignedPerson || '—')} · seeded=${report.liveTraceDay.seededThisDay ? 'ναι' : 'όχι'}${report.liveTraceDay.note ? ' · ' + escapeHtml(report.liveTraceDay.note) : ''}</td></tr>`;
+        } else {
+            html += `<tr><th>Live Step-4 trace</th><td class="text-muted">Δεν υπάρχει (ενεργοποίησε debug και ξανατρέξε Βήμα 4)</td></tr>`;
+        }
+        if (report.reason) {
+            html += `<tr><th>Λόγος τελικής ανάθεσης</th><td><small>${escapeHtml(report.reason.type || '')}: ${escapeHtml(report.reason.reason || JSON.stringify(report.reason.meta || {}))}</small></td></tr>`;
+        }
+        html += '</tbody></table></div>';
+
+        html += '<h6 class="mb-2">Μήνας — Firebase vs καθαρή σειρά</h6>';
+        html +=
+            '<div class="table-responsive mb-3"><table class="table table-sm table-bordered table-hover"><thead class="table-light"><tr>';
+        html +=
+            '<th>Ημ.</th><th>Idx</th><th>Καθαρή επανάληψη</th><th>Firebase baseline</th><th>Τελική</th><th></th></tr></thead><tbody>';
+        (report.monthRows || []).forEach((r) => {
+            const mismatch = r.firebase && r.replay && normPerson(r.firebase) !== normPerson(r.replay);
+            const isTarget = r.dateKey === report.dateKey;
+            const dupFirebase =
+                report.targetPerson &&
+                r.firebase &&
+                normPerson(r.firebase) === normPerson(report.targetPerson) &&
+                (report.appearances.firebase || []).length > 1;
+            let mark = '';
+            if (mismatch) mark = '<span class="badge text-bg-danger">≠ επανάληψη</span>';
+            else if (dupFirebase) mark = '<span class="badge text-bg-warning">διπλότυπο</span>';
+            else if (isTarget) mark = '<span class="badge text-bg-primary">στόχος</span>';
+            html += `<tr class="${isTarget ? 'table-primary' : mismatch ? 'table-danger' : ''}">`;
+            html += `<td>${escapeHtml(r.dateKey)}</td><td>${r.replayIndex ?? '—'}</td>`;
+            html += `<td>${escapeHtml(r.replay || '—')}</td>`;
+            html += `<td><strong>${escapeHtml(r.firebase || '—')}</strong></td>`;
+            html += `<td>${escapeHtml(r.final || '—')}</td><td>${mark}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+
+        if ((report.mismatches || []).length) {
+            html += `<p class="small text-danger mb-2"><strong>${report.mismatches.length}</strong> μέρες όπου Firebase ≠ καθαρή επανάληψη.</p>`;
+        }
+        if ((report.firebaseDupes || []).length) {
+            html += '<p class="small text-warning mb-2"><strong>Διπλότυπα στο Firebase baseline:</strong> ';
+            html += report.firebaseDupes
+                .map((d) => `${escapeHtml(d.person)} → ${escapeHtml(d.dates.join(', '))}`)
+                .join(' · ');
+            html += '</p>';
+        }
+
+        if ((report.liveTrace || []).length) {
+            html += '<h6 class="mb-2">Live trace (ίδια ομάδα / φίλτρο)</h6>';
+            html +=
+                '<div class="table-responsive mb-2"><table class="table table-sm table-bordered"><thead><tr><th>Ημ.</th><th>pos</th><th>pure</th><th>final</th><th>seed</th></tr></thead><tbody>';
+            report.liveTrace.forEach((t) => {
+                html += `<tr><td>${escapeHtml(t.dateKey)}</td><td>${t.rotationPosition}</td>`;
+                html += `<td>${escapeHtml(t.purePerson || '—')}</td><td>${escapeHtml(t.finalAssignedPerson || '—')}</td>`;
+                html += `<td>${t.seededThisDay ? escapeHtml(t.seedPerson || 'ναι') : '—'}</td></tr>`;
+            });
+            html += '</tbody></table></div>';
+        }
+
+        html +=
+            '<p class="small text-muted mb-0">Σύμβουλος: αν Firebase έχει διπλότυπο αλλά η καθαρή επανάληψη όχι, το πρόβλημα είναι στο αποθηκευμένο baseline (ή σε παλιό υπολογισμό). Αν και οι δύο έχουν διπλότυπο, κοίτα seed μήνα / λίστα.</p>';
+        return html;
     }
 
     function reasonLabels(codes) {
@@ -1411,7 +1792,29 @@
         const matchGroup = (g) => f.groupNum == null || Number(f.groupNum) === Number(g);
         const matchDate = (dk) => !f.dateKey || dk === f.dateKey;
 
-        let body = '<h6 class="mb-2"><i class="fas fa-user-clock me-1"></i>Return-from-missing (καθημερινές)</h6>';
+        let body = '';
+        body +=
+            '<div class="card border-danger mb-4"><div class="card-header bg-danger-subtle py-2">' +
+            '<strong><i class="fas fa-search-plus me-1"></i>Έλεγχος baseline θέσης</strong>' +
+            '<span class="text-muted small ms-2">Γιατί μπήκε κάποιος στο rotationBaseline (π.χ. 24 &amp; 26 ίδιο άτομο)</span></div>' +
+            '<div class="card-body py-3">' +
+            '<div class="row g-2 align-items-end mb-2">' +
+            '<div class="col-md-3"><label class="form-label small mb-0">Ημερομηνία</label>' +
+            '<input type="text" class="form-control form-control-sm" id="dutyNormalBaselineInspectDate" placeholder="2026-11-26" ' +
+            `value="${escapeHtml(f.dateKey || '')}"></div>` +
+            '<div class="col-md-2"><label class="form-label small mb-0">Ομάδα</label>' +
+            '<input type="number" min="1" max="4" class="form-control form-control-sm" id="dutyNormalBaselineInspectGroup" ' +
+            `value="${f.groupNum != null && !Number.isNaN(f.groupNum) ? f.groupNum : '2'}"></div>` +
+            '<div class="col-md-4"><label class="form-label small mb-0">Όνομα (προαιρετικό)</label>' +
+            '<input type="text" class="form-control form-control-sm" id="dutyNormalBaselineInspectPerson" placeholder="Τηλεμάχου" ' +
+            `value="${escapeHtml(f.personName || '')}"></div>` +
+            '<div class="col-md-3"><button type="button" class="btn btn-danger btn-sm w-100" id="dutyNormalBaselineInspectBtn">' +
+            '<i class="fas fa-microscope me-1"></i>Ανάλυση</button></div></div>' +
+            '<div id="dutyNormalBaselineInspectResult" class="mt-2"></div>' +
+            '<p class="small text-muted mb-0 mt-2">Ή από κονσόλα: <code>dutyNormalDebug.inspect(&apos;2026-11-26&apos;, 2, &apos;Τηλεμάχου&apos;)</code></p>' +
+            '</div></div>';
+
+        body += '<h6 class="mb-2"><i class="fas fa-user-clock me-1"></i>Return-from-missing (καθημερινές)</h6>';
         const plans = state.returnPlans.filter(
             (p) => matchGroup(p.groupNum) && matchPerson(p.personName) && (!f.dateKey || matchDate(p.firstMissedKey) || matchDate(p.targetKey))
         );
@@ -1468,7 +1871,18 @@
             el = document.getElementById(modalId);
             document.getElementById('dutyNormalDebugExportBtn').onclick = () => {
                 const blob = new Blob(
-                    [JSON.stringify({ returnPlans: state.returnPlans, unavailableReplacements: state.unavailableReplacements }, null, 2)],
+                    [
+                        JSON.stringify(
+                            {
+                                returnPlans: state.returnPlans,
+                                unavailableReplacements: state.unavailableReplacements,
+                                baselineTrace: state.baselineTrace,
+                                lastInspect: state.lastInspect || null
+                            },
+                            null,
+                            2
+                        )
+                    ],
                     { type: 'application/json' }
                 );
                 const a = document.createElement('a');
@@ -1492,7 +1906,27 @@
             <div class="col-md-2 d-flex align-items-end"><button type="button" class="btn btn-primary btn-sm w-100" id="dutyNormalDebugRefilterBtn">Φίλτρο</button></div>
             </div>` + body;
         document.getElementById('dutyNormalDebugRefilterBtn').onclick = () => renderPanel();
+        const inspectBtn = document.getElementById('dutyNormalBaselineInspectBtn');
+        if (inspectBtn) {
+            inspectBtn.onclick = () => {
+                const dk = document.getElementById('dutyNormalBaselineInspectDate')?.value?.trim();
+                const gn = parseInt(document.getElementById('dutyNormalBaselineInspectGroup')?.value, 10);
+                const pn = document.getElementById('dutyNormalBaselineInspectPerson')?.value?.trim() || null;
+                const report = inspectBaselineSlot(dk, gn, pn);
+                state.lastInspect = report;
+                const out = document.getElementById('dutyNormalBaselineInspectResult');
+                if (out) out.innerHTML = renderInspectReportHtml(report);
+                console.log('[dutyNormalDebug.inspect]', report);
+            };
+        }
         bootstrap.Modal.getOrCreateInstance(el).show();
+    }
+
+    function inspect(dateKey, groupNum, personName) {
+        const report = inspectBaselineSlot(dateKey, groupNum, personName || null);
+        state.lastInspect = report;
+        console.log('[dutyNormalDebug.inspect]', report);
+        return report;
     }
 
     function getDebugToolbarHtml() {
@@ -1509,7 +1943,10 @@
                     <button type="button" class="btn btn-outline-primary btn-sm" id="dutyNormalDebugViewBtn">
                         <i class="fas fa-list me-1"></i>Προβολή log
                     </button>
-                    <span class="text-muted small">Ενεργοποιήστε πριν το preview · return-from-missing εφαρμόζεται και στο «Επόμενο».</span>
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="dutyNormalBaselineInspectOpenBtn">
+                        <i class="fas fa-microscope me-1"></i>Έλεγχος baseline
+                    </button>
+                    <span class="text-muted small">Ενεργοποίησε πριν το Βήμα 4 για live trace · ο έλεγχος baseline δουλεύει και χωρίς νέο υπολογισμό (Firebase vs καθαρή σειρά).</span>
                 </div>
             </div>
         </div>`;
@@ -1518,6 +1955,7 @@
     function wireToolbar() {
         const cb = document.getElementById('dutyNormalDebugCheckbox');
         const btn = document.getElementById('dutyNormalDebugViewBtn');
+        const inspectOpen = document.getElementById('dutyNormalBaselineInspectOpenBtn');
         if (cb) {
             cb.checked = isEnabled();
             cb.onchange = () => {
@@ -1526,6 +1964,9 @@
             };
         }
         if (btn) btn.onclick = () => renderPanel();
+        if (inspectOpen) {
+            inspectOpen.onclick = () => renderPanel();
+        }
     }
 
     window.dutyNormalDebug = {
@@ -1534,7 +1975,12 @@
         clear,
         recordUnavailableReplacement,
         recordReturnFromMissingPlan,
+        recordBaselineStep,
+        patchBaselineStep,
         finalizeMissedNormalAbsences,
+        inspectBaselineSlot,
+        inspect,
+        replayPureNormalBaselineMonth,
         REASON_LABELS,
         renderPanel,
         getDebugToolbarHtml,
