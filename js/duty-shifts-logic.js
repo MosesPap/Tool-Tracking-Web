@@ -3082,12 +3082,11 @@
                 (typeof getDutyCategoryForDateKeyLocal === 'function' ? getDutyCategoryForDateKeyLocal(dateKey) : null) ||
                 (typeof getDutyCategoryForDateKey === 'function' ? getDutyCategoryForDateKey(dateKey) : 'normal');
 
+            // Manual alternate must NOT jump the baseline cursor to the alternate's baseline index —
+            // that skipped people in between (e.g. #3 → #5, dropping #4). Cursor stays sequential;
+            // final assignment still swaps to the replacement when the slot matches (see callers).
             if (existingManualAlternate) {
-                const bi = groupPeople.findIndex(p => norm(p) === norm(existingManualAlternate.baseline));
-                if (bi >= 0) {
-                    rotationPosition = bi;
-                    globalRotationPosition[groupNum] = rotationPosition;
-                }
+                // leave rotationPosition as sequential cursor
             } else if (deferState) {
                 const st = deferState[groupNum];
                 if (st?.person) {
@@ -3111,17 +3110,24 @@
                                     ? getPreviousMonthKeyFromDate(dateInMonth)
                                     : null
                         };
+                        const isNormalDuty = dutyCat === 'normal' || dayTypeCategory === 'normal';
+                        if (isNormalDuty) {
+                            // Επιλαχών: skip natural turn once for FINAL only — keep slot on pure baseline
+                            // so the basic series never jumps (e.g. #3 → #5). Caller replaces final.
+                            delete deferState[groupNum];
+                        } else {
+                            let guard = 0;
+                            while (
+                                guard++ <= rotationDays + 2 &&
+                                groupPeople[rotationPosition] &&
+                                norm(groupPeople[rotationPosition]) === dn
+                            ) {
+                                rotationPosition = (rotationPosition + 1) % rotationDays;
+                                delete deferState[groupNum];
+                            }
+                            globalRotationPosition[groupNum] = rotationPosition;
+                        }
                     }
-                    let guard = 0;
-                    while (
-                        guard++ <= rotationDays + 2 &&
-                        groupPeople[rotationPosition] &&
-                        norm(groupPeople[rotationPosition]) === dn
-                    ) {
-                        rotationPosition = (rotationPosition + 1) % rotationDays;
-                        delete deferState[groupNum];
-                    }
-                    globalRotationPosition[groupNum] = rotationPosition;
                 }
             }
             return { rotationPosition, existingManualAlternate, deferFulfillment };
@@ -14941,6 +14947,41 @@
                                     normalizePersonKey(existingManualAlternate.baseline)
                             ) {
                                 assignedPerson = existingManualAlternate.replacement;
+                            }
+
+                            // Επιλαχών natural turn: keep them on pure baseline, replace FINAL only.
+                            if (
+                                deferFulfillmentNormal?.skippedReplacement &&
+                                originalRotationPerson &&
+                                normalizePersonKey(originalRotationPerson) ===
+                                    normalizePersonKey(deferFulfillmentNormal.skippedReplacement) &&
+                                assignedPerson &&
+                                normalizePersonKey(assignedPerson) ===
+                                    normalizePersonKey(deferFulfillmentNormal.skippedReplacement)
+                            ) {
+                                let foundDeferReplacement = false;
+                                for (let offset = 1; offset <= rotationDays * 2 && !foundDeferReplacement; offset++) {
+                                    const idx = (rotationPosition + offset) % rotationDays;
+                                    const candidate = groupPeople[idx];
+                                    if (!candidate) continue;
+                                    if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) continue;
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
+                                    if (
+                                        assignedPeoplePreview[monthKey][groupNum] &&
+                                        assignedPeoplePreview[monthKey][groupNum][candidate]
+                                    ) {
+                                        const lastAssignmentDateKey =
+                                            assignedPeoplePreview[monthKey][groupNum][candidate];
+                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        const currentDate = new Date(dateKey + 'T00:00:00');
+                                        const daysDiff = Math.floor(
+                                            (currentDate - lastDate) / (1000 * 60 * 60 * 24)
+                                        );
+                                        if (daysDiff <= 5 && daysDiff > 0) continue;
+                                    }
+                                    assignedPerson = candidate;
+                                    foundDeferReplacement = true;
+                                }
                             }
 
                             // Baseline for UI / Firebase: always the basic-series slot holder
