@@ -3398,6 +3398,39 @@
             return (idx + 1) % groupPeople.length;
         }
 
+        // #region agent log
+        const _dbgNovG2Watch = new Set(['2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27', '2026-11-30']);
+        function _dbgIsTilemachou(name) {
+            const s = String(name || '');
+            return /ΤΗΛΕΜΑΧΟΥ|Τηλεμάχου|ΤΗΛΕΜΑΧΟΥ/i.test(s) || s.toUpperCase().includes('TILEMACH');
+        }
+        function _dbgAgentLog(hypothesisId, location, message, data) {
+            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '73ad17' },
+                body: JSON.stringify({
+                    sessionId: '73ad17',
+                    runId: 'pre-fix',
+                    hypothesisId,
+                    location,
+                    message,
+                    data: data || {},
+                    timestamp: Date.now()
+                })
+            }).catch(() => {});
+        }
+        function _dbgSnapG2(assignments, pureMap, label) {
+            const out = {};
+            for (const dk of _dbgNovG2Watch) {
+                out[dk] = {
+                    assigned: assignments?.[dk]?.[2] || null,
+                    pure: pureMap?.[dk]?.[2] || null
+                };
+            }
+            _dbgAgentLog('E', 'duty-shifts-logic.js:snapG2', label, out);
+        }
+        // #endregion
+
         /** True if person already holds a pure baseline slot in the previous `lookback` normal days. */
         function personHasRecentPureNormalBaseline(
             pureByDate,
@@ -14912,6 +14945,19 @@
                                 pureNormalRotationByDate[dateKey][groupNum] = originalRotationPerson;
                                 lastPureNormalBaselinePerson[groupNum] = originalRotationPerson;
                             }
+                            // #region agent log
+                            if (groupNum === 2 && _dbgNovG2Watch.has(dateKey)) {
+                                _dbgAgentLog('A', 'duty-shifts-logic.js:pureBaseline', 'pure baseline slot g2', {
+                                    dateKey,
+                                    pure: originalRotationPerson || null,
+                                    isTilemachou: _dbgIsTilemachou(originalRotationPerson),
+                                    rotationPosition,
+                                    listLen: rotationDays,
+                                    lastPure: lastPureNormalBaselinePerson[groupNum] || null,
+                                    listSlice: (groupPeople || []).slice(0, 16).map((p, i) => `${i}:${String(p || '').slice(0, 40)}`)
+                                });
+                            }
+                            // #endregion
 
                             const rotationPerson = originalRotationPerson;
                             let wasReplacedFromBaseline = false;
@@ -15196,6 +15242,20 @@
                                 normalAssignments[dateKey] = {};
                             }
                             normalAssignments[dateKey][groupNum] = assignedPerson;
+                            // #region agent log
+                            if (groupNum === 2 && _dbgNovG2Watch.has(dateKey)) {
+                                _dbgAgentLog('B', 'duty-shifts-logic.js:initialAssign', 'initial final assign g2 (pre-swap)', {
+                                    dateKey,
+                                    assigned: assignedPerson || null,
+                                    pure: originalRotationPerson || null,
+                                    assignedIsTilemachou: _dbgIsTilemachou(assignedPerson),
+                                    pureIsTilemachou: _dbgIsTilemachou(originalRotationPerson),
+                                    wasDisabledPersonSkipped: !!wasDisabledPersonSkipped,
+                                    wasReplacedDueToFiveDayRule: !!wasReplacedDueToFiveDayRule,
+                                    reason: assignedPerson ? (getAssignmentReason(dateKey, groupNum, assignedPerson)?.type || null) : null
+                                });
+                            }
+                            // #endregion
                             
                             if (
                                 assignedPerson &&
@@ -15328,6 +15388,9 @@
             if (normalDays.length > 0 && sortedNormal) {
                 const swappedPeopleSet = new Set(); // Format: "dateKey:groupNum:personName"
                 const normalSwapInvolvedPersonsPreview = new Set();
+                // #region agent log
+                _dbgSnapG2(normalAssignments, pureNormalRotationByDate, 'before main preview swaps g2');
+                // #endregion
                 
                 // Apply swap logic to normalAssignments BEFORE displaying
                 sortedNormal.forEach((dateKey) => {
@@ -15768,6 +15831,26 @@
                             // Perform the swap
                             normalAssignments[dateKey][groupNum] = swapCandidate;
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
+                            // #region agent log
+                            if (
+                                groupNum === 2 &&
+                                (_dbgNovG2Watch.has(dateKey) ||
+                                    _dbgNovG2Watch.has(swapDayKey) ||
+                                    _dbgIsTilemachou(currentPerson) ||
+                                    _dbgIsTilemachou(swapCandidate))
+                            ) {
+                                _dbgAgentLog('C', 'duty-shifts-logic.js:previewSwap', 'preview swap applied g2/tilemachou', {
+                                    dateKey,
+                                    swapDayKey,
+                                    currentPerson,
+                                    swapCandidate,
+                                    applyWeekPairLogic: !!applyWeekPairLogic,
+                                    usedAsapFallbackPreview: !!usedAsapFallbackPreview,
+                                    afterDateKey: normalAssignments[dateKey]?.[groupNum] || null,
+                                    afterSwapDay: normalAssignments[swapDayKey]?.[groupNum] || null
+                                });
+                            }
+                            // #endregion
 
                             // Rotation continuity reflow in preview only for week-pair groups.
                             try {
@@ -15839,6 +15922,9 @@
                     }
                 }
                 });
+                // #region agent log
+                _dbgSnapG2(normalAssignments, pureNormalRotationByDate, 'after main preview swaps g2');
+                // #endregion
 
                 // Δεύτερο πέρασμα: όσες συγκρούσεις έμειναν (π.χ. λόγω απουσιών / τέλος μήνα)
                 // ψάξε εταίρο σε ΟΛΟ τον μήνα (όχι μόνο ±10 ημέρες).
@@ -15958,6 +16044,23 @@
                             normalAssignments[dateKey][groupNum] = swapCandidate;
                             if (!normalAssignments[swapDayKey]) normalAssignments[swapDayKey] = {};
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
+                            // #region agent log
+                            if (
+                                groupNum === 2 &&
+                                (_dbgNovG2Watch.has(dateKey) ||
+                                    _dbgNovG2Watch.has(swapDayKey) ||
+                                    _dbgIsTilemachou(currentPerson) ||
+                                    _dbgIsTilemachou(swapCandidate))
+                            ) {
+                                _dbgAgentLog('D', 'duty-shifts-logic.js:residualSwap', 'residual ASAP swap g2/tilemachou', {
+                                    dateKey,
+                                    swapDayKey,
+                                    currentPerson,
+                                    swapCandidate,
+                                    pass: residualPass
+                                });
+                            }
+                            // #endregion
                             const conflictNeighborInfoPreview = getConsecutiveConflictNeighborInfo(
                                 dateKey,
                                 currentPerson,
@@ -16119,6 +16222,22 @@
                             normalAssignments[dateKey][groupNum] = swapCandidate;
                             if (!normalAssignments[swapDayKey]) normalAssignments[swapDayKey] = {};
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
+                            // #region agent log
+                            if (
+                                groupNum === 2 &&
+                                (_dbgNovG2Watch.has(dateKey) ||
+                                    _dbgNovG2Watch.has(swapDayKey) ||
+                                    _dbgIsTilemachou(currentPerson) ||
+                                    _dbgIsTilemachou(swapCandidate))
+                            ) {
+                                _dbgAgentLog('D', 'duty-shifts-logic.js:postRfmSwap', 'post-RFM ASAP swap g2/tilemachou', {
+                                    dateKey,
+                                    swapDayKey,
+                                    currentPerson,
+                                    swapCandidate
+                                });
+                            }
+                            // #endregion
                             const info = getConsecutiveConflictNeighborInfo(
                                 dateKey,
                                 currentPerson,
@@ -16282,6 +16401,9 @@
             calculationSteps.tempNormalAssignments = normalAssignments;
             calculationSteps.normalStep4PreviewProcessed = true;
             calculationSteps.tempNormalBaselineDisplay = normalRotationPersons;
+            // #region agent log
+            _dbgSnapG2(normalAssignments, pureNormalRotationByDate, 'before finalizeNormalPreview g2');
+            // #endregion
             finalizeNormalPreview(normalAssignments, pureNormalRotationByDate, normalRotationPersons);
             if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
                 dutyNormalDebug.finalizeMissedNormalAbsences({
