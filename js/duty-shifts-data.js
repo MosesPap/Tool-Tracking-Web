@@ -7356,46 +7356,19 @@ ${content.innerHTML}
                 personName
                     ? `<span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}`
                     : '<span class="text-muted">—</span>';
-            const formatBaselinePersonCell = (
-                personName,
-                orderNo,
-                groupData,
-                groupNum,
-                typeKey,
-                monthStartKey,
-                monthEndKey,
-                consumedSubstitutes
-            ) => {
-                if (!personName) return '<span class="text-muted">—</span>';
-                const unavailable = isPersonUnavailableWholeMonth(
-                    personName,
-                    groupNum,
-                    typeKey,
-                    monthStartKey,
-                    monthEndKey,
-                    groupData
-                );
-                // Own baseline turn: always show if available. Do NOT strike because they
-                // already appeared as someone else's substitute — that left people behind.
-                if (!unavailable) {
-                    return formatPersonCell(personName, orderNo);
+            /**
+             * Βασική σειρά: πάντα το άτομο της ροής (χωρίς προσπέραση λόγω απουσίας/απενεργοποίησης).
+             * Αν η τελική ανάθεση διαφέρει → διαγραφή + στην παρένθεση ο τελικός.
+             */
+            const formatBaselinePersonCell = (baselinePerson, baselineOrder, finalPerson, finalOrder) => {
+                if (!baselinePerson) return '<span class="text-muted">—</span>';
+                const same =
+                    !!finalPerson && normName(finalPerson) === normName(baselinePerson);
+                if (same || !finalPerson) {
+                    return formatPersonCell(baselinePerson, baselineOrder);
                 }
-                const nextPerson = findNextAvailableInRotationList(
-                    groupData,
-                    typeKey,
-                    personName,
-                    groupNum,
-                    monthStartKey,
-                    monthEndKey,
-                    consumedSubstitutes
-                );
-                if (nextPerson && consumedSubstitutes instanceof Set) {
-                    consumedSubstitutes.add(normName(nextPerson));
-                }
-                const nextOrder = nextPerson ? getOrderNo(groupData, typeKey, nextPerson) : null;
-                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
-                if (!nextPerson) return struck;
-                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${nextOrder || '-'}</span>${escapeHtml(nextPerson)})</span>`;
+                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${baselineOrder || '-'}</span>${escapeHtml(baselinePerson)}</span>`;
+                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${finalOrder || '-'}</span>${escapeHtml(finalPerson)})</span>`;
             };
             const buildChangeMarker = (reasonObj, pairKey, getSwapPairLabelNo) => {
                 if (!reasonObj) return { text: '', color: null, style: '' };
@@ -7427,8 +7400,6 @@ ${content.innerHTML}
                 const monthDate = new Date(year, month, 1);
                 const monthName = getGreekMonthName(monthDate);
                 const daysInMonth = new Date(year, month + 1, 0).getDate();
-                const monthStartKey = formatDateKey(monthDate);
-                const monthEndKey = formatDateKey(new Date(year, month, daysInMonth));
 
                 const swapPairLabelByKey = new Map();
                 let nextSwapPairLabelNo = 1;
@@ -7488,13 +7459,6 @@ ${content.innerHTML}
                     `;
                     monthSection.appendChild(groupBlock);
 
-                    const consumedBaselineSubstitutes = {
-                        normal: new Set(),
-                        semi: new Set(),
-                        weekend: new Set(),
-                        special: new Set()
-                    };
-
                     const tbody = groupBlock.querySelector('tbody');
                     for (let day = 1; day <= daysInMonth; day++) {
                         const date = new Date(year, month, day);
@@ -7536,7 +7500,7 @@ ${content.innerHTML}
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dayName}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;${change.style}">${formatPersonCell(finalPerson, finalOrder)}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey])}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, finalPerson, finalOrder)}</td>
                         `;
                         tbody.appendChild(row);
                     }
