@@ -3416,8 +3416,8 @@
             const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3;
             if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
                 // #region agent log
-                if (groupNum === 4) {
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'pre-fix',hypothesisId:'E',location:'duty-shifts-logic.js:resolveNormalRotationStartPosition',message:'group4 forced start 0 special-case',data:{date:date&&formatDateKey?formatDateKey(date):String(date),isFebruary2026,isAprilStart},timestamp:Date.now()})}).catch(()=>{});
+                if (groupNum === 2) {
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'g2-pre',hypothesisId:'A',location:'duty-shifts-logic.js:resolveNormalRotationStartPosition',message:'group2 forced start 0 special-case',data:{date:date&&typeof formatDateKey==='function'?formatDateKey(date):String(date),isFebruary2026,isAprilStart,calcStartMonth:calculationSteps.startDate&&calculationSteps.startDate.getMonth()},timestamp:Date.now()})}).catch(()=>{});
                 }
                 // #endregion
                 return 0;
@@ -3437,9 +3437,8 @@
             if (lastPersonName && lastPersonIndex >= 0) {
                 const nextPos = (lastPersonIndex + 1) % rotationDays;
                 // #region agent log
-                if (groupNum === 4) {
-                    const listPreview = groupPeople.map((p, i) => `${i + 1}:${String(p||'').slice(0,40)}`);
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'post-fix',hypothesisId:'A',location:'duty-shifts-logic.js:resolveNormalRotationStartPosition',message:'group4 month-start seed resolved',data:{date:date&&typeof formatDateKey==='function'?formatDateKey(date):String(date),lastPersonName,lastPersonIndex1based:lastPersonIndex+1,nextPos1based:nextPos+1,nextPerson:groupPeople[nextPos],listPreview},timestamp:Date.now()})}).catch(()=>{});
+                if (groupNum === 2) {
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'g2-pre',hypothesisId:'B',location:'duty-shifts-logic.js:resolveNormalRotationStartPosition',message:'group2 month-start seed resolved',data:{date:date&&typeof formatDateKey==='function'?formatDateKey(date):String(date),lastPersonName,lastPersonIndex1based:lastPersonIndex+1,nextPos1based:nextPos+1,nextPerson:groupPeople[nextPos],listLen:rotationDays,listPreview:groupPeople.map((p,i)=>`${i+1}:${String(p||'').slice(0,36)}`)},timestamp:Date.now()})}).catch(()=>{});
                 }
                 // #endregion
                 console.log(
@@ -3486,6 +3485,11 @@
             if (keys.length > 0) {
                 const firstDate = new Date(keys[0] + 'T00:00:00');
                 const daysSinceStart = getRotationPosition(firstDate, 'normal', groupNum);
+                // #region agent log
+                if (groupNum === 2) {
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'g2-pre',hypothesisId:'E',location:'duty-shifts-logic.js:resolveNormalRotationStartPosition',message:'group2 seed fallback daysSinceStart',data:{date:date&&typeof formatDateKey==='function'?formatDateKey(date):String(date),lastPersonName,daysSinceStart,pos:daysSinceStart%rotationDays,listLen:rotationDays},timestamp:Date.now()})}).catch(()=>{});
+                }
+                // #endregion
                 if (lastPersonName) {
                     console.log(
                         `[NORMAL ROTATION] Seed person ${lastPersonName} not in group ${groupNum} list — fallback position ${daysSinceStart % rotationDays}`
@@ -3493,6 +3497,11 @@
                 }
                 return daysSinceStart % rotationDays;
             }
+            // #region agent log
+            if (groupNum === 2) {
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'g2-pre',hypothesisId:'E',location:'duty-shifts-logic.js:resolveNormalRotationStartPosition',message:'group2 seed fallback hard 0',data:{date:date&&typeof formatDateKey==='function'?formatDateKey(date):String(date),lastPersonName,listLen:rotationDays},timestamp:Date.now()})}).catch(()=>{});
+            }
+            // #endregion
             return 0;
         }
 
@@ -14774,11 +14783,6 @@
                                     if (liveIdx >= 0) {
                                         globalNormalRotationPosition[groupNum] =
                                             (liveIdx + 1) % rotationDays;
-                                        // #region agent log
-                                        if (groupNum === 4) {
-                                            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'pre-fix',hypothesisId:'D',location:'duty-shifts-logic.js:month-boundary-continue',message:'group4 live month-boundary continue',data:{dateKey,lastLivePerson,liveIdx1based:liveIdx+1,nextPos1based:globalNormalRotationPosition[groupNum]+1,nextPerson:groupPeople[globalNormalRotationPosition[groupNum]]},timestamp:Date.now()})}).catch(()=>{});
-                                        }
-                                        // #endregion
                                         console.log(
                                             `[NORMAL ROTATION] Month-boundary continue group ${groupNum} after ${lastLivePerson} → position ${globalNormalRotationPosition[groupNum]}`
                                         );
