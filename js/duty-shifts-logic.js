@@ -15156,50 +15156,85 @@
                                     : originalRotationPerson;
                             normalRotationPersons[dateKey][groupNum] = baselineForDisplay;
                             
-                            // If assigned person was already assigned recently (due to swap), skip to next person
-                            // BUT: Skip this check if we just replaced a disabled person - swap logic will handle duplicates
-                            // Check if assigned within 5 days (too close)
+                            // Own baseline slot but already has a final this month (e.g. #7 replaced #3
+                            // on the 24th, then #7's natural turn lands on the 30th): continue the
+                            // available series — prefer unused finals, then ≤5-day fallback.
+                            // Baseline display stays originalRotationPerson; only the final changes.
                             let wasReplacedDueToFiveDayRule = false;
-                            if (!wasDisabledPersonSkipped && assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal') && assignedPeoplePreview[monthKey][groupNum][assignedPerson]) {
-                                const lastAssignmentDateKey = assignedPeoplePreview[monthKey][groupNum][assignedPerson];
+                            if (
+                                !wasDisabledPersonSkipped &&
+                                assignedPerson &&
+                                !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal') &&
+                                assignedPeoplePreview[monthKey][groupNum][assignedPerson]
+                            ) {
+                                const alreadyServedThisMonth = true;
+                                const lastAssignmentDateKey =
+                                    assignedPeoplePreview[monthKey][groupNum][assignedPerson];
                                 const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
                                 const currentDate = new Date(dateKey + 'T00:00:00');
-                                const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
-                                // Only skip if assigned within 5 days (too close)
-                                if (daysDiff <= 5 && daysDiff > 0) {
-                                    // This person was already assigned recently (swapped), find next available person in rotation
-                                    // Keep searching through entire rotation until we find someone not disabled and not already assigned recently
+                                const daysDiff = Math.floor(
+                                    (currentDate - lastDate) / (1000 * 60 * 60 * 24)
+                                );
+                                const nearbyOnly = daysDiff <= 5 && daysDiff > 0;
+
+                                if (alreadyServedThisMonth && daysDiff > 0) {
+                                    const tryAlreadyServedCandidate = (candidate, requireUnused) => {
+                                        if (!candidate || candidate === assignedPerson) return false;
+                                        if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) {
+                                            return false;
+                                        }
+                                        if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) {
+                                            return false;
+                                        }
+                                        const priorKey =
+                                            assignedPeoplePreview[monthKey][groupNum][candidate];
+                                        if (priorKey) {
+                                            if (requireUnused) return false;
+                                            const candLast = new Date(priorKey + 'T00:00:00');
+                                            const candDiff = Math.floor(
+                                                (currentDate - candLast) / (1000 * 60 * 60 * 24)
+                                            );
+                                            if (candDiff <= 5 && candDiff > 0) return false;
+                                        }
+                                        return true;
+                                    };
                                     let foundReplacement = false;
-                                    for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
-                                        const nextIndex = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[nextIndex];
-                                        
-                                        if (!candidate) continue;
-                                        if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
-                                        // Check if candidate was assigned recently (within 5 days)
-                                        if (assignedPeoplePreview[monthKey][groupNum][candidate]) {
-                                            const candidateLastDateKey = assignedPeoplePreview[monthKey][groupNum][candidate];
-                                            const candidateLastDate = new Date(candidateLastDateKey + 'T00:00:00');
-                                            const candidateDaysDiff = Math.floor((currentDate - candidateLastDate) / (1000 * 60 * 60 * 24));
-                                            if (candidateDaysDiff <= 5 && candidateDaysDiff > 0) {
-                                                continue; // Too close
+                                    const skippedOwnSlot = assignedPerson;
+                                    for (const requireUnused of [true, false]) {
+                                        if (foundReplacement) break;
+                                        for (
+                                            let offset = 1;
+                                            offset <= rotationDays * 2 && !foundReplacement;
+                                            offset++
+                                        ) {
+                                            const nextIndex = (rotationPosition + offset) % rotationDays;
+                                            const candidate = groupPeople[nextIndex];
+                                            if (!tryAlreadyServedCandidate(candidate, requireUnused)) {
+                                                continue;
+                                            }
+                                            assignedPerson = candidate;
+                                            foundReplacement = true;
+                                            wasReplacedDueToFiveDayRule = true;
+                                            if (!getAssignmentReason(dateKey, groupNum, assignedPerson)) {
+                                                storeUnavailableReplacementReason(
+                                                    dateKey,
+                                                    groupNum,
+                                                    assignedPerson,
+                                                    skippedOwnSlot,
+                                                    date,
+                                                    'normal'
+                                                );
                                             }
                                         }
-                                    
-                                        // Found available person
-                                        assignedPerson = candidate;
-                                        foundReplacement = true;
-                                        wasReplacedDueToFiveDayRule = true;
                                     }
-                                    
-                                    // If still no replacement found after checking everyone twice, leave unassigned
-                                    // (This should be extremely rare - only if everyone is disabled or already assigned recently)
-                                    if (!foundReplacement) {
+                                    // Nearby (≤5) and nobody else: leave empty. Farther with nobody
+                                    // unused: second pass may reuse someone; if still none, keep slot.
+                                    if (!foundReplacement && nearbyOnly) {
                                         assignedPerson = null;
                                     }
                                 }
                             }
-                            // Keep baseline as basic-series slot (originalRotationPerson); 5-day rule only changes final assignee.
+                            // Keep baseline as basic-series slot (originalRotationPerson); final may differ.
                             
                             // Check if there's a pending swap for this position
                             if (pendingNormalSwaps[monthKey][groupNum] && pendingNormalSwaps[monthKey][groupNum].swapToPosition === rotationPosition) {
