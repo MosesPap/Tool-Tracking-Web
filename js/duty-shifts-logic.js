@@ -9331,76 +9331,12 @@
                                 const conflictNeighborKey = conflictNeighborInfo?.neighborKey || dateKey;
                                 const conflictWithLabel = conflictNeighborInfo?.conflictWithLabel || 'Αργία';
 
-                                // Always perform a simple two-slot swap: conflicted person goes to swap date, swap candidate goes to conflicted date.
-                                // (Previously a "backward shift" rotated the whole track and overwrote 24/02 and 26/02 with wrong assignments.)
+                                // Two-slot swap only — do NOT reflow later days (that jumped the series, e.g. #7 on 30/11 instead of #11).
                                 updatedAssignments[dateKey][groupNum] = swapCandidate;
                                 updatedAssignments[swapDayKey][groupNum] = currentPerson;
                                 console.log('[SWAP SAVE DEBUG] After two-slot swap:', dateKey, 'Group', groupNum, '->', swapCandidate, '|', swapDayKey, '->', currentPerson, '| updatedAssignments sample:', { [dateKey]: updatedAssignments[dateKey]?.[groupNum], [swapDayKey]: updatedAssignments[swapDayKey]?.[groupNum] });
                                 const isBackwardWithinMonth = false; // no track shift; swap only
                                 const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
-
-                                // Rotation continuity reflow only for Mon↔Wed / Tue↔Thu groups (week-pair logic).
-                                // Cursor continues after who actually serves on the later swap day (not the
-                                // conflicted baseline person) so e.g. Sun→Mon fill by Kaparis leaves Fatsitas next.
-                                try {
-                                    if (applyWeekPairLogic && !isCrossMonthSwap && Array.isArray(groupPeople) && groupPeople.length > 0) {
-                                        const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
-                                        const laterAssignedPerson =
-                                            updatedAssignments[laterKey]?.[groupNum] ||
-                                            ((laterKey === dateKey) ? swapCandidate : currentPerson);
-                                        const laterAssignedIdx = groupPeople.indexOf(laterAssignedPerson);
-                                        if (laterAssignedIdx >= 0) {
-                                            let cursorIdx = (laterAssignedIdx + 1) % groupPeople.length;
-                                            const laterPos = sortedNormal.indexOf(laterKey);
-                                            if (laterPos >= 0) {
-                                                for (let ni = laterPos + 1; ni < sortedNormal.length; ni++) {
-                                                    const nextKey = sortedNormal[ni];
-                                                    const nextDateObj = new Date(nextKey + 'T00:00:00');
-                                                    if (isNaN(nextDateObj.getTime())) continue;
-
-                                                    const existingPerson = updatedAssignments?.[nextKey]?.[groupNum] || null;
-                                                    const existingReason = existingPerson ? getAssignmentReason(nextKey, groupNum, existingPerson) : null;
-                                                    if (existingReason && existingReason.meta && (existingReason.meta.returnFromMissing || existingReason.meta.shiftedByReturnFromMissing)) {
-                                                        const existingIdx = groupPeople.indexOf(existingPerson);
-                                                        if (existingIdx >= 0) cursorIdx = (existingIdx + 1) % groupPeople.length;
-                                                        continue;
-                                                    }
-
-                                                    let picked = null;
-                                                    for (let off = 0; off < groupPeople.length; off++) {
-                                                        const candIdx = (cursorIdx + off) % groupPeople.length;
-                                                        const cand = groupPeople[candIdx];
-                                                        if (!cand) continue;
-                                                        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
-                                                        if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) continue;
-                                                        picked = cand;
-                                                        cursorIdx = (candIdx + 1) % groupPeople.length;
-                                                        break;
-                                                    }
-                                                    if (picked) {
-                                                    const prevAssigned = updatedAssignments?.[nextKey]?.[groupNum] || null;
-                                                        if (!updatedAssignments[nextKey]) updatedAssignments[nextKey] = {};
-                                                        updatedAssignments[nextKey][groupNum] = picked;
-                                                    if (prevAssigned && prevAssigned !== picked) {
-                                                        storeAssignmentReason(
-                                                            nextKey,
-                                                            groupNum,
-                                                            picked,
-                                                            'shift',
-                                                            '',
-                                                            prevAssigned,
-                                                            null,
-                                                            { swapContinuity: true, anchorSwapDay: laterKey }
-                                                        );
-                                                    }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                } catch (contErr) {
-                                    console.warn('[SWAP CONTINUITY] Failed to reflow future normal days after swap:', contErr);
-                                }
                                 
                                 // Store assignment reasons for BOTH people involved in the swap with swap pair ID
                                 // Improved Greek reasons:
@@ -15114,6 +15050,117 @@
             }
             
             html += '</div>';
+
+            // Rebuild βασική σειρά (+1, only εξαίρεση out of list), then realign finals from it
+            // BEFORE conflict swaps — so swap-reflow cannot put e.g. #7 on a day that belongs to #11.
+            try {
+                const rebuiltPure = {};
+                const cursorByGroup = {};
+                const lastBaselineByGroup = {};
+                const normP = (s) =>
+                    typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
+                for (const dk of sortedNormal) {
+                    const dObj = new Date(dk + 'T00:00:00');
+                    for (let g = 1; g <= 4; g++) {
+                        if (
+                            typeof shouldRecalculateDutyGroup === 'function' &&
+                            !shouldRecalculateDutyGroup(g)
+                        ) {
+                            const keep = pureNormalRotationByDate[dk]?.[g];
+                            if (keep) {
+                                if (!rebuiltPure[dk]) rebuiltPure[dk] = {};
+                                rebuiltPure[dk][g] = keep;
+                            }
+                            continue;
+                        }
+                        const people =
+                            ((typeof groupsForDuty === 'function' ? groupsForDuty(g, dk) : groups[g]) || {})
+                                .normal || [];
+                        if (!people.length) continue;
+                        let pos;
+                        if (cursorByGroup[g] === undefined) {
+                            pos = resolveNormalRotationStartPosition(dObj, g, people, sortedNormal);
+                        } else if (lastBaselineByGroup[g]) {
+                            const lastIdx = people.findIndex(
+                                (p) => normP(p) === normP(lastBaselineByGroup[g])
+                            );
+                            pos =
+                                lastIdx >= 0
+                                    ? (lastIdx + 1) % people.length
+                                    : cursorByGroup[g] % people.length;
+                        } else {
+                            pos = cursorByGroup[g] % people.length;
+                        }
+                        const person = people[pos];
+                        if (!rebuiltPure[dk]) rebuiltPure[dk] = {};
+                        rebuiltPure[dk][g] = person;
+                        lastBaselineByGroup[g] = person;
+                        cursorByGroup[g] = (pos + 1) % people.length;
+                        if (!normalRotationPersons[dk]) normalRotationPersons[dk] = {};
+                        normalRotationPersons[dk][g] = person;
+                    }
+                }
+                for (const k of Object.keys(pureNormalRotationByDate)) delete pureNormalRotationByDate[k];
+                Object.assign(pureNormalRotationByDate, rebuiltPure);
+
+                // Finals follow baseline; only replace when baseline cannot serve. Preserve RFM inserts.
+                for (const dk of sortedNormal) {
+                    const dObj = new Date(dk + 'T00:00:00');
+                    if (isNaN(dObj.getTime())) continue;
+                    for (let g = 1; g <= 4; g++) {
+                        if (
+                            typeof shouldRecalculateDutyGroup === 'function' &&
+                            !shouldRecalculateDutyGroup(g)
+                        ) {
+                            continue;
+                        }
+                        const baseline = pureNormalRotationByDate[dk]?.[g];
+                        if (!baseline) continue;
+                        const curFinal = normalAssignments[dk]?.[g] || null;
+                        const curReason = curFinal ? getAssignmentReason(dk, g, curFinal) : null;
+                        if (
+                            curReason?.meta?.returnFromMissing ||
+                            curReason?.meta?.insertedByShift ||
+                            curReason?.meta?.fromDeferred
+                        ) {
+                            continue;
+                        }
+                        const people =
+                            ((typeof groupsForDuty === 'function' ? groupsForDuty(g, dk) : groups[g]) || {})
+                                .normal || [];
+                        let assigned = baseline;
+                        const baseIdx = people.findIndex((p) => normP(p) === normP(baseline));
+                        if (
+                            isPersonDisabledForDuty(baseline, g, 'normal') ||
+                            isPersonMissingOnDate(baseline, g, dObj, 'normal')
+                        ) {
+                            assigned = null;
+                            if (baseIdx >= 0 && people.length) {
+                                for (let offset = 1; offset <= people.length; offset++) {
+                                    const cand = people[(baseIdx + offset) % people.length];
+                                    if (!cand || normP(cand) === normP(baseline)) continue;
+                                    if (isPersonDisabledForDuty(cand, g, 'normal')) continue;
+                                    if (isPersonMissingOnDate(cand, g, dObj, 'normal')) continue;
+                                    assigned = cand;
+                                    break;
+                                }
+                            }
+                        }
+                        const existingMA = findExistingManualAlternateOnDateGroup(dk, g);
+                        if (
+                            existingMA &&
+                            assigned &&
+                            normP(assigned) === normP(existingMA.baseline)
+                        ) {
+                            assigned = existingMA.replacement;
+                        }
+                        if (!normalAssignments[dk]) normalAssignments[dk] = {};
+                        normalAssignments[dk][g] = assigned;
+                    }
+                }
+            } catch (rebuildAlignErr) {
+                console.warn('[NORMAL BASELINE] Rebuild/realign before swaps failed:', rebuildAlignErr);
+            }
             
             // NOW APPLY SWAP LOGIC IN PREVIEW (Monday-Wednesday and Tuesday-Thursday rules)
             // This ensures preview shows exactly what will be saved
@@ -15578,70 +15625,9 @@
                                 swapPairId: swapPairId
                             });
                             
-                            // Perform the swap
+                            // Two-slot swap only — no future-day reflow (keeps βασική σειρά, e.g. #11 on 30/11).
                             normalAssignments[dateKey][groupNum] = swapCandidate;
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
-
-                            // Rotation continuity reflow in preview only for week-pair groups.
-                            // Same as save path: continue after the person who remains on the later swap day.
-                            try {
-                                const isCrossMonthSwapPreview = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
-                                if (applyWeekPairLogic && !isCrossMonthSwapPreview && Array.isArray(groupPeople) && groupPeople.length > 0) {
-                                    const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
-                                    const laterAssignedPerson =
-                                        normalAssignments[laterKey]?.[groupNum] ||
-                                        ((laterKey === dateKey) ? swapCandidate : currentPerson);
-                                    const laterAssignedIdx = groupPeople.indexOf(laterAssignedPerson);
-                                    if (laterAssignedIdx >= 0) {
-                                        let cursorIdx = (laterAssignedIdx + 1) % groupPeople.length;
-                                        const laterPos = sortedNormal.indexOf(laterKey);
-                                        if (laterPos >= 0) {
-                                            for (let ni = laterPos + 1; ni < sortedNormal.length; ni++) {
-                                                const nextKey = sortedNormal[ni];
-                                                const nextDateObj = new Date(nextKey + 'T00:00:00');
-                                                if (isNaN(nextDateObj.getTime())) continue;
-                                                const existingPerson = normalAssignments?.[nextKey]?.[groupNum] || null;
-                                                const existingReason = existingPerson ? getAssignmentReason(nextKey, groupNum, existingPerson) : null;
-                                                if (existingReason && existingReason.meta && (existingReason.meta.returnFromMissing || existingReason.meta.shiftedByReturnFromMissing)) {
-                                                    const existingIdx = groupPeople.indexOf(existingPerson);
-                                                    if (existingIdx >= 0) cursorIdx = (existingIdx + 1) % groupPeople.length;
-                                                    continue;
-                                                }
-                                                let picked = null;
-                                                for (let off = 0; off < groupPeople.length; off++) {
-                                                    const candIdx = (cursorIdx + off) % groupPeople.length;
-                                                    const cand = groupPeople[candIdx];
-                                                    if (!cand) continue;
-                                                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
-                                                    if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) continue;
-                                                    picked = cand;
-                                                    cursorIdx = (candIdx + 1) % groupPeople.length;
-                                                    break;
-                                                }
-                                                if (picked) {
-                                                    const prevAssigned = normalAssignments?.[nextKey]?.[groupNum] || null;
-                                                    if (!normalAssignments[nextKey]) normalAssignments[nextKey] = {};
-                                                    normalAssignments[nextKey][groupNum] = picked;
-                                                    if (prevAssigned && prevAssigned !== picked) {
-                                                        storeAssignmentReason(
-                                                            nextKey,
-                                                            groupNum,
-                                                            picked,
-                                                            'shift',
-                                                            '',
-                                                            prevAssigned,
-                                                            null,
-                                                            { swapContinuity: true, anchorSwapDay: laterKey }
-                                                        );
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } catch (previewContErr) {
-                                console.warn('[PREVIEW SWAP CONTINUITY] Failed to reflow future normal days after swap:', previewContErr);
-                            }
                             
                             const conflictNeighborInfoPreview = getConsecutiveConflictNeighborInfo(dateKey, currentPerson, groupNum, simulatedAssignments);
                             const conflictNeighborKeyPreview = conflictNeighborInfoPreview?.neighborKey || dateKey;
@@ -16138,62 +16124,6 @@
             // Store normal assignments and rotation positions for saving when Next is pressed
             calculationSteps.tempNormalAssignments = normalAssignments;
             calculationSteps.normalStep4PreviewProcessed = true;
-
-            // Rebuild βασική σειρά strictly: +1 each normal day, skip ONLY εξαίρεση (already out of list).
-            // Name-based continuity so list membership changes cannot jump past someone (e.g. #9).
-            try {
-                const rebuiltPure = {};
-                const cursorByGroup = {};
-                const lastBaselineByGroup = {};
-                const normP = (s) =>
-                    typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
-                for (const dk of sortedNormal) {
-                    const dObj = new Date(dk + 'T00:00:00');
-                    for (let g = 1; g <= 4; g++) {
-                        if (
-                            typeof shouldRecalculateDutyGroup === 'function' &&
-                            !shouldRecalculateDutyGroup(g)
-                        ) {
-                            const keep = pureNormalRotationByDate[dk]?.[g];
-                            if (keep) {
-                                if (!rebuiltPure[dk]) rebuiltPure[dk] = {};
-                                rebuiltPure[dk][g] = keep;
-                            }
-                            continue;
-                        }
-                        const people =
-                            ((typeof groupsForDuty === 'function' ? groupsForDuty(g, dk) : groups[g]) || {})
-                                .normal || [];
-                        if (!people.length) continue;
-                        let pos;
-                        if (cursorByGroup[g] === undefined) {
-                            pos = resolveNormalRotationStartPosition(dObj, g, people, sortedNormal);
-                        } else if (lastBaselineByGroup[g]) {
-                            const lastIdx = people.findIndex(
-                                (p) => normP(p) === normP(lastBaselineByGroup[g])
-                            );
-                            pos =
-                                lastIdx >= 0
-                                    ? (lastIdx + 1) % people.length
-                                    : cursorByGroup[g] % people.length;
-                        } else {
-                            pos = cursorByGroup[g] % people.length;
-                        }
-                        const person = people[pos];
-                        if (!rebuiltPure[dk]) rebuiltPure[dk] = {};
-                        rebuiltPure[dk][g] = person;
-                        lastBaselineByGroup[g] = person;
-                        cursorByGroup[g] = (pos + 1) % people.length;
-                        if (!normalRotationPersons[dk]) normalRotationPersons[dk] = {};
-                        normalRotationPersons[dk][g] = person;
-                    }
-                }
-                for (const k of Object.keys(pureNormalRotationByDate)) delete pureNormalRotationByDate[k];
-                Object.assign(pureNormalRotationByDate, rebuiltPure);
-            } catch (rebuildErr) {
-                console.warn('[NORMAL BASELINE] Strict rebuild failed:', rebuildErr);
-            }
-
             calculationSteps.tempNormalBaselineDisplay = normalRotationPersons;
             finalizeNormalPreview(normalAssignments, pureNormalRotationByDate, normalRotationPersons);
             if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
