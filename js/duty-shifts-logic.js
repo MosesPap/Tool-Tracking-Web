@@ -3285,7 +3285,9 @@
                 const bp = String(reason.meta?.baselinePerson || '').trim();
                 if (bp) return bp;
             }
-            // Unavailable replacement (missing/disabled): baseline keeps the slot — continue after baseline, not the stand-in.
+            // Unavailable replacement (missing/disabled): baseline kept the slot.
+            // Continue the basic series after the baseline person, not after the final substitute
+            // (otherwise next month jumps past people who never got a baseline turn).
             if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
                 return reason.swappedWith;
             }
@@ -11363,7 +11365,6 @@
                                 if (!assignedPeoplePreviewWeekend[monthKey][groupNum]) {
                                     assignedPeoplePreviewWeekend[monthKey][groupNum] = {};
                                 }
-                                // Next available in list order — do not skip for 5-day cool-down.
                                 let foundEligible = false;
                                 for (let offset = 1; offset <= rotationDays * 2 && !foundEligible; offset++) {
                                     const idx = (rotationPosition + offset) % rotationDays;
@@ -11371,6 +11372,13 @@
                                     if (!candidate) continue;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
+                                    if (assignedPeoplePreviewWeekend[monthKey][groupNum][candidate]) {
+                                        const lastAssignmentDateKey = assignedPeoplePreviewWeekend[monthKey][groupNum][candidate];
+                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        const currentDate = new Date(dateKey + 'T00:00:00');
+                                        const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
+                                        if (daysDiff <= 5 && daysDiff > 0) continue;
+                                    }
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
                                     wasReplaced = true;
@@ -14765,13 +14773,26 @@
 
                             // Final-only replacement when baseline person cannot serve (disabled or absent).
                             // Does NOT advance the basic series past intermediate people.
+                            // Keeps ±5-day proximity rule for final assignee selection.
                             if (baselineIsDisabled || baselineIsMissing) {
                                 let foundReplacement = false;
-                                // Next available in list order — do not skip anyone for 5-day cool-down here.
                                 const tryCandidate = (candidate, idx) => {
                                     if (!candidate || candidate === originalRotationPerson) return false;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) return false;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) return false;
+                                    if (
+                                        assignedPeoplePreview[monthKey][groupNum] &&
+                                        assignedPeoplePreview[monthKey][groupNum][candidate]
+                                    ) {
+                                        const lastAssignmentDateKey =
+                                            assignedPeoplePreview[monthKey][groupNum][candidate];
+                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        const currentDate = new Date(dateKey + 'T00:00:00');
+                                        const daysDiff = Math.floor(
+                                            (currentDate - lastDate) / (1000 * 60 * 60 * 24)
+                                        );
+                                        if (daysDiff <= 5 && daysDiff > 0) return false;
+                                    }
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
                                     wasDisabledPersonSkipped = true;
@@ -15094,7 +15115,7 @@
                                 }
                             }
                             
-                            // Always show true basic-series slot; final replacement appears as Αντικατάσταση.
+                            // Always show true baseline slot vs final (disabled/absent keep the baseline name).
                             const baselinePersonForDisplay =
                                 normalRotationPersons[dateKey]?.[groupNum] || originalRotationPerson;
                             html += `<td>${buildBaselineComputedCellHtml(baselinePersonForDisplay, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
@@ -16146,20 +16167,24 @@
                 });
             }
             calculationSteps.lastNormalRotationPositions = {};
-            // Use rotation continuity (manual alternate → baseline slot; swap → swapped-out) for cross-month seeding
+            // Prefer pure baseline slot for cross-month seeding (one-by-one series).
             for (let g = 1; g <= 4; g++) {
                 const sortedNormalKeys = [...normalDays].sort();
                 let lastPersonForRotation = null;
                 for (let i = sortedNormalKeys.length - 1; i >= 0; i--) {
                     const dk = sortedNormalKeys[i];
+                    const baselineSlot =
+                        pureNormalRotationByDate[dk]?.[g] || normalRotationPersons[dk]?.[g] || null;
                     const ap = normalAssignments[dk]?.[g];
-                    if (!ap) continue;
-                    lastPersonForRotation = getPersonForNormalRotationContinuity(dk, g, ap, normalAssignments);
+                    if (!baselineSlot && !ap) continue;
+                    lastPersonForRotation =
+                        baselineSlot ||
+                        getPersonForNormalRotationContinuity(dk, g, ap, normalAssignments);
                     break;
                 }
                 if (lastPersonForRotation) {
                     calculationSteps.lastNormalRotationPositions[g] = lastPersonForRotation;
-                    console.log(`[NORMAL ROTATION] Storing last rotation continuity person ${lastPersonForRotation} for group ${g}`);
+                    console.log(`[NORMAL ROTATION] Storing last baseline slot person ${lastPersonForRotation} for group ${g}`);
                 }
             }
 
@@ -16171,9 +16196,20 @@
                 const d = new Date(dateKey + 'T00:00:00');
                 const monthKey = getMonthKeyFromDate(d);
                 for (let g = 1; g <= 4; g++) {
+                    const baselineSlot =
+                        pureNormalRotationByDate[dateKey]?.[g] ||
+                        normalRotationPersons[dateKey]?.[g] ||
+                        null;
                     const assignedPerson = normalAssignments[dateKey]?.[g];
-                    if (assignedPerson) {
-                        const personForRotation = getPersonForNormalRotationContinuity(dateKey, g, assignedPerson, normalAssignments);
+                    if (baselineSlot || assignedPerson) {
+                        const personForRotation =
+                            baselineSlot ||
+                            getPersonForNormalRotationContinuity(
+                                dateKey,
+                                g,
+                                assignedPerson,
+                                normalAssignments
+                            );
                         if (!lastNormalRotationPositionsByMonth[monthKey]) {
                             lastNormalRotationPositionsByMonth[monthKey] = {};
                         }

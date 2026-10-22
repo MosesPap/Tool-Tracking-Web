@@ -1691,8 +1691,7 @@
             const prevMonthKey = getPreviousMonthKeyFromDate(dateInMonth);
             const prevManualAlternate = findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInMonth, groupNum);
 
-            // Prefer last baseline slot (pure series), then stored continuity, then final-assignment continuity.
-            // Using final assignees first jumped the basic series after replacements (e.g. Group B).
+            // Prefer actual last assignment / baseline continuity from previous month whenever available.
             const fromAssignments = getLastAssignmentContinuityPersonForPreviousMonth(
                 dayTypeCategory,
                 dateInMonth,
@@ -1700,7 +1699,10 @@
             );
             const fromBaseline = getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
             const fromStored = getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-            const lastContinuityPerson = fromBaseline || fromStored || fromAssignments;
+            const lastContinuityPerson =
+                dayTypeCategory === 'semi'
+                    ? fromAssignments || fromBaseline || fromStored
+                    : fromAssignments || fromBaseline || fromStored;
             const continuityIdx = findIdx(lastContinuityPerson);
             if (lastContinuityPerson && continuityIdx >= 0) {
                 let cursor = (continuityIdx + 1) % len;
@@ -7311,13 +7313,19 @@ ${content.innerHTML}
                 personName
                     ? `<span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}`
                     : '<span class="text-muted">—</span>';
-            /** Βασική σειρά: plain when same as final; else ~~baseline~~ (final). */
-            const formatBaselinePersonCell = (personName, orderNo, finalPerson, finalOrder) => {
-                if (!personName) return '<span class="text-muted">—</span>';
-                if (!finalPerson || normName(personName) === normName(finalPerson)) {
-                    return formatPersonCell(personName, orderNo);
+            /**
+             * Βασική σειρά cell: if baseline did not enter τελική, strikethrough baseline
+             * and show the actual final assignee in parentheses — not a month-level heuristic.
+             */
+            const formatBaselinePersonCell = (baselinePerson, baselineOrder, finalPerson, finalOrder) => {
+                if (!baselinePerson) return '<span class="text-muted">—</span>';
+                const same =
+                    finalPerson &&
+                    normName(baselinePerson) === normName(finalPerson);
+                if (!finalPerson || same) {
+                    return formatPersonCell(baselinePerson, baselineOrder);
                 }
-                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
+                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${baselineOrder || '-'}</span>${escapeHtml(baselinePerson)}</span>`;
                 return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${finalOrder || '-'}</span>${escapeHtml(finalPerson)})</span>`;
             };
             const buildChangeMarker = (reasonObj, pairKey, getSwapPairLabelNo) => {
@@ -7350,8 +7358,6 @@ ${content.innerHTML}
                 const monthDate = new Date(year, month, 1);
                 const monthName = getGreekMonthName(monthDate);
                 const daysInMonth = new Date(year, month + 1, 0).getDate();
-                const monthStartKey = formatDateKey(monthDate);
-                const monthEndKey = formatDateKey(new Date(year, month, daysInMonth));
 
                 const swapPairLabelByKey = new Map();
                 let nextSwapPairLabelNo = 1;
@@ -7396,13 +7402,13 @@ ${content.innerHTML}
                                     <tr style="background-color:#428BCA;color:white;">
                                         <th rowspan="2" style="width:10%;text-align:center;vertical-align:middle;">ΗΜΕΡ.</th>
                                         <th rowspan="2" style="width:9%;text-align:center;vertical-align:middle;">ΗΜΕΡΑ</th>
-                                        <th colspan="2" style="text-align:center;">Τελικές αναθέσεις (μετά αλλαγές)</th>
-                                        <th style="width:24%;text-align:center;vertical-align:middle;background:#5a6268;">Βασική σειρά</th>
+                                        <th style="width:30%;text-align:center;vertical-align:middle;background:#5a6268;">Βασική σειρά</th>
+                                        <th rowspan="2" style="width:12%;text-align:center;vertical-align:middle;">ΑΛΛΑΓΗ</th>
+                                        <th style="width:30%;text-align:center;vertical-align:middle;">Τελική ανάθεση</th>
                                     </tr>
                                     <tr style="background-color:#5a9fd4;color:white;">
-                                        <th style="width:30%;text-align:center;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
-                                        <th style="width:12%;text-align:center;">ΑΛΛΑΓΗ</th>
                                         <th style="text-align:center;background:#6c757d;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
+                                        <th style="text-align:center;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
                                     </tr>
                                 </thead>
                                 <tbody id="assignmentsCompare_${monthKey.replace(/-/g, '')}_g${groupNum}"></tbody>
@@ -7450,9 +7456,9 @@ ${content.innerHTML}
                         row.innerHTML = `
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dateStr}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dayName}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;${change.style}">${formatPersonCell(finalPerson, finalOrder)}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, finalPerson, finalOrder)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;${change.style}">${formatPersonCell(finalPerson, finalOrder)}</td>
                         `;
                         tbody.appendChild(row);
                     }
