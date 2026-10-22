@@ -3375,9 +3375,10 @@
 
         /**
          * Continuity for normal (καθημερινές) month-to-month seed.
-         * Prefer who actually closed the previous month on the calendar (#6 → next is #7),
-         * not the swapped-out partner of a conflict/ASAP swap (which wrongly seeded #3).
-         * Keep manual-alternate / preserveBaseline / Thursday-spacing exceptions.
+         * Prefer who actually closed the previous month on the calendar
+         * (e.g. final #6 Σωτηριάδου → next is #7), including manual day-modal
+         * with preserveBaseline — do NOT fall back to baselinePerson (#2 → start #3).
+         * Keep manual-alternate (αναπληρωματικός) and Thursday-spacing exceptions.
          */
         function getPersonForNormalRotationContinuity(dateKey, groupNum, assignedPerson, normalAssignmentsByDate) {
             if (!assignedPerson) return null;
@@ -3388,10 +3389,8 @@
             if (reason && reason.type === 'skip' && reason.meta?.manualAlternateReplacement && reason.swappedWith) {
                 return reason.swappedWith;
             }
-            if (reason && reason.type === 'skip' && reason.meta?.preserveBaseline) {
-                const bp = String(reason.meta?.baselinePerson || '').trim();
-                if (bp) return bp;
-            }
+            // preserveBaseline / manualDayModal: still continue after the FINAL assignee
+            // (who served on the calendar), not the displaced baseline slot holder.
             if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement) {
                 return assignedPerson;
             }
@@ -3440,7 +3439,7 @@
                 // #region agent log
                 if (groupNum === 4) {
                     const listPreview = groupPeople.map((p, i) => `${i + 1}:${String(p||'').slice(0,40)}`);
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'pre-fix',hypothesisId:'A',location:'duty-shifts-logic.js:resolveNormalRotationStartPosition',message:'group4 month-start seed resolved',data:{date:date&&typeof formatDateKey==='function'?formatDateKey(date):String(date),lastPersonName,lastPersonIndex1based:lastPersonIndex+1,nextPos1based:nextPos+1,nextPerson:groupPeople[nextPos],listPreview},timestamp:Date.now()})}).catch(()=>{});
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'post-fix',hypothesisId:'A',location:'duty-shifts-logic.js:resolveNormalRotationStartPosition',message:'group4 month-start seed resolved',data:{date:date&&typeof formatDateKey==='function'?formatDateKey(date):String(date),lastPersonName,lastPersonIndex1based:lastPersonIndex+1,nextPos1based:nextPos+1,nextPerson:groupPeople[nextPos],listPreview},timestamp:Date.now()})}).catch(()=>{});
                 }
                 // #endregion
                 console.log(
