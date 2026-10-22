@@ -7321,27 +7321,10 @@ ${content.innerHTML}
                 typeKey,
                 monthStartKey,
                 monthEndKey,
-                consumedSubstitutes,
-                finalPerson = null
+                consumedSubstitutes
             ) => {
                 if (!personName) return '<span class="text-muted">—</span>';
                 const personNorm = normName(personName);
-                const finalNorm = finalPerson ? normName(finalPerson) : '';
-                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
-
-                // Prefer actual final assignee in parentheses — this is who really replaces the struck baseline.
-                if (finalPerson && finalNorm && finalNorm !== personNorm) {
-                    const finalOrder = getOrderNo(groupData, typeKey, finalPerson);
-                    if (consumedSubstitutes instanceof Set) {
-                        consumedSubstitutes.add(finalNorm);
-                    }
-                    return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${finalOrder || '-'}</span>${escapeHtml(finalPerson)})</span>`;
-                }
-                // Same person on final = they actually serve; never strike just because they subbed earlier.
-                if (finalPerson && finalNorm && finalNorm === personNorm) {
-                    return formatPersonCell(personName, orderNo);
-                }
-
                 const unavailable = isPersonUnavailableWholeMonth(
                     personName,
                     groupNum,
@@ -7355,9 +7338,6 @@ ${content.innerHTML}
                 if (!unavailable && !alreadyUsedAsSubstitute) {
                     return formatPersonCell(personName, orderNo);
                 }
-                // Heuristic only when final is missing/same: next available not yet used as substitute.
-                // Do NOT put already-used substitutes into the skip set when searching — otherwise
-                // the chain dies mid-month (e.g. after Αρέστη on 23, no parenthesis on 24+).
                 const nextPerson = findNextAvailableInRotationList(
                     groupData,
                     typeKey,
@@ -7365,12 +7345,13 @@ ${content.innerHTML}
                     groupNum,
                     monthStartKey,
                     monthEndKey,
-                    null
+                    consumedSubstitutes
                 );
                 if (nextPerson && consumedSubstitutes instanceof Set) {
                     consumedSubstitutes.add(normName(nextPerson));
                 }
                 const nextOrder = nextPerson ? getOrderNo(groupData, typeKey, nextPerson) : null;
+                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
                 if (!nextPerson) return struck;
                 return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${nextOrder || '-'}</span>${escapeHtml(nextPerson)})</span>`;
             };
@@ -7513,7 +7494,7 @@ ${content.innerHTML}
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dayName}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;${change.style}">${formatPersonCell(finalPerson, finalOrder)}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey], finalPerson)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey])}</td>
                         `;
                         tbody.appendChild(row);
                     }
