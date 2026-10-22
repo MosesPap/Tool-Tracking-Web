@@ -14972,19 +14972,21 @@
 
                             // Final-only replacement when baseline person cannot serve (disabled or absent).
                             // Does NOT advance the basic series past intermediate people.
+                            // Prefer people with no final yet this month (so e.g. #7 who already
+                            // replaced #3 is not reused for #6 a week later — continue to #11).
+                            // Fall back to the ≤5-day nearby rule only if nobody unused remains.
                             if (baselineIsDisabled || baselineIsMissing) {
                                 let foundReplacement = false;
-                                const tryCandidate = (candidate, idx) => {
+                                const tryCandidate = (candidate, idx, requireUnusedThisMonth) => {
                                     if (!candidate || candidate === originalRotationPerson) return false;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) return false;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) return false;
-                                    if (
+                                    const priorKey =
                                         assignedPeoplePreview[monthKey][groupNum] &&
-                                        assignedPeoplePreview[monthKey][groupNum][candidate]
-                                    ) {
-                                        const lastAssignmentDateKey =
-                                            assignedPeoplePreview[monthKey][groupNum][candidate];
-                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        assignedPeoplePreview[monthKey][groupNum][candidate];
+                                    if (priorKey) {
+                                        if (requireUnusedThisMonth) return false;
+                                        const lastDate = new Date(priorKey + 'T00:00:00');
                                         const currentDate = new Date(dateKey + 'T00:00:00');
                                         const daysDiff = Math.floor(
                                             (currentDate - lastDate) / (1000 * 60 * 60 * 24)
@@ -15000,16 +15002,29 @@
                                     return true;
                                 };
 
-                                if (precomputedFinal && tryCandidate(precomputedFinal, groupPeople.indexOf(precomputedFinal))) {
-                                    foundReplacement = true;
-                                }
-                                if (!foundReplacement) {
-                                    for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
+                                const searchReplacement = (requireUnusedThisMonth) => {
+                                    if (
+                                        precomputedFinal &&
+                                        tryCandidate(
+                                            precomputedFinal,
+                                            groupPeople.indexOf(precomputedFinal),
+                                            requireUnusedThisMonth
+                                        )
+                                    ) {
+                                        return true;
+                                    }
+                                    for (let offset = 1; offset <= rotationDays * 2; offset++) {
                                         const idx = (rotationPosition + offset) % rotationDays;
-                                        if (tryCandidate(groupPeople[idx], idx)) {
-                                            foundReplacement = true;
+                                        if (tryCandidate(groupPeople[idx], idx, requireUnusedThisMonth)) {
+                                            return true;
                                         }
                                     }
+                                    return false;
+                                };
+
+                                foundReplacement = searchReplacement(true);
+                                if (!foundReplacement) {
+                                    foundReplacement = searchReplacement(false);
                                 }
                                 if (!foundReplacement) {
                                     assignedPerson = null;
@@ -15059,28 +15074,34 @@
                                 normalizePersonKey(assignedPerson) ===
                                     normalizePersonKey(deferFulfillmentNormal.skippedReplacement)
                             ) {
-                                let foundDeferReplacement = false;
-                                for (let offset = 1; offset <= rotationDays * 2 && !foundDeferReplacement; offset++) {
-                                    const idx = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[idx];
-                                    if (!candidate) continue;
-                                    if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) continue;
-                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
-                                    if (
+                                const tryDeferCandidate = (candidate, requireUnusedThisMonth) => {
+                                    if (!candidate) return false;
+                                    if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) return false;
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) return false;
+                                    const priorKey =
                                         assignedPeoplePreview[monthKey][groupNum] &&
-                                        assignedPeoplePreview[monthKey][groupNum][candidate]
-                                    ) {
-                                        const lastAssignmentDateKey =
-                                            assignedPeoplePreview[monthKey][groupNum][candidate];
-                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                        assignedPeoplePreview[monthKey][groupNum][candidate];
+                                    if (priorKey) {
+                                        if (requireUnusedThisMonth) return false;
+                                        const lastDate = new Date(priorKey + 'T00:00:00');
                                         const currentDate = new Date(dateKey + 'T00:00:00');
                                         const daysDiff = Math.floor(
                                             (currentDate - lastDate) / (1000 * 60 * 60 * 24)
                                         );
-                                        if (daysDiff <= 5 && daysDiff > 0) continue;
+                                        if (daysDiff <= 5 && daysDiff > 0) return false;
                                     }
                                     assignedPerson = candidate;
-                                    foundDeferReplacement = true;
+                                    return true;
+                                };
+                                let foundDeferReplacement = false;
+                                for (const requireUnused of [true, false]) {
+                                    if (foundDeferReplacement) break;
+                                    for (let offset = 1; offset <= rotationDays * 2 && !foundDeferReplacement; offset++) {
+                                        const idx = (rotationPosition + offset) % rotationDays;
+                                        if (tryDeferCandidate(groupPeople[idx], requireUnused)) {
+                                            foundDeferReplacement = true;
+                                        }
+                                    }
                                 }
                             }
 
@@ -15155,58 +15176,61 @@
                             // Swap logic will run when Next is pressed
                             // NOTE: Disabled/missing check already happened above, so this is just a safety check
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
-                                // This should rarely happen (already checked above), but handle it defensively
-                                // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
-                                // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
-                                // IMPORTANT: Also check if replacement was already assigned this month to prevent duplicate assignments
-                                let foundReplacement = false;
-                                for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
-                                    const idx = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[idx];
-                                    if (!candidate) continue;
-                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
-                                    // Check if candidate was already assigned recently (within 5 days) - prevent nearby duplicates
-                                    if (assignedPeoplePreview[monthKey][groupNum] && assignedPeoplePreview[monthKey][groupNum][candidate]) {
-                                        const lastAssignmentDateKey = assignedPeoplePreview[monthKey][groupNum][candidate];
-                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
+                                // Defensive path: same preference as baseline unavailable —
+                                // unused-this-month first, then ≤5-day nearby fallback.
+                                const tryMissingCandidate = (candidate, requireUnusedThisMonth) => {
+                                    if (!candidate) return false;
+                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) return false;
+                                    if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) return false;
+                                    const priorKey =
+                                        assignedPeoplePreview[monthKey][groupNum] &&
+                                        assignedPeoplePreview[monthKey][groupNum][candidate];
+                                    if (priorKey) {
+                                        if (requireUnusedThisMonth) return false;
+                                        const lastDate = new Date(priorKey + 'T00:00:00');
                                         const currentDate = new Date(dateKey + 'T00:00:00');
-                                        const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
-                                        // Only prevent if assigned within 5 days (too close)
-                                        if (daysDiff <= 5 && daysDiff > 0) {
-                                            continue; // Too close, skip this candidate
-                                        }
-                                        // If daysDiff > 5, allow duplicate (far enough apart, even if they replaced someone before)
+                                        const daysDiff = Math.floor(
+                                            (currentDate - lastDate) / (1000 * 60 * 60 * 24)
+                                        );
+                                        if (daysDiff <= 5 && daysDiff > 0) return false;
                                     }
-                                    
-                                    // Found eligible replacement
                                     assignedPerson = candidate;
-                                    foundReplacement = true;
-                                    const unavailableExtraNormal2 =
-                                        deferFulfillmentNormal?.skippedReplacement
-                                            ? { deferFulfillment: deferFulfillmentNormal }
-                                            : null;
-                                    storeUnavailableReplacementReason(
-                                        dateKey,
-                                        groupNum,
-                                        assignedPerson,
-                                        wasReplacedFromBaseline ? originalRotationPerson : rotationPerson,
-                                        date,
-                                        'normal',
-                                        null,
-                                        unavailableExtraNormal2
-                                    );
-                                    if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
-                                        dutyNormalDebug.recordUnavailableReplacement({
+                                    return true;
+                                };
+                                let foundReplacement = false;
+                                for (const requireUnused of [true, false]) {
+                                    if (foundReplacement) break;
+                                    for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
+                                        const idx = (rotationPosition + offset) % rotationDays;
+                                        if (!tryMissingCandidate(groupPeople[idx], requireUnused)) continue;
+                                        foundReplacement = true;
+                                        const unavailableExtraNormal2 =
+                                            deferFulfillmentNormal?.skippedReplacement
+                                                ? { deferFulfillment: deferFulfillmentNormal }
+                                                : null;
+                                        storeUnavailableReplacementReason(
                                             dateKey,
                                             groupNum,
-                                            replacement: assignedPerson,
-                                            skippedPerson: wasReplacedFromBaseline ? originalRotationPerson : rotationPerson,
-                                            rotationPerson: originalRotationPerson
-                                        });
+                                            assignedPerson,
+                                            wasReplacedFromBaseline ? originalRotationPerson : rotationPerson,
+                                            date,
+                                            'normal',
+                                            null,
+                                            unavailableExtraNormal2
+                                        );
+                                        if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                            dutyNormalDebug.recordUnavailableReplacement({
+                                                dateKey,
+                                                groupNum,
+                                                replacement: assignedPerson,
+                                                skippedPerson: wasReplacedFromBaseline
+                                                    ? originalRotationPerson
+                                                    : rotationPerson,
+                                                rotationPerson: originalRotationPerson
+                                            });
+                                        }
                                     }
-                                    break;
                                 }
-                                // If no replacement found after checking everyone twice (everyone disabled or already assigned), leave unassigned
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 }
