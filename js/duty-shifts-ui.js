@@ -5688,43 +5688,11 @@
                                     spacingIcon = ` <i class="fas fa-exclamation-triangle duty-thursday-spacing-fail" title="${escapeHtml(failText)}" aria-label="${escapeHtml(failText)}"></i>`;
                                 }
                             }
-                            let baselineStruckHtml = '';
-                            let showListOrder = true;
-                            if (e.personName && e.groupNum >= 1 && e.groupNum <= 4) {
-                                const baselineStr =
-                                    typeof getRotationBaselineAssignmentForType === 'function'
-                                        ? getRotationBaselineAssignmentForType(dayTypeCategory, key)
-                                        : null;
-                                const baselinePerson =
-                                    typeof parseAssignedPersonForGroupFromAssignment === 'function'
-                                        ? parseAssignedPersonForGroupFromAssignment(baselineStr, e.groupNum)
-                                        : null;
-                                const normCal = (s) =>
-                                    typeof normalizePersonKey === 'function'
-                                        ? normalizePersonKey(s)
-                                        : String(s || '').trim();
-                                if (
-                                    baselinePerson &&
-                                    normCal(baselinePerson) !== normCal(e.personName)
-                                ) {
-                                    // Baseline did not enter final: strike baseline, final in parentheses.
-                                    const baselineDisplay = String(baselinePerson)
-                                        .replace(/\s*\(Ομάδα\s*\d+\)\s*/g, '')
-                                        .trim();
-                                    baselineStruckHtml = `<span class="duty-baseline-struck">${escapeHtml(baselineDisplay)}</span> `;
-                                    showListOrder = false;
-                                }
-                            }
                             const listOrderSuffix =
-                                showListOrder && e.listOrder != null
+                                e.listOrder != null
                                     ? ` <span class="duty-list-order" title="Σειρά / προτεραιότητα στη λίστα ${escapeHtml(DUTY_LIST_TYPE_LABELS[dayTypeCategory] || dayTypeCategory)}">(${e.listOrder})</span>`
                                     : '';
-                            const nameHtml = baselineStruckHtml
-                                ? `${baselineStruckHtml}<span class="duty-final-in-parens">(${escapeHtml(e.nameOnly)})</span>`
-                                : `${escapeHtml(e.nameOnly)}${listOrderSuffix}`;
-                            // When showing strike+paren, skip replacement underline (paren already marks final).
-                            const useUnderline = e.underline && !baselineStruckHtml;
-                            displayAssignmentHtml += `<div class="${cls}${useUnderline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${nameHtml}${bufferIcon}${spacingIcon}</div>`;
+                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${escapeHtml(e.nameOnly)}${listOrderSuffix}${bufferIcon}${spacingIcon}</div>`;
                         });
                         if (shouldShowHeavyIndicators && assignmentReasons[key]) {
                             displayAssignmentHtml += `<div class="duty-person-swapped" title="Υπάρχουν λόγοι αλλαγής/παράλειψης">*</div>`;

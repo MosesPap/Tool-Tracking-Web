@@ -1237,17 +1237,6 @@
             text-underline-offset: 2px;
         }
 
-        /* Baseline person did not enter final: strike baseline, show final in parentheses */
-        .duty-baseline-struck {
-            text-decoration: line-through;
-            text-decoration-thickness: 2px;
-            opacity: 0.75;
-        }
-        .duty-final-in-parens {
-            font-weight: 700;
-            color: #1a237e;
-        }
-
         /* Hierarchy popup styles */
         .hierarchy-popup {
             position: fixed;
@@ -2931,7 +2920,7 @@
                         <small>
                             <i class="fas fa-info-circle me-1"></i>
                             Αριστερά: τελικές αναθέσεις με αρίθμηση ανταλλαγών (#1, #2, …) όπως στο Excel.
-                            Δεξιά: βασική σειρά περιστροφής χωρίς αλλαγές. Απενεργοποιημένοι/απόντες ολόκληρο τον μήνα: <span class="compare-baseline-unavailable">διαγραφή</span> και σε παρένθεση ο επόμενος διαθέσιμος.
+                            Δεξιά: βασική σειρά (ένα προς ένα από τον προηγούμενο μήνα, εκτός εξαίρεσης). Αν δεν μπήκε στην τελική: <span class="compare-baseline-unavailable">διαγραφή</span> και σε παρένθεση ο/η της τελικής.
                             Οι γραμμές με διαφορά επισημαίνονται ανοιχτό κίτρινο.
                         </small>
                     </div>

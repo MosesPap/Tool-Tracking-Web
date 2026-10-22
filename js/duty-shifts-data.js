@@ -718,31 +718,21 @@
         }
 
         function buildBaselineComputedCellHtml(baselinePerson, computedPerson, computedDaysCountInfo = '', computedLastDutyInfo = '') {
-            const escape =
-                typeof escapeHtml === 'function'
-                    ? escapeHtml
-                    : (s) =>
-                          String(s || '')
-                              .replace(/&/g, '&amp;')
-                              .replace(/</g, '&lt;')
-                              .replace(/>/g, '&gt;')
-                              .replace(/"/g, '&quot;');
             const base = baselinePerson || '-';
             const comp = computedPerson || '-';
             const changed = base !== '-' && comp !== '-' && base !== comp;
-            const extra = `${computedDaysCountInfo || ''}${computedLastDutyInfo || ''}`;
 
-            // Same person: show once.
+            // If there is no change, show the name only once (no duplicate baseline/computed).
             if (!changed) {
-                return `<div><strong>${escape(base)}</strong>${extra}</div>`;
+                return `<div><strong>${base}</strong></div>`;
             }
 
-            // Baseline did not enter final: strike baseline, final in parentheses.
+            // If changed (swap/skip/missing replacement), show Baseline -> Computed clearly.
             return `
-                <div>
-                    <span class="duty-baseline-struck">${escape(base)}</span>
-                    <span class="duty-final-in-parens">(${escape(comp)})</span>${extra}
-                </div>
+                <div class="small text-muted">Βασική Σειρά</div>
+                <div><strong>${base}</strong></div>
+                <div class="small text-primary mt-1">Αντικατάσταση</div>
+                <div><strong>${comp}</strong></div>
             `;
         }
 
@@ -1701,7 +1691,8 @@
             const prevMonthKey = getPreviousMonthKeyFromDate(dateInMonth);
             const prevManualAlternate = findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInMonth, groupNum);
 
-            // Prefer actual last assignment / baseline continuity from previous month whenever available.
+            // Prefer last baseline slot (pure series), then stored continuity, then final-assignment continuity.
+            // Using final assignees first jumped the basic series after replacements (e.g. Group B).
             const fromAssignments = getLastAssignmentContinuityPersonForPreviousMonth(
                 dayTypeCategory,
                 dateInMonth,
@@ -1709,10 +1700,7 @@
             );
             const fromBaseline = getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
             const fromStored = getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-            const lastContinuityPerson =
-                dayTypeCategory === 'semi'
-                    ? fromAssignments || fromBaseline || fromStored
-                    : fromAssignments || fromBaseline || fromStored;
+            const lastContinuityPerson = fromBaseline || fromStored || fromAssignments;
             const continuityIdx = findIdx(lastContinuityPerson);
             if (lastContinuityPerson && continuityIdx >= 0) {
                 let cursor = (continuityIdx + 1) % len;
@@ -7323,47 +7311,14 @@ ${content.innerHTML}
                 personName
                     ? `<span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}`
                     : '<span class="text-muted">—</span>';
-            const formatBaselinePersonCell = (
-                personName,
-                orderNo,
-                groupData,
-                groupNum,
-                typeKey,
-                monthStartKey,
-                monthEndKey,
-                consumedSubstitutes
-            ) => {
+            /** Βασική σειρά: plain when same as final; else ~~baseline~~ (final). */
+            const formatBaselinePersonCell = (personName, orderNo, finalPerson, finalOrder) => {
                 if (!personName) return '<span class="text-muted">—</span>';
-                const personNorm = normName(personName);
-                const unavailable = isPersonUnavailableWholeMonth(
-                    personName,
-                    groupNum,
-                    typeKey,
-                    monthStartKey,
-                    monthEndKey,
-                    groupData
-                );
-                const alreadyUsedAsSubstitute =
-                    consumedSubstitutes instanceof Set && consumedSubstitutes.has(personNorm);
-                if (!unavailable && !alreadyUsedAsSubstitute) {
+                if (!finalPerson || normName(personName) === normName(finalPerson)) {
                     return formatPersonCell(personName, orderNo);
                 }
-                const nextPerson = findNextAvailableInRotationList(
-                    groupData,
-                    typeKey,
-                    personName,
-                    groupNum,
-                    monthStartKey,
-                    monthEndKey,
-                    consumedSubstitutes
-                );
-                if (nextPerson && consumedSubstitutes instanceof Set) {
-                    consumedSubstitutes.add(normName(nextPerson));
-                }
-                const nextOrder = nextPerson ? getOrderNo(groupData, typeKey, nextPerson) : null;
                 const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
-                if (!nextPerson) return struck;
-                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${nextOrder || '-'}</span>${escapeHtml(nextPerson)})</span>`;
+                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${finalOrder || '-'}</span>${escapeHtml(finalPerson)})</span>`;
             };
             const buildChangeMarker = (reasonObj, pairKey, getSwapPairLabelNo) => {
                 if (!reasonObj) return { text: '', color: null, style: '' };
@@ -7456,13 +7411,6 @@ ${content.innerHTML}
                     `;
                     monthSection.appendChild(groupBlock);
 
-                    const consumedBaselineSubstitutes = {
-                        normal: new Set(),
-                        semi: new Set(),
-                        weekend: new Set(),
-                        special: new Set()
-                    };
-
                     const tbody = groupBlock.querySelector('tbody');
                     for (let day = 1; day <= daysInMonth; day++) {
                         const date = new Date(year, month, day);
@@ -7504,7 +7452,7 @@ ${content.innerHTML}
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dayName}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;${change.style}">${formatPersonCell(finalPerson, finalOrder)}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey])}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, finalPerson, finalOrder)}</td>
                         `;
                         tbody.appendChild(row);
                     }
