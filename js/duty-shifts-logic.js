@@ -3102,6 +3102,8 @@
                                 : typeof findLatestManualAlternateInPreviousMonth === 'function'
                                   ? findLatestManualAlternateInPreviousMonth(dutyCat, dateInMonth, groupNum)
                                   : null;
+                        // Keep baseline slot on this person (basic series skips ONLY εξαίρεση).
+                        // Defer affects final assignment only — do not advance the rotation cursor.
                         deferFulfillment = {
                             skippedReplacement: st.person,
                             baselinePerson: latest?.baselinePerson || null,
@@ -3111,17 +3113,8 @@
                                     ? getPreviousMonthKeyFromDate(dateInMonth)
                                     : null
                         };
-                    }
-                    let guard = 0;
-                    while (
-                        guard++ <= rotationDays + 2 &&
-                        groupPeople[rotationPosition] &&
-                        norm(groupPeople[rotationPosition]) === dn
-                    ) {
-                        rotationPosition = (rotationPosition + 1) % rotationDays;
                         delete deferState[groupNum];
                     }
-                    globalRotationPosition[groupNum] = rotationPosition;
                 }
             }
             return { rotationPosition, existingManualAlternate, deferFulfillment };
@@ -12186,36 +12179,26 @@
                         const stDefer = deferManualAlternateSkipSemiRun[groupNum];
                         if (stDefer?.person) {
                             const dn = normSemiRun(stDefer.person);
-                            let deferFulfillmentSemiRun = null;
+                            // Keep baseline on this person — do not advance past επιλαχών defer.
                             if (groupPeople[pos] && normSemiRun(groupPeople[pos]) === dn) {
                                 const latestSemi =
                                     typeof getManualAlternateDeferFromPreviousMonth === 'function'
                                         ? getManualAlternateDeferFromPreviousMonth('semi', date, groupNum)
                                         : null;
-                                deferFulfillmentSemiRun = {
+                                const deferFulfillmentSemiRun = {
                                     skippedReplacement: stDefer.person,
                                     baselinePerson: latestSemi?.baselinePerson || null,
                                     sourceDateKey: latestSemi?.dateKey || null,
                                     prevMonthKey:
                                         typeof getPreviousMonthKeyFromDate === 'function'
                                             ? getPreviousMonthKeyFromDate(date)
-                                            : null
+                                            : null,
+                                    rotationSlotPerson: groupPeople[pos] || null
                                 };
-                            }
-                            let guard = 0;
-                            while (
-                                guard++ <= rotationDays + 2 &&
-                                groupPeople[pos] &&
-                                normSemiRun(groupPeople[pos]) === dn
-                            ) {
-                                pos = (pos + 1) % rotationDays;
+                                semiDeferFulfillmentPending[`${dateKey}:${groupNum}`] = deferFulfillmentSemiRun;
                                 delete deferManualAlternateSkipSemiRun[groupNum];
                             }
                             globalSemiPos[groupNum] = pos;
-                            if (deferFulfillmentSemiRun) {
-                                deferFulfillmentSemiRun.rotationSlotPerson = groupPeople[pos] || null;
-                                semiDeferFulfillmentPending[`${dateKey}:${groupNum}`] = deferFulfillmentSemiRun;
-                            }
                         }
                     }
                     // Whole-month absentees must not hold ημιαργία slots (e.g. #4+#6 out → #5 keeps place between them)
@@ -14769,9 +14752,21 @@
                                 originalRotationPerson &&
                                 isPersonMissingOnDate(originalRotationPerson, groupNum, date, 'normal');
 
-                            // Final-only replacement when baseline person cannot serve (disabled or absent).
-                            // Does NOT advance the basic series past intermediate people.
-                            if (baselineIsDisabled || baselineIsMissing) {
+                            // Final-only replacement when baseline person cannot serve (disabled/absent)
+                            // OR when they are the prior-month επιλαχών defer (already served once).
+                            // Does NOT advance the basic series past anyone except εξαίρεση (already filtered).
+                            const normDefer = (s) =>
+                                typeof normalizePersonKey === 'function'
+                                    ? normalizePersonKey(s)
+                                    : String(s || '').trim();
+                            const baselineIsDeferSkip =
+                                !!(
+                                    deferFulfillmentNormal?.skippedReplacement &&
+                                    originalRotationPerson &&
+                                    normDefer(originalRotationPerson) ===
+                                        normDefer(deferFulfillmentNormal.skippedReplacement)
+                                );
+                            if (baselineIsDisabled || baselineIsMissing || baselineIsDeferSkip) {
                                 let foundReplacement = false;
                                 const tryCandidate = (candidate, idx) => {
                                     if (!candidate || candidate === originalRotationPerson) return false;
@@ -14813,20 +14808,32 @@
                                 if (!foundReplacement) {
                                     assignedPerson = null;
                                 } else if (!getAssignmentReason(dateKey, groupNum, assignedPerson)) {
-                                    const unavailableExtraNormal =
-                                        deferFulfillmentNormal?.skippedReplacement
-                                            ? { deferFulfillment: deferFulfillmentNormal }
-                                            : null;
-                                    storeUnavailableReplacementReason(
-                                        dateKey,
-                                        groupNum,
-                                        assignedPerson,
-                                        originalRotationPerson,
-                                        date,
-                                        'normal',
-                                        null,
-                                        unavailableExtraNormal
-                                    );
+                                    if (baselineIsDeferSkip && !baselineIsDisabled && !baselineIsMissing) {
+                                        tryStoreManualAlternateDeferFulfillmentReason(
+                                            dateKey,
+                                            groupNum,
+                                            assignedPerson,
+                                            deferFulfillmentNormal,
+                                            'normal',
+                                            originalRotationPerson,
+                                            date
+                                        );
+                                    } else {
+                                        const unavailableExtraNormal =
+                                            deferFulfillmentNormal?.skippedReplacement
+                                                ? { deferFulfillment: deferFulfillmentNormal }
+                                                : null;
+                                        storeUnavailableReplacementReason(
+                                            dateKey,
+                                            groupNum,
+                                            assignedPerson,
+                                            originalRotationPerson,
+                                            date,
+                                            'normal',
+                                            null,
+                                            unavailableExtraNormal
+                                        );
+                                    }
                                     if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
                                         dutyNormalDebug.recordUnavailableReplacement({
                                             dateKey,
@@ -15027,20 +15034,7 @@
                             }
                             normalAssignments[dateKey][groupNum] = assignedPerson;
                             
-                            if (
-                                assignedPerson &&
-                                deferFulfillmentNormal &&
-                                !wasDisabledOnlySkippedInBaseline &&
-                                tryStoreManualAlternateDeferFulfillmentReason(
-                                    dateKey,
-                                    groupNum,
-                                    assignedPerson,
-                                    deferFulfillmentNormal
-                                )
-                            ) {
-                                if (!normalRotationPersons[dateKey]) normalRotationPersons[dateKey] = {};
-                                normalRotationPersons[dateKey][groupNum] = deferFulfillmentNormal.skippedReplacement;
-                            }
+                            // Defer reason already stored above when final ≠ baseline; never overwrite baseline slot.
                             
                             // Track that this person has been assigned (to prevent nearby duplicate assignments)
                             if (assignedPerson && assignedPeoplePreview[monthKey] && assignedPeoplePreview[monthKey][groupNum]) {
