@@ -3487,7 +3487,7 @@
 
         /**
          * True if person already holds a normal slot on another day within `windowDays`
-         * before `dateKey` (used by swap-continuity reflow to avoid Tue+Thu duplicates).
+         * of `dateKey` (backward or forward — blocks e.g. 30↔23 when they also serve on 24).
          */
         function personHasNearbyNormalAssignment(
             assignmentsByDate,
@@ -3517,14 +3517,70 @@
                       : ignoreDateKeys
                         ? new Set([ignoreDateKeys])
                         : null;
+            const checkAt = (otherKey) => {
+                if (ignore && ignore.has(otherKey)) return false;
+                const otherDate = new Date(otherKey + 'T00:00:00');
+                if (isNaN(otherDate.getTime())) return false;
+                const daysDiff = Math.abs(
+                    Math.floor((dateObj - otherDate) / (1000 * 60 * 60 * 24))
+                );
+                if (daysDiff <= 0 || daysDiff > windowDays) return false;
+                const otherPerson = assignmentsByDate?.[otherKey]?.[groupNum] || null;
+                return !!(otherPerson && norm(otherPerson) === target);
+            };
             for (let i = idx - 1; i >= 0; i--) {
                 const prevKey = sortedNormalKeys[i];
-                if (ignore && ignore.has(prevKey)) continue;
                 const prevDate = new Date(prevKey + 'T00:00:00');
-                if (isNaN(prevDate.getTime())) continue;
-                const daysDiff = Math.floor((dateObj - prevDate) / (1000 * 60 * 60 * 24));
-                if (daysDiff > windowDays) break;
-                if (daysDiff <= 0) continue;
+                if (!isNaN(prevDate.getTime())) {
+                    const daysDiff = Math.floor((dateObj - prevDate) / (1000 * 60 * 60 * 24));
+                    if (daysDiff > windowDays) break;
+                }
+                if (checkAt(prevKey)) return true;
+            }
+            for (let i = idx + 1; i < sortedNormalKeys.length; i++) {
+                const nextKey = sortedNormalKeys[i];
+                const nextDate = new Date(nextKey + 'T00:00:00');
+                if (!isNaN(nextDate.getTime())) {
+                    const daysDiff = Math.floor((nextDate - dateObj) / (1000 * 60 * 60 * 24));
+                    if (daysDiff > windowDays) break;
+                }
+                if (checkAt(nextKey)) return true;
+            }
+            return false;
+        }
+
+        /**
+         * True if person already has a normal final on an earlier day in the same calendar month.
+         * Used so replacements continue the available series (e.g. after #7 on 24, #6→#11 not #7 again).
+         */
+        function personHasEarlierNormalFinalInMonth(
+            assignmentsByDate,
+            sortedNormalKeys,
+            dateKey,
+            groupNum,
+            personName,
+            ignoreDateKeys = null
+        ) {
+            if (!personName || !dateKey || !Array.isArray(sortedNormalKeys)) return false;
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) => String(s || '').trim();
+            const target = norm(personName);
+            if (!target) return false;
+            const monthPrefix = dateKey.slice(0, 7);
+            const ignore =
+                ignoreDateKeys instanceof Set
+                    ? ignoreDateKeys
+                    : Array.isArray(ignoreDateKeys)
+                      ? new Set(ignoreDateKeys)
+                      : ignoreDateKeys
+                        ? new Set([ignoreDateKeys])
+                        : null;
+            for (const prevKey of sortedNormalKeys) {
+                if (prevKey >= dateKey) break;
+                if (!prevKey.startsWith(monthPrefix)) continue;
+                if (ignore && ignore.has(prevKey)) continue;
                 const prevPerson = assignmentsByDate?.[prevKey]?.[groupNum] || null;
                 if (prevPerson && norm(prevPerson) === target) return true;
             }
@@ -9536,27 +9592,55 @@
                                                     }
 
                                                     let picked = null;
-                                                    for (let off = 0; off < groupPeople.length; off++) {
-                                                        const candIdx = (cursorIdx + off) % groupPeople.length;
-                                                        const cand = groupPeople[candIdx];
-                                                        if (!cand) continue;
-                                                        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
-                                                        if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) continue;
-                                                        if (
-                                                            personHasNearbyNormalAssignment(
-                                                                updatedAssignments,
-                                                                sortedNormal,
-                                                                nextKey,
-                                                                groupNum,
-                                                                cand,
-                                                                5
-                                                            )
-                                                        ) {
-                                                            continue;
+                                                    let pickedIdx = -1;
+                                                    const tryReflowCand = (requireUnused) => {
+                                                        for (let off = 0; off < groupPeople.length; off++) {
+                                                            const candIdx = (cursorIdx + off) % groupPeople.length;
+                                                            const cand = groupPeople[candIdx];
+                                                            if (!cand) continue;
+                                                            if (
+                                                                typeof isPersonDisabledForDuty === 'function' &&
+                                                                isPersonDisabledForDuty(cand, groupNum, 'normal')
+                                                            ) {
+                                                                continue;
+                                                            }
+                                                            if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) {
+                                                                continue;
+                                                            }
+                                                            if (
+                                                                requireUnused &&
+                                                                personHasEarlierNormalFinalInMonth(
+                                                                    updatedAssignments,
+                                                                    sortedNormal,
+                                                                    nextKey,
+                                                                    groupNum,
+                                                                    cand
+                                                                )
+                                                            ) {
+                                                                continue;
+                                                            }
+                                                            if (
+                                                                personHasNearbyNormalAssignment(
+                                                                    updatedAssignments,
+                                                                    sortedNormal,
+                                                                    nextKey,
+                                                                    groupNum,
+                                                                    cand,
+                                                                    5
+                                                                )
+                                                            ) {
+                                                                continue;
+                                                            }
+                                                            return { cand, candIdx };
                                                         }
-                                                        picked = cand;
-                                                        cursorIdx = (candIdx + 1) % groupPeople.length;
-                                                        break;
+                                                        return null;
+                                                    };
+                                                    const reflowPick =
+                                                        tryReflowCand(true) || tryReflowCand(false);
+                                                    if (reflowPick) {
+                                                        picked = reflowPick.cand;
+                                                        pickedIdx = reflowPick.candIdx;
+                                                        cursorIdx = (pickedIdx + 1) % groupPeople.length;
                                                     }
                                                     if (picked) {
                                                     const prevAssigned = updatedAssignments?.[nextKey]?.[groupNum] || null;
@@ -14616,195 +14700,149 @@
                                     : (g?.normal || []);
                             
                             if (groupPeople.length === 0) continue;
-                            
-                            // Process missing periods
+
+                            const normP = (s) =>
+                                typeof normalizePersonKey === 'function'
+                                    ? normalizePersonKey(s)
+                                    : String(s || '').trim();
+
+                            // Collect all baseline slots that need a final replacement, then resolve
+                            // chronologically so the available series continues (#3→#7, later #6→#11).
+                            const replacementJobs = []; // { dk, skippedPerson, source }
+
                             for (const personName of Object.keys(missingMap)) {
                                 const periods = Array.isArray(missingMap[personName]) ? missingMap[personName] : [];
                                 for (const period of periods) {
                                     const pStartKey = inputValueToDateKey(period?.start);
                                     const pEndKey = inputValueToDateKey(period?.end);
                                     if (!pStartKey || !pEndKey) continue;
-                                    
-                                    // Check if missing period overlaps with calculation period
                                     if (pEndKey < calcStartKey || pStartKey > calcEndKey) continue;
-                                    
+
                                     const dedupeKey = `${groupNum}|${personName}|${pEndKey}`;
                                     if (processedMissingReplacements.has(dedupeKey)) continue;
                                     processedMissingReplacements.add(dedupeKey);
-                                    
-                                    // Determine the actual period to check (within calculation range)
+
                                     const checkStartKey = maxDateKey(pStartKey, calcStartKey);
                                     const checkEndKey = minDateKey(pEndKey, calcEndKey);
                                     if (!checkStartKey || !checkEndKey || checkStartKey > checkEndKey) continue;
-                                    
-                                    // Check rotationBaselineNormalAssignments for this person's normal duties during missing period.
-                                    // Use normalized name comparison so storage format doesn't skip replacement.
-                                    const normP = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-                                    const baselineDutiesToReplace = [];
+
                                     for (const dk of sortedNormal) {
                                         if (dk < checkStartKey) continue;
                                         if (dk > checkEndKey) break;
-                                        
                                         const baselinePerson =
-                                            parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
-                                            null;
-                                        
+                                            parseAssignedPersonForGroupFromAssignment(
+                                                getRotationBaselineAssignmentForType('normal', dk),
+                                                groupNum
+                                            ) || null;
                                         if (baselinePerson && normP(baselinePerson) === normP(personName)) {
-                                            baselineDutiesToReplace.push(dk);
-                                        }
-                                    }
-                                    
-                                    // If person has baseline duties during missing period, replace them
-                                    if (baselineDutiesToReplace.length > 0) {
-                                        // Find the person's position in rotation (by normalized name)
-                                        const personIndex = groupPeople.findIndex(p => normP(p) === normP(personName));
-                                        if (personIndex < 0) continue; // Person not in rotation list
-                                        
-                                        // For each baseline duty date, find the next available person in rotation.
-                                        // IMPORTANT: Advance "virtual" rotation across dates so we don't assign the same person on consecutive dates.
-                                        let lastReplacementIndex = personIndex;
-                                        for (const dk of baselineDutiesToReplace) {
-                                            const dateObj = dateKeyToDate(dk);
-                                            if (isNaN(dateObj.getTime())) continue;
-                                            
-                                            // Find next available person in rotation (starting from person after last replacement)
-                                            let replacementPerson = null;
-                                            for (let offset = 1; offset <= groupPeople.length * 2; offset++) {
-                                                const idx = (lastReplacementIndex + offset) % groupPeople.length;
-                                                const candidate = groupPeople[idx];
-                                                if (!candidate) continue;
-                                                
-                                                // Check if candidate is also missing/disabled on this date
-                                                if (isPersonMissingOnDate(candidate, groupNum, dateObj, 'normal')) continue;
-                                                
-                                                // Check if candidate is disabled for normal duties
-                                                if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) continue;
-                                                
-                                                // Found eligible replacement
-                                                replacementPerson = candidate;
-                                                break;
-                                            }
-                                            
-                                            if (replacementPerson) {
-                                                // Store the replacement in baselineNormalByDate so it's used during calculation
-                                                if (!baselineNormalByDate[dk]) {
-                                                    baselineNormalByDate[dk] = {};
-                                                }
-                                                baselineNormalByDate[dk][groupNum] = replacementPerson;
-                                                lastReplacementIndex = groupPeople.indexOf(replacementPerson);
-                                                
-                                                // Store assignment reason
-                                                storeUnavailableReplacementReason(
-                                                    dk,
-                                                    groupNum,
-                                                    replacementPerson,
-                                                    personName,
-                                                    dateObj,
-                                                    'normal'
-                                                );
-                                                if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
-                                                    dutyNormalDebug.recordUnavailableReplacement({
-                                                        dateKey: dk,
-                                                        groupNum,
-                                                        replacement: replacementPerson,
-                                                        skippedPerson: personName,
-                                                        rotationPerson: personName
-                                                    });
-                                                }
-                                                
-                                                console.log(`[MISSING REPLACEMENT] Replaced ${personName} with ${replacementPerson} on ${dk} (Group ${groupNum}) - missing period`);
-                                            }
+                                            replacementJobs.push({
+                                                dk,
+                                                skippedPerson: personName,
+                                                source: 'missing'
+                                            });
                                         }
                                     }
                                 }
                             }
-                            
-                            // Process disabled persons (check all disabled persons, not just periods)
+
                             for (const personName of Object.keys(disabledMap)) {
                                 const disabledInfo = disabledMap[personName];
                                 if (!disabledInfo) continue;
-                                
-                                // Check if person is disabled for normal duties
-                                const isDisabledForNormal = disabledInfo === true || 
-                                                           (typeof disabledInfo === 'object' && disabledInfo.normal === true);
-                                
+                                const isDisabledForNormal =
+                                    disabledInfo === true ||
+                                    (typeof disabledInfo === 'object' && disabledInfo.normal === true);
                                 if (!isDisabledForNormal) continue;
-                                
-                                // Check if person has baseline normal duties during calculation period. Use normalized name comparison.
-                                const normPDisabled = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-                                const baselineDutiesToReplace = [];
+
                                 for (const dk of sortedNormal) {
                                     if (dk < calcStartKey) continue;
                                     if (dk > calcEndKey) break;
-                                    
-                                    const baselinePerson = 
+                                    const baselinePerson =
                                         baselineNormalByDate?.[dk]?.[groupNum] ||
-                                        parseAssignedPersonForGroupFromAssignment(getRotationBaselineAssignmentForType('normal', dk), groupNum) ||
+                                        parseAssignedPersonForGroupFromAssignment(
+                                            getRotationBaselineAssignmentForType('normal', dk),
+                                            groupNum
+                                        ) ||
                                         null;
-                                    
-                                    if (baselinePerson && normPDisabled(baselinePerson) === normPDisabled(personName)) {
-                                        // Check if person is still disabled on this date
-                                        const dateObj = dateKeyToDate(dk);
-                                        if (isNaN(dateObj.getTime())) continue;
-                                        if (isPersonMissingOnDate(personName, groupNum, dateObj, 'normal')) {
-                                            baselineDutiesToReplace.push(dk);
-                                        }
+                                    if (!baselinePerson || normP(baselinePerson) !== normP(personName)) continue;
+                                    const dateObj = dateKeyToDate(dk);
+                                    if (isNaN(dateObj.getTime())) continue;
+                                    if (!isPersonMissingOnDate(personName, groupNum, dateObj, 'normal') &&
+                                        !isPersonDisabledForDuty(personName, groupNum, 'normal')) {
+                                        continue;
+                                    }
+                                    // Disabled keep baseline slot; only schedule final replacement here.
+                                    if (isPersonDisabledForDuty(personName, groupNum, 'normal') ||
+                                        isPersonMissingOnDate(personName, groupNum, dateObj, 'normal')) {
+                                        replacementJobs.push({
+                                            dk,
+                                            skippedPerson: personName,
+                                            source: 'disabled'
+                                        });
                                     }
                                 }
-                                
-                                // If person has baseline duties while disabled, replace them
-                                if (baselineDutiesToReplace.length > 0) {
-                                    // Find the person's position in rotation (by normalized name)
-                                    const personIndex = groupPeople.findIndex(p => normPDisabled(p) === normPDisabled(personName));
-                                    if (personIndex < 0) continue; // Person not in rotation list
-                                    
-                                    // For each baseline duty date, find the next available person in rotation.
-                                    // IMPORTANT: Advance "virtual" rotation across dates so we don't assign the same person on consecutive dates.
-                                    let lastReplacementIndex = personIndex;
-                                    for (const dk of baselineDutiesToReplace) {
-                                        const dateObj = dateKeyToDate(dk);
-                                        if (isNaN(dateObj.getTime())) continue;
-                                        
-                                        // Find next available person in rotation (starting from person after last replacement)
-                                        let replacementPerson = null;
-                                        for (let offset = 1; offset <= groupPeople.length * 2; offset++) {
-                                            const idx = (lastReplacementIndex + offset) % groupPeople.length;
-                                            const candidate = groupPeople[idx];
-                                            if (!candidate) continue;
-                                            
-                                            // Check if candidate is also missing/disabled on this date
-                                            if (isPersonMissingOnDate(candidate, groupNum, dateObj, 'normal')) continue;
-                                            
-                                            // Check if candidate is disabled for normal duties
-                                            if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) continue;
-                                            
-                                            // Found eligible replacement
-                                            replacementPerson = candidate;
-                                            break;
-                                        }
-                                        
-                                        if (replacementPerson) {
-                                            // Store the replacement in baselineNormalByDate so it's used during calculation
-                                            if (!baselineNormalByDate[dk]) {
-                                                baselineNormalByDate[dk] = {};
-                                            }
-                                            baselineNormalByDate[dk][groupNum] = replacementPerson;
-                                            lastReplacementIndex = groupPeople.indexOf(replacementPerson);
-                                            
-                                            // Store assignment reason
-                                            storeUnavailableReplacementReason(
-                                                dk,
-                                                groupNum,
-                                                replacementPerson,
-                                                personName,
-                                                dateObj,
-                                                'normal'
-                                            );
-                                            
-                                            console.log(`[DISABLED REPLACEMENT] Replaced ${personName} with ${replacementPerson} on ${dk} (Group ${groupNum}) - disabled`);
-                                        }
-                                    }
+                            }
+
+                            replacementJobs.sort((a, b) => (a.dk < b.dk ? -1 : a.dk > b.dk ? 1 : 0));
+                            const seenJobKeys = new Set();
+                            const usedReplacementNorms = new Set();
+
+                            for (const job of replacementJobs) {
+                                const { dk, skippedPerson, source } = job;
+                                const jobKey = `${dk}|${normP(skippedPerson)}`;
+                                if (seenJobKeys.has(jobKey)) continue;
+                                seenJobKeys.add(jobKey);
+                                if (baselineNormalByDate?.[dk]?.[groupNum]) {
+                                    usedReplacementNorms.add(normP(baselineNormalByDate[dk][groupNum]));
+                                    continue;
                                 }
+                                const dateObj = dateKeyToDate(dk);
+                                if (isNaN(dateObj.getTime())) continue;
+                                const personIndex = groupPeople.findIndex(
+                                    (p) => normP(p) === normP(skippedPerson)
+                                );
+                                if (personIndex < 0) continue;
+
+                                const tryPick = (requireUnused) => {
+                                    for (let offset = 1; offset <= groupPeople.length * 2; offset++) {
+                                        const idx = (personIndex + offset) % groupPeople.length;
+                                        const candidate = groupPeople[idx];
+                                        if (!candidate || normP(candidate) === normP(skippedPerson)) continue;
+                                        if (isPersonMissingOnDate(candidate, groupNum, dateObj, 'normal')) continue;
+                                        if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) continue;
+                                        const cNorm = normP(candidate);
+                                        if (requireUnused && usedReplacementNorms.has(cNorm)) continue;
+                                        return candidate;
+                                    }
+                                    return null;
+                                };
+
+                                const replacementPerson = tryPick(true) || tryPick(false);
+                                if (!replacementPerson) continue;
+
+                                if (!baselineNormalByDate[dk]) baselineNormalByDate[dk] = {};
+                                baselineNormalByDate[dk][groupNum] = replacementPerson;
+                                usedReplacementNorms.add(normP(replacementPerson));
+
+                                storeUnavailableReplacementReason(
+                                    dk,
+                                    groupNum,
+                                    replacementPerson,
+                                    skippedPerson,
+                                    dateObj,
+                                    'normal'
+                                );
+                                if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
+                                    dutyNormalDebug.recordUnavailableReplacement({
+                                        dateKey: dk,
+                                        groupNum,
+                                        replacement: replacementPerson,
+                                        skippedPerson,
+                                        rotationPerson: skippedPerson
+                                    });
+                                }
+                                console.log(
+                                    `[${source === 'disabled' ? 'DISABLED' : 'MISSING'} REPLACEMENT] Replaced ${skippedPerson} with ${replacementPerson} on ${dk} (Group ${groupNum})`
+                                );
                             }
                         }
                     }
@@ -15899,27 +15937,55 @@
                                                     continue;
                                                 }
                                                 let picked = null;
-                                                for (let off = 0; off < groupPeople.length; off++) {
-                                                    const candIdx = (cursorIdx + off) % groupPeople.length;
-                                                    const cand = groupPeople[candIdx];
-                                                    if (!cand) continue;
-                                                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
-                                                    if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) continue;
-                                                    if (
-                                                        personHasNearbyNormalAssignment(
-                                                            normalAssignments,
-                                                            sortedNormal,
-                                                            nextKey,
-                                                            groupNum,
-                                                            cand,
-                                                            5
-                                                        )
-                                                    ) {
-                                                        continue;
+                                                let pickedIdx = -1;
+                                                const tryReflowCandPreview = (requireUnused) => {
+                                                    for (let off = 0; off < groupPeople.length; off++) {
+                                                        const candIdx = (cursorIdx + off) % groupPeople.length;
+                                                        const cand = groupPeople[candIdx];
+                                                        if (!cand) continue;
+                                                        if (
+                                                            typeof isPersonDisabledForDuty === 'function' &&
+                                                            isPersonDisabledForDuty(cand, groupNum, 'normal')
+                                                        ) {
+                                                            continue;
+                                                        }
+                                                        if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) {
+                                                            continue;
+                                                        }
+                                                        if (
+                                                            requireUnused &&
+                                                            personHasEarlierNormalFinalInMonth(
+                                                                normalAssignments,
+                                                                sortedNormal,
+                                                                nextKey,
+                                                                groupNum,
+                                                                cand
+                                                            )
+                                                        ) {
+                                                            continue;
+                                                        }
+                                                        if (
+                                                            personHasNearbyNormalAssignment(
+                                                                normalAssignments,
+                                                                sortedNormal,
+                                                                nextKey,
+                                                                groupNum,
+                                                                cand,
+                                                                5
+                                                            )
+                                                        ) {
+                                                            continue;
+                                                        }
+                                                        return { cand, candIdx };
                                                     }
-                                                    picked = cand;
-                                                    cursorIdx = (candIdx + 1) % groupPeople.length;
-                                                    break;
+                                                    return null;
+                                                };
+                                                const reflowPickPreview =
+                                                    tryReflowCandPreview(true) || tryReflowCandPreview(false);
+                                                if (reflowPickPreview) {
+                                                    picked = reflowPickPreview.cand;
+                                                    pickedIdx = reflowPickPreview.candIdx;
+                                                    cursorIdx = (pickedIdx + 1) % groupPeople.length;
                                                 }
                                                 if (picked) {
                                                     const prevAssigned = normalAssignments?.[nextKey]?.[groupNum] || null;
