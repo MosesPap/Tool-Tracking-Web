@@ -1087,8 +1087,10 @@
             const assigned = getPersonOnDateForRotationContinuityLookup(dayTypeCategory, lastKey, groupNum);
             const store =
                 dayTypeCategory === 'normal' ? buildNormalRotationContinuityStore() : getAssignmentsForDayType(dayTypeCategory);
-            // Normal: continue after final assignee (not conflict-swap displaced). Manual alternate handled inside helper.
-            if (dayTypeCategory === 'normal' && typeof getPersonForNormalRotationContinuity === 'function') {
+            if (
+                dayTypeCategory === 'normal' &&
+                typeof getPersonForNormalRotationContinuity === 'function'
+            ) {
                 return getPersonForNormalRotationContinuity(lastKey, groupNum, assigned, store);
             }
             if (typeof getPersonForRotationContinuity === 'function') {
@@ -1703,8 +1705,8 @@
             );
             const fromBaseline = getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
             const fromStored = getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-            // Normal: assignments (final) first, then stored lastRotationPositions, then baseline.
-            // Preferring baseline over stored caused e.g. final #6 → seed from baseline #2 → next month starts at #3.
+            // Normal: prefer final calendar / stored continuity over baseline last
+            // (baseline can lag behind swaps → wrong next-month seed, e.g. #6 final → start #3).
             const lastContinuityPerson =
                 dayTypeCategory === 'normal'
                     ? fromAssignments || fromStored || fromBaseline
@@ -1852,7 +1854,10 @@
                         : getAssignmentsForDayType(dayTypeCategory);
                 const assigned = getPersonOnDateForRotationContinuityLookup(dayTypeCategory, lastKey, groupNum);
                 let continuity = assigned;
-                if (dayTypeCategory === 'normal' && typeof getPersonForNormalRotationContinuity === 'function') {
+                if (
+                    dayTypeCategory === 'normal' &&
+                    typeof getPersonForNormalRotationContinuity === 'function'
+                ) {
                     continuity = getPersonForNormalRotationContinuity(lastKey, groupNum, assigned, store);
                 } else if (typeof getPersonForRotationContinuity === 'function') {
                     continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);

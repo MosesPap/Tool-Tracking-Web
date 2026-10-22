@@ -3374,20 +3374,34 @@
         }
 
         /**
-         * Normal cross-month continuity: continue after who actually served on the last weekday
-         * (τελική ανάθεση → επόμενος στη λίστα / επόμενος διαθέσιμος).
-         * Only manual-alternate / preserveBaseline keep the baseline slot so the series does not jump to the replacement's index.
-         * Conflict swaps must NOT rewind to the displaced person (that caused e.g. final #6 → next month #3).
+         * Continuity for normal (καθημερινές) month-to-month seed.
+         * Prefer who actually closed the previous month on the calendar (#6 → next is #7),
+         * not the swapped-out partner of a conflict/ASAP swap (which wrongly seeded #3).
+         * Keep manual-alternate / preserveBaseline / Thursday-spacing exceptions.
          */
         function getPersonForNormalRotationContinuity(dateKey, groupNum, assignedPerson, normalAssignmentsByDate) {
             if (!assignedPerson) return null;
-            const reason = getAssignmentReason(dateKey, groupNum, assignedPerson);
-            if (reason && reason.type === 'skip' && reason.meta && reason.meta.manualAlternateReplacement && reason.swappedWith) {
+            const reason =
+                typeof getAssignmentReason === 'function'
+                    ? getAssignmentReason(dateKey, groupNum, assignedPerson)
+                    : null;
+            if (reason && reason.type === 'skip' && reason.meta?.manualAlternateReplacement && reason.swappedWith) {
                 return reason.swappedWith;
             }
             if (reason && reason.type === 'skip' && reason.meta?.preserveBaseline) {
                 const bp = String(reason.meta?.baselinePerson || '').trim();
                 if (bp) return bp;
+            }
+            if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement) {
+                return assignedPerson;
+            }
+            if (reason && reason.type === 'swap' && reason.meta?.thursdaySpacing) {
+                return getPersonForRotationContinuity(
+                    dateKey,
+                    groupNum,
+                    assignedPerson,
+                    normalAssignmentsByDate
+                );
             }
             return assignedPerson;
         }
@@ -9841,8 +9855,9 @@
                     Object.assign(normalDayAssignments, mergedNormalFinal);
                     
                     // IMPORTANT: Update last normal rotation state from FINAL assignments (after return-from-missing and swap)
-                    // so next month continues after who actually served (τελική ανάθεση → #n → next starts at #n+1 / next available).
-                    // Manual alternate / preserveBaseline still seed from the baseline slot via getPersonForNormalRotationContinuity.
+                    // so that next time we build the preview we start from the correct person and rotation stays consistent.
+                    // When the person on a date got there by SWAP (conflict swap-in), use the SWAPPED-OUT person as "last"
+                    // so next month we continue from the next person after the swapped-out person in rotation (still checking conflicts/missing/disabled).
                     const sortedDateKeys = Object.keys(updatedAssignments).sort();
                     const baselineByDateForRotation = calculationSteps.tempNormalBaselineAssignments || {};
                     const allRotationDateKeys = new Set([
@@ -14707,16 +14722,52 @@
                             html += '<td class="text-muted">-</td>';
                         } else {
                             const rotationDays = groupPeople.length;
-                            const shouldSeedNormalRotation =
-                                (typeof shouldRecalculateDutyGroup !== 'function' || shouldRecalculateDutyGroup(groupNum)) &&
-                                (isNormalMonthStartInRange || globalNormalRotationPosition[groupNum] === undefined);
-                            if (shouldSeedNormalRotation) {
+                            const maySeedNormal =
+                                typeof shouldRecalculateDutyGroup !== 'function' ||
+                                shouldRecalculateDutyGroup(groupNum);
+                            if (maySeedNormal && globalNormalRotationPosition[groupNum] === undefined) {
                                 globalNormalRotationPosition[groupNum] = resolveNormalRotationStartPosition(
                                     date,
                                     groupNum,
                                     groupPeople,
                                     sortedNormal
                                 );
+                            } else if (
+                                maySeedNormal &&
+                                isNormalMonthStartInRange &&
+                                globalNormalRotationPosition[groupNum] !== undefined
+                            ) {
+                                // Same calc run crossing a month: continue after last person already
+                                // placed earlier in this run (do not reseed from stale baseline/storage).
+                                let lastLivePerson = null;
+                                const curIdx = sortedNormal.indexOf(dateKey);
+                                for (let pi = curIdx - 1; pi >= 0; pi--) {
+                                    const prevDk = sortedNormal[pi];
+                                    lastLivePerson =
+                                        pureNormalRotationByDate[prevDk]?.[groupNum] ||
+                                        normalAssignments[prevDk]?.[groupNum] ||
+                                        null;
+                                    if (lastLivePerson) break;
+                                }
+                                if (lastLivePerson) {
+                                    const normLive =
+                                        typeof normalizePersonKey === 'function'
+                                            ? normalizePersonKey
+                                            : (n) => String(n || '').trim();
+                                    let liveIdx = groupPeople.indexOf(lastLivePerson);
+                                    if (liveIdx < 0) {
+                                        liveIdx = groupPeople.findIndex(
+                                            (p) => normLive(p) === normLive(lastLivePerson)
+                                        );
+                                    }
+                                    if (liveIdx >= 0) {
+                                        globalNormalRotationPosition[groupNum] =
+                                            (liveIdx + 1) % rotationDays;
+                                        console.log(
+                                            `[NORMAL ROTATION] Month-boundary continue group ${groupNum} after ${lastLivePerson} → position ${globalNormalRotationPosition[groupNum]}`
+                                        );
+                                    }
+                                }
                             }
                             
                             let assignedPerson = null;
@@ -16181,7 +16232,7 @@
                 });
             }
             calculationSteps.lastNormalRotationPositions = {};
-            // Cross-month seed: after final assignee (manual alternate → baseline slot). Do not rewind on conflict swaps.
+            // Use rotation continuity (manual alternate → baseline slot; swap → swapped-out) for cross-month seeding
             for (let g = 1; g <= 4; g++) {
                 const sortedNormalKeys = [...normalDays].sort();
                 let lastPersonForRotation = null;
