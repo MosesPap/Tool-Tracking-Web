@@ -1087,6 +1087,10 @@
             const assigned = getPersonOnDateForRotationContinuityLookup(dayTypeCategory, lastKey, groupNum);
             const store =
                 dayTypeCategory === 'normal' ? buildNormalRotationContinuityStore() : getAssignmentsForDayType(dayTypeCategory);
+            // Normal: continue after final assignee (not conflict-swap displaced). Manual alternate handled inside helper.
+            if (dayTypeCategory === 'normal' && typeof getPersonForNormalRotationContinuity === 'function') {
+                return getPersonForNormalRotationContinuity(lastKey, groupNum, assigned, store);
+            }
             if (typeof getPersonForRotationContinuity === 'function') {
                 return getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
             }
@@ -1699,9 +1703,11 @@
             );
             const fromBaseline = getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
             const fromStored = getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+            // Normal: assignments (final) first, then stored lastRotationPositions, then baseline.
+            // Preferring baseline over stored caused e.g. final #6 → seed from baseline #2 → next month starts at #3.
             const lastContinuityPerson =
-                dayTypeCategory === 'semi'
-                    ? fromAssignments || fromBaseline || fromStored
+                dayTypeCategory === 'normal'
+                    ? fromAssignments || fromStored || fromBaseline
                     : fromAssignments || fromBaseline || fromStored;
             const continuityIdx = findIdx(lastContinuityPerson);
             if (lastContinuityPerson && continuityIdx >= 0) {
@@ -1846,7 +1852,9 @@
                         : getAssignmentsForDayType(dayTypeCategory);
                 const assigned = getPersonOnDateForRotationContinuityLookup(dayTypeCategory, lastKey, groupNum);
                 let continuity = assigned;
-                if (typeof getPersonForRotationContinuity === 'function') {
+                if (dayTypeCategory === 'normal' && typeof getPersonForNormalRotationContinuity === 'function') {
+                    continuity = getPersonForNormalRotationContinuity(lastKey, groupNum, assigned, store);
+                } else if (typeof getPersonForRotationContinuity === 'function') {
                     continuity = getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
                 } else {
                     const manual = findManualAlternateReplacementForGroup(lastKey, groupNum);
@@ -7313,20 +7321,47 @@ ${content.innerHTML}
                 personName
                     ? `<span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}`
                     : '<span class="text-muted">—</span>';
-            /**
-             * Βασική σειρά cell: if baseline did not enter τελική, strikethrough baseline
-             * and show the actual final assignee in parentheses — not a month-level heuristic.
-             */
-            const formatBaselinePersonCell = (baselinePerson, baselineOrder, finalPerson, finalOrder) => {
-                if (!baselinePerson) return '<span class="text-muted">—</span>';
-                const same =
-                    finalPerson &&
-                    normName(baselinePerson) === normName(finalPerson);
-                if (!finalPerson || same) {
-                    return formatPersonCell(baselinePerson, baselineOrder);
+            const formatBaselinePersonCell = (
+                personName,
+                orderNo,
+                groupData,
+                groupNum,
+                typeKey,
+                monthStartKey,
+                monthEndKey,
+                consumedSubstitutes
+            ) => {
+                if (!personName) return '<span class="text-muted">—</span>';
+                const personNorm = normName(personName);
+                const unavailable = isPersonUnavailableWholeMonth(
+                    personName,
+                    groupNum,
+                    typeKey,
+                    monthStartKey,
+                    monthEndKey,
+                    groupData
+                );
+                const alreadyUsedAsSubstitute =
+                    consumedSubstitutes instanceof Set && consumedSubstitutes.has(personNorm);
+                if (!unavailable && !alreadyUsedAsSubstitute) {
+                    return formatPersonCell(personName, orderNo);
                 }
-                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${baselineOrder || '-'}</span>${escapeHtml(baselinePerson)}</span>`;
-                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${finalOrder || '-'}</span>${escapeHtml(finalPerson)})</span>`;
+                const nextPerson = findNextAvailableInRotationList(
+                    groupData,
+                    typeKey,
+                    personName,
+                    groupNum,
+                    monthStartKey,
+                    monthEndKey,
+                    consumedSubstitutes
+                );
+                if (nextPerson && consumedSubstitutes instanceof Set) {
+                    consumedSubstitutes.add(normName(nextPerson));
+                }
+                const nextOrder = nextPerson ? getOrderNo(groupData, typeKey, nextPerson) : null;
+                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
+                if (!nextPerson) return struck;
+                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${nextOrder || '-'}</span>${escapeHtml(nextPerson)})</span>`;
             };
             const buildChangeMarker = (reasonObj, pairKey, getSwapPairLabelNo) => {
                 if (!reasonObj) return { text: '', color: null, style: '' };
@@ -7358,6 +7393,8 @@ ${content.innerHTML}
                 const monthDate = new Date(year, month, 1);
                 const monthName = getGreekMonthName(monthDate);
                 const daysInMonth = new Date(year, month + 1, 0).getDate();
+                const monthStartKey = formatDateKey(monthDate);
+                const monthEndKey = formatDateKey(new Date(year, month, daysInMonth));
 
                 const swapPairLabelByKey = new Map();
                 let nextSwapPairLabelNo = 1;
@@ -7402,13 +7439,13 @@ ${content.innerHTML}
                                     <tr style="background-color:#428BCA;color:white;">
                                         <th rowspan="2" style="width:10%;text-align:center;vertical-align:middle;">ΗΜΕΡ.</th>
                                         <th rowspan="2" style="width:9%;text-align:center;vertical-align:middle;">ΗΜΕΡΑ</th>
-                                        <th style="width:30%;text-align:center;vertical-align:middle;background:#5a6268;">Βασική σειρά</th>
-                                        <th rowspan="2" style="width:12%;text-align:center;vertical-align:middle;">ΑΛΛΑΓΗ</th>
-                                        <th style="width:30%;text-align:center;vertical-align:middle;">Τελική ανάθεση</th>
+                                        <th colspan="2" style="text-align:center;">Τελικές αναθέσεις (μετά αλλαγές)</th>
+                                        <th style="width:24%;text-align:center;vertical-align:middle;background:#5a6268;">Βασική σειρά</th>
                                     </tr>
                                     <tr style="background-color:#5a9fd4;color:white;">
+                                        <th style="width:30%;text-align:center;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
+                                        <th style="width:12%;text-align:center;">ΑΛΛΑΓΗ</th>
                                         <th style="text-align:center;background:#6c757d;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
-                                        <th style="text-align:center;">ΟΝΟΜΑΤΕΠΩΝΥΜΟ</th>
                                     </tr>
                                 </thead>
                                 <tbody id="assignmentsCompare_${monthKey.replace(/-/g, '')}_g${groupNum}"></tbody>
@@ -7416,6 +7453,13 @@ ${content.innerHTML}
                         </div>
                     `;
                     monthSection.appendChild(groupBlock);
+
+                    const consumedBaselineSubstitutes = {
+                        normal: new Set(),
+                        semi: new Set(),
+                        weekend: new Set(),
+                        special: new Set()
+                    };
 
                     const tbody = groupBlock.querySelector('tbody');
                     for (let day = 1; day <= daysInMonth; day++) {
@@ -7456,9 +7500,9 @@ ${content.innerHTML}
                         row.innerHTML = `
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dateStr}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dayName}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, finalPerson, finalOrder)}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;${change.style}">${formatPersonCell(finalPerson, finalOrder)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey])}</td>
                         `;
                         tbody.appendChild(row);
                     }
