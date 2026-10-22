@@ -3487,8 +3487,7 @@
 
         /**
          * True if person already holds a normal slot on another day within `windowDays`
-         * before `dateKey` (used by swap-continuity reflow / swap partner checks).
-         * `ignoreDateKeys`: optional Set/array of dateKeys to skip (e.g. the other end of a pending swap).
+         * before `dateKey` (used by swap-continuity reflow to avoid Tue+Thu duplicates).
          */
         function personHasNearbyNormalAssignment(
             assignmentsByDate,
@@ -3506,6 +3505,10 @@
                     : (s) => String(s || '').trim();
             const target = norm(personName);
             if (!target) return false;
+            const idx = sortedNormalKeys.indexOf(dateKey);
+            if (idx < 0) return false;
+            const dateObj = new Date(dateKey + 'T00:00:00');
+            if (isNaN(dateObj.getTime())) return false;
             const ignore =
                 ignoreDateKeys instanceof Set
                     ? ignoreDateKeys
@@ -3514,10 +3517,6 @@
                       : ignoreDateKeys
                         ? new Set([ignoreDateKeys])
                         : null;
-            const idx = sortedNormalKeys.indexOf(dateKey);
-            if (idx < 0) return false;
-            const dateObj = new Date(dateKey + 'T00:00:00');
-            if (isNaN(dateObj.getTime())) return false;
             for (let i = idx - 1; i >= 0; i--) {
                 const prevKey = sortedNormalKeys[i];
                 if (ignore && ignore.has(prevKey)) continue;
@@ -3528,6 +3527,46 @@
                 if (daysDiff <= 0) continue;
                 const prevPerson = assignmentsByDate?.[prevKey]?.[groupNum] || null;
                 if (prevPerson && norm(prevPerson) === target) return true;
+            }
+            return false;
+        }
+
+        /** Reject swap if either person would land within windowDays of another of their normal duties. */
+        function normalSwapWouldCreateNearbyRepeat(
+            assignmentsByDate,
+            sortedNormalKeys,
+            dateKey,
+            candidateKey,
+            currentPerson,
+            swapCandidate,
+            groupNum,
+            windowDays = 5
+        ) {
+            if (
+                personHasNearbyNormalAssignment(
+                    assignmentsByDate,
+                    sortedNormalKeys,
+                    candidateKey,
+                    groupNum,
+                    currentPerson,
+                    windowDays,
+                    dateKey
+                )
+            ) {
+                return true;
+            }
+            if (
+                personHasNearbyNormalAssignment(
+                    assignmentsByDate,
+                    sortedNormalKeys,
+                    dateKey,
+                    groupNum,
+                    swapCandidate,
+                    windowDays,
+                    candidateKey
+                )
+            ) {
+                return true;
             }
             return false;
         }
@@ -8924,39 +8963,25 @@
                                 if (isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, candidateKey)) return null;
                                 if (hasConsecutiveDuty(candidateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
                                 if (hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
-                                // Don't land someone who already served a nearby normal day (e.g. Τηλεμάχου 24 → 26).
-                                // Ignore the other swap endpoint (they're leaving that day).
-                                if (
-                                    personHasNearbyNormalAssignment(
-                                        updatedAssignments,
-                                        sortedNormal,
-                                        dateKey,
-                                        groupNum,
-                                        swapCandidate,
-                                        5,
-                                        candidateKey
-                                    )
-                                ) {
-                                    return null;
-                                }
-                                if (
-                                    personHasNearbyNormalAssignment(
-                                        updatedAssignments,
-                                        sortedNormal,
-                                        candidateKey,
-                                        groupNum,
-                                        currentPerson,
-                                        5,
-                                        dateKey
-                                    )
-                                ) {
-                                    return null;
-                                }
                                 if (!updatedAssignments[candidateKey]) {
                                     const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(candidateKey) : null;
                                     updatedAssignments[candidateKey] = raw && typeof extractGroupAssignmentsMap === 'function' ? extractGroupAssignmentsMap(raw) : {};
                                 }
                                 if (!isNormalConflictSwapValidForMissingBoundaries(dateKey, candidateKey, currentPerson, swapCandidate, groupNum)) {
+                                    return null;
+                                }
+                                if (
+                                    normalSwapWouldCreateNearbyRepeat(
+                                        updatedAssignments,
+                                        sortedNormal,
+                                        dateKey,
+                                        candidateKey,
+                                        currentPerson,
+                                        swapCandidate,
+                                        groupNum,
+                                        5
+                                    )
+                                ) {
                                     return null;
                                 }
                                 return { swapCandidate, candidateKey };
@@ -8980,63 +9005,20 @@
                                 if (hasConsecutiveDuty(candidateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
                                 if (hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
                                 if (
-                                    personHasNearbyNormalAssignment(
+                                    normalSwapWouldCreateNearbyRepeat(
                                         updatedAssignments,
                                         sortedNormal,
                                         dateKey,
-                                        groupNum,
-                                        swapCandidate,
-                                        5,
-                                        candidateKey
-                                    )
-                                ) {
-                                    return null;
-                                }
-                                if (
-                                    personHasNearbyNormalAssignment(
-                                        updatedAssignments,
-                                        sortedNormal,
                                         candidateKey,
-                                        groupNum,
                                         currentPerson,
-                                        5,
-                                        dateKey
+                                        swapCandidate,
+                                        groupNum,
+                                        5
                                     )
                                 ) {
                                     return null;
                                 }
                                 return { swapCandidate, candidateKey };
-                            };
-
-                            const isSwapNearbyRepeatOk = (candidateKey, swapCandidate) => {
-                                if (!candidateKey || !swapCandidate) return false;
-                                if (
-                                    personHasNearbyNormalAssignment(
-                                        updatedAssignments,
-                                        sortedNormal,
-                                        dateKey,
-                                        groupNum,
-                                        swapCandidate,
-                                        5,
-                                        candidateKey
-                                    )
-                                ) {
-                                    return false;
-                                }
-                                if (
-                                    personHasNearbyNormalAssignment(
-                                        updatedAssignments,
-                                        sortedNormal,
-                                        candidateKey,
-                                        groupNum,
-                                        currentPerson,
-                                        5,
-                                        dateKey
-                                    )
-                                ) {
-                                    return false;
-                                }
-                                return true;
                             };
 
                             if (!applyWeekPairLogic) {
@@ -9140,8 +9122,7 @@
                                         if (!isPersonMissingOnDate(swapCandidate, groupNum, sameWeekDate, 'normal') &&
                                             !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, sameWeekKey) &&
                                             !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                            isNormalConflictSwapValidForMissingBoundaries(dateKey, sameWeekKey, currentPerson, swapCandidate, groupNum) &&
-                                            isSwapNearbyRepeatOk(sameWeekKey, swapCandidate)) {
+                                            isNormalConflictSwapValidForMissingBoundaries(dateKey, sameWeekKey, currentPerson, swapCandidate, groupNum)) {
                                             swapDayKey = sameWeekKey;
                                             swapDayIndex = normalDays.indexOf(sameWeekKey);
                                             swapFound = true;
@@ -9340,8 +9321,7 @@
                                                 !isDeferredManualAlternatePersonOnDate(swapCandidate, groupNum, sameWeekKey) &&
                                                 !hasConsecutiveDuty(sameWeekKey, swapCandidate, groupNum, simulatedAssignments) &&
                                                 !hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments) &&
-                                                isNormalConflictSwapValidForMissingBoundaries(dateKey, sameWeekKey, currentPerson, swapCandidate, groupNum) &&
-                                                isSwapNearbyRepeatOk(sameWeekKey, swapCandidate)) {
+                                                isNormalConflictSwapValidForMissingBoundaries(dateKey, sameWeekKey, currentPerson, swapCandidate, groupNum)) {
                                                 swapDayKey = sameWeekKey;
                                                 swapDayIndex = normalDays.indexOf(sameWeekKey);
                                                 swapFound = true;
@@ -9476,12 +9456,19 @@
                                     console.warn(`[SWAP WARNING] Could not find swap candidate for ${swapDayKey} (Group ${groupNum})`);
                                     continue;
                                 }
-                                // Final guard: reject swaps that would place someone on a day near another
-                                // normal they already hold (e.g. Τηλεμάχου 24 + swap onto 26).
-                                if (!isSwapNearbyRepeatOk(swapDayKey, swapCandidate)) {
-                                    console.log(
-                                        `[SWAP SKIP] Nearby repeat blocked ${dateKey}↔${swapDayKey} group ${groupNum} (${currentPerson} / ${swapCandidate})`
-                                    );
+                                // Block swaps that would repeat someone within ~5 days (e.g. Τηλεμάχου 24 → again on 26).
+                                if (
+                                    normalSwapWouldCreateNearbyRepeat(
+                                        updatedAssignments,
+                                        sortedNormal,
+                                        dateKey,
+                                        swapDayKey,
+                                        currentPerson,
+                                        swapCandidate,
+                                        groupNum,
+                                        5
+                                    )
+                                ) {
                                     continue;
                                 }
                                 
@@ -15473,63 +15460,7 @@
                             if (!isNormalConflictSwapValidForMissingBoundaries(dateKey, candidateKey, currentPerson, swapCandidate, groupNum)) return null;
                             if (hasConsecutiveDuty(candidateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
                             if (hasConsecutiveDuty(dateKey, swapCandidate, groupNum, simulatedAssignments)) return null;
-                            if (
-                                personHasNearbyNormalAssignment(
-                                    normalAssignments,
-                                    sortedNormal,
-                                    dateKey,
-                                    groupNum,
-                                    swapCandidate,
-                                    5,
-                                    candidateKey
-                                )
-                            ) {
-                                return null;
-                            }
-                            if (
-                                personHasNearbyNormalAssignment(
-                                    normalAssignments,
-                                    sortedNormal,
-                                    candidateKey,
-                                    groupNum,
-                                    currentPerson,
-                                    5,
-                                    dateKey
-                                )
-                            ) {
-                                return null;
-                            }
                             return { swapCandidate, candidateKey };
-                        };
-                        const isPreviewSwapNearbyRepeatOk = (candidateKey, swapCandidate) => {
-                            if (!candidateKey || !swapCandidate) return false;
-                            if (
-                                personHasNearbyNormalAssignment(
-                                    normalAssignments,
-                                    sortedNormal,
-                                    dateKey,
-                                    groupNum,
-                                    swapCandidate,
-                                    5,
-                                    candidateKey
-                                )
-                            ) {
-                                return false;
-                            }
-                            if (
-                                personHasNearbyNormalAssignment(
-                                    normalAssignments,
-                                    sortedNormal,
-                                    candidateKey,
-                                    groupNum,
-                                    currentPerson,
-                                    5,
-                                    dateKey
-                                )
-                            ) {
-                                return false;
-                            }
-                            return true;
                         };
                         if (!applyWeekPairLogic) {
                             if (!isPersonInvolvedInNormalAsapSwap(normalSwapInvolvedPersonsPreview, groupNum, currentPerson)) {
@@ -15884,10 +15815,18 @@
                                 console.warn(`[PREVIEW SWAP WARNING] Could not find swap candidate for swap ${swapDayKey} (Group ${groupNum})`);
                                 continue; // Skip to next iteration
                             }
-                            if (!isPreviewSwapNearbyRepeatOk(swapDayKey, swapCandidate)) {
-                                console.log(
-                                    `[PREVIEW SWAP SKIP] Nearby repeat blocked ${dateKey}↔${swapDayKey} group ${groupNum} (${currentPerson} / ${swapCandidate})`
-                                );
+                            if (
+                                normalSwapWouldCreateNearbyRepeat(
+                                    normalAssignments,
+                                    sortedNormal,
+                                    dateKey,
+                                    swapDayKey,
+                                    currentPerson,
+                                    swapCandidate,
+                                    groupNum,
+                                    5
+                                )
+                            ) {
                                 continue;
                             }
                             
@@ -16122,6 +16061,20 @@
                                     ) {
                                         return null;
                                     }
+                                    if (
+                                        normalSwapWouldCreateNearbyRepeat(
+                                            normalAssignments,
+                                            sortedNormal,
+                                            dateKey,
+                                            candidateKey,
+                                            currentPerson,
+                                            swapCandidate,
+                                            groupNum,
+                                            5
+                                        )
+                                    ) {
+                                        return null;
+                                    }
                                     return { swapCandidate, candidateKey };
                                 }
                             });
@@ -16302,6 +16255,20 @@
                                             swapCandidate,
                                             groupNum,
                                             postRfmSimulated
+                                        )
+                                    ) {
+                                        return null;
+                                    }
+                                    if (
+                                        normalSwapWouldCreateNearbyRepeat(
+                                            normalAssignments,
+                                            sortedNormal,
+                                            dateKey,
+                                            candidateKey,
+                                            currentPerson,
+                                            swapCandidate,
+                                            groupNum,
+                                            5
                                         )
                                     ) {
                                         return null;

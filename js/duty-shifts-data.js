@@ -7322,21 +7322,26 @@ ${content.innerHTML}
                 monthStartKey,
                 monthEndKey,
                 consumedSubstitutes,
-                actualFinalPerson = null
+                finalPerson = null
             ) => {
                 if (!personName) return '<span class="text-muted">—</span>';
                 const personNorm = normName(personName);
-                const finalNorm = actualFinalPerson ? normName(actualFinalPerson) : '';
+                const finalNorm = finalPerson ? normName(finalPerson) : '';
                 const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
-                // Prefer the real final assignee in parentheses whenever baseline ≠ final
-                // (so the paren never "runs out" mid-month).
-                if (finalNorm && finalNorm !== personNorm) {
-                    const finalOrder = getOrderNo(groupData, typeKey, actualFinalPerson);
+
+                // Prefer actual final assignee in parentheses — this is who really replaces the struck baseline.
+                if (finalPerson && finalNorm && finalNorm !== personNorm) {
+                    const finalOrder = getOrderNo(groupData, typeKey, finalPerson);
                     if (consumedSubstitutes instanceof Set) {
                         consumedSubstitutes.add(finalNorm);
                     }
-                    return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${finalOrder || '-'}</span>${escapeHtml(actualFinalPerson)})</span>`;
+                    return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${finalOrder || '-'}</span>${escapeHtml(finalPerson)})</span>`;
                 }
+                // Same person on final = they actually serve; never strike just because they subbed earlier.
+                if (finalPerson && finalNorm && finalNorm === personNorm) {
+                    return formatPersonCell(personName, orderNo);
+                }
+
                 const unavailable = isPersonUnavailableWholeMonth(
                     personName,
                     groupNum,
@@ -7350,27 +7355,18 @@ ${content.innerHTML}
                 if (!unavailable && !alreadyUsedAsSubstitute) {
                     return formatPersonCell(personName, orderNo);
                 }
-                let nextPerson = findNextAvailableInRotationList(
+                // Heuristic only when final is missing/same: next available not yet used as substitute.
+                // Do NOT put already-used substitutes into the skip set when searching — otherwise
+                // the chain dies mid-month (e.g. after Αρέστη on 23, no parenthesis on 24+).
+                const nextPerson = findNextAvailableInRotationList(
                     groupData,
                     typeKey,
                     personName,
                     groupNum,
                     monthStartKey,
                     monthEndKey,
-                    consumedSubstitutes
+                    null
                 );
-                // Fallback: if the consumed set exhausted the list, still show next available ignoring prior substitutes
-                if (!nextPerson) {
-                    nextPerson = findNextAvailableInRotationList(
-                        groupData,
-                        typeKey,
-                        personName,
-                        groupNum,
-                        monthStartKey,
-                        monthEndKey,
-                        null
-                    );
-                }
                 if (nextPerson && consumedSubstitutes instanceof Set) {
                     consumedSubstitutes.add(normName(nextPerson));
                 }
