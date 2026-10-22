@@ -3375,10 +3375,10 @@
 
         /**
          * Continuity for normal (καθημερινές) month-to-month seed.
-         * Prefer who actually closed the previous month on the calendar
-         * (e.g. final #6 Σωτηριάδου → next is #7), including manual day-modal
-         * with preserveBaseline — do NOT fall back to baselinePerson (#2 → start #3).
-         * Keep manual-alternate (αναπληρωματικός) and Thursday-spacing exceptions.
+         * - preserveBaseline / plain final: continue after who actually served on the calendar.
+         * - mutualTwoDaySwap: use shorter-arc "later of two" (not raw last-day assignee),
+         *   else e.g. Φιλίππος #16 wraps to #1 instead of after Αρέστη (νο 5).
+         * - manual-alternate / Thursday-spacing: shared helper rules.
          */
         function getPersonForNormalRotationContinuity(dateKey, groupNum, assignedPerson, normalAssignmentsByDate) {
             if (!assignedPerson) return null;
@@ -3389,12 +3389,16 @@
             if (reason && reason.type === 'skip' && reason.meta?.manualAlternateReplacement && reason.swappedWith) {
                 return reason.swappedWith;
             }
-            // preserveBaseline / manualDayModal: still continue after the FINAL assignee
-            // (who served on the calendar), not the displaced baseline slot holder.
             if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement) {
                 return assignedPerson;
             }
-            if (reason && reason.type === 'swap' && reason.meta?.thursdaySpacing) {
+            if (
+                reason &&
+                reason.type === 'swap' &&
+                (reason.meta?.mutualTwoDaySwap ||
+                    reason.meta?.semiConsecutiveHolidaySwap ||
+                    reason.meta?.thursdaySpacing)
+            ) {
                 return getPersonForRotationContinuity(
                     dateKey,
                     groupNum,
@@ -3417,7 +3421,7 @@
             if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
                 // #region agent log
                 if (groupNum === 2) {
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'g2-pre',hypothesisId:'A',location:'duty-shifts-logic.js:resolveNormalRotationStartPosition',message:'group2 forced start 0 special-case',data:{date:date&&typeof formatDateKey==='function'?formatDateKey(date):String(date),isFebruary2026,isAprilStart,calcStartMonth:calculationSteps.startDate&&calculationSteps.startDate.getMonth()},timestamp:Date.now()})}).catch(()=>{});
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'g2-post',hypothesisId:'A',location:'duty-shifts-logic.js:resolveNormalRotationStartPosition',message:'group2 forced start 0 special-case',data:{date:date&&typeof formatDateKey==='function'?formatDateKey(date):String(date),isFebruary2026,isAprilStart,calcStartMonth:calculationSteps.startDate&&calculationSteps.startDate.getMonth()},timestamp:Date.now()})}).catch(()=>{});
                 }
                 // #endregion
                 return 0;
@@ -3438,7 +3442,7 @@
                 const nextPos = (lastPersonIndex + 1) % rotationDays;
                 // #region agent log
                 if (groupNum === 2) {
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'g2-pre',hypothesisId:'B',location:'duty-shifts-logic.js:resolveNormalRotationStartPosition',message:'group2 month-start seed resolved',data:{date:date&&typeof formatDateKey==='function'?formatDateKey(date):String(date),lastPersonName,lastPersonIndex1based:lastPersonIndex+1,nextPos1based:nextPos+1,nextPerson:groupPeople[nextPos],listLen:rotationDays,listPreview:groupPeople.map((p,i)=>`${i+1}:${String(p||'').slice(0,36)}`)},timestamp:Date.now()})}).catch(()=>{});
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'g2-post',hypothesisId:'B',location:'duty-shifts-logic.js:resolveNormalRotationStartPosition',message:'group2 month-start seed resolved',data:{date:date&&typeof formatDateKey==='function'?formatDateKey(date):String(date),lastPersonName,lastPersonIndex1based:lastPersonIndex+1,nextPos1based:nextPos+1,nextPerson:groupPeople[nextPos],listLen:rotationDays,listPreview:groupPeople.map((p,i)=>`${i+1}:${String(p||'').slice(0,36)}`)},timestamp:Date.now()})}).catch(()=>{});
                 }
                 // #endregion
                 console.log(
