@@ -718,21 +718,31 @@
         }
 
         function buildBaselineComputedCellHtml(baselinePerson, computedPerson, computedDaysCountInfo = '', computedLastDutyInfo = '') {
+            const escape =
+                typeof escapeHtml === 'function'
+                    ? escapeHtml
+                    : (s) =>
+                          String(s || '')
+                              .replace(/&/g, '&amp;')
+                              .replace(/</g, '&lt;')
+                              .replace(/>/g, '&gt;')
+                              .replace(/"/g, '&quot;');
             const base = baselinePerson || '-';
             const comp = computedPerson || '-';
             const changed = base !== '-' && comp !== '-' && base !== comp;
+            const extra = `${computedDaysCountInfo || ''}${computedLastDutyInfo || ''}`;
 
-            // If there is no change, show the name only once (no duplicate baseline/computed).
+            // Same person: show once.
             if (!changed) {
-                return `<div><strong>${base}</strong></div>`;
+                return `<div><strong>${escape(base)}</strong>${extra}</div>`;
             }
 
-            // If changed (swap/skip/missing replacement), show Baseline -> Computed clearly.
+            // Baseline did not enter final: strike baseline, final in parentheses.
             return `
-                <div class="small text-muted">Βασική Σειρά</div>
-                <div><strong>${base}</strong></div>
-                <div class="small text-primary mt-1">Αντικατάσταση</div>
-                <div><strong>${comp}</strong></div>
+                <div>
+                    <span class="duty-baseline-struck">${escape(base)}</span>
+                    <span class="duty-final-in-parens">(${escape(comp)})</span>${extra}
+                </div>
             `;
         }
 
@@ -6337,25 +6347,8 @@
                 return swapPairLabelByKey.get(k);
             };
             const getOrderNo = (groupData, type, personName) => {
-                if (!personName) return null;
-                const target = normName(personName);
-                const priorities = groupData?.priorities || {};
-                const direct = priorities[personName]?.[type];
-                if (typeof direct === 'number' && direct > 0 && direct < 999) return direct;
-                for (const key of Object.keys(priorities)) {
-                    if (normName(key) === target) {
-                        const p = priorities[key]?.[type];
-                        if (typeof p === 'number' && p > 0 && p < 999) return p;
-                    }
-                }
-                const list = (groupData?.[type] || []).slice();
-                list.sort((a, b) => {
-                    const pa = priorities[a]?.[type] ?? 999;
-                    const pb = priorities[b]?.[type] ?? 999;
-                    if (pa !== pb) return pa - pb;
-                    return 0;
-                });
-                const idx = list.findIndex((n) => normName(n) === target);
+                const list = (groupData?.[type] || []).map(normName);
+                const idx = list.findIndex(n => n === normName(personName));
                 return idx >= 0 ? idx + 1 : null;
             };
             const getMissingPeriodsOverMonth = (groupData, personName, mStart, mEnd) => {
@@ -6838,15 +6831,7 @@
             monthEndKey,
             skipNormSet
         ) {
-            // Same order as calculation / calendar parentheses (priority-sorted, excluded filtered).
-            let list =
-                typeof getSortedGroupListForRotation === 'function'
-                    ? getSortedGroupListForRotation(groupNum, typeKey) || []
-                    : (groupData?.[typeKey] || []).slice();
-            if (typeof filterExcludedFromDutyList === 'function') {
-                list = filterExcludedFromDutyList(list, groupNum);
-            }
-            list = list.filter(Boolean);
+            const list = (groupData?.[typeKey] || []).filter(Boolean);
             if (!list.length) return '';
             const norm = (s) =>
                 String(s || '')
@@ -7320,27 +7305,9 @@ ${content.innerHTML}
                 ];
                 return palette[Math.abs(h) % palette.length];
             };
-            // Priority-sorted order (same as calendar parentheses / basic rotation), not raw array index.
             const getOrderNo = (groupData, type, personName) => {
-                if (!personName) return null;
-                const target = normName(personName);
-                const priorities = groupData?.priorities || {};
-                const direct = priorities[personName]?.[type];
-                if (typeof direct === 'number' && direct > 0 && direct < 999) return direct;
-                for (const key of Object.keys(priorities)) {
-                    if (normName(key) === target) {
-                        const p = priorities[key]?.[type];
-                        if (typeof p === 'number' && p > 0 && p < 999) return p;
-                    }
-                }
-                const list = (groupData?.[type] || []).slice();
-                list.sort((a, b) => {
-                    const pa = priorities[a]?.[type] ?? 999;
-                    const pb = priorities[b]?.[type] ?? 999;
-                    if (pa !== pb) return pa - pb;
-                    return 0;
-                });
-                const idx = list.findIndex((n) => normName(n) === target);
+                const list = (groupData?.[type] || []).map(normName);
+                const idx = list.findIndex((n) => n === normName(personName));
                 return idx >= 0 ? idx + 1 : null;
             };
             const getReasonForAssigned = (dateKey, groupNum, personName) => {
@@ -7356,19 +7323,47 @@ ${content.innerHTML}
                 personName
                     ? `<span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}`
                     : '<span class="text-muted">—</span>';
-            /**
-             * Βασική σειρά: πάντα το άτομο της ροής (χωρίς προσπέραση λόγω απουσίας/απενεργοποίησης).
-             * Αν η τελική ανάθεση διαφέρει → διαγραφή + στην παρένθεση ο τελικός.
-             */
-            const formatBaselinePersonCell = (baselinePerson, baselineOrder, finalPerson, finalOrder) => {
-                if (!baselinePerson) return '<span class="text-muted">—</span>';
-                const same =
-                    !!finalPerson && normName(finalPerson) === normName(baselinePerson);
-                if (same || !finalPerson) {
-                    return formatPersonCell(baselinePerson, baselineOrder);
+            const formatBaselinePersonCell = (
+                personName,
+                orderNo,
+                groupData,
+                groupNum,
+                typeKey,
+                monthStartKey,
+                monthEndKey,
+                consumedSubstitutes
+            ) => {
+                if (!personName) return '<span class="text-muted">—</span>';
+                const personNorm = normName(personName);
+                const unavailable = isPersonUnavailableWholeMonth(
+                    personName,
+                    groupNum,
+                    typeKey,
+                    monthStartKey,
+                    monthEndKey,
+                    groupData
+                );
+                const alreadyUsedAsSubstitute =
+                    consumedSubstitutes instanceof Set && consumedSubstitutes.has(personNorm);
+                if (!unavailable && !alreadyUsedAsSubstitute) {
+                    return formatPersonCell(personName, orderNo);
                 }
-                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${baselineOrder || '-'}</span>${escapeHtml(baselinePerson)}</span>`;
-                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${finalOrder || '-'}</span>${escapeHtml(finalPerson)})</span>`;
+                const nextPerson = findNextAvailableInRotationList(
+                    groupData,
+                    typeKey,
+                    personName,
+                    groupNum,
+                    monthStartKey,
+                    monthEndKey,
+                    consumedSubstitutes
+                );
+                if (nextPerson && consumedSubstitutes instanceof Set) {
+                    consumedSubstitutes.add(normName(nextPerson));
+                }
+                const nextOrder = nextPerson ? getOrderNo(groupData, typeKey, nextPerson) : null;
+                const struck = `<span class="compare-baseline-unavailable"><span class="fw-semibold me-1">#${orderNo || '-'}</span>${escapeHtml(personName)}</span>`;
+                if (!nextPerson) return struck;
+                return `${struck} <span class="compare-baseline-next">(<span class="fw-semibold me-1">#${nextOrder || '-'}</span>${escapeHtml(nextPerson)})</span>`;
             };
             const buildChangeMarker = (reasonObj, pairKey, getSwapPairLabelNo) => {
                 if (!reasonObj) return { text: '', color: null, style: '' };
@@ -7400,6 +7395,8 @@ ${content.innerHTML}
                 const monthDate = new Date(year, month, 1);
                 const monthName = getGreekMonthName(monthDate);
                 const daysInMonth = new Date(year, month + 1, 0).getDate();
+                const monthStartKey = formatDateKey(monthDate);
+                const monthEndKey = formatDateKey(new Date(year, month, daysInMonth));
 
                 const swapPairLabelByKey = new Map();
                 let nextSwapPairLabelNo = 1;
@@ -7459,6 +7456,13 @@ ${content.innerHTML}
                     `;
                     monthSection.appendChild(groupBlock);
 
+                    const consumedBaselineSubstitutes = {
+                        normal: new Set(),
+                        semi: new Set(),
+                        weekend: new Set(),
+                        special: new Set()
+                    };
+
                     const tbody = groupBlock.querySelector('tbody');
                     for (let day = 1; day <= daysInMonth; day++) {
                         const date = new Date(year, month, day);
@@ -7500,7 +7504,7 @@ ${content.innerHTML}
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${dayName}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;${change.style}">${formatPersonCell(finalPerson, finalOrder)}</td>
                             <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;color:${change.color};font-size:11px;">${escapeHtml(change.text)}</td>
-                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, finalPerson, finalOrder)}</td>
+                            <td style="padding:4px;border:1px solid #ddd;background-color:${rgbColor} !important;">${formatBaselinePersonCell(baselinePerson, baselineOrder, groupData, groupNum, typeKey, monthStartKey, monthEndKey, consumedBaselineSubstitutes[typeKey])}</td>
                         `;
                         tbody.appendChild(row);
                     }
