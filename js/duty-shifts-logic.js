@@ -3082,12 +3082,10 @@
                 (typeof getDutyCategoryForDateKeyLocal === 'function' ? getDutyCategoryForDateKeyLocal(dateKey) : null) ||
                 (typeof getDutyCategoryForDateKey === 'function' ? getDutyCategoryForDateKey(dateKey) : 'normal');
 
+            // Never jump/skip the basic-series cursor for manual alternate or defer.
+            // Only εξαίρεση are absent from groupPeople; final assignment may still differ.
             if (existingManualAlternate) {
-                const bi = groupPeople.findIndex(p => norm(p) === norm(existingManualAlternate.baseline));
-                if (bi >= 0) {
-                    rotationPosition = bi;
-                    globalRotationPosition[groupNum] = rotationPosition;
-                }
+                // Keep rotationPosition as-is; final layer applies replacement when slot matches baseline.
             } else if (deferState) {
                 const st = deferState[groupNum];
                 if (st?.person) {
@@ -3102,8 +3100,6 @@
                                 : typeof findLatestManualAlternateInPreviousMonth === 'function'
                                   ? findLatestManualAlternateInPreviousMonth(dutyCat, dateInMonth, groupNum)
                                   : null;
-                        // Keep baseline slot on this person (basic series skips ONLY εξαίρεση).
-                        // Defer affects final assignment only — do not advance the rotation cursor.
                         deferFulfillment = {
                             skippedReplacement: st.person,
                             baselinePerson: latest?.baselinePerson || null,
@@ -14134,7 +14130,6 @@
             // After "Αντικατάσταση Επιλαχών", skip the replacement's next natural turn in this month (D then B,C,E…).
             let deferManualAlternateSkipNormal = {};
             let prevMonthKeyNormalAlternateDefer = null;
-            let prevNormalSeedMonthKey = null;
             
             // Track baseline assignments for this preview to detect cascading shifts
             const baselineNormalByDate = {}; // dateKey -> { groupNum -> personName }
@@ -14637,11 +14632,6 @@
                         }
                         prevMonthKeyNormalAlternateDefer = calMonthKey;
                     }
-                    const isNormalMonthStartInRange = prevNormalSeedMonthKey !== calMonthKey;
-                    if (isNormalMonthStartInRange) {
-                        prevNormalSeedMonthKey = calMonthKey;
-                    }
-                    
                     if (!pendingNormalSwaps[monthKey]) {
                         pendingNormalSwaps[monthKey] = {};
                     }
@@ -14676,10 +14666,9 @@
                             html += '<td class="text-muted">-</td>';
                         } else {
                             const rotationDays = groupPeople.length;
-                            const shouldSeedNormalRotation =
-                                (typeof shouldRecalculateDutyGroup !== 'function' || shouldRecalculateDutyGroup(groupNum)) &&
-                                (isNormalMonthStartInRange || globalNormalRotationPosition[groupNum] === undefined);
-                            if (shouldSeedNormalRotation) {
+                            // Seed only once per group in this calc pass — never reseed mid-range
+                            // (month boundaries used to overwrite the cursor and skip people e.g. #9).
+                            if (globalNormalRotationPosition[groupNum] === undefined) {
                                 globalNormalRotationPosition[groupNum] = resolveNormalRotationStartPosition(
                                     date,
                                     groupNum,
@@ -16149,6 +16138,62 @@
             // Store normal assignments and rotation positions for saving when Next is pressed
             calculationSteps.tempNormalAssignments = normalAssignments;
             calculationSteps.normalStep4PreviewProcessed = true;
+
+            // Rebuild βασική σειρά strictly: +1 each normal day, skip ONLY εξαίρεση (already out of list).
+            // Name-based continuity so list membership changes cannot jump past someone (e.g. #9).
+            try {
+                const rebuiltPure = {};
+                const cursorByGroup = {};
+                const lastBaselineByGroup = {};
+                const normP = (s) =>
+                    typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
+                for (const dk of sortedNormal) {
+                    const dObj = new Date(dk + 'T00:00:00');
+                    for (let g = 1; g <= 4; g++) {
+                        if (
+                            typeof shouldRecalculateDutyGroup === 'function' &&
+                            !shouldRecalculateDutyGroup(g)
+                        ) {
+                            const keep = pureNormalRotationByDate[dk]?.[g];
+                            if (keep) {
+                                if (!rebuiltPure[dk]) rebuiltPure[dk] = {};
+                                rebuiltPure[dk][g] = keep;
+                            }
+                            continue;
+                        }
+                        const people =
+                            ((typeof groupsForDuty === 'function' ? groupsForDuty(g, dk) : groups[g]) || {})
+                                .normal || [];
+                        if (!people.length) continue;
+                        let pos;
+                        if (cursorByGroup[g] === undefined) {
+                            pos = resolveNormalRotationStartPosition(dObj, g, people, sortedNormal);
+                        } else if (lastBaselineByGroup[g]) {
+                            const lastIdx = people.findIndex(
+                                (p) => normP(p) === normP(lastBaselineByGroup[g])
+                            );
+                            pos =
+                                lastIdx >= 0
+                                    ? (lastIdx + 1) % people.length
+                                    : cursorByGroup[g] % people.length;
+                        } else {
+                            pos = cursorByGroup[g] % people.length;
+                        }
+                        const person = people[pos];
+                        if (!rebuiltPure[dk]) rebuiltPure[dk] = {};
+                        rebuiltPure[dk][g] = person;
+                        lastBaselineByGroup[g] = person;
+                        cursorByGroup[g] = (pos + 1) % people.length;
+                        if (!normalRotationPersons[dk]) normalRotationPersons[dk] = {};
+                        normalRotationPersons[dk][g] = person;
+                    }
+                }
+                for (const k of Object.keys(pureNormalRotationByDate)) delete pureNormalRotationByDate[k];
+                Object.assign(pureNormalRotationByDate, rebuiltPure);
+            } catch (rebuildErr) {
+                console.warn('[NORMAL BASELINE] Strict rebuild failed:', rebuildErr);
+            }
+
             calculationSteps.tempNormalBaselineDisplay = normalRotationPersons;
             finalizeNormalPreview(normalAssignments, pureNormalRotationByDate, normalRotationPersons);
             if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
