@@ -1091,7 +1091,17 @@
                 dayTypeCategory === 'normal' &&
                 typeof getPersonForNormalRotationContinuity === 'function'
             ) {
-                return getPersonForNormalRotationContinuity(lastKey, groupNum, assigned, store);
+                const continuity = getPersonForNormalRotationContinuity(lastKey, groupNum, assigned, store);
+                // #region agent log
+                if (groupNum === 4) {
+                    const reason =
+                        typeof getAssignmentReason === 'function'
+                            ? getAssignmentReason(lastKey, groupNum, assigned)
+                            : null;
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'pre-fix',hypothesisId:'A',location:'duty-shifts-data.js:getLastAssignmentContinuityPersonForPreviousMonth',message:'group4 last assignment continuity',data:{prevMonthKey,lastKey,assigned,continuity,reasonType:reason?.type||null,reasonMeta:reason?.meta?Object.keys(reason.meta):[],swappedWith:reason?.swappedWith||null,dateKeysCount:dateKeys.size},timestamp:Date.now()})}).catch(()=>{});
+                }
+                // #endregion
+                return continuity;
             }
             if (typeof getPersonForRotationContinuity === 'function') {
                 return getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
@@ -1712,6 +1722,19 @@
                     ? fromAssignments || fromStored || fromBaseline
                     : fromAssignments || fromBaseline || fromStored;
             const continuityIdx = findIdx(lastContinuityPerson);
+            // #region agent log
+            if (dayTypeCategory === 'normal' && groupNum === 4) {
+                const source =
+                    fromAssignments && lastContinuityPerson === fromAssignments
+                        ? 'assignments'
+                        : fromStored && lastContinuityPerson === fromStored
+                          ? 'stored'
+                          : fromBaseline && lastContinuityPerson === fromBaseline
+                            ? 'baseline'
+                            : 'none';
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'pre-fix',hypothesisId:'B',location:'duty-shifts-data.js:computeRotationPositionAtMonthStart',message:'group4 continuity sources',data:{prevMonthKey,fromAssignments,fromBaseline,fromStored,lastContinuityPerson,source,continuityIdx1based:continuityIdx>=0?continuityIdx+1:null,cursor1based:continuityIdx>=0?((continuityIdx+1)%len)+1:null,listLen:len},timestamp:Date.now()})}).catch(()=>{});
+            }
+            // #endregion
             if (lastContinuityPerson && continuityIdx >= 0) {
                 let cursor = (continuityIdx + 1) % len;
                 // Semi/weekend/special: if prev month ended on a two-person swap (αμοιβαία ή
@@ -1895,7 +1918,13 @@
                 const cursor = computeRotationPositionAtMonthStart(dayTypeCategory, monthStartDate, groupNum, groupPeople);
                 if (Number.isFinite(cursor)) {
                     const len = groupPeople.length;
-                    return groupPeople[(cursor - 1 + len) % len] || null;
+                    const seedPerson = groupPeople[(cursor - 1 + len) % len] || null;
+                    // #region agent log
+                    if (dayTypeCategory === 'normal' && groupNum === 4) {
+                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'pre-fix',hypothesisId:'C',location:'duty-shifts-data.js:getRotationSeedPersonForMonthStart',message:'group4 seed person from cursor-1',data:{monthSeedKey,cursor1based:cursor+1,cursorPerson:groupPeople[cursor],seedPerson,seedIdx1based:((cursor-1+len)%len)+1},timestamp:Date.now()})}).catch(()=>{});
+                    }
+                    // #endregion
+                    return seedPerson;
                 }
             }
             const fromBaseline = getLastBaselineRotationPersonForDate(dayTypeCategory, monthStartDate, groupNum);
