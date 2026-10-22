@@ -6337,8 +6337,25 @@
                 return swapPairLabelByKey.get(k);
             };
             const getOrderNo = (groupData, type, personName) => {
-                const list = (groupData?.[type] || []).map(normName);
-                const idx = list.findIndex(n => n === normName(personName));
+                if (!personName) return null;
+                const target = normName(personName);
+                const priorities = groupData?.priorities || {};
+                const direct = priorities[personName]?.[type];
+                if (typeof direct === 'number' && direct > 0 && direct < 999) return direct;
+                for (const key of Object.keys(priorities)) {
+                    if (normName(key) === target) {
+                        const p = priorities[key]?.[type];
+                        if (typeof p === 'number' && p > 0 && p < 999) return p;
+                    }
+                }
+                const list = (groupData?.[type] || []).slice();
+                list.sort((a, b) => {
+                    const pa = priorities[a]?.[type] ?? 999;
+                    const pb = priorities[b]?.[type] ?? 999;
+                    if (pa !== pb) return pa - pb;
+                    return 0;
+                });
+                const idx = list.findIndex((n) => normName(n) === target);
                 return idx >= 0 ? idx + 1 : null;
             };
             const getMissingPeriodsOverMonth = (groupData, personName, mStart, mEnd) => {
@@ -6821,7 +6838,15 @@
             monthEndKey,
             skipNormSet
         ) {
-            const list = (groupData?.[typeKey] || []).filter(Boolean);
+            // Same order as calculation / calendar parentheses (priority-sorted, excluded filtered).
+            let list =
+                typeof getSortedGroupListForRotation === 'function'
+                    ? getSortedGroupListForRotation(groupNum, typeKey) || []
+                    : (groupData?.[typeKey] || []).slice();
+            if (typeof filterExcludedFromDutyList === 'function') {
+                list = filterExcludedFromDutyList(list, groupNum);
+            }
+            list = list.filter(Boolean);
             if (!list.length) return '';
             const norm = (s) =>
                 String(s || '')
@@ -7295,9 +7320,27 @@ ${content.innerHTML}
                 ];
                 return palette[Math.abs(h) % palette.length];
             };
+            // Priority-sorted order (same as calendar parentheses / basic rotation), not raw array index.
             const getOrderNo = (groupData, type, personName) => {
-                const list = (groupData?.[type] || []).map(normName);
-                const idx = list.findIndex((n) => n === normName(personName));
+                if (!personName) return null;
+                const target = normName(personName);
+                const priorities = groupData?.priorities || {};
+                const direct = priorities[personName]?.[type];
+                if (typeof direct === 'number' && direct > 0 && direct < 999) return direct;
+                for (const key of Object.keys(priorities)) {
+                    if (normName(key) === target) {
+                        const p = priorities[key]?.[type];
+                        if (typeof p === 'number' && p > 0 && p < 999) return p;
+                    }
+                }
+                const list = (groupData?.[type] || []).slice();
+                list.sort((a, b) => {
+                    const pa = priorities[a]?.[type] ?? 999;
+                    const pb = priorities[b]?.[type] ?? 999;
+                    if (pa !== pb) return pa - pb;
+                    return 0;
+                });
+                const idx = list.findIndex((n) => normName(n) === target);
                 return idx >= 0 ? idx + 1 : null;
             };
             const getReasonForAssigned = (dateKey, groupNum, personName) => {
@@ -7324,7 +7367,6 @@ ${content.innerHTML}
                 consumedSubstitutes
             ) => {
                 if (!personName) return '<span class="text-muted">—</span>';
-                const personNorm = normName(personName);
                 const unavailable = isPersonUnavailableWholeMonth(
                     personName,
                     groupNum,
@@ -7333,9 +7375,9 @@ ${content.innerHTML}
                     monthEndKey,
                     groupData
                 );
-                const alreadyUsedAsSubstitute =
-                    consumedSubstitutes instanceof Set && consumedSubstitutes.has(personNorm);
-                if (!unavailable && !alreadyUsedAsSubstitute) {
+                // Own baseline turn: always show if available. Do NOT strike because they
+                // already appeared as someone else's substitute — that left people behind.
+                if (!unavailable) {
                     return formatPersonCell(personName, orderNo);
                 }
                 const nextPerson = findNextAvailableInRotationList(
