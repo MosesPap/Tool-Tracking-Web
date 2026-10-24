@@ -6107,32 +6107,24 @@
 
             /**
              * Chrono entries for Excel alternate anchor.
-             * Prefer rotation baseline (ignores swaps) so coverage follows natural order:
-             * 1) rotationBaseline store
-             * 2) assignmentReasons swap/skip → swappedWith (κάτοχος θέσης σειράς)
+             * Σειρά προτεραιότητας για # κάλυψης:
+             * 1) swap/skip/shift → swappedWith (κάτοχος θέσης — πάνω από λάθος baseline store)
+             * 2) rotationBaseline store
              * 3) final assignee
              * Special: sparse lookback — άγκυρα last-special-chrono χωριστά.
              */
-            const resolveRotationPersonForChrono = (type, dk, finalPerson) => {
-                let baselinePerson = '';
-                if (typeof getRotationBaselineAssignmentForType === 'function') {
-                    const baselineRaw = getRotationBaselineAssignmentForType(type, dk);
-                    if (baselineRaw && typeof parseAssignedPersonForGroupFromAssignment === 'function') {
-                        baselinePerson =
-                            parseAssignedPersonForGroupFromAssignment(baselineRaw, groupNum) || '';
-                    }
+            const findAssignmentReasonForPerson = (dk, personName) => {
+                const gmap = assignmentReasons?.[dk]?.[groupNum];
+                if (!gmap || !personName) return null;
+                for (const p of Object.keys(gmap)) {
+                    if (normName(p) === normName(personName)) return gmap[p];
                 }
-                if (baselinePerson) return { person: baselinePerson, fromBaseline: true, via: 'baseline' };
-                // Ανταλλαγή/αντικατάσταση χωρίς αποθηκευμένο baseline: swappedWith = θέση σειράς
-                if (finalPerson && assignmentReasons?.[dk]?.[groupNum]) {
-                    const gmap = assignmentReasons[dk][groupNum];
-                    let reason = null;
-                    for (const p of Object.keys(gmap || {})) {
-                        if (normName(p) === normName(finalPerson)) {
-                            reason = gmap[p];
-                            break;
-                        }
-                    }
+                return null;
+            };
+            const resolveRotationPersonForChrono = (type, dk, finalPerson) => {
+                // 1) Ανταλλαγή: swappedWith = θέση σειράς (μην αφήσεις λάθος baseline να κερδίσει)
+                if (finalPerson) {
+                    const reason = findAssignmentReasonForPerson(dk, finalPerson);
                     if (
                         reason &&
                         (reason.type === 'swap' ||
@@ -6147,8 +6139,48 @@
                         };
                     }
                 }
+                // 2) Baseline store
+                let baselinePerson = '';
+                if (typeof getRotationBaselineAssignmentForType === 'function') {
+                    const baselineRaw = getRotationBaselineAssignmentForType(type, dk);
+                    if (baselineRaw && typeof parseAssignedPersonForGroupFromAssignment === 'function') {
+                        baselinePerson =
+                            parseAssignedPersonForGroupFromAssignment(baselineRaw, groupNum) || '';
+                    }
+                }
+                if (baselinePerson) return { person: baselinePerson, fromBaseline: true, via: 'baseline' };
                 if (finalPerson) return { person: finalPerson, fromBaseline: false, via: 'final' };
                 return { person: '', fromBaseline: false, via: 'none' };
+            };
+            /** Τελευταία μέρα με ανταλλαγή: άγκυρα ≥ max(# των δύο) — π.χ. #10↔#11 → #11. Δεν πειράζει wrap #4↔#1 (max=4). */
+            const bumpAnchorIfLastDaySwap = (entries, orderList, resolved) => {
+                if (!resolved || !entries?.length || !orderList?.length) return resolved;
+                const last = entries[entries.length - 1];
+                if (!last?.dateKey) return resolved;
+                const reason =
+                    findAssignmentReasonForPerson(last.dateKey, last.finalPerson) ||
+                    findAssignmentReasonForPerson(last.dateKey, last.person);
+                if (
+                    !reason ||
+                    (reason.type !== 'swap' && reason.type !== 'skip' && reason.type !== 'shift') ||
+                    !reason.swappedWith
+                ) {
+                    return resolved;
+                }
+                const candidates = [last.person, last.finalPerson, reason.swappedWith].filter(Boolean);
+                let maxNo = Number.isFinite(resolved.coveredThrough) ? resolved.coveredThrough : 0;
+                for (const c of candidates) {
+                    const i = findIdxInList(orderList, c);
+                    if (i >= 0) maxNo = Math.max(maxNo, i + 1);
+                }
+                if (!(maxNo > (resolved.coveredThrough || 0))) return resolved;
+                return {
+                    ...resolved,
+                    coveredThrough: maxNo,
+                    idx: maxNo - 1,
+                    person: normName(orderList[maxNo - 1] || resolved.person),
+                    method: `${resolved.method || 'none'}+swap-last`
+                };
             };
             const pushChronoEntryIfAssigned = (type, orderList, dk, out) => {
                 if (getDutyCategoryForDateKeyLocal(dk) !== type) return;
@@ -6368,6 +6400,8 @@
                 } else {
                     const orderNos = entries.map((e) => e.orderNo).filter((n) => n != null);
                     resolved = resolveAnchorFromChronoOrderNos(orderNos, orderList);
+                    // Μόνο αν η τελευταία μέρα έχει ανταλλαγή: μην αφήσεις άγκυρα στο μικρότερο # του ζεύγους
+                    resolved = bumpAnchorIfLastDaySwap(entries, orderList, resolved);
                 }
                 lastAssigned[t] = resolved.person || '';
                 lastAssignedIdx[t] = Number.isFinite(resolved.idx) ? resolved.idx : -1;
