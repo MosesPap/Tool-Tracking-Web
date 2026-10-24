@@ -5989,7 +5989,7 @@
          *   → συνέχεια μετά το τέλος του καλυμμένου κύκλου (π.χ. …12,1,2 → επόμενοι #3,#4)
          * με επαναλήψεις χωρίς πτώση: συνέχεια μετά το max των επαναλήψεων
          * με επαναλήψεις με πτώση/wrap (π.χ. #13,#14 μετά #3,#4,#5): max μόνο μετά την πτώση
-         * ειδικές: chrono lookback έως ~10 έτη (αραιές αργίες — όχι μόνο ο μήνας προεπισκόπησης)
+         * ειδικές: lookback έως ~10 έτη· άγκυρα = τελευταίος χρονολογικά σε ειδική (όχι 1ες/επαναλήψεις)
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
@@ -6256,8 +6256,59 @@
             for (const t of ['normal', 'semi', 'weekend', 'special']) {
                 const entries = collectAssignedChronoEntriesForType(t);
                 const orderList = orderListForType(t);
-                const orderNos = entries.map((e) => e.orderNo).filter((n) => n != null);
-                const resolved = resolveAnchorFromChronoOrderNos(orderNos, orderList);
+                let resolved;
+                if (t === 'special') {
+                    // Αραιές ειδικές: άγκυρα = ποιος μπήκε την τελευταία φορά (χρονολογικά), όχι max 1ων/επαναλήψεων.
+                    let last = null;
+                    for (let i = entries.length - 1; i >= 0; i--) {
+                        const e = entries[i];
+                        if (e && e.person && e.orderNo != null) {
+                            last = e;
+                            break;
+                        }
+                    }
+                    if (!last) {
+                        for (let i = entries.length - 1; i >= 0; i--) {
+                            if (entries[i]?.person) {
+                                last = entries[i];
+                                break;
+                            }
+                        }
+                    }
+                    if (last) {
+                        let idx =
+                            last.orderNo != null && Number.isFinite(last.orderNo)
+                                ? last.orderNo - 1
+                                : findIdxInList(orderList, last.person);
+                        if (idx < 0) idx = findIdxInList(orderList, last.person);
+                        resolved = {
+                            person: last.person || '',
+                            idx,
+                            method: 'last-special-chrono',
+                            lapsOrderNos: [],
+                            lastLapOrderNos: last.orderNo != null ? [last.orderNo] : [],
+                            chainOrderNos: [],
+                            firstsOrderNos: [],
+                            repeatsOrderNos: [],
+                            coveredThrough: last.orderNo != null ? last.orderNo : idx >= 0 ? idx + 1 : null
+                        };
+                    } else {
+                        resolved = {
+                            person: '',
+                            idx: -1,
+                            method: 'none',
+                            lapsOrderNos: [],
+                            lastLapOrderNos: [],
+                            chainOrderNos: [],
+                            firstsOrderNos: [],
+                            repeatsOrderNos: [],
+                            coveredThrough: null
+                        };
+                    }
+                } else {
+                    const orderNos = entries.map((e) => e.orderNo).filter((n) => n != null);
+                    resolved = resolveAnchorFromChronoOrderNos(orderNos, orderList);
+                }
                 lastAssigned[t] = resolved.person || '';
                 lastAssignedIdx[t] = Number.isFinite(resolved.idx) ? resolved.idx : -1;
                 debugByType[t] = {
@@ -7014,6 +7065,7 @@
                         'ascending-coverage': 'αύξουσα κάλυψη (πτώση/ανταλλαγή)',
                         'repeats-max': 'max επαναλήψεων (γύρος 2)',
                         'repeats-after-drop': 'επαναλήψεις μετά πτώση/wrap (γύρος 2)',
+                        'last-special-chrono': 'τελευταία ειδική αργία (χρονολογικά)',
                         'ascending-chain': 'αλυσίδα +1',
                         'max-in-lap': 'μέγιστη θέση γύρου',
                         'fallback-last': 'τελευταίος χρονολογικά',
