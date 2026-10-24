@@ -6063,6 +6063,19 @@
                 return false;
             };
 
+            const isMissingOnDateKey = (personName, dateKey) => {
+                if (!personName || !dateKey) return false;
+                const periods = groupData?.missingPeriods?.[personName];
+                if (!Array.isArray(periods) || periods.length === 0) return false;
+                for (const p of periods) {
+                    const pStartKey = inputValueToDateKey(p?.start);
+                    const pEndKey = inputValueToDateKey(p?.end);
+                    if (!pStartKey || !pEndKey) continue;
+                    if (pStartKey <= dateKey && dateKey <= pEndKey) return true;
+                }
+                return false;
+            };
+
             const isAvailableForNextMonth = (personName, dutyType, { allowIneligible = false } = {}) => {
                 if (
                     typeof isPersonExcludedFromDuties === 'function' &&
@@ -6070,10 +6083,24 @@
                 ) {
                     return false;
                 }
-                // Μερική/ολική απουσία επόμενου μήνα: ποτέ αυτόματος επιλαχών (χειροκίνητα OK στο dropdown).
-                if (isMissingAnyPartOfNextMonth(personName)) return false;
+                // Καθημερινές/ημιαργίες/αργίες: μερική απουσία επόμενου μήνα → όχι αυτόματος επιλαχών.
+                // Ειδικές: ελέγχονται ανά ημερομηνία ειδικής (βλ. nextThreeForSpecial).
+                if (dutyType !== 'special' && isMissingAnyPartOfNextMonth(personName)) return false;
                 if (allowIneligible) return true;
                 if (isDisabledForNextMonth(personName, dutyType)) return false;
+                return true;
+            };
+
+            const isAvailableForSpecialOnDate = (personName, dateKey, { allowIneligible = false } = {}) => {
+                if (
+                    typeof isPersonExcludedFromDuties === 'function' &&
+                    isPersonExcludedFromDuties(personName, groupNum)
+                ) {
+                    return false;
+                }
+                if (dateKey && isMissingOnDateKey(personName, dateKey)) return false;
+                if (allowIneligible) return true;
+                if (dateKey && isDisabledForTypeAtDate(personName, 'special', dateKey)) return false;
                 return true;
             };
 
@@ -6413,21 +6440,41 @@
                 return [picks[0] || '', picks[1] || ''];
             };
 
+            const findNextSpecialDates = (count = 3, maxDays = 3650) => {
+                const out = [];
+                const start = new Date(year, month + 1, 1);
+                for (let i = 0; i < maxDays && out.length < count; i++) {
+                    const d = new Date(start);
+                    d.setDate(start.getDate() + i);
+                    if (getDayType(d) === 'special-holiday') out.push(d);
+                }
+                return out;
+            };
+
             const nextThreeForSpecial = () => {
                 const rawList = orderListForType('special');
                 if (rawList.length === 0) return { names: ['', '', ''], notes: ['', '', ''] };
-                const outNames = nextNFromRotationListAfterAnchor('special', 3, { allowIneligible: true });
-                const findNextSpecialDates = (count = 3, maxDays = 3650) => {
-                    const out = [];
-                    const start = new Date(year, month + 1, 1);
-                    for (let i = 0; i < maxDays && out.length < count; i++) {
-                        const d = new Date(start);
-                        d.setDate(start.getDate() + i);
-                        if (getDayType(d) === 'special-holiday') out.push(d);
-                    }
-                    return out;
-                };
                 const specialDates = findNextSpecialDates(3, 3650);
+                // Ανά θέση επιλαχόντα: διαθεσιμότητα στην αντίστοιχη επόμενη ειδική (όχι «οποιαδήποτε απουσία στον μήνα»).
+                let startIdx = resolveStartIndexAfterAnchor('special', rawList);
+                const outNames = [];
+                let cursor = startIdx;
+                let checked = 0;
+                while (checked < rawList.length * 2 && outNames.length < 3) {
+                    const person = rawList[cursor];
+                    const slotDate = specialDates[outNames.length];
+                    const slotKey =
+                        slotDate && !isNaN(slotDate.getTime()) ? formatDateKey(slotDate) : null;
+                    if (
+                        person &&
+                        isAvailableForSpecialOnDate(person, slotKey, { allowIneligible: true })
+                    ) {
+                        outNames.push(person);
+                    }
+                    cursor = (cursor + 1) % rawList.length;
+                    checked++;
+                }
+                while (outNames.length < 3) outNames.push('');
                 const outNotes = [];
                 for (let i = 0; i < 3; i++) {
                     const name = outNames[i] || '';
