@@ -6363,58 +6363,77 @@
                 weekend: 'Αργίες',
                 special: 'Ειδικές Αργίες'
             };
+            const resolveLastChronoAnchor = (entries, orderList, methodName) => {
+                let last = null;
+                for (let i = entries.length - 1; i >= 0; i--) {
+                    const e = entries[i];
+                    if (e && e.person && e.orderNo != null) {
+                        last = e;
+                        break;
+                    }
+                }
+                if (!last) {
+                    for (let i = entries.length - 1; i >= 0; i--) {
+                        if (entries[i]?.person) {
+                            last = entries[i];
+                            break;
+                        }
+                    }
+                }
+                if (!last) {
+                    return {
+                        person: '',
+                        idx: -1,
+                        method: 'none',
+                        lapsOrderNos: [],
+                        lastLapOrderNos: [],
+                        chainOrderNos: [],
+                        firstsOrderNos: [],
+                        repeatsOrderNos: [],
+                        coveredThrough: null
+                    };
+                }
+                let idx =
+                    last.orderNo != null && Number.isFinite(last.orderNo)
+                        ? last.orderNo - 1
+                        : findIdxInList(orderList, last.person);
+                if (idx < 0) idx = findIdxInList(orderList, last.person);
+                // Αν το όνομα δεν ταιριάζει στη λίστα αλλά έχουμε #, κράτα το idx από το #
+                if (
+                    idx >= 0 &&
+                    idx < orderList.length &&
+                    (!last.person || normName(orderList[idx]) === normName(last.person))
+                ) {
+                    // ok
+                } else if (last.orderNo != null && last.orderNo >= 1 && last.orderNo <= orderList.length) {
+                    idx = last.orderNo - 1;
+                }
+                return {
+                    person: idx >= 0 ? normName(orderList[idx] || last.person || '') : last.person || '',
+                    idx,
+                    method: methodName,
+                    lapsOrderNos: [],
+                    lastLapOrderNos: last.orderNo != null ? [last.orderNo] : [],
+                    chainOrderNos: [],
+                    firstsOrderNos: [],
+                    repeatsOrderNos: [],
+                    coveredThrough:
+                        last.orderNo != null ? last.orderNo : idx >= 0 ? idx + 1 : null
+                };
+            };
+
             for (const t of ['normal', 'semi', 'weekend', 'special']) {
                 const entries = collectAssignedChronoEntriesForType(t);
                 const orderList = orderListForType(t);
                 let resolved;
                 if (t === 'special') {
-                    // Αραιές ειδικές: άγκυρα = ποιος μπήκε την τελευταία φορά (χρονολογικά), όχι max 1ων/επαναλήψεων.
-                    let last = null;
-                    for (let i = entries.length - 1; i >= 0; i--) {
-                        const e = entries[i];
-                        if (e && e.person && e.orderNo != null) {
-                            last = e;
-                            break;
-                        }
-                    }
-                    if (!last) {
-                        for (let i = entries.length - 1; i >= 0; i--) {
-                            if (entries[i]?.person) {
-                                last = entries[i];
-                                break;
-                            }
-                        }
-                    }
-                    if (last) {
-                        let idx =
-                            last.orderNo != null && Number.isFinite(last.orderNo)
-                                ? last.orderNo - 1
-                                : findIdxInList(orderList, last.person);
-                        if (idx < 0) idx = findIdxInList(orderList, last.person);
-                        resolved = {
-                            person: last.person || '',
-                            idx,
-                            method: 'last-special-chrono',
-                            lapsOrderNos: [],
-                            lastLapOrderNos: last.orderNo != null ? [last.orderNo] : [],
-                            chainOrderNos: [],
-                            firstsOrderNos: [],
-                            repeatsOrderNos: [],
-                            coveredThrough: last.orderNo != null ? last.orderNo : idx >= 0 ? idx + 1 : null
-                        };
-                    } else {
-                        resolved = {
-                            person: '',
-                            idx: -1,
-                            method: 'none',
-                            lapsOrderNos: [],
-                            lastLapOrderNos: [],
-                            chainOrderNos: [],
-                            firstsOrderNos: [],
-                            repeatsOrderNos: [],
-                            coveredThrough: null
-                        };
-                    }
+                    // Αραιές ειδικές: άγκυρα = τελευταίος χρονολογικά
+                    resolved = resolveLastChronoAnchor(entries, orderList, 'last-special-chrono');
+                } else if (t === 'weekend') {
+                    // Αργίες: άγκυρα = τελευταία αργία του μήνα (π.χ. #7 → επιλαχόντες #8,#9).
+                    // Η 1ες/επαναλήψεις έδινε λάθος εκκίνηση από #1 όταν έλειπε σταθερό match ονόματος.
+                    resolved = resolveLastChronoAnchor(entries, orderList, 'last-weekend-chrono');
+                    resolved = bumpAnchorIfLastDaySwap(entries, orderList, resolved);
                 } else {
                     const orderNos = entries.map((e) => e.orderNo).filter((n) => n != null);
                     resolved = resolveAnchorFromChronoOrderNos(orderNos, orderList);
@@ -6460,12 +6479,9 @@
             const resolveStartIndexAfterAnchor = (type, rawList) => {
                 if (!rawList.length) return 0;
                 const storedIdx = lastAssignedIdx[type];
+                // Εμπιστεύσου το idx κάλυψης (#) — μην ξαναρχίζεις από #1 αν το όνομα δεν ταιριάζει ακριβώς
                 if (storedIdx >= 0 && storedIdx < rawList.length) {
-                    const anchor = lastAssigned[type];
-                    const atStored = rawList[storedIdx];
-                    if (!anchor || normName(atStored) === normName(anchor)) {
-                        return (storedIdx + 1) % rawList.length;
-                    }
+                    return (storedIdx + 1) % rawList.length;
                 }
                 const anchor = lastAssigned[type] ? normName(lastAssigned[type]) : '';
                 if (!anchor) return 0;
@@ -7200,6 +7216,7 @@
                         'repeats-max': 'max επαναλήψεων (γύρος 2)',
                         'repeats-after-drop': 'επαναλήψεις μετά πτώση/wrap (γύρος 2)',
                         'last-special-chrono': 'τελευταία ειδική αργία (χρονολογικά)',
+                        'last-weekend-chrono': 'τελευταία αργία (χρονολογικά)',
                         'ascending-chain': 'αλυσίδα +1',
                         'max-in-lap': 'μέγιστη θέση γύρου',
                         'fallback-last': 'τελευταίος χρονολογικά',
