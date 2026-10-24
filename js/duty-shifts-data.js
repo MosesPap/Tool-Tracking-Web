@@ -5988,8 +5988,9 @@
          * χωρίς επαναλήψεις: αύξουσα κυκλική κάλυψη από τον πρώτο # (εκτός σειράς = ανταλλαγή, μετράνε στο covered)
          *   → συνέχεια μετά το τέλος του καλυμμένου κύκλου (π.χ. …12,1,2 → επόμενοι #3,#4)
          * με επαναλήψεις χωρίς πτώση: συνέχεια μετά το max των επαναλήψεων
-         * με επαναλήψεις με πτώση/wrap (π.χ. #13,#14 μετά #3,#4,#5): max μόνο μετά την πτώση
-         * ειδικές: lookback έως ~10 έτη· άγκυρα = τελευταίος χρονολογικά σε ειδική (όχι 1ες/επαναλήψεις)
+         * με επαναλήψεις με πτώση/wrap (π.χ. #13,#14,#1..#4): max μόνο μετά την πτώση
+         * ανταλλαγή: chrono # από baseline/swappedWith (όχι τελικό όνομα) — σενάρια 1–2 παραμένουν
+         * ειδικές: lookback· άγκυρα = τελευταίος χρονολογικά σε ειδική
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
@@ -6106,14 +6107,13 @@
 
             /**
              * Chrono entries for Excel alternate anchor.
-             * Prefer rotation baseline (ignores swaps) so coverage follows natural order;
-             * fall back to final assignee when baseline is missing.
-             * Special: sparse (~6/year) — look back across months until last specials are found
-             * (not only the preview month).
+             * Prefer rotation baseline (ignores swaps) so coverage follows natural order:
+             * 1) rotationBaseline store
+             * 2) assignmentReasons swap/skip → swappedWith (κάτοχος θέσης σειράς)
+             * 3) final assignee
+             * Special: sparse lookback — άγκυρα last-special-chrono χωριστά.
              */
-            const pushChronoEntryIfAssigned = (type, orderList, dk, out) => {
-                if (getDutyCategoryForDateKeyLocal(dk) !== type) return;
-                const finalPerson = finalAssignedOnDate(dk);
+            const resolveRotationPersonForChrono = (type, dk, finalPerson) => {
                 let baselinePerson = '';
                 if (typeof getRotationBaselineAssignmentForType === 'function') {
                     const baselineRaw = getRotationBaselineAssignmentForType(type, dk);
@@ -6122,15 +6122,48 @@
                             parseAssignedPersonForGroupFromAssignment(baselineRaw, groupNum) || '';
                     }
                 }
-                const person = baselinePerson || finalPerson;
-                if (!person) return;
-                const name = normName(person);
+                if (baselinePerson) return { person: baselinePerson, fromBaseline: true, via: 'baseline' };
+                // Ανταλλαγή/αντικατάσταση χωρίς αποθηκευμένο baseline: swappedWith = θέση σειράς
+                if (finalPerson && assignmentReasons?.[dk]?.[groupNum]) {
+                    const gmap = assignmentReasons[dk][groupNum];
+                    let reason = null;
+                    for (const p of Object.keys(gmap || {})) {
+                        if (normName(p) === normName(finalPerson)) {
+                            reason = gmap[p];
+                            break;
+                        }
+                    }
+                    if (
+                        reason &&
+                        (reason.type === 'swap' ||
+                            reason.type === 'skip' ||
+                            reason.type === 'shift') &&
+                        reason.swappedWith
+                    ) {
+                        return {
+                            person: String(reason.swappedWith),
+                            fromBaseline: true,
+                            via: 'swap-reason'
+                        };
+                    }
+                }
+                if (finalPerson) return { person: finalPerson, fromBaseline: false, via: 'final' };
+                return { person: '', fromBaseline: false, via: 'none' };
+            };
+            const pushChronoEntryIfAssigned = (type, orderList, dk, out) => {
+                if (getDutyCategoryForDateKeyLocal(dk) !== type) return;
+                const finalPerson = finalAssignedOnDate(dk);
+                const resolved = resolveRotationPersonForChrono(type, dk, finalPerson);
+                if (!resolved.person) return;
+                const name = normName(resolved.person);
                 const idx = findIdxInList(orderList, name);
                 out.push({
                     dateKey: dk,
                     person: name,
                     orderNo: idx >= 0 ? idx + 1 : null,
-                    fromBaseline: !!baselinePerson
+                    fromBaseline: !!resolved.fromBaseline,
+                    via: resolved.via || null,
+                    finalPerson: finalPerson ? normName(finalPerson) : ''
                 });
             };
             const collectAssignedChronoEntriesForType = (type) => {
