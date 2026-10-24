@@ -5983,11 +5983,12 @@
 
         /**
          * Excel ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ (background, όλοι οι τύποι):
-         * χρονολογικά: στρώση 1ες εμφανίσεις vs επαναλήψεις (2η+)
+         * χρονολογικά (baseline, αγνοεί swaps): στρώση 1ες εμφανίσεις vs επαναλήψεις (2η+)
          * ενεργή = επαναλήψεις αν υπάρχουν, αλλιώς 1ες
          * χωρίς επαναλήψεις: αύξουσα κυκλική κάλυψη από τον πρώτο # (εκτός σειράς = ανταλλαγή, μετράνε στο covered)
          *   → συνέχεια μετά το τέλος του καλυμμένου κύκλου (π.χ. …12,1,2 → επόμενοι #3,#4)
-         * με επαναλήψεις: συνέχεια μετά το max των επαναλήψεων
+         * με επαναλήψεις χωρίς πτώση: συνέχεια μετά το max των επαναλήψεων
+         * με επαναλήψεις με πτώση/wrap (π.χ. #13,#14 μετά #3,#4,#5): max μόνο μετά την πτώση
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
@@ -6073,7 +6074,11 @@
                 return true;
             };
 
-            /** Final assignees as shown in Excel preview (calendar days of this duty type). */
+            /**
+             * Chrono entries for Excel alternate anchor.
+             * Prefer rotation baseline (ignores swaps) so coverage follows natural order;
+             * fall back to final assignee when baseline is missing.
+             */
             const collectAssignedChronoEntriesForType = (type) => {
                 const orderList = orderListForType(type);
                 const out = [];
@@ -6085,14 +6090,24 @@
                     const date = new Date(year, month, day);
                     const dk = formatDateKey(date);
                     if (getDutyCategoryForDateKeyLocal(dk) !== type) continue;
-                    const person = finalAssignedOnDate(dk);
+                    const finalPerson = finalAssignedOnDate(dk);
+                    let baselinePerson = '';
+                    if (typeof getRotationBaselineAssignmentForType === 'function') {
+                        const baselineRaw = getRotationBaselineAssignmentForType(type, dk);
+                        if (baselineRaw && typeof parseAssignedPersonForGroupFromAssignment === 'function') {
+                            baselinePerson =
+                                parseAssignedPersonForGroupFromAssignment(baselineRaw, groupNum) || '';
+                        }
+                    }
+                    const person = baselinePerson || finalPerson;
                     if (!person) continue;
                     const name = normName(person);
                     const idx = findIdxInList(orderList, name);
                     out.push({
                         dateKey: dk,
                         person: name,
-                        orderNo: idx >= 0 ? idx + 1 : null
+                        orderNo: idx >= 0 ? idx + 1 : null,
+                        fromBaseline: !!baselinePerson
                     });
                 }
                 return out;
@@ -6102,7 +6117,9 @@
 
             /**
              * 1ες εμφανίσεις vs επαναλήψεις· άγκυρα =
-             * - επαναλήψεις: max(#) στις επαναλήψεις
+             * - επαναλήψεις χωρίς πτώση: max(#) στις επαναλήψεις
+             * - επαναλήψεις με πτώση (π.χ. μήνας από #13→#14 μετά wrap #3,#4,#5):
+             *   max(#) μόνο στο τμήμα μετά την τελευταία πτώση (άγκυρα #5, όχι #14)
              * - 1ες χωρίς πτώση (κενά = απουσίες/προσπέραση): max(#)
              * - 1ες με πτώση (ανταλλαγή/γύρισμα): αύξουσα κυκλική κάλυψη από τον πρώτο #
              */
@@ -6144,8 +6161,23 @@
                 let method;
 
                 if (repeats.length) {
-                    lastCoveredOrderNo = Math.max(...repeats);
-                    method = 'repeats-max';
+                    // Πτώση στις επαναλήψεις = wrap μετά από ξεκίνημα στη μέση της λίστας
+                    // (π.χ. #13,#14 μετά #3,#4,#5). Το max όλης της λίστας θα έδινε λάθος #14.
+                    let runMax = 0;
+                    let lastDropAt = -1;
+                    for (let i = 0; i < repeats.length; i++) {
+                        const n = repeats[i];
+                        if (runMax > 0 && n < runMax) lastDropAt = i;
+                        if (n > runMax) runMax = n;
+                    }
+                    if (lastDropAt < 0) {
+                        lastCoveredOrderNo = Math.max(...repeats);
+                        method = 'repeats-max';
+                    } else {
+                        const suffix = repeats.slice(lastDropAt);
+                        lastCoveredOrderNo = Math.max(...suffix);
+                        method = 'repeats-after-drop';
+                    }
                 } else {
                     // Πτώση = νέο # μικρότερο από την τρέχουσα κορυφή → ανταλλαγή/γύρισμα
                     let runMax = 0;
@@ -6902,6 +6934,7 @@
                         'firsts-max': 'max 1ων εμφανίσεων (κενά=απουσίες)',
                         'ascending-coverage': 'αύξουσα κάλυψη (πτώση/ανταλλαγή)',
                         'repeats-max': 'max επαναλήψεων (γύρος 2)',
+                        'repeats-after-drop': 'επαναλήψεις μετά πτώση/wrap (γύρος 2)',
                         'ascending-chain': 'αλυσίδα +1',
                         'max-in-lap': 'μέγιστη θέση γύρου',
                         'fallback-last': 'τελευταίος χρονολογικά',
@@ -6935,7 +6968,7 @@
                             <div class="mb-2 pb-2 border-bottom">
                                 <div class="fw-semibold">${escapeHtml(d.label || t)}</div>
                                 <div class="text-muted mb-1">Χρονολογικά: ${chronoLine || '—'}</div>
-                                <div class="text-muted mb-1">1ες εμφανίσεις · επαναλήψεις · χωρίς πτώση→max · με πτώση→κυκλική κάλυψη (κενά=απουσίες)</div>
+                                <div class="text-muted mb-1">baseline σειρά · 1ες/επαναλήψεις · χωρίς πτώση→max · επαναλήψεις με πτώση→max μετά wrap · 1ες με πτώση→κυκλική κάλυψη</div>
                                 <div class="mb-1">${lapsLine || 'Ένας γύρος'}</div>
                                 <div>Κάλυψη μέχρι: <strong>${d.coveredThrough != null ? '#' + d.coveredThrough : '—'}</strong></div>
                                 <div>Τελευταίος γύρος: <strong>${lastLap}</strong></div>
