@@ -6047,14 +6047,15 @@
             };
             const isDisabledForNextMonth = (personName, dutyType) =>
                 isDisabledForTypeAtDate(personName, dutyType, nextMonthStartKey);
-            const isMissingWholeNextMonth = (personName) => {
+            /** Οποιαδήποτε επικάλυψη απουσίας με τον επόμενο μήνα (μερική ή ολόκληρη). */
+            const isMissingAnyPartOfNextMonth = (personName) => {
                 const periods = groupData?.missingPeriods?.[personName];
                 if (!Array.isArray(periods) || periods.length === 0) return false;
                 for (const p of periods) {
                     const pStartKey = inputValueToDateKey(p?.start);
                     const pEndKey = inputValueToDateKey(p?.end);
                     if (!pStartKey || !pEndKey) continue;
-                    if (pStartKey <= nextMonthStartKey && pEndKey >= nextMonthEndKey) {
+                    if (pEndKey >= nextMonthStartKey && pStartKey <= nextMonthEndKey) {
                         return true;
                     }
                 }
@@ -6068,9 +6069,10 @@
                 ) {
                     return false;
                 }
+                // Μερική/ολική απουσία επόμενου μήνα: ποτέ αυτόματος επιλαχών (χειροκίνητα OK στο dropdown).
+                if (isMissingAnyPartOfNextMonth(personName)) return false;
                 if (allowIneligible) return true;
                 if (isDisabledForNextMonth(personName, dutyType)) return false;
-                if (isMissingWholeNextMonth(personName)) return false;
                 return true;
             };
 
