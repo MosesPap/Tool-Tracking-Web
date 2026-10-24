@@ -69,10 +69,132 @@
         };
         /** YYYY-MM -> true: month cannot start «Υπολογισμός Υπηρεσιών» until unlocked (Firestore doc monthCalculationLocks). */
         let monthCalculationLocks = {};
+        /**
+         * Manual Excel «ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ» overrides per calendar month.
+         * excelAlternateOverridesByMonth[YYYY-MM][groupNum] = { normal[], semi[], weekend[], special[], specialNotes[] }
+         */
+        let excelAlternateOverridesByMonth = {};
 
         function getMonthKeyFromDate(date) {
             return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         }
+
+        function normalizeExcelAlternateGroupOverride(raw) {
+            const empty = { normal: [], semi: [], weekend: [], special: [], specialNotes: [] };
+            if (!raw || typeof raw !== 'object') return empty;
+            const copyArr = (a, n) => {
+                const src = Array.isArray(a) ? a : [];
+                const out = [];
+                for (let i = 0; i < n; i++) out.push(src[i] != null ? String(src[i]) : '');
+                return out;
+            };
+            return {
+                normal: copyArr(raw.normal, 2),
+                semi: copyArr(raw.semi, 2),
+                weekend: copyArr(raw.weekend, 2),
+                special: copyArr(raw.special, 3),
+                specialNotes: copyArr(raw.specialNotes, 3)
+            };
+        }
+
+        function getSavedExcelAlternateOverridesForMonth(monthKey) {
+            if (!monthKey || !excelAlternateOverridesByMonth?.[monthKey]) return null;
+            return excelAlternateOverridesByMonth[monthKey];
+        }
+
+        function applySavedExcelAlternateOverrideOnto(autoBlock, savedBlock) {
+            const base = normalizeExcelAlternateGroupOverride(autoBlock);
+            if (!savedBlock) return base;
+            const saved = normalizeExcelAlternateGroupOverride(savedBlock);
+            for (const type of ['normal', 'semi', 'weekend', 'special']) {
+                for (let i = 0; i < base[type].length; i++) {
+                    if (saved[type][i] !== undefined && saved[type][i] !== null) {
+                        base[type][i] = saved[type][i];
+                    }
+                }
+            }
+            for (let i = 0; i < 3; i++) {
+                if (saved.specialNotes[i] !== undefined && saved.specialNotes[i] !== null) {
+                    base.specialNotes[i] = saved.specialNotes[i];
+                }
+            }
+            return base;
+        }
+
+        function syncExcelAlternateOverridesFromPreviewDom(previewRoot) {
+            if (!previewRoot || !_excelAlternateOverrides) return;
+            previewRoot.querySelectorAll('.excel-alt-select').forEach((sel) => {
+                const g = Number(sel.getAttribute('data-group'));
+                const type = sel.getAttribute('data-type');
+                const idx = Number(sel.getAttribute('data-index'));
+                if (!g || !type || !Number.isFinite(idx)) return;
+                if (!_excelAlternateOverrides[g]) {
+                    _excelAlternateOverrides[g] = normalizeExcelAlternateGroupOverride(null);
+                }
+                if (!Array.isArray(_excelAlternateOverrides[g][type])) {
+                    _excelAlternateOverrides[g][type] = [];
+                }
+                _excelAlternateOverrides[g][type][idx] = sel.value || '';
+            });
+        }
+
+        async function saveExcelAlternateOverridesForCurrentPreviewMonth() {
+            const base =
+                _excelExportDate instanceof Date && !isNaN(_excelExportDate.getTime())
+                    ? _excelExportDate
+                    : currentDate;
+            const monthKey = getMonthKeyFromDate(base);
+            const previewContent = document.getElementById('excelPreviewContent');
+            syncExcelAlternateOverridesFromPreviewDom(previewContent);
+            if (!excelAlternateOverridesByMonth || typeof excelAlternateOverridesByMonth !== 'object') {
+                excelAlternateOverridesByMonth = {};
+            }
+            const monthPayload = {};
+            for (let g = 1; g <= 4; g++) {
+                if (_excelAlternateOverrides?.[g]) {
+                    monthPayload[g] = normalizeExcelAlternateGroupOverride(_excelAlternateOverrides[g]);
+                }
+            }
+            excelAlternateOverridesByMonth[monthKey] = monthPayload;
+            try {
+                localStorage.setItem(
+                    'dutyShiftsExcelAlternateOverrides',
+                    JSON.stringify(excelAlternateOverridesByMonth)
+                );
+            } catch (e) {
+                console.warn('localStorage excel alternate overrides:', e);
+            }
+            try {
+                if (typeof db !== 'undefined' && db && firebase?.auth?.()?.currentUser) {
+                    const user = firebase.auth().currentUser;
+                    const sanitized = typeof sanitizeForFirestore === 'function'
+                        ? sanitizeForFirestore(excelAlternateOverridesByMonth)
+                        : excelAlternateOverridesByMonth;
+                    await db.collection('dutyShifts').doc('excelAlternateOverrides').set({
+                        ...sanitized,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                }
+            } catch (err) {
+                console.error('Error saving excelAlternateOverrides to Firestore:', err);
+                alert('Αποθηκεύτηκε τοπικά, αλλά απέτυχε η αποθήκευση στο Firebase.');
+                return false;
+            }
+            if (typeof showToast === 'function') {
+                showToast(`Αναπληρωματικοί αποθηκεύτηκαν για ${monthKey}.`, 'success');
+            } else {
+                alert(`Αναπληρωματικοί αποθηκεύτηκαν για ${monthKey}.`);
+            }
+            const statusEl = document.getElementById('excelAltSaveStatus');
+            if (statusEl) {
+                statusEl.textContent = `Αποθηκευμένο για ${monthKey}`;
+                statusEl.classList.remove('text-muted');
+                statusEl.classList.add('text-success');
+            }
+            return true;
+        }
+        window.saveExcelAlternateOverridesForCurrentPreviewMonth = saveExcelAlternateOverridesForCurrentPreviewMonth;
 
         function isMonthCalculationLocked(monthKey) {
             return !!(monthKey && typeof monthKey === 'string' && monthCalculationLocks && monthCalculationLocks[monthKey] === true);
@@ -1091,17 +1213,7 @@
                 dayTypeCategory === 'normal' &&
                 typeof getPersonForNormalRotationContinuity === 'function'
             ) {
-                const continuity = getPersonForNormalRotationContinuity(lastKey, groupNum, assigned, store);
-                // #region agent log
-                if (groupNum === 2) {
-                    const reason =
-                        typeof getAssignmentReason === 'function'
-                            ? getAssignmentReason(lastKey, groupNum, assigned)
-                            : null;
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'g2-post',hypothesisId:'D',location:'duty-shifts-data.js:getLastAssignmentContinuityPersonForPreviousMonth',message:'group2 last assignment continuity',data:{prevMonthKey,lastKey,assigned,continuity,reasonType:reason?.type||null,reasonMeta:reason?.meta?Object.keys(reason.meta||{}):[],swappedWith:reason?.swappedWith||null,dateKeysCount:dateKeys.size},timestamp:Date.now()})}).catch(()=>{});
-                }
-                // #endregion
-                return continuity;
+                return getPersonForNormalRotationContinuity(lastKey, groupNum, assigned, store);
             }
             if (typeof getPersonForRotationContinuity === 'function') {
                 return getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
@@ -1722,19 +1834,6 @@
                     ? fromAssignments || fromStored || fromBaseline
                     : fromAssignments || fromBaseline || fromStored;
             const continuityIdx = findIdx(lastContinuityPerson);
-            // #region agent log
-            if (dayTypeCategory === 'normal' && groupNum === 2) {
-                const source =
-                    fromAssignments && lastContinuityPerson === fromAssignments
-                        ? 'assignments'
-                        : fromStored && lastContinuityPerson === fromStored
-                          ? 'stored'
-                          : fromBaseline && lastContinuityPerson === fromBaseline
-                            ? 'baseline'
-                            : 'none';
-                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'g2-post',hypothesisId:'C',location:'duty-shifts-data.js:computeRotationPositionAtMonthStart',message:'group2 continuity sources',data:{prevMonthKey,fromAssignments,fromBaseline,fromStored,lastContinuityPerson,source,continuityIdx1based:continuityIdx>=0?continuityIdx+1:null,cursor1based:continuityIdx>=0?((continuityIdx+1)%len)+1:null,listLen:len,listPreview:groupPeople.map((p,i)=>`${i+1}:${String(p||'').slice(0,36)}`)},timestamp:Date.now()})}).catch(()=>{});
-            }
-            // #endregion
             if (lastContinuityPerson && continuityIdx >= 0) {
                 let cursor = (continuityIdx + 1) % len;
                 // Semi/weekend/special: if prev month ended on a two-person swap (αμοιβαία ή
@@ -2934,7 +3033,8 @@
                     missingReasonsDoc,
                     monthCalculationLocksDoc,
                     personStatusScheduleDoc,
-                    settingsDoc
+                    settingsDoc,
+                    excelAlternateOverridesDoc
                 ] = await Promise.all([
                     dutyShifts.doc('groups').get(),
                     dutyShifts.doc('holidays').get(),
@@ -2955,7 +3055,8 @@
                     dutyShifts.doc('missingReasons').get(),
                     dutyShifts.doc('monthCalculationLocks').get(),
                     dutyShifts.doc('personStatusSchedule').get(),
-                    dutyShifts.doc('settings').get()
+                    dutyShifts.doc('settings').get(),
+                    dutyShifts.doc('excelAlternateOverrides').get()
                 ]);
                 
                 // Load groups
@@ -3219,6 +3320,26 @@
                     migrateNormalWeekPairSwapDisabledGroupsFromLocalStorageIfNeeded().catch((e) => {
                         console.warn('migrateNormalWeekPairSwapDisabledGroupsFromLocalStorageIfNeeded:', e);
                     });
+                }
+
+                excelAlternateOverridesByMonth = {};
+                if (excelAlternateOverridesDoc && excelAlternateOverridesDoc.exists) {
+                    const rawAlt = excelAlternateOverridesDoc.data() || {};
+                    delete rawAlt.lastUpdated;
+                    delete rawAlt.updatedBy;
+                    for (const mk of Object.keys(rawAlt)) {
+                        if (!/^\d{4}-\d{2}$/.test(mk)) continue;
+                        const monthEntry = rawAlt[mk];
+                        if (!monthEntry || typeof monthEntry !== 'object') continue;
+                        excelAlternateOverridesByMonth[mk] = {};
+                        for (const gk of Object.keys(monthEntry)) {
+                            const gNum = parseInt(gk, 10);
+                            if (!Number.isFinite(gNum) || gNum < 1 || gNum > 4) continue;
+                            excelAlternateOverridesByMonth[mk][gNum] = normalizeExcelAlternateGroupOverride(
+                                monthEntry[gk]
+                            );
+                        }
+                    }
                 }
                 
                 // Load last rotation positions
@@ -3631,6 +3752,31 @@
                     }
                 } catch (_) {
                     monthCalculationLocks = {};
+                }
+            }
+
+            excelAlternateOverridesByMonth = {};
+            const savedExcelAlts = localStorage.getItem('dutyShiftsExcelAlternateOverrides');
+            if (savedExcelAlts) {
+                try {
+                    const parsed = JSON.parse(savedExcelAlts);
+                    if (parsed && typeof parsed === 'object') {
+                        for (const mk of Object.keys(parsed)) {
+                            if (!/^\d{4}-\d{2}$/.test(mk)) continue;
+                            const monthEntry = parsed[mk];
+                            if (!monthEntry || typeof monthEntry !== 'object') continue;
+                            excelAlternateOverridesByMonth[mk] = {};
+                            for (const gk of Object.keys(monthEntry)) {
+                                const gNum = parseInt(gk, 10);
+                                if (!Number.isFinite(gNum) || gNum < 1 || gNum > 4) continue;
+                                excelAlternateOverridesByMonth[mk][gNum] = normalizeExcelAlternateGroupOverride(
+                                    monthEntry[gk]
+                                );
+                            }
+                        }
+                    }
+                } catch (_) {
+                    excelAlternateOverridesByMonth = {};
                 }
             }
             
@@ -4158,6 +4304,12 @@
                 if (/^\d{4}-\d{2}$/.test(k) && monthCalculationLocks[k]) locksOnly[k] = true;
             }
             localStorage.setItem('dutyShiftsMonthCalculationLocks', JSON.stringify(locksOnly));
+            try {
+                localStorage.setItem(
+                    'dutyShiftsExcelAlternateOverrides',
+                    JSON.stringify(excelAlternateOverridesByMonth || {})
+                );
+            } catch (_) {}
             try {
                 ensurePersonStatusScheduleSeeded();
                 if (typeof sanitizePersonStatusScheduleEffectiveDates === 'function') {
@@ -6270,7 +6422,7 @@
 
         // Excel export month selection (separate from calendar currentDate)
         let _excelExportDate = null; // Date object set to 1st of selected month
-        /** Per-group overrides from Excel preview dropdowns (export session only). */
+        /** Per-group overrides from Excel preview dropdowns (session + loaded month saves). */
         let _excelAlternateOverrides = null;
         let _excelAlternateAutoByGroup = null;
 
@@ -6435,13 +6587,19 @@
                     },
                     debug: rotationInfo.debug || null
                 };
-                _excelAlternateOverrides[groupNum] = {
+                const autoBlock = {
                     normal: [..._excelAlternateAutoByGroup[groupNum].next.normal],
                     semi: [..._excelAlternateAutoByGroup[groupNum].next.semi],
                     weekend: [..._excelAlternateAutoByGroup[groupNum].next.weekend],
                     special: [..._excelAlternateAutoByGroup[groupNum].next.special],
                     specialNotes: [..._excelAlternateAutoByGroup[groupNum].nextNotes.special]
                 };
+                const monthKeyForAlts = getMonthKeyFromDate(base);
+                const savedMonthAlts = getSavedExcelAlternateOverridesForMonth(monthKeyForAlts);
+                _excelAlternateOverrides[groupNum] = applySavedExcelAlternateOverrideOnto(
+                    autoBlock,
+                    savedMonthAlts?.[groupNum] || null
+                );
                 const monthStartKey = formatDateKey(firstDay);
                 const monthEndKey = formatDateKey(lastDay);
                 const allPeople = Array.from(new Set([
@@ -6564,11 +6722,11 @@
                                         <i class="fas fa-undo"></i>
                                     </button>
                                 </div>
-                                <div class="small text-muted mb-2">Μπορείτε να αλλάξετε τα ονόματα πριν τη δημιουργία του αρχείου.</div>
-                                ${renderAlternateRows('normal', rotationInfo.next.normal)}
-                                ${renderAlternateRows('semi', rotationInfo.next.semi)}
-                                ${renderAlternateRows('weekend', rotationInfo.next.weekend)}
-                                ${renderAlternateRows('special', rotationInfo.next.special, rotationInfo.nextNotes?.special || [])}
+                                <div class="small text-muted mb-2">Μπορείτε να αλλάξετε τα ονόματα και να τα αποθηκεύσετε για τον μήνα.</div>
+                                ${renderAlternateRows('normal', _excelAlternateOverrides[groupNum].normal)}
+                                ${renderAlternateRows('semi', _excelAlternateOverrides[groupNum].semi)}
+                                ${renderAlternateRows('weekend', _excelAlternateOverrides[groupNum].weekend)}
+                                ${renderAlternateRows('special', _excelAlternateOverrides[groupNum].special, _excelAlternateOverrides[groupNum].specialNotes || [])}
                                 <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2 excel-alt-debug-btn" data-group="${groupNum}">
                                     <i class="fas fa-list-ol me-1"></i>Σειρά αναθέσεων (debug)
                                 </button>
@@ -6662,7 +6820,22 @@
                 }
             }
 
-            // Wire editable alternate dropdowns + reset (export-session overrides only)
+            const monthKeyStatus = getMonthKeyFromDate(base);
+            const statusEl = document.getElementById('excelAltSaveStatus');
+            if (statusEl) {
+                const hasSaved = !!getSavedExcelAlternateOverridesForMonth(monthKeyStatus);
+                if (hasSaved) {
+                    statusEl.textContent = `Αποθηκευμένο για ${monthKeyStatus}`;
+                    statusEl.classList.remove('text-muted');
+                    statusEl.classList.add('text-success');
+                } else {
+                    statusEl.textContent = `Χειροκίνητες αλλαγές επιλαχόντων αποθηκεύονται ανά μήνα (${monthKeyStatus})`;
+                    statusEl.classList.add('text-muted');
+                    statusEl.classList.remove('text-success');
+                }
+            }
+
+            // Wire editable alternate dropdowns + reset
             previewContent.querySelectorAll('.excel-alt-select').forEach((sel) => {
                 sel.addEventListener('change', () => {
                     const g = Number(sel.getAttribute('data-group'));
