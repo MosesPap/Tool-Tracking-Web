@@ -5989,6 +5989,7 @@
          *   → συνέχεια μετά το τέλος του καλυμμένου κύκλου (π.χ. …12,1,2 → επόμενοι #3,#4)
          * με επαναλήψεις χωρίς πτώση: συνέχεια μετά το max των επαναλήψεων
          * με επαναλήψεις με πτώση/wrap (π.χ. #13,#14 μετά #3,#4,#5): max μόνο μετά την πτώση
+         * ειδικές: chrono lookback έως ~10 έτη (αραιές αργίες — όχι μόνο ο μήνας προεπισκόπησης)
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
@@ -6080,10 +6081,49 @@
              * Chrono entries for Excel alternate anchor.
              * Prefer rotation baseline (ignores swaps) so coverage follows natural order;
              * fall back to final assignee when baseline is missing.
+             * Special: sparse (~6/year) — look back across months until last specials are found
+             * (not only the preview month).
              */
+            const pushChronoEntryIfAssigned = (type, orderList, dk, out) => {
+                if (getDutyCategoryForDateKeyLocal(dk) !== type) return;
+                const finalPerson = finalAssignedOnDate(dk);
+                let baselinePerson = '';
+                if (typeof getRotationBaselineAssignmentForType === 'function') {
+                    const baselineRaw = getRotationBaselineAssignmentForType(type, dk);
+                    if (baselineRaw && typeof parseAssignedPersonForGroupFromAssignment === 'function') {
+                        baselinePerson =
+                            parseAssignedPersonForGroupFromAssignment(baselineRaw, groupNum) || '';
+                    }
+                }
+                const person = baselinePerson || finalPerson;
+                if (!person) return;
+                const name = normName(person);
+                const idx = findIdxInList(orderList, name);
+                out.push({
+                    dateKey: dk,
+                    person: name,
+                    orderNo: idx >= 0 ? idx + 1 : null,
+                    fromBaseline: !!baselinePerson
+                });
+            };
             const collectAssignedChronoEntriesForType = (type) => {
                 const orderList = orderListForType(type);
                 const out = [];
+                if (type === 'special') {
+                    // ~6 ειδικές/έτος (Δεκ×3, Ιαν×1, Πάσχα×2): ψάξε πίσω έως ~10 έτη
+                    const endDate = new Date(year, month + 1, 0);
+                    endDate.setHours(0, 0, 0, 0);
+                    const maxDaysBack = 3650;
+                    const collected = [];
+                    const d = new Date(endDate);
+                    for (let i = 0; i < maxDaysBack; i++) {
+                        const dk = formatDateKey(d);
+                        pushChronoEntryIfAssigned('special', orderList, dk, collected);
+                        d.setDate(d.getDate() - 1);
+                    }
+                    collected.reverse();
+                    return collected;
+                }
                 const dim =
                     Number.isFinite(daysInMonth) && daysInMonth > 0
                         ? daysInMonth
@@ -6091,26 +6131,7 @@
                 for (let day = 1; day <= dim; day++) {
                     const date = new Date(year, month, day);
                     const dk = formatDateKey(date);
-                    if (getDutyCategoryForDateKeyLocal(dk) !== type) continue;
-                    const finalPerson = finalAssignedOnDate(dk);
-                    let baselinePerson = '';
-                    if (typeof getRotationBaselineAssignmentForType === 'function') {
-                        const baselineRaw = getRotationBaselineAssignmentForType(type, dk);
-                        if (baselineRaw && typeof parseAssignedPersonForGroupFromAssignment === 'function') {
-                            baselinePerson =
-                                parseAssignedPersonForGroupFromAssignment(baselineRaw, groupNum) || '';
-                        }
-                    }
-                    const person = baselinePerson || finalPerson;
-                    if (!person) continue;
-                    const name = normName(person);
-                    const idx = findIdxInList(orderList, name);
-                    out.push({
-                        dateKey: dk,
-                        person: name,
-                        orderNo: idx >= 0 ? idx + 1 : null,
-                        fromBaseline: !!baselinePerson
-                    });
+                    pushChronoEntryIfAssigned(type, orderList, dk, out);
                 }
                 return out;
             };
