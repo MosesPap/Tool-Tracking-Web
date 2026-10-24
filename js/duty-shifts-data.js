@@ -6653,14 +6653,70 @@
                 const groupPreview = document.createElement('div');
                 groupPreview.className = 'mb-4 p-3 border rounded bg-white';
                 groupPreview.dataset.excelGroup = String(groupNum);
+                const nextMonthStartKey = formatDateKey(new Date(year, month + 1, 1));
+                const nextMonthEndKey = formatDateKey(new Date(year, month + 2, 0));
+                const formatAbsenceEndLabel = (endKey) => {
+                    if (!endKey) return '';
+                    const d = new Date(`${endKey}T00:00:00`);
+                    if (isNaN(d.getTime())) return endKey;
+                    return typeof formatDate === 'function' ? formatDate(d) : endKey;
+                };
+                const getPersonAltStatus = (personName, type) => {
+                    const markers = [];
+                    let optClass = '';
+                    let isDisabled = false;
+                    const dp = groupData?.disabledPersons?.[personName];
+                    if (dp && typeof dp === 'object' && (dp.all || dp[type])) {
+                        isDisabled = true;
+                    }
+                    if (!isDisabled && typeof getDisabledStateAtDate === 'function') {
+                        const st = getDisabledStateAtDate(groupNum, personName, nextMonthStartKey);
+                        if (st && (st.all || st[type])) isDisabled = true;
+                    }
+                    if (
+                        !isDisabled &&
+                        typeof isPersonDisabledForDuty === 'function' &&
+                        isPersonDisabledForDuty(personName, groupNum, type, nextMonthStartKey)
+                    ) {
+                        isDisabled = true;
+                    }
+                    if (isDisabled) {
+                        markers.push('Απενεργοποιημένος');
+                        optClass = 'excel-alt-opt-disabled';
+                    }
+                    const periods = groupData?.missingPeriods?.[personName];
+                    let absenceEndKey = null;
+                    if (Array.isArray(periods)) {
+                        for (const per of periods) {
+                            const sKey = inputValueToDateKey(per?.start);
+                            const eKey = inputValueToDateKey(per?.end);
+                            if (!sKey || !eKey) continue;
+                            // Επικάλυψη με μήνα προεπισκόπησης ή επόμενο (επιλαχόντες)
+                            if (eKey < monthStartKey || sKey > nextMonthEndKey) continue;
+                            if (!absenceEndKey || eKey > absenceEndKey) absenceEndKey = eKey;
+                        }
+                    }
+                    if (absenceEndKey) {
+                        markers.push(`Απουσία έως ${formatAbsenceEndLabel(absenceEndKey)}`);
+                        optClass = optClass
+                            ? `${optClass} excel-alt-opt-absent`
+                            : 'excel-alt-opt-absent';
+                    }
+                    return { markers, optClass, isDisabled, absenceEndKey };
+                };
                 const buildPersonSelect = (type, index, selectedName) => {
                     const list = (groupData?.[type] || []).filter(Boolean);
                     const opts = [`<option value="">—</option>`];
                     for (const p of list) {
                         const sel = normName(p) === normName(selectedName) ? ' selected' : '';
                         const orderNo = getOrderNo(groupData, type, p);
+                        const status = getPersonAltStatus(p, type);
+                        const suffix = status.markers.length
+                            ? ` — ${status.markers.join(' · ')}`
+                            : '';
+                        const cls = status.optClass ? ` class="${status.optClass}"` : '';
                         opts.push(
-                            `<option value="${escapeHtml(p)}"${sel}>#${orderNo || '-'} ${escapeHtml(p)}</option>`
+                            `<option value="${escapeHtml(p)}"${cls}${sel}>#${orderNo || '-'} ${escapeHtml(p)}${escapeHtml(suffix)}</option>`
                         );
                     }
                     if (selectedName && !list.some((p) => normName(p) === normName(selectedName))) {
