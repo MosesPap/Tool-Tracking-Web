@@ -5578,33 +5578,22 @@
             if (isWeekend(date)) {
                 return 'weekend-holiday';
             }
-            
-            // Special case: December 30th should be normal day (unless it's Friday or weekend)
-            // Don't classify it as semi-normal just because next day (Dec 31) is a special holiday
-            const isDecember30 = date.getMonth() === 11 && date.getDate() === 30;
-            
-            // For December 30th, check if it's Friday (semi-normal) or return normal
-            if (isDecember30) {
-                if (date.getDay() === 5) {
-                    return 'semi-normal-day'; // Friday
-                }
-                // December 30th is normal day (unless it's Friday or weekend, which is already checked above)
-                return 'normal-day';
-            }
-            
-            // For all other days, check if next day is weekend, holiday, or special holiday
+
+            // Ημέρα πριν από ΣΚ / αργία / ειδική → ημιαργία.
+            // Ισχύει και για 30/12 πριν την 31/12 (ειδική): ημιαργία.
+            // Σάβ/Κυρ έχουν ήδη επιστραφεί ως αργία παραπάνω.
+            // Παρασκευή → ημιαργία (παρακάτω ή μέσω next-day).
             const nextDay = new Date(date);
             nextDay.setDate(nextDay.getDate() + 1);
-            
+
             if (isWeekend(nextDay) || isHoliday(nextDay) || isSpecialHoliday(nextDay)) {
                 return 'semi-normal-day';
             }
-            
-            // Check if it's Friday
+
             if (date.getDay() === 5) {
                 return 'semi-normal-day';
             }
-            
+
             return 'normal-day';
         }
 
