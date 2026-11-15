@@ -294,7 +294,7 @@
             }
             if (s.includes('/')) {
                 const parts = s.split('/');
-                if (parts.length === 3) {
+                    if (parts.length === 3) {
                     let year = parseInt(parts[2], 10);
                     const month = parseInt(parts[1], 10);
                     const day = parseInt(parts[0], 10);
@@ -348,8 +348,8 @@
         }
 
         function getTodayDateKeyForLastNext() {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
             return typeof formatDateKey === 'function' ? formatDateKey(today) : null;
         }
 
@@ -398,7 +398,7 @@
             for (const dateKey of keys) {
                 if (afterKey && dateKey <= afterKey) continue;
                 const assignment = store[dateKey];
-                if (!assignment) continue;
+                    if (!assignment) continue;
                 const assignedPersons =
                     typeof extractAllPersonNames === 'function' ? extractAllPersonNames(assignment) : [];
                 if (personMatchesAssignmentEntryAnyGroup(person, assignedPersons)) {
@@ -716,7 +716,7 @@
                     seedIdx = options.seedPersonIndex;
                 }
                 pos = (seedIdx + 1) % list.length;
-            } else {
+                    } else {
                 cursor = new Date();
                 cursor.setHours(0, 0, 0, 0);
                 cursor.setDate(cursor.getDate() + 1);
@@ -985,7 +985,7 @@
                 const inList = list.some((p) => normalizePersonKey(p) === normalizePersonKey(person));
                 if (inList) nextDutyFormatted = 'Δεν βρέθηκε';
             }
-
+            
             return { lastDuty: lastDutyFormatted, nextDuty: nextDutyFormatted };
         }
 
@@ -3217,7 +3217,7 @@
             void assignedPerson;
             void deferState;
             void opts;
-            globalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                globalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
         }
 
         /**
@@ -3367,7 +3367,7 @@
                 const otherKey = findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey);
                 if (otherKey) {
                     const swappedOutPerson = getSemiAssignedPersonFromStore(assignmentsByDate, otherKey, groupNum);
-                    if (swappedOutPerson) return swappedOutPerson;
+                if (swappedOutPerson) return swappedOutPerson;
                 }
             }
             return assignedPerson;
@@ -3512,7 +3512,7 @@
             }
             
             if (!assignment) return false;
-
+            
             if (typeof extractGroupAssignmentsMap === 'function') {
                 const gmap = extractGroupAssignmentsMap(assignment);
                 const assigned = gmap?.[groupNum] || gmap?.[String(groupNum)];
@@ -3528,7 +3528,7 @@
             }
 
             if (typeof assignment === 'string') {
-                const personGroupStr = `${person} (Ομάδα ${groupNum})`;
+            const personGroupStr = `${person} (Ομάδα ${groupNum})`;
                 return assignment.includes(personGroupStr);
             }
             return false;
@@ -7524,11 +7524,11 @@
                     if (!briefReason && isBaseDisabledOrMissing) {
                         briefReason =
                             buildUnavailableReplacementReason({
-                                skippedPersonName: base,
-                                replacementPersonName: comp,
-                                dateObj,
-                                groupNum,
-                                dutyCategory: 'semi'
+                            skippedPersonName: base,
+                            replacementPersonName: comp,
+                            dateObj,
+                            groupNum,
+                            dutyCategory: 'semi'
                             }) || '';
                     }
                     if (!briefReason) briefReason = 'Αλλαγή';
@@ -8285,7 +8285,7 @@
                             const personName = entry.personName, groupNum = entry.groupNum, returnKey = entry.returnKey, pEndKey = entry.pEndKey;
                             // Already placed in a previous month for this same missing period (pEndKey)? Skip deferred – no re-assign here.
                             if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey)) {
-                                return false; // remove from deferred – already assigned in a previous month
+                                    return false; // remove from deferred – already assigned in a previous month
                             }
                             let track = entry.track;
                             if (!track) {
@@ -10186,14 +10186,14 @@
                 ) {
                     mergeTempGroupAssignmentsIntoAssignmentStore(normalSource, normalDayAssignments);
                 } else {
-                    for (const dateKey in normalSource) {
+                for (const dateKey in normalSource) {
                         const parts = [];
                         for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
-                            const person = normalSource[dateKey]?.[groupNum];
-                            if (person) {
+                        const person = normalSource[dateKey]?.[groupNum];
+                        if (person) {
                                 parts.push(`${person} (Ομάδα ${groupNum})`);
                             }
-                        }
+                            }
                         if (parts.length > 0) {
                             normalDayAssignments[dateKey] = parts.join(', ');
                         }
@@ -10284,7 +10284,7 @@
                 } catch (e) {
                     console.warn('syncLastDutiesFromAssignments after calculation:', e);
                 }
-
+                
                 // Save all assignments to Firebase
                 if (loadingAlert && loadingAlert.parentNode) {
                     loadingAlert.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Αποθήκευση στο Firebase...';
@@ -10301,7 +10301,7 @@
                 renderGroups();
                 renderHolidays();
                 renderRecurringHolidays();
-            renderCalendar();
+                renderCalendar();
                 updateStatistics();
                 
                 // Remove loading indicator
@@ -11028,7 +11028,7 @@
                                                       : null)
                                                 : eligibleDbg && typeof getMonthKeyFromDate === 'function'
                                                   ? getMonthKeyFromDate(new Date(eligibleDbg + 'T00:00:00'))
-                                                  : null;
+                                                : null;
                                         const alt = dutyWeekendDebug.scanAlternateWeekendDates({
                                             personName: rosterPersonName,
                                             groupNum,
@@ -12723,8 +12723,8 @@
                                     );
                                 } else {
                                     // Last person not found in list - use rotation calculation
-                                    const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
-                                    globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                            const daysSinceStart = getRotationPosition(date, 'weekend', groupNum);
+                            globalWeekendRotationPosition[groupNum] = daysSinceStart % rotationDays;
                                     if (lastPersonName) {
                                         console.log(`[WEEKEND ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalWeekendRotationPosition[groupNum]}`);
                                     }
@@ -12989,7 +12989,7 @@
                                 }
                                 if (!hadMissedSemi) continue;
                                 if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey, pStartKey)) continue;
-
+                                
                                 // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
                                 const thirdDayAfterEnd = addDaysToDateKeyLocal(pEndKey, 3);
                                 if (!thirdDayAfterEnd) continue;
@@ -13141,8 +13141,8 @@
                                         );
                                     } else {
                                         // Last person not found in list - use rotation calculation
-                                        const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
-                                        globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
+                                const daysSinceStart = getRotationPosition(date, 'semi', groupNum);
+                                globalSemiRotationPosition[groupNum] = daysSinceStart % rotationDays;
                                         if (lastPersonName) {
                                             console.log(`[SEMI ROTATION] Last person ${lastPersonName} not found in group ${groupNum} list, using rotation calculation: position ${globalSemiRotationPosition[groupNum]}`);
                                         }
@@ -14373,7 +14373,7 @@
                 'dates'
             );
             const sortedSemi = [...(semiNormalDays || [])].sort();
-
+            
             const periodLabel = buildPeriodLabel(startDate, endDate);
             if (typeof dutyNormalDebug !== 'undefined' && dutyNormalDebug.isEnabled()) {
                 dutyNormalDebug.clear();
@@ -14810,7 +14810,7 @@
                                 if (!pureNormalRotationByDate[dateKey]) pureNormalRotationByDate[dateKey] = {};
                                 pureNormalRotationByDate[dateKey][groupNum] = originalRotationPerson;
                             }
-
+                            
                             const rotationPerson = originalRotationPerson;
                             let wasReplacedFromBaseline = false;
                             const precomputedFinal =
@@ -14819,12 +14819,12 @@
                                     : null;
 
                             assignedPerson = originalRotationPerson;
-
+                            
                             // Initialize assigned people tracking for this group if needed
                             if (!assignedPeoplePreview[monthKey][groupNum]) {
                                 assignedPeoplePreview[monthKey][groupNum] = {};
                             }
-
+                            
                             // Legacy flag: must stay false so baseline is never shifted for disabled.
                             let wasDisabledOnlySkippedInBaseline = false;
                             let wasDisabledPersonSkipped = false;
@@ -15071,11 +15071,11 @@
                                         // Basic series always advances by one slot from the baseline position
                                         // (replacements must not jump the rotation cursor).
                                         markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
-                                        globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                    } else {
+                                            globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                        } else {
                                         // No conflict — same rule: advance basic series by one from baseline slot
                                         markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
-                                        globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                     }
                                 } else {
                                     // Person is missing or no person assigned - advance rotation position from rotation position

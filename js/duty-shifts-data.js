@@ -51,8 +51,8 @@
                 const el = document.getElementById(`group${g}Container`);
                 if (!el) continue;
                 el.style.display = g <= n ? '' : 'none';
-                el.classList.remove('col-lg-3', 'col-lg-4');
                 if (g <= n) {
+                    el.classList.remove('col-lg-3', 'col-lg-4');
                     el.classList.add(n === 3 ? 'col-lg-4' : 'col-lg-3');
                 }
                 const badge = el.querySelector('.group-badge');
@@ -65,64 +65,12 @@
                 label.textContent = activeGroupMode === '3' ? 'Υπολογισμός: 3 ομάδες' : 'Υπολογισμός: 4 ομάδες';
             }
         }
-
-        const GROUP_NAMES_FOUR = {
-            1: 'ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ',
-            2: 'ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ',
-            3: 'ΤΕΧΝΙΚΟΣ Ε/Π AW139',
-            4: 'ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ'
-        };
-
-        function normalizeDutyDateKey(raw) {
-            if (raw == null || raw === '') return null;
-            if (typeof parseLastDutyDateToKey === 'function') {
-                const k = parseLastDutyDateToKey(raw);
-                if (k && /^\d{4}-\d{2}-\d{2}$/.test(k)) return k;
-            }
-            const s = String(raw).trim();
-            return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+        function getGroupsFour() {
+            return groupsFour;
         }
-
-        /**
-         * Όλα τα άτομα από τις 4 ομάδες (ενιαία λίστα), με lastDuties από την ομάδα προέλευσης.
-         * Ταξινόμηση για listType: παλαιότερη τελευταία υπηρεσία πρώτα, χωρίς ημερομηνία στο τέλος.
-         */
-        function collectPeoplePoolFromGroupsFour(listType) {
-            const byName = new Map();
-            for (let g = 1; g <= 4; g++) {
-                const gd = groupsFour[g] || {};
-                const names = new Set([
-                    ...(gd.special || []),
-                    ...(gd.weekend || []),
-                    ...(gd.semi || []),
-                    ...(gd.normal || [])
-                ]);
-                for (const name of names) {
-                    if (!name || byName.has(name)) continue;
-                    const ld = gd.lastDuties?.[name] || {};
-                    byName.set(name, {
-                        name,
-                        sourceGroup: g,
-                        sourceGroupName: GROUP_NAMES_FOUR[g] || `Ομάδα ${g}`,
-                        lastDuties: { ...ld },
-                        priorities: { ...(gd.priorities?.[name] || {}) },
-                        lastDutyKey: normalizeDutyDateKey(ld[listType])
-                    });
-                }
-            }
-            const arr = Array.from(byName.values());
-            arr.sort((a, b) => {
-                const da = a.lastDutyKey;
-                const db = b.lastDutyKey;
-                if (!da && !db) return String(a.name).localeCompare(String(b.name), 'el');
-                if (!da) return 1;
-                if (!db) return -1;
-                if (da !== db) return da < db ? -1 : 1;
-                return String(a.name).localeCompare(String(b.name), 'el');
-            });
-            return arr;
+        function getGroupsThree() {
+            return groupsThree;
         }
-        window.collectPeoplePoolFromGroupsFour = collectPeoplePoolFromGroupsFour;
         function setActiveGroupMode(mode, opts = {}) {
             const persist = opts.persist !== false;
             const next = mode === '3' || mode === 3 ? '3' : '4';
@@ -155,6 +103,8 @@
         window.getActiveGroupMode = getActiveGroupMode;
         window.setActiveGroupMode = setActiveGroupMode;
         window.updateGroupSetUiVisibility = updateGroupSetUiVisibility;
+        window.getGroupsFour = getGroupsFour;
+        window.getGroupsThree = getGroupsThree;
         // Organizational rankings - separate from priority, doesn't affect list order
         let rankings = {}; // Format: { "Person Name": rankNumber }
         let rankingsModified = false; // Track if rankings have been modified (only save when true)

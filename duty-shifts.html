@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="ToolTrack">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.638 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.639 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -2383,7 +2383,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.638</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.639</span></h4>
             </div>
             <div class="title-bar-stats d-flex flex-column align-items-end align-items-lg-end gap-1" style="font-weight: 500; opacity: 0.98;">
                 <div class="title-bar-stats-row d-flex align-items-center flex-wrap gap-3" style="font-size: 1.25em;">
@@ -3050,6 +3050,33 @@
                 <div class="modal-footer border-0 pt-0">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
                     <button type="button" class="btn btn-primary" id="confirmModalOkButton">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk add people from 4-group set into a 3-group list type -->
+    <div class="modal fade" id="bulkAddFromFourModal" tabindex="-1" aria-labelledby="bulkAddFromFourTitle" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="bulkAddFromFourTitle">Προσθήκη πολλών</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Κλείσιμο"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-2" id="bulkAddFromFourMeta"></p>
+                    <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="bulkAddFromFourSelectAll">Επιλογή όλων</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="bulkAddFromFourClear">Καθαρισμός</button>
+                        <span class="small text-muted ms-auto" id="bulkAddFromFourCount"></span>
+                    </div>
+                    <div id="bulkAddFromFourList" class="border rounded px-3" style="max-height: 55vh; overflow-y: auto;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-success" onclick="confirmBulkAddFromFour()">
+                        <i class="fas fa-user-plus me-1"></i>Προσθήκη επιλεγμένων
+                    </button>
                 </div>
             </div>
         </div>
@@ -4187,11 +4214,11 @@
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Load duty-shifts files in order: data -> logic -> ui -->
-    <script src="js/duty-shifts-data.js?v=1.638" charset="UTF-8"></script>
+    <script src="js/duty-shifts-data.js?v=1.639" charset="UTF-8"></script>
     <script src="js/duty-shifts-debug.js" charset="UTF-8"></script>
     <script src="js/duty-shifts-night-changes.js?v=1.591" charset="UTF-8"></script>
-    <script src="js/duty-shifts-logic.js?v=1.638" charset="UTF-8"></script>
-    <script src="js/duty-shifts-ui.js?v=1.638" charset="UTF-8"></script>
+    <script src="js/duty-shifts-logic.js?v=1.639" charset="UTF-8"></script>
+    <script src="js/duty-shifts-ui.js?v=1.639" charset="UTF-8"></script>
     <script src="js/duty-shifts-ai-assistant.js" charset="UTF-8"></script>
     <script>
         // NOTE: Main JavaScript code has been moved to js/duty-shifts.js to reduce memory usage

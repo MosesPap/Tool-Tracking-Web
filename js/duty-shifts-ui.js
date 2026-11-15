@@ -790,78 +790,101 @@
                 const normalList = groupData.normal || [];
                 
                 const allPeople = new Set([...specialList, ...weekendList, ...semiList, ...normalList]);
-                
-                if (allPeople.size === 0) {
+                const isMode3 =
+                    typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
+
+                if (allPeople.size === 0 && !isMode3) {
                     container.innerHTML = '<p class="text-muted text-center">Δεν έχουν προστεθεί άτομα ακόμα</p>';
                 } else {
-                    // Special holidays order
+                    const bulkBtnHtml = (listType) =>
+                        isMode3
+                            ? `<button type="button" class="btn btn-sm btn-outline-success ms-2 py-0 px-2"
+                                    title="Προσθήκη πολλών από τις 4 ομάδες"
+                                    onclick="event.stopPropagation(); openBulkAddFromFourModal(${i}, '${listType}')">
+                                    <i class="fas fa-users me-1"></i>Πολλά
+                               </button>`
+                            : '';
+
                     const specialDiv = document.createElement('div');
                     specialDiv.className = 'mb-3 border rounded p-2';
                     specialDiv.innerHTML = `
                         <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('specialList_${i}', 'specialChevron_${i}')">
-                            <strong class="text-warning"><i class="fas fa-star me-1"></i>Σειρά Ειδικών Αργιών:</strong>
+                            <div class="d-flex align-items-center flex-wrap gap-1">
+                                <strong class="text-warning"><i class="fas fa-star me-1"></i>Σειρά Ειδικών Αργιών:</strong>
+                                ${bulkBtnHtml('special')}
+                            </div>
                             <i id="specialChevron_${i}" class="fas fa-chevron-down"></i>
                         </div>
                         <div id="specialList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(specialDiv);
-                    
-                    // Weekend/Holiday order
+
                     const weekendDiv = document.createElement('div');
                     weekendDiv.className = 'mb-3 border rounded p-2';
                     weekendDiv.innerHTML = `
                         <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('weekendList_${i}', 'weekendChevron_${i}')">
-                            <strong class="text-info"><i class="fas fa-calendar-week me-1"></i>Σειρά Σαββατοκύριακων/Αργιών:</strong>
+                            <div class="d-flex align-items-center flex-wrap gap-1">
+                                <strong class="text-info"><i class="fas fa-calendar-week me-1"></i>Σειρά Σαββατοκύριακων/Αργιών:</strong>
+                                ${bulkBtnHtml('weekend')}
+                            </div>
                             <i id="weekendChevron_${i}" class="fas fa-chevron-down"></i>
                         </div>
                         <div id="weekendList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(weekendDiv);
-                    
-                    // Ημιαργία order
+
                     const semiDiv = document.createElement('div');
                     semiDiv.className = 'mb-3 border rounded p-2';
                     semiDiv.innerHTML = `
                         <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('semiList_${i}', 'semiChevron_${i}')">
-                            <strong class="text-warning"><i class="fas fa-calendar-alt me-1"></i>Σειρά Ημιαργιών:</strong>
+                            <div class="d-flex align-items-center flex-wrap gap-1">
+                                <strong class="text-warning"><i class="fas fa-calendar-alt me-1"></i>Σειρά Ημιαργιών:</strong>
+                                ${bulkBtnHtml('semi')}
+                            </div>
                             <i id="semiChevron_${i}" class="fas fa-chevron-down"></i>
                         </div>
                         <div id="semiList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(semiDiv);
-                    
-                    // Καθημερινή order
+
                     const normalDiv = document.createElement('div');
                     normalDiv.className = 'mb-3 border rounded p-2';
                     normalDiv.innerHTML = `
                         <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('normalList_${i}', 'normalChevron_${i}')">
-                            <strong class="text-primary"><i class="fas fa-calendar-day me-1"></i>Σειρά Καθημερινών:</strong>
+                            <div class="d-flex align-items-center flex-wrap gap-1">
+                                <strong class="text-primary"><i class="fas fa-calendar-day me-1"></i>Σειρά Καθημερινών:</strong>
+                                ${bulkBtnHtml('normal')}
+                            </div>
                             <i id="normalChevron_${i}" class="fas fa-chevron-down"></i>
                         </div>
                         <div id="normalList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(normalDiv);
-                    
-                    // Render each list
+
+                    if (allPeople.size === 0 && isMode3) {
+                        const hint = document.createElement('p');
+                        hint.className = 'text-muted text-center small mb-2';
+                        hint.textContent =
+                            'Κενή ομάδα — χρησιμοποιήστε «Πολλά» σε κάθε τύπο υπηρεσίας για μαζική προσθήκη από τις 4 ομάδες.';
+                        container.insertBefore(hint, container.firstChild);
+                    }
+
                     const lists = [
                         { type: 'special', list: specialList, containerId: `specialList_${i}` },
                         { type: 'weekend', list: weekendList, containerId: `weekendList_${i}` },
                         { type: 'semi', list: semiList, containerId: `semiList_${i}` },
                         { type: 'normal', list: normalList, containerId: `normalList_${i}` }
                     ];
-                    
+
                     lists.forEach(({ type, list, containerId }) => {
                         const listContainer = document.getElementById(containerId);
-                        // Lazy rendering for performance: populate only when expanded.
                         groupListRenderRegistry.set(containerId, { groupNum: i, type, list });
                         listContainer.dataset.populated = 'false';
-                        // If list is already open (restoreOpenLists will show it), pre-populate now.
                         if (openLists.includes(containerId)) {
                             ensureGroupListPopulated(containerId);
                         }
                     });
                 }
-                
             }
             
             // Restore open lists if preserveOpenLists is true
@@ -1151,6 +1174,279 @@
             const modal = new bootstrap.Modal(document.getElementById('addPersonModal'));
             modal.show();
         }
+
+        let bulkAddFromFourContext = { groupNum: null, listType: null };
+        let lastBulkAddCandidates = [];
+
+        const BULK_ADD_LIST_TYPE_LABELS = {
+            special: 'Ειδικές Αργίες',
+            weekend: 'Σαββατοκύριακα/Αργίες',
+            semi: 'Ημιαργίες',
+            normal: 'Καθημερινές'
+        };
+
+        function normalizeBulkLastDutyKey(raw) {
+            if (raw == null || raw === '') return null;
+            if (typeof parseLastDutyDateToKey === 'function') {
+                const parsed = parseLastDutyDateToKey(raw);
+                if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) return parsed;
+            }
+            const s = String(raw).trim();
+            return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+        }
+
+        /** Υποψήφιοι από όλες τις 4 ομάδες, ταξινόμηση: παλαιότερη lastDuty πρώτα, χωρίς ημερομηνία τελευταία. */
+        function collectBulkAddCandidatesFromFour(listType, alreadyInList) {
+            const source =
+                typeof getGroupsFour === 'function' ? getGroupsFour() : null;
+            const byName = new Map();
+            if (!source) return [];
+            const already = alreadyInList instanceof Set ? alreadyInList : new Set(alreadyInList || []);
+
+            for (let g = 1; g <= 4; g++) {
+                const gd = source[g];
+                if (!gd) continue;
+                const people = new Set([
+                    ...(gd.special || []),
+                    ...(gd.weekend || []),
+                    ...(gd.semi || []),
+                    ...(gd.normal || [])
+                ]);
+                for (const name of people) {
+                    if (!name || already.has(name)) continue;
+                    const ld = gd.lastDuties?.[name] || {};
+                    const dateKey = normalizeBulkLastDutyKey(ld[listType]);
+                    const existing = byName.get(name);
+                    if (!existing) {
+                        byName.set(name, {
+                            name,
+                            lastDate: dateKey,
+                            sourceGroup: g,
+                            lastDuties: { ...ld },
+                            priorities: { ...(gd.priorities?.[name] || {}) }
+                        });
+                    } else {
+                        if (dateKey && (!existing.lastDate || dateKey > existing.lastDate)) {
+                            existing.lastDate = dateKey;
+                        }
+                        for (const k of ['special', 'weekend', 'semi', 'normal']) {
+                            const cand = normalizeBulkLastDutyKey(ld[k]);
+                            const cur = normalizeBulkLastDutyKey(existing.lastDuties[k]);
+                            if (cand && (!cur || cand > cur)) existing.lastDuties[k] = ld[k];
+                            else if (!cur && ld[k]) existing.lastDuties[k] = ld[k];
+                        }
+                        existing.priorities = { ...existing.priorities, ...(gd.priorities?.[name] || {}) };
+                    }
+                }
+            }
+
+            return Array.from(byName.values()).sort((a, b) => {
+                if (!a.lastDate && !b.lastDate) {
+                    return String(a.name).localeCompare(String(b.name), 'el');
+                }
+                if (!a.lastDate) return 1;
+                if (!b.lastDate) return -1;
+                if (a.lastDate !== b.lastDate) return a.lastDate < b.lastDate ? -1 : 1;
+                return String(a.name).localeCompare(String(b.name), 'el');
+            });
+        }
+
+        function openBulkAddFromFourModal(groupNum, listType) {
+            if (typeof getActiveGroupMode === 'function' && getActiveGroupMode() !== '3') {
+                alert('Η μαζική προσθήκη είναι διαθέσιμη μόνο στο σετ 3 ομάδων.');
+                return;
+            }
+            if (!['special', 'weekend', 'semi', 'normal'].includes(listType)) return;
+            const g = parseInt(groupNum, 10);
+            if (!Number.isFinite(g) || g < 1 || g > 3) return;
+
+            bulkAddFromFourContext = { groupNum: g, listType };
+
+            if (!groups[g]) {
+                groups[g] = {
+                    special: [],
+                    weekend: [],
+                    semi: [],
+                    normal: [],
+                    lastDuties: {},
+                    priorities: {}
+                };
+            }
+            if (!groups[g][listType]) groups[g][listType] = [];
+            if (!groups[g].lastDuties) groups[g].lastDuties = {};
+            if (!groups[g].priorities) groups[g].priorities = {};
+
+            const already = new Set(groups[g][listType] || []);
+            lastBulkAddCandidates = collectBulkAddCandidatesFromFour(listType, already);
+
+            const titleEl = document.getElementById('bulkAddFromFourTitle');
+            const metaEl = document.getElementById('bulkAddFromFourMeta');
+            const listEl = document.getElementById('bulkAddFromFourList');
+            const countEl = document.getElementById('bulkAddFromFourCount');
+            if (!listEl) return;
+
+            const groupName =
+                typeof getGroupName === 'function' ? getGroupName(g) : `Ομάδα ${g}`;
+            const typeLabel = BULK_ADD_LIST_TYPE_LABELS[listType] || listType;
+            if (titleEl) {
+                titleEl.textContent = `Προσθήκη πολλών — ${groupName} / ${typeLabel}`;
+            }
+            if (metaEl) {
+                metaEl.textContent =
+                    'Άτομα από όλες τις 4 ομάδες, ταξινομημένα κατά τελευταία υπηρεσία αυτού του τύπου (παλαιότεροι πρώτα).';
+            }
+
+            const esc = (s) =>
+                String(s)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/"/g, '&quot;');
+            const names4 = {
+                1: 'ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ',
+                2: 'ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ',
+                3: 'ΤΕΧΝΙΚΟΣ Ε/Π AW139',
+                4: 'ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ'
+            };
+
+            if (lastBulkAddCandidates.length === 0) {
+                listEl.innerHTML =
+                    '<div class="text-muted text-center py-3">Δεν υπάρχουν διαθέσιμα άτομα (ή είναι ήδη στη λίστα).</div>';
+            } else {
+                listEl.innerHTML = lastBulkAddCandidates
+                    .map((c, idx) => {
+                        const dateLabel = c.lastDate || '—';
+                        const src = names4[c.sourceGroup] || `Ομάδα ${c.sourceGroup}`;
+                        const safeName = esc(c.name);
+                        return `<div class="form-check border-bottom py-2">
+                            <input class="form-check-input bulk-add-from-four-cb" type="checkbox"
+                                id="bulkAddFourCb_${idx}" data-idx="${idx}">
+                            <label class="form-check-label w-100" for="bulkAddFourCb_${idx}">
+                                <span class="fw-semibold">${safeName}</span>
+                                <span class="text-muted small ms-2">τελευταία: ${dateLabel}</span>
+                                <span class="text-muted small d-block">από: ${esc(src)}</span>
+                            </label>
+                        </div>`;
+                    })
+                    .join('');
+            }
+
+            const updateCount = () => {
+                if (!countEl) return;
+                const n = listEl.querySelectorAll('.bulk-add-from-four-cb:checked').length;
+                countEl.textContent = n ? `${n} επιλεγμένα` : 'Κανένα επιλεγμένο';
+            };
+            listEl.querySelectorAll('.bulk-add-from-four-cb').forEach((cb) => {
+                cb.addEventListener('change', updateCount);
+            });
+            updateCount();
+
+            const selectAllBtn = document.getElementById('bulkAddFromFourSelectAll');
+            const clearBtn = document.getElementById('bulkAddFromFourClear');
+            if (selectAllBtn) {
+                selectAllBtn.onclick = () => {
+                    listEl.querySelectorAll('.bulk-add-from-four-cb').forEach((cb) => {
+                        cb.checked = true;
+                    });
+                    updateCount();
+                };
+            }
+            if (clearBtn) {
+                clearBtn.onclick = () => {
+                    listEl.querySelectorAll('.bulk-add-from-four-cb').forEach((cb) => {
+                        cb.checked = false;
+                    });
+                    updateCount();
+                };
+            }
+
+            const modalEl = document.getElementById('bulkAddFromFourModal');
+            if (!modalEl) return;
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+
+        async function confirmBulkAddFromFour() {
+            const { groupNum: g, listType } = bulkAddFromFourContext || {};
+            if (!g || !listType) return;
+
+            const listEl = document.getElementById('bulkAddFromFourList');
+            if (!listEl) return;
+            const selectedMetas = [];
+            listEl.querySelectorAll('.bulk-add-from-four-cb:checked').forEach((cb) => {
+                const idx = parseInt(cb.getAttribute('data-idx'), 10);
+                if (!Number.isFinite(idx) || !lastBulkAddCandidates[idx]) return;
+                selectedMetas.push(lastBulkAddCandidates[idx]);
+            });
+            if (selectedMetas.length === 0) {
+                alert('Επιλέξτε τουλάχιστον ένα άτομο.');
+                return;
+            }
+
+            if (!groups[g]) {
+                groups[g] = {
+                    special: [],
+                    weekend: [],
+                    semi: [],
+                    normal: [],
+                    lastDuties: {},
+                    priorities: {}
+                };
+            }
+            if (!groups[g][listType]) groups[g][listType] = [];
+            if (!groups[g].lastDuties) groups[g].lastDuties = {};
+            if (!groups[g].priorities) groups[g].priorities = {};
+
+            const already = new Set(groups[g][listType]);
+
+            // Σειρά modal = παλαιότεροι πρώτα (διατηρείται από τη σειρά των checkboxes)
+            for (const meta of selectedMetas) {
+                const name = meta.name;
+                if (!name || already.has(name)) continue;
+                groups[g][listType].push(name);
+                already.add(name);
+                const prevLd = groups[g].lastDuties[name] || {};
+                groups[g].lastDuties[name] = {
+                    special: prevLd.special || meta.lastDuties.special || null,
+                    weekend: prevLd.weekend || meta.lastDuties.weekend || null,
+                    semi: prevLd.semi || meta.lastDuties.semi || null,
+                    normal: prevLd.normal || meta.lastDuties.normal || null
+                };
+                if (!groups[g].priorities[name]) groups[g].priorities[name] = {};
+            }
+
+            // Όλη η λίστα: σειρά κατά lastDuty (παλαιότεροι πρώτα) + priorities 1..n
+            const list = groups[g][listType];
+            list.sort((a, b) => {
+                const dateA = normalizeBulkLastDutyKey(groups[g].lastDuties?.[a]?.[listType]);
+                const dateB = normalizeBulkLastDutyKey(groups[g].lastDuties?.[b]?.[listType]);
+                if (!dateA && !dateB) return String(a).localeCompare(String(b), 'el');
+                if (!dateA) return 1;
+                if (!dateB) return -1;
+                if (dateA !== dateB) return dateA < dateB ? -1 : 1;
+                return String(a).localeCompare(String(b), 'el');
+            });
+            list.forEach((person, index) => {
+                if (!groups[g].priorities[person]) groups[g].priorities[person] = {};
+                groups[g].priorities[person][listType] = index + 1;
+            });
+
+            try {
+                if (typeof saveData === 'function') await saveData();
+            } catch (e) {
+                console.error('confirmBulkAddFromFour save:', e);
+            }
+            if (typeof renderGroups === 'function') {
+                renderGroups(true, [`${listType}List_${g}`]);
+            }
+
+            const modalEl = document.getElementById('bulkAddFromFourModal');
+            if (modalEl) {
+                const inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            }
+        }
+
+        window.openBulkAddFromFourModal = openBulkAddFromFourModal;
+        window.confirmBulkAddFromFour = confirmBulkAddFromFour;
         function lastDutyDateKeyForEditField(personName, groupNumber, listType, storedRaw) {
             // Same as lists: calendar before today, else manual stored
             if (typeof resolveEffectiveLastDutyDateKey === 'function') {
