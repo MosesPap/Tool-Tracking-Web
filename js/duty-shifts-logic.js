@@ -2071,23 +2071,17 @@
          * Mirrors baseline semi seeding (first semi of month + getLastRotationPersonForDate; Feb-2026 / April groups 1–2 hacks).
          * Used when an absence window lies in a month before calculationSteps.startDate — getRotationPosition() is invalid there.
          */
-        /** Επόμενος στη σειρά ημιαργίας: απενεργοποιημένοι δεν καταλαμβάνουν ημέρα (ίδιο με build Step 3). */
+        /**
+         * Καθαρή βασική σειρά ημιαργίας: ΚΑΘΕ άτομο κρατά τη θέση του (και απενεργοποιημένοι).
+         * Η αντικατάσταση γίνεται μόνο στο Step 3 με λόγο — αλλιώς ο baseline «προσπερνά»
+         * και μετά καθαρίζεται ο λόγος (assigned === baseline χωρίς τον νο.8).
+         */
         function resolveSemiRotationAssigneeForDate(groupPeople, posState, groupNum, dateKey) {
             const rotLen = groupPeople.length;
             if (!rotLen) return { person: null, nextPos: 0 };
-            let pos = posState % rotLen;
-            const date = new Date(dateKey + 'T00:00:00');
-            let guard = 0;
-            while (
-                guard++ <= rotLen + 2 &&
-                groupPeople[pos] &&
-                typeof isPersonDisabledForDuty === 'function' &&
-                isPersonDisabledForDuty(groupPeople[pos], groupNum, 'semi', date)
-            ) {
-                pos = (pos + 1) % rotLen;
-            }
+            const pos = ((Number(posState) || 0) % rotLen + rotLen) % rotLen;
             const person = groupPeople[pos] || null;
-            return { person, nextPos: person != null ? (pos + 1) % rotLen : (posState + 1) % rotLen };
+            return { person, nextPos: (pos + 1) % rotLen };
         }
 
         function buildExpectedSemiPersonMapForCalendarMonth(year, monthIndex0, groupNum) {
@@ -12660,12 +12654,15 @@
 
             const mergedSemiBaseline = finalizeSemiPreview(finalAssignments, baselineSemiByDate, baseline);
 
+            // Καθάρισε stale unavailable λόγους ΜΟΝΟ όταν η τελική = καθαρή σειρά
+            // (baselineSemiByDate), όχι το merged preview — αλλιώς σβήνεται ο λόγος
+            // όταν ο νο.N προσπεράστηκε ως disabled και το expected map είχε ήδη τον αντικαταστάτη.
             for (const dateKey of sortedSemi) {
                 for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const assigned = finalAssignments[dateKey]?.[groupNum];
-                    const base = mergedSemiBaseline[dateKey]?.[groupNum];
-                    if (!assigned || !base) continue;
-                    if (normalizePersonKey(assigned) !== normalizePersonKey(base)) continue;
+                    const pureBase = baselineSemiByDate[dateKey]?.[groupNum];
+                    if (!assigned || !pureBase) continue;
+                    if (normalizePersonKey(assigned) !== normalizePersonKey(pureBase)) continue;
                     const gmap = assignmentReasons[dateKey]?.[groupNum];
                     if (!gmap) continue;
                     for (const pn of Object.keys(gmap)) {
