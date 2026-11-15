@@ -1597,10 +1597,25 @@
             const maxG =
                 typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4;
             const byGroup = {};
+            // normKey → { g, name } στην τρέχουσα ομάδα εμφάνισης (μετά από μετακίνηση).
+            const homeByNorm = {};
+
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) =>
+                          String(s || '')
+                              .trim()
+                              .toLowerCase();
+
             for (let g = 1; g <= maxG; g++) {
                 byGroup[g] = {};
                 for (const person of getPeopleInGroupForDutyTotals(g)) {
                     byGroup[g][person] = emptyDutyTotalsBucket();
+                    const pk = norm(person);
+                    if (pk && !homeByNorm[pk]) {
+                        homeByNorm[pk] = { g, name: person };
+                    }
                 }
             }
 
@@ -1611,13 +1626,13 @@
                 { type: 'normal', store: typeof normalDayAssignments !== 'undefined' ? normalDayAssignments : {} }
             ];
 
-            const norm =
-                typeof normalizePersonKey === 'function'
-                    ? normalizePersonKey
-                    : (s) =>
-                          String(s || '')
-                              .trim()
-                              .toLowerCase();
+            const ensureBucket = (groupNum, displayName) => {
+                if (!byGroup[groupNum]) byGroup[groupNum] = {};
+                if (!byGroup[groupNum][displayName]) {
+                    byGroup[groupNum][displayName] = emptyDutyTotalsBucket();
+                }
+                return byGroup[groupNum][displayName];
+            };
 
             for (const { type, store } of stores) {
                 if (!store || typeof store !== 'object') continue;
@@ -1630,26 +1645,22 @@
                         typeof extractGroupAssignmentsMap === 'function'
                             ? extractGroupAssignmentsMap(raw)
                             : {};
-                    for (let g = 1; g <= maxG; g++) {
+                    // Μέχρι 4: παλιές αναθέσεις μπορεί να είναι σε ομάδα άλλου σετ.
+                    for (let g = 1; g <= 4; g++) {
                         const person = map[g] || map[String(g)];
                         if (!person) continue;
-                        const peopleMap = byGroup[g];
-                        if (!peopleMap) continue;
-                        let hitName = null;
-                        if (peopleMap[person]) {
-                            hitName = person;
-                        } else {
-                            const pk = norm(person);
-                            for (const name of Object.keys(peopleMap)) {
-                                if (norm(name) === pk) {
-                                    hitName = name;
-                                    break;
-                                }
-                            }
+                        const pk = norm(person);
+                        if (!pk) continue;
+                        let home = homeByNorm[pk];
+                        if (!home) {
+                            // Όχι στις τρέχουσες λίστες: εμφάνιση στην ομάδα της ανάθεσης.
+                            const displayG = g <= maxG ? g : 1;
+                            home = { g: displayG, name: person };
+                            homeByNorm[pk] = home;
                         }
-                        if (!hitName) continue;
-                        peopleMap[hitName][type] += 1;
-                        peopleMap[hitName].total += 1;
+                        const bucket = ensureBucket(home.g, home.name);
+                        bucket[type] += 1;
+                        bucket.total += 1;
                     }
                 }
             }
@@ -1668,7 +1679,7 @@
                         const [y, m] = k.split('-');
                         return `${m}/${y}`;
                     })
-                    .join(', ')} — μετράει τελικές αναθέσεις στο ημερολόγιο για την ομάδα κάθε ατόμου.`;
+                    .join(', ')} — ανά άτομο μετράει όλες τις υπηρεσίες σε όλες τις ομάδες (και μετά από μετακίνηση).`;
             }
 
             const byGroup = computeDutyTotalsForMonths(keys);
