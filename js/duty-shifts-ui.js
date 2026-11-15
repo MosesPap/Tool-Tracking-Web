@@ -674,7 +674,7 @@
         }
         function getOpenLists() {
             const openLists = [];
-            for (let i = 1; i <= 4; i++) {
+            for (let i = 1; i <= getDutyGroupCount(); i++) {
                 const listTypes = ['special', 'weekend', 'semi', 'normal'];
                 listTypes.forEach(lt => {
                     const listId = `${lt}List_${i}`;
@@ -748,7 +748,7 @@
                     }
                 });
             }
-            for (let i = 1; i <= 4; i++) {
+            for (let i = 1; i <= getDutyGroupCount(); i++) {
                 const container = document.getElementById(`group${i}People`);
                 container.innerHTML = '';
                 
@@ -1938,7 +1938,7 @@
                     const baselineMap = extractGroupAssignmentsMap(existingBaseline);
                     baselineMap[groupNum] = personName;
                     const baseParts = [];
-                    for (let g = 1; g <= 4; g++) {
+                    for (let g = 1; g <= getDutyGroupCount(); g++) {
                         const pn = baselineMap[g];
                         if (pn) baseParts.push(`${pn} (Ομάδα ${g})`);
                     }
@@ -2116,7 +2116,7 @@
 
             groupMap[groupNum] = replacement;
             const parts = [];
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 const pn = groupMap[g];
                 if (pn) parts.push(`${pn} (Ομάδα ${g})`);
             }
@@ -2333,7 +2333,7 @@
 
             let hasAnyPeople = false;
 
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                 const groupData = groups[groupNum] || {
                     special: [],
                     weekend: [],
@@ -2818,7 +2818,7 @@
             const byExact = typeof getPersonGroup === 'function' ? getPersonGroup(personName) : null;
             if (byExact) return byExact;
             if (!pk) return null;
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                 const group = groups[groupNum];
                 if (!group) continue;
                 for (const lt of ['special', 'weekend', 'semi', 'normal']) {
@@ -2938,7 +2938,7 @@
             const listTypes = ['special', 'weekend', 'semi', 'normal'];
             const pk = personKeyForTransferReturn(personName);
 
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 if (!groups[g]) continue;
                 for (const lt of listTypes) {
                     const list = groups[g][lt] || [];
@@ -3048,7 +3048,7 @@
                 }
             }
             if (typeof scheduleListOrdersForGroup === 'function') {
-                for (let g = 1; g <= 4; g++) scheduleListOrdersForGroup(g, effKey);
+                for (let g = 1; g <= getDutyGroupCount(); g++) scheduleListOrdersForGroup(g, effKey);
             }
             await finalizeTransferReturns(returnedNames);
             if (returnedNames.length === 1) {
@@ -3240,7 +3240,8 @@
             ]);
         }
         function openTransferTargetGroupModal(fromGroup, index, listType, personName, reopenActionsOnCancel = false) {
-            const availableGroups = [1, 2, 3, 4].filter(g => g !== fromGroup);
+            const _maxG = typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4;
+            const availableGroups = Array.from({ length: _maxG }, (_, i) => i + 1).filter(g => g !== fromGroup);
             if (availableGroups.length === 0) {
                 alert('Δεν υπάρχουν άλλες ομάδες για μεταφορά');
                 return;
@@ -3284,7 +3285,8 @@
             if (reopenActionsOnCancel) reopenPersonActionsAfterTransferFlow = true;
             pendingTransferTargetGroup = null;
 
-            if (!toGroup || toGroup === fromGroup || ![1, 2, 3, 4].includes(toGroup)) {
+            const _maxGTransfer = typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4;
+            if (!toGroup || toGroup === fromGroup || toGroup < 1 || toGroup > _maxGTransfer) {
                 alert('Μη έγκυρη επιλογή ομάδας');
                 return;
             }
@@ -3376,7 +3378,7 @@
         }
         function getAllPeople() {
             const allPeople = new Set();
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                 const group = groups[groupNum];
                 if (group) {
                     ['special', 'weekend', 'semi', 'normal'].forEach(listType => {
@@ -3389,7 +3391,7 @@
             return Array.from(allPeople).sort();
         }
         function getPersonGroup(personName) {
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                 const group = groups[groupNum];
                 if (group) {
                     const listTypes = ['special', 'weekend', 'semi', 'normal'];
@@ -3403,7 +3405,7 @@
             return null;
         }
         function getPersonDetails(personName) {
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                 const group = groups[groupNum];
                 if (group) {
                     const listTypes = ['special', 'weekend', 'semi', 'normal'];
@@ -4057,7 +4059,7 @@
             rankingsModified = true;
         }
         function isPersonInAnyGroupLists(personName) {
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 const gd = groups?.[g];
                 if (!gd) continue;
                 if (['special', 'weekend', 'semi', 'normal'].some(t => (gd[t] || []).includes(personName))) {
@@ -5119,13 +5121,27 @@
             const changesCb = document.getElementById('dutyShiftsNightDutiesChangesGroups34');
             const mode = typeof getNightDutiesMode === 'function' ? getNightDutiesMode() : 'off';
             if (changesCb) changesCb.checked = mode === 'changes';
+            const activeMode = typeof getActiveGroupMode === 'function' ? getActiveGroupMode() : '4';
+            const mode4 = document.getElementById('dutyShiftsGroupMode4');
+            const mode3 = document.getElementById('dutyShiftsGroupMode3');
+            if (mode4) mode4.checked = activeMode !== '3';
+            if (mode3) mode3.checked = activeMode === '3';
             const disabledGroups = typeof getNormalWeekPairSwapDisabledGroups === 'function'
                 ? getNormalWeekPairSwapDisabledGroups()
                 : [];
+            const n = typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4;
             for (let g = 1; g <= 4; g++) {
                 const cb = document.getElementById(`normalSwapDisableGroup${g}`);
-                if (cb) cb.checked = disabledGroups.includes(g);
+                if (!cb) continue;
+                const wrap = cb.closest('.form-check');
+                if (wrap) wrap.style.display = g <= n ? '' : 'none';
+                cb.checked = disabledGroups.includes(g);
+                const lab = wrap ? wrap.querySelector('label') : null;
+                if (lab && typeof getGroupName === 'function' && g <= n) {
+                    lab.textContent = getGroupName(g);
+                }
             }
+            if (typeof updateGroupSetUiVisibility === 'function') updateGroupSetUiVisibility();
             const modalEl = document.getElementById('normalSwapLogicSettingsModal');
             if (!modalEl) return;
             const m = new bootstrap.Modal(modalEl);
@@ -5140,8 +5156,14 @@
                     localStorage.setItem('dutyShiftsFlexibleStatusEffectiveDates', flexCb.checked ? '1' : '0');
                 } catch (_) {}
             }
+            const mode3 = document.getElementById('dutyShiftsGroupMode3');
+            const nextMode = mode3 && mode3.checked ? '3' : '4';
+            if (typeof setActiveGroupMode === 'function') {
+                setActiveGroupMode(nextMode, { persist: true });
+            }
             const selected = [];
-            for (let g = 1; g <= 4; g++) {
+            const n = typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4;
+            for (let g = 1; g <= n; g++) {
                 const cb = document.getElementById(`normalSwapDisableGroup${g}`);
                 if (cb && cb.checked) selected.push(g);
             }
@@ -5160,11 +5182,12 @@
             if (m) m.hide();
             if (typeof showInfoMessage === 'function') {
                 showInfoMessage(
-                    'Οι ρυθμίσεις αποθηκεύτηκαν στο cloud. Ισχύουν για όλους τους χρήστες (εξαιρέσεις ομάδων) και ανά λογαριασμό (ευέλικτη ημερομηνία).',
+                    `Οι ρυθμίσεις αποθηκεύτηκαν. Ενεργό σετ: ${nextMode} ομάδες. Ισχύουν για όλους τους χρήστες (σετ/εξαιρέσεις) και ανά λογαριασμό (ευέλικτη ημερομηνία).`,
                     'Ρυθμίσεις'
                 );
             }
             if (typeof renderGroups === 'function') renderGroups(true);
+            if (typeof renderCalendar === 'function') renderCalendar();
         }
 
         const DUTY_LIST_TYPE_LABELS = {
@@ -5279,7 +5302,7 @@
                     if (m) {
                         const name = m[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
                         const g = parseInt(m[2], 10);
-                        if (g >= 1 && g <= 4 && name) specialDutyInMonthByGroup[g].add(name);
+                        if (g >= 1 && g <= getDutyGroupCount() && name) specialDutyInMonthByGroup[g].add(name);
                     }
                 }
             }
@@ -5299,7 +5322,7 @@
                 dayKeysByCategory[cat].push(dk);
             }
             const monthSeedDate = new Date(year, month, 1);
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                 const gdata = groups[groupNum] || {};
                 for (const cat of ['special', 'weekend', 'semi', 'normal']) {
                     const people = gdata[cat] || [];
@@ -5401,7 +5424,7 @@
                 if (showMdOnly) {
                     mdHighlightNorms = [];
                     const rows = [];
-                    for (let g = 1; g <= 4; g++) {
+                    for (let g = 1; g <= getDutyGroupCount(); g++) {
                         const plist = (groups[g] || {})[dayTypeCategory] || [];
                         if (!Array.isArray(plist)) continue;
                         for (const personName of plist) {
@@ -5485,7 +5508,7 @@
                             let thursdaySpacingPairId = null;
                             let thursdaySpacingPairFallbackKey = null;
                             let swapStyle = '';
-                            if (personName && g >= 1 && g <= 4) {
+                            if (personName && g >= 1 && g <= getDutyGroupCount()) {
                                 const spacingMarkerEarly =
                                     typeof getThursdaySpacingMarker === 'function'
                                         ? getThursdaySpacingMarker(key, g, personName)
@@ -5598,7 +5621,7 @@
                                 nameOnly,
                                 rank,
                                 listOrder:
-                                    personName && g >= 1 && g <= 4
+                                    personName && g >= 1 && g <= getDutyGroupCount()
                                         ? getPersonDutyListPosition(g, personName, dayTypeCategory, key)
                                         : null,
                                 underline,
@@ -5616,7 +5639,7 @@
                         const hierarchyData = JSON.stringify(hierarchyOrderedEntries.map(e => ({
                             name: e.nameOnly,
                             rank: e.rank,
-                            bufferWarning: !!(e.personName && e.groupNum >= 1 && e.groupNum <= 4 && typeof isPersonOnMissingBufferDay === 'function' && isPersonOnMissingBufferDay(e.personName, e.groupNum, key))
+                            bufferWarning: !!(e.personName && e.groupNum >= 1 && e.groupNum <= getDutyGroupCount() && typeof isPersonOnMissingBufferDay === 'function' && isPersonOnMissingBufferDay(e.personName, e.groupNum, key))
                         })));
                         // Sort by group order (1, 2, 3, 4) for display
                         const entriesByGroup = [...entries].sort((a, b) => {
@@ -5636,8 +5659,8 @@
                             } else if (e.isSwap) {
                                 cls = 'duty-person-swapped';
                             }
-                            const groupDisplay = e.groupNum && e.groupNum >= 1 && e.groupNum <= 4 ? e.groupNum : '';
-                            const showBufferWarn = e.personName && e.groupNum >= 1 && e.groupNum <= 4 && typeof isPersonOnMissingBufferDay === 'function' && isPersonOnMissingBufferDay(e.personName, e.groupNum, key);
+                            const groupDisplay = e.groupNum && e.groupNum >= 1 && e.groupNum <= getDutyGroupCount() ? e.groupNum : '';
+                            const showBufferWarn = e.personName && e.groupNum >= 1 && e.groupNum <= getDutyGroupCount() && typeof isPersonOnMissingBufferDay === 'function' && isPersonOnMissingBufferDay(e.personName, e.groupNum, key);
                             const bufferIcon = showBufferWarn
                                 ? ` <i class="fas fa-exclamation-triangle duty-missing-buffer-warn" title="${escapeHtml(missingBufferTitle)}" aria-label="${escapeHtml(missingBufferTitle)}"></i>`
                                 : '';
@@ -6683,7 +6706,7 @@
                 startMonthInput.value = `${currentYear}-${currentMonth}`;
             }
             }
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 const stripCb = document.getElementById(`calcStripManualOverridesG${g}`);
                 if (stripCb) stripCb.checked = false;
                 const lab = document.getElementById(`calcStripGroupLabel${g}`);
@@ -6815,7 +6838,7 @@
                         }
                     }
 
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         const base = baselineByDate?.[dateKey]?.[groupNum] || null;
                         const comp = computedByDate?.[dateKey]?.[groupNum] || null;
                         if (!base || !comp) continue;
@@ -6958,7 +6981,7 @@
                 if (isNaN(dateObj.getTime())) continue;
                 const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const dayName = getGreekDayName(dateObj);
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const base = baselineByDate?.[dateKey]?.[groupNum] || null;
                     const comp = computedByDate?.[dateKey]?.[groupNum] || null;
                     if (!base || !comp) continue;
@@ -7120,7 +7143,7 @@
                     for (const dateKey in updatedAssignments) {
                         const groups = updatedAssignments[dateKey];
                         const parts = [];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             if (groups[groupNum]) {
                                 parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
                             }
@@ -7151,7 +7174,7 @@
                         const groups = updatedAssignments[dateKey];
                         if (!groups) continue;
                         
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             const assignedPerson = groups[groupNum];
                             if (assignedPerson) {
                                 if (!finalWeekendRotationPositionsByMonth[monthKey]) {
@@ -7169,7 +7192,7 @@
                     if (Object.keys(finalWeekendRotationPositionsByMonth).length > 0) {
                         for (const monthKey in finalWeekendRotationPositionsByMonth) {
                             const groupsForMonth = finalWeekendRotationPositionsByMonth[monthKey] || {};
-                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                                 if (groupsForMonth[groupNum] !== undefined) {
                                     setLastRotationPersonForMonth('weekend', monthKey, groupNum, groupsForMonth[groupNum]);
                                 }
@@ -7214,7 +7237,7 @@
                     for (const dateKey in updatedAssignments) {
                         const groups = updatedAssignments[dateKey];
                         const parts = [];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             if (groups[groupNum]) {
                                 parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
                             }
@@ -7260,7 +7283,7 @@
                         const groups = updatedAssignments[dateKey];
                         if (!groups) continue;
                         
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             const assignedPerson = groups[groupNum];
                             if (assignedPerson) {
                                 if (!finalSemiRotationPositionsByMonth[monthKey]) {
@@ -7276,7 +7299,7 @@
                     if (Object.keys(finalSemiRotationPositionsByMonth).length > 0) {
                         for (const monthKey in finalSemiRotationPositionsByMonth) {
                             const groupsForMonth = finalSemiRotationPositionsByMonth[monthKey] || {};
-                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                                 if (groupsForMonth[groupNum] !== undefined) {
                                     setLastRotationPersonForMonth('semi', monthKey, groupNum, groupsForMonth[groupNum]);
                                 }
@@ -7759,7 +7782,7 @@
             }
             
             // Ensure we have one person per group (1-4), even if not assigned
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                 if (!groupsFound.has(groupNum)) {
                     personGroups.push({
                         name: '',
@@ -9597,7 +9620,7 @@
             const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
             nextMonthDate.setHours(0, 0, 0, 0);
             
-            for (let i = 1; i <= 4; i++) {
+            for (let i = 1; i <= getDutyGroupCount(); i++) {
                 const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, disabledPersons: {}, excludedFromDuties: {} };
                 const specialList = groupData.special || [];
                 const weekendList = groupData.weekend || [];
@@ -10208,7 +10231,7 @@
         <h2>${listType.name}</h2>
         <div class="groups-grid">
 `;
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
                     const groupName = getGroupName(groupNum);
                     const list =

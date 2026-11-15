@@ -426,7 +426,7 @@
                 const mk = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(d) : null;
                 if (mk) {
                     if (!simulatedSpecial[mk]) simulatedSpecial[mk] = {};
-                    for (let g = 1; g <= 4; g++) {
+                    for (let g = 1; g <= getDutyGroupCount(); g++) {
                         if (!gmap[g]) continue;
                         if (!simulatedSpecial[mk][g]) simulatedSpecial[mk][g] = new Set();
                         simulatedSpecial[mk][g].add(gmap[g]);

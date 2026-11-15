@@ -4,13 +4,157 @@
 
 
         // Data storage - each group has four order lists: special, weekend, semi, normal
-        // Each person also has last duty dates for each type, missing periods, and priorities
-        let groups = {
-            1: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} },
-            2: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} },
-            3: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} },
-            4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} }
+        // Parallel sets: 4 ομάδες (παλιό) + 3 ομάδες (νέο). Το `groups` δείχνει στο ενεργό σετ.
+        function createEmptyGroupBucket() {
+            return {
+                special: [],
+                weekend: [],
+                semi: [],
+                normal: [],
+                lastDuties: {},
+                missingPeriods: {},
+                priorities: {},
+                disabledPersons: {},
+                excludedFromDuties: {}
+            };
+        }
+        function createEmptyGroupsFour() {
+            return {
+                1: createEmptyGroupBucket(),
+                2: createEmptyGroupBucket(),
+                3: createEmptyGroupBucket(),
+                4: createEmptyGroupBucket()
+            };
+        }
+        function createEmptyGroupsThree() {
+            return {
+                1: createEmptyGroupBucket(),
+                2: createEmptyGroupBucket(),
+                3: createEmptyGroupBucket()
+            };
+        }
+        let groupsFour = createEmptyGroupsFour();
+        let groupsThree = createEmptyGroupsThree();
+        /** '4' | '3' — ποιο σετ χρησιμοποιεί υπολογισμός / UI λιστών */
+        let activeGroupMode = '4';
+        let groups = groupsFour;
+
+        function getDutyGroupCount() {
+            return activeGroupMode === '3' ? 3 : 4;
+        }
+        function getActiveGroupMode() {
+            return activeGroupMode === '3' ? '3' : '4';
+        }
+        function updateGroupSetUiVisibility() {
+            const n = getDutyGroupCount();
+            for (let g = 1; g <= 4; g++) {
+                const el = document.getElementById(`group${g}Container`);
+                if (!el) continue;
+                el.style.display = g <= n ? '' : 'none';
+                el.classList.remove('col-lg-3', 'col-lg-4');
+                if (g <= n) {
+                    el.classList.add(n === 3 ? 'col-lg-4' : 'col-lg-3');
+                }
+                const badge = el.querySelector('.group-badge');
+                if (badge && typeof getGroupName === 'function') {
+                    badge.textContent = getGroupName(g);
+                }
+            }
+            const label = document.getElementById('activeGroupModeLabel');
+            if (label) {
+                label.textContent = activeGroupMode === '3' ? 'Υπολογισμός: 3 ομάδες' : 'Υπολογισμός: 4 ομάδες';
+            }
+        }
+
+        const GROUP_NAMES_FOUR = {
+            1: 'ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ',
+            2: 'ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ',
+            3: 'ΤΕΧΝΙΚΟΣ Ε/Π AW139',
+            4: 'ΤΕΧΝΙΚΟΣ ΕΠΙΓΕΙΩΝ ΜΕΣΩΝ'
         };
+
+        function normalizeDutyDateKey(raw) {
+            if (raw == null || raw === '') return null;
+            if (typeof parseLastDutyDateToKey === 'function') {
+                const k = parseLastDutyDateToKey(raw);
+                if (k && /^\d{4}-\d{2}-\d{2}$/.test(k)) return k;
+            }
+            const s = String(raw).trim();
+            return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+        }
+
+        /**
+         * Όλα τα άτομα από τις 4 ομάδες (ενιαία λίστα), με lastDuties από την ομάδα προέλευσης.
+         * Ταξινόμηση για listType: παλαιότερη τελευταία υπηρεσία πρώτα, χωρίς ημερομηνία στο τέλος.
+         */
+        function collectPeoplePoolFromGroupsFour(listType) {
+            const byName = new Map();
+            for (let g = 1; g <= 4; g++) {
+                const gd = groupsFour[g] || {};
+                const names = new Set([
+                    ...(gd.special || []),
+                    ...(gd.weekend || []),
+                    ...(gd.semi || []),
+                    ...(gd.normal || [])
+                ]);
+                for (const name of names) {
+                    if (!name || byName.has(name)) continue;
+                    const ld = gd.lastDuties?.[name] || {};
+                    byName.set(name, {
+                        name,
+                        sourceGroup: g,
+                        sourceGroupName: GROUP_NAMES_FOUR[g] || `Ομάδα ${g}`,
+                        lastDuties: { ...ld },
+                        priorities: { ...(gd.priorities?.[name] || {}) },
+                        lastDutyKey: normalizeDutyDateKey(ld[listType])
+                    });
+                }
+            }
+            const arr = Array.from(byName.values());
+            arr.sort((a, b) => {
+                const da = a.lastDutyKey;
+                const db = b.lastDutyKey;
+                if (!da && !db) return String(a.name).localeCompare(String(b.name), 'el');
+                if (!da) return 1;
+                if (!db) return -1;
+                if (da !== db) return da < db ? -1 : 1;
+                return String(a.name).localeCompare(String(b.name), 'el');
+            });
+            return arr;
+        }
+        window.collectPeoplePoolFromGroupsFour = collectPeoplePoolFromGroupsFour;
+        function setActiveGroupMode(mode, opts = {}) {
+            const persist = opts.persist !== false;
+            const next = mode === '3' || mode === 3 ? '3' : '4';
+            activeGroupMode = next;
+            groups = next === '3' ? groupsThree : groupsFour;
+            if (typeof lastRotationPositionsFour !== 'undefined' && typeof lastRotationPositionsThree !== 'undefined') {
+                lastRotationPositions =
+                    next === '3' ? lastRotationPositionsThree : lastRotationPositionsFour;
+            }
+            try {
+                localStorage.setItem('dutyShiftsActiveGroupMode', next);
+            } catch (_) {}
+            updateGroupSetUiVisibility();
+            if (typeof renderGroups === 'function') {
+                try {
+                    renderGroups();
+                } catch (_) {}
+            }
+            if (typeof renderCalendar === 'function') {
+                try {
+                    renderCalendar();
+                } catch (_) {}
+            }
+            if (persist && typeof saveDutyShiftsActiveGroupModeSetting === 'function') {
+                saveDutyShiftsActiveGroupModeSetting(next).catch(() => {});
+            }
+            return next;
+        }
+        window.getDutyGroupCount = getDutyGroupCount;
+        window.getActiveGroupMode = getActiveGroupMode;
+        window.setActiveGroupMode = setActiveGroupMode;
+        window.updateGroupSetUiVisibility = updateGroupSetUiVisibility;
         // Organizational rankings - separate from priority, doesn't affect list order
         let rankings = {}; // Format: { "Person Name": rankNumber }
         let rankingsModified = false; // Track if rankings have been modified (only save when true)
@@ -61,12 +205,12 @@
         //
         // LEGACY (flat) structure is still supported for backward compatibility:
         // lastRotationPositions[dayType][groupNum] = personName
-        let lastRotationPositions = {
-            normal: {},
-            semi: {},
-            weekend: {},
-            special: {}
-        };
+        function createEmptyLastRotationPositions() {
+            return { normal: {}, semi: {}, weekend: {}, special: {} };
+        }
+        let lastRotationPositionsFour = createEmptyLastRotationPositions();
+        let lastRotationPositionsThree = createEmptyLastRotationPositions();
+        let lastRotationPositions = lastRotationPositionsFour;
         /** YYYY-MM -> true: month cannot start «Υπολογισμός Υπηρεσιών» until unlocked (Firestore doc monthCalculationLocks). */
         let monthCalculationLocks = {};
         /**
@@ -150,7 +294,7 @@
                 excelAlternateOverridesByMonth = {};
             }
             const monthPayload = {};
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 if (_excelAlternateOverrides?.[g]) {
                     monthPayload[g] = normalizeExcelAlternateGroupOverride(_excelAlternateOverrides[g]);
                 }
@@ -418,7 +562,7 @@
                 personStatusSchedule.membership.length === 0 &&
                 personStatusSchedule.listOrders.length === 0
             ) {
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     const gd = groups[g];
                     if (!gd) continue;
                     for (const listType of DUTY_STATUS_LIST_TYPES) {
@@ -475,7 +619,7 @@
                 .filter((e) => e.personKey === pk && compareScheduleDateKeys(e.effectiveFrom, dk) <= 0)
                 .sort(comparePersonStatusScheduleEntriesDesc);
             if (hits.length) return hits[0].groupNum;
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 for (const lt of DUTY_STATUS_LIST_TYPES) {
                     const list = groups[g]?.[lt] || [];
                     if (list.some((p) => personScheduleKey(p) === pk)) return g;
@@ -807,7 +951,7 @@
                     if (!out[dayType][monthKey]) out[dayType][monthKey] = {};
                     const assignment = flatDateMap[dateKey];
                     if (!assignment) continue;
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         const person = parseAssignedPersonForGroupFromAssignment(assignment, groupNum);
                         if (person) out[dayType][monthKey][groupNum] = person; // sorted asc => last wins
                     }
@@ -830,7 +974,7 @@
                 const gmap = assignmentsByDate[dateKey];
                 if (!gmap || typeof gmap !== 'object') continue;
                 const parts = [];
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const person = gmap[groupNum];
                     if (person) parts.push(`${person} (Ομάδα ${groupNum})`);
                 }
@@ -1537,7 +1681,7 @@
             for (const dk in assignmentReasons || {}) {
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
                 const cat = getDutyCategoryForDateKeyLocal(dk);
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     const manual = findManualAlternateReplacementForGroup(dk, g);
                     let replacementPerson = null;
                     let baselinePerson = null;
@@ -1578,7 +1722,7 @@
         }
 
         function seedManualAlternateDeferAllGroupsForMonthStart(deferState, dayTypeCategory, dateInMonth) {
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 seedManualAlternateDeferFromPreviousMonth(deferState, dayTypeCategory, dateInMonth, g);
             }
         }
@@ -2301,7 +2445,7 @@
             const keys = Array.isArray(dateKeys) ? dateKeys : Object.keys(existingByDate || {});
             for (const dateKey of keys) {
                 const map = extractGroupAssignmentsMap(existingByDate?.[dateKey]);
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     if (recalcSet.has(g) || !map[g]) continue;
                     if (!tempByDate[dateKey]) tempByDate[dateKey] = {};
                     tempByDate[dateKey][g] = map[g];
@@ -2317,7 +2461,7 @@
                 const tempMap = tempByDate[dateKey];
                 if (!tempMap || typeof tempMap !== 'object') continue;
                 const existingMap = extractGroupAssignmentsMap(targetStore[dateKey]);
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     if (!recalcSet.has(g)) continue;
                     if (tempMap[g]) existingMap[g] = tempMap[g];
                     else delete existingMap[g];
@@ -2348,7 +2492,7 @@
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue;
                 const existingMap = extractGroupAssignmentsMap(existingStore[dateKey]);
                 let hasPreserved = false;
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     if (!recalcGroupSet.has(g) && existingMap[g]) hasPreserved = true;
                 }
                 if (hasPreserved) out[dateKey] = existingStore[dateKey];
@@ -2858,6 +3002,7 @@
                     .set(
                         {
                             normalWeekPairSwapDisabledGroups: safe,
+                            activeGroupMode: getActiveGroupMode(),
                             lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                             updatedBy: user.uid
                         },
@@ -2872,6 +3017,31 @@
                 return false;
             }
         }
+
+        async function saveDutyShiftsActiveGroupModeSetting(mode) {
+            const m = mode === '3' || mode === 3 ? '3' : '4';
+            try {
+                localStorage.setItem('dutyShiftsActiveGroupMode', m);
+            } catch (_) {}
+            const user = window.auth?.currentUser;
+            if (!user?.uid || !window.db) return false;
+            try {
+                const db = window.db || firebase.firestore();
+                await db.collection('dutyShifts').doc('settings').set(
+                    {
+                        activeGroupMode: m,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    },
+                    { merge: true }
+                );
+                return true;
+            } catch (e) {
+                console.error('saveDutyShiftsActiveGroupModeSetting:', e);
+                return false;
+            }
+        }
+        window.saveDutyShiftsActiveGroupModeSetting = saveDutyShiftsActiveGroupModeSetting;
 
         async function migrateNormalWeekPairSwapDisabledGroupsFromLocalStorageIfNeeded() {
             const user = window.auth?.currentUser;
@@ -3015,6 +3185,7 @@
                 const dutyShifts = db.collection('dutyShifts');
                 const [
                     groupsDoc,
+                    groupsThreeDoc,
                     holidaysDoc,
                     specialHolidaysDoc,
                     recurringDoc,
@@ -3037,6 +3208,7 @@
                     excelAlternateOverridesDoc
                 ] = await Promise.all([
                     dutyShifts.doc('groups').get(),
+                    dutyShifts.doc('groupsThree').get(),
                     dutyShifts.doc('holidays').get(),
                     dutyShifts.doc('specialHolidays').get(),
                     dutyShifts.doc('recurringSpecialHolidays').get(),
@@ -3058,50 +3230,56 @@
                     dutyShifts.doc('settings').get(),
                     dutyShifts.doc('excelAlternateOverrides').get()
                 ]);
-                
-                // Load groups
-                if (groupsDoc.exists) {
-                    const data = groupsDoc.data();
-                    delete data.lastUpdated;
-                    delete data.updatedBy;
-                    groups = migrateGroupsFormat(data) || { 1: { regular: [], special: [] }, 2: { regular: [], special: [] }, 3: { regular: [], special: [] }, 4: { regular: [], special: [] } };
-                    
-                    // CRITICAL: Always ensure priorities/disabled objects exist and are properly initialized
-                    for (let i = 1; i <= 4; i++) {
-                        if (!groups[i]) {
-                            groups[i] = { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} };
-                        }
-                        if (!groups[i].priorities) {
-                            groups[i].priorities = {};
-                        }
-                        if (!groups[i].disabledPersons) {
-                            groups[i].disabledPersons = {};
-                        }
-                        if (!groups[i].excludedFromDuties) {
-                            groups[i].excludedFromDuties = {};
-                        }
 
-                        // Migrate old boolean disabled flag to per-type object
-                        for (const name of Object.keys(groups[i].disabledPersons || {})) {
-                            if (groups[i].disabledPersons[name] === true) {
-                                groups[i].disabledPersons[name] = { all: true, special: false, weekend: false, semi: false, normal: false };
+                const finalizeLoadedGroupsObject = (rawGroups, maxG) => {
+                    const gObj = migrateGroupsFormat(rawGroups) || (maxG === 3 ? createEmptyGroupsThree() : createEmptyGroupsFour());
+                    // migrateGroupsFormat always returns 1..4; trim for three-set
+                    const out = maxG === 3 ? createEmptyGroupsThree() : createEmptyGroupsFour();
+                    for (let i = 1; i <= maxG; i++) {
+                        out[i] = gObj[i] || createEmptyGroupBucket();
+                        if (!out[i].priorities) out[i].priorities = {};
+                        if (!out[i].disabledPersons) out[i].disabledPersons = {};
+                        if (!out[i].excludedFromDuties) out[i].excludedFromDuties = {};
+                        for (const name of Object.keys(out[i].disabledPersons || {})) {
+                            if (out[i].disabledPersons[name] === true) {
+                                out[i].disabledPersons[name] = {
+                                    all: true,
+                                    special: false,
+                                    weekend: false,
+                                    semi: false,
+                                    normal: false
+                                };
                             }
                         }
-                        
-                        // Ensure all people in lists have priority entries (only if they don't already exist)
-                        const listTypes = ['special', 'weekend', 'semi', 'normal'];
-                        listTypes.forEach(listType => {
-                            const list = groups[i][listType] || [];
-                            list.forEach(person => {
-                                if (!groups[i].priorities[person]) {
-                                    groups[i].priorities[person] = {};
-                                }
-                                if (groups[i].priorities[person][listType] === undefined) {
-                                    groups[i].priorities[person][listType] = 999; // Default priority
+                        ['special', 'weekend', 'semi', 'normal'].forEach((listType) => {
+                            const list = out[i][listType] || [];
+                            list.forEach((person) => {
+                                if (!out[i].priorities[person]) out[i].priorities[person] = {};
+                                if (out[i].priorities[person][listType] === undefined) {
+                                    out[i].priorities[person][listType] = 999;
                                 }
                             });
                         });
                     }
+                    return out;
+                };
+
+                // Load groups (4) + groupsThree (3) — χωρίς απώλεια του παλιού σετ
+                if (groupsDoc.exists) {
+                    const data = groupsDoc.data();
+                    delete data.lastUpdated;
+                    delete data.updatedBy;
+                    groupsFour = finalizeLoadedGroupsObject(data, 4);
+                } else {
+                    groupsFour = createEmptyGroupsFour();
+                }
+                if (groupsThreeDoc && groupsThreeDoc.exists) {
+                    const data3 = groupsThreeDoc.data();
+                    delete data3.lastUpdated;
+                    delete data3.updatedBy;
+                    groupsThree = finalizeLoadedGroupsObject(data3, 3);
+                } else {
+                    groupsThree = createEmptyGroupsThree();
                 }
 
                 if (personStatusScheduleDoc && personStatusScheduleDoc.exists) {
@@ -3307,13 +3485,21 @@
                     }
                 }
 
-                // Κοινές ρυθμίσεις: εξαιρέσεις ομάδων swap (Δευ↔Τετ / Πέμ↔Τρι)
+                // Κοινές ρυθμίσεις: εξαιρέσεις ομάδων swap + ενεργό σετ ομάδων (4|3)
+                let loadedGroupMode = '4';
+                try {
+                    const lsMode = localStorage.getItem('dutyShiftsActiveGroupMode');
+                    if (lsMode === '3' || lsMode === '4') loadedGroupMode = lsMode;
+                } catch (_) {}
                 if (settingsDoc && settingsDoc.exists) {
                     const settingsData = settingsDoc.data() || {};
                     if (Array.isArray(settingsData.normalWeekPairSwapDisabledGroups)) {
                         applyNormalWeekPairSwapDisabledGroupsFromValue(settingsData.normalWeekPairSwapDisabledGroups);
                     }
                     applyNightDutiesModeFromValue(resolveNightDutiesModeFromSettings(settingsData));
+                    if (settingsData.activeGroupMode === '3' || settingsData.activeGroupMode === '4') {
+                        loadedGroupMode = settingsData.activeGroupMode;
+                    }
                 } else {
                     applyNormalWeekPairSwapDisabledGroupsFromValue(readNormalWeekPairSwapDisabledGroupsFromLocalStorage());
                     applyNightDutiesModeFromValue(readNightDutiesModeFromLocalStorage());
@@ -3342,43 +3528,51 @@
                     }
                 }
                 
-                // Load last rotation positions
+                // Load last rotation positions (ξεχωριστά ανά σετ 4/3)
+                const convertArrayToObject = (arr) => {
+                    if (Array.isArray(arr)) {
+                        const obj = {};
+                        arr.forEach((value, index) => {
+                            obj[index + 1] = value;
+                        });
+                        return obj;
+                    }
+                    return arr;
+                };
+                const normalizeRotationType = (val) => {
+                    if (!val || typeof val !== 'object') return {};
+                    if (Array.isArray(val)) return convertArrayToObject(val);
+                    const keys = Object.keys(val);
+                    const hasMonthKeys = keys.some((k) => isMonthKey(k));
+                    if (hasMonthKeys) {
+                        const out = {};
+                        for (const mk of keys) out[mk] = convertArrayToObject(val[mk]);
+                        return out;
+                    }
+                    return convertArrayToObject(val);
+                };
+                const applyRotationPositionsInto = (target, src) => {
+                    if (!src || typeof src !== 'object') return;
+                    if (src.normal) target.normal = normalizeRotationType(src.normal);
+                    if (src.semi) target.semi = normalizeRotationType(src.semi);
+                    if (src.weekend) target.weekend = normalizeRotationType(src.weekend);
+                    if (src.special) target.special = normalizeRotationType(src.special);
+                };
+                lastRotationPositionsFour = createEmptyLastRotationPositions();
+                lastRotationPositionsThree = createEmptyLastRotationPositions();
                 if (lastRotationPositionsDoc.exists) {
                     const data = lastRotationPositionsDoc.data();
                     delete data.lastUpdated;
                     delete data.updatedBy;
-                    
-                    const convertArrayToObject = (arr) => {
-                        if (Array.isArray(arr)) {
-                            const obj = {};
-                            arr.forEach((value, index) => {
-                                obj[index + 1] = value;
-                            });
-                            return obj;
-                        }
-                        return arr;
-                    };
-                    
-                    const normalizeRotationType = (val) => {
-                        if (!val || typeof val !== 'object') return {};
-                        if (Array.isArray(val)) return convertArrayToObject(val);
-                        const keys = Object.keys(val);
-                        const hasMonthKeys = keys.some(k => isMonthKey(k));
-                        if (hasMonthKeys) {
-                            const out = {};
-                            for (const mk of keys) out[mk] = convertArrayToObject(val[mk]);
-                            return out;
-                        }
-                        return convertArrayToObject(val);
-                    };
-                    
-                    if (data.normal) lastRotationPositions.normal = normalizeRotationType(data.normal);
-                    if (data.semi) lastRotationPositions.semi = normalizeRotationType(data.semi);
-                    if (data.weekend) lastRotationPositions.weekend = normalizeRotationType(data.weekend);
-                    if (data.special) lastRotationPositions.special = normalizeRotationType(data.special);
-                } else {
-                    lastRotationPositions = { normal: {}, semi: {}, weekend: {}, special: {} };
+                    if (data.modes && typeof data.modes === 'object') {
+                        applyRotationPositionsInto(lastRotationPositionsFour, data.modes['4'] || data.modes[4]);
+                        applyRotationPositionsInto(lastRotationPositionsThree, data.modes['3'] || data.modes[3]);
+                    } else {
+                        // Legacy flat → σετ 4
+                        applyRotationPositionsInto(lastRotationPositionsFour, data);
+                    }
                 }
+                setActiveGroupMode(loadedGroupMode, { persist: false });
                 
                 // Load rankings
                 if (rankingsDoc.exists) {
@@ -3537,7 +3731,7 @@
         function rebuildCriticalAssignmentsFromLastDuties() {
             let rebuiltCount = 0;
             
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                 const groupData = groups[groupNum];
                 if (!groupData || !groupData.lastDuties) continue;
                 
@@ -3598,32 +3792,52 @@
         // Fallback: Load data from localStorage
         function loadDataFromLocalStorage() {
             const savedGroups = localStorage.getItem('dutyShiftsGroups');
+            const savedGroupsThree = localStorage.getItem('dutyShiftsGroupsThree');
             const savedHolidays = localStorage.getItem('dutyShiftsHolidays');
-            
-            if (savedGroups) {
-                const parsed = JSON.parse(savedGroups);
-                groups = migrateGroupsFormat(parsed) || { 1: { regular: [], special: [] }, 2: { regular: [], special: [] }, 3: { regular: [], special: [] }, 4: { regular: [], special: [] } };
-                
-                // Initialize priorities if they don't exist (backward compatibility)
-                for (let i = 1; i <= 4; i++) {
-                    if (!groups[i]) continue;
-                    if (!groups[i].priorities) groups[i].priorities = {};
-                    
-                    // Ensure all people in lists have priority entries
-                    const listTypes = ['special', 'weekend', 'semi', 'normal'];
-                    listTypes.forEach(listType => {
-                        const list = groups[i][listType] || [];
-                        list.forEach(person => {
-                            if (!groups[i].priorities[person]) {
-                                groups[i].priorities[person] = {};
-                            }
-                            if (groups[i].priorities[person][listType] === undefined) {
-                                groups[i].priorities[person][listType] = 999; // Default priority
+            let lsGroupMode = '4';
+            try {
+                const m = localStorage.getItem('dutyShiftsActiveGroupMode');
+                if (m === '3' || m === '4') lsGroupMode = m;
+            } catch (_) {}
+
+            const hydrateGroupSet = (parsed, maxG) => {
+                const base = migrateGroupsFormat(parsed) || (maxG === 3 ? createEmptyGroupsThree() : createEmptyGroupsFour());
+                const out = maxG === 3 ? createEmptyGroupsThree() : createEmptyGroupsFour();
+                for (let i = 1; i <= maxG; i++) {
+                    out[i] = base[i] || createEmptyGroupBucket();
+                    if (!out[i].priorities) out[i].priorities = {};
+                    ['special', 'weekend', 'semi', 'normal'].forEach((listType) => {
+                        const list = out[i][listType] || [];
+                        list.forEach((person) => {
+                            if (!out[i].priorities[person]) out[i].priorities[person] = {};
+                            if (out[i].priorities[person][listType] === undefined) {
+                                out[i].priorities[person][listType] = 999;
                             }
                         });
                     });
                 }
+                return out;
+            };
+
+            if (savedGroups) {
+                try {
+                    groupsFour = hydrateGroupSet(JSON.parse(savedGroups), 4);
+                } catch (_) {
+                    groupsFour = createEmptyGroupsFour();
+                }
+            } else {
+                groupsFour = createEmptyGroupsFour();
             }
+            if (savedGroupsThree) {
+                try {
+                    groupsThree = hydrateGroupSet(JSON.parse(savedGroupsThree), 3);
+                } catch (_) {
+                    groupsThree = createEmptyGroupsThree();
+                }
+            } else {
+                groupsThree = createEmptyGroupsThree();
+            }
+            setActiveGroupMode(lsGroupMode, { persist: false });
             const savedSchedule = localStorage.getItem('dutyShiftsPersonStatusSchedule');
             if (savedSchedule) {
                 try {
@@ -3768,7 +3982,7 @@
                             excelAlternateOverridesByMonth[mk] = {};
                             for (const gk of Object.keys(monthEntry)) {
                                 const gNum = parseInt(gk, 10);
-                                if (!Number.isFinite(gNum) || gNum < 1 || gNum > 4) continue;
+                                if (!Number.isFinite(gNum) || gNum < 1 || gNum > getDutyGroupCount()) continue;
                                 excelAlternateOverridesByMonth[mk][gNum] = normalizeExcelAlternateGroupOverride(
                                     monthEntry[gk]
                                 );
@@ -3780,7 +3994,7 @@
                 }
             }
             
-            // Load last rotation positions from localStorage
+            // Load last rotation positions from localStorage (modes 4/3 ή legacy flat)
             const savedLastRotationPositions = localStorage.getItem('dutyShiftsLastRotationPositions');
             if (savedLastRotationPositions) {
                 try {
@@ -3813,12 +4027,26 @@
                         }
                         return convertArrayToObject(val);
                     };
-
-                    if (parsed.normal) lastRotationPositions.normal = normalizeRotationTypeLocal(parsed.normal);
-                    if (parsed.semi) lastRotationPositions.semi = normalizeRotationTypeLocal(parsed.semi);
-                    if (parsed.weekend) lastRotationPositions.weekend = normalizeRotationTypeLocal(parsed.weekend);
-                    if (parsed.special) lastRotationPositions.special = normalizeRotationTypeLocal(parsed.special);
-                    console.log('Loaded lastRotationPositions from localStorage:', lastRotationPositions);
+                    const applyLocalRotation = (target, src) => {
+                        if (!src || typeof src !== 'object') return;
+                        if (src.normal) target.normal = normalizeRotationTypeLocal(src.normal);
+                        if (src.semi) target.semi = normalizeRotationTypeLocal(src.semi);
+                        if (src.weekend) target.weekend = normalizeRotationTypeLocal(src.weekend);
+                        if (src.special) target.special = normalizeRotationTypeLocal(src.special);
+                    };
+                    lastRotationPositionsFour = createEmptyLastRotationPositions();
+                    lastRotationPositionsThree = createEmptyLastRotationPositions();
+                    if (parsed.modes && typeof parsed.modes === 'object') {
+                        applyLocalRotation(lastRotationPositionsFour, parsed.modes['4'] || parsed.modes[4]);
+                        applyLocalRotation(lastRotationPositionsThree, parsed.modes['3'] || parsed.modes[3]);
+                    } else {
+                        applyLocalRotation(lastRotationPositionsFour, parsed);
+                    }
+                    lastRotationPositions =
+                        getActiveGroupMode() === '3'
+                            ? lastRotationPositionsThree
+                            : lastRotationPositionsFour;
+                    console.log('Loaded lastRotationPositions from localStorage (modes):', getActiveGroupMode());
                 } catch (e) {
                     console.error('Error parsing lastRotationPositions from localStorage:', e);
                 }
@@ -3978,12 +4206,21 @@
                     for (let gi = 1; gi <= 4; gi++) {
                         syncGroupListArraysFromPriorities(gi);
                     }
-                    const sanitizedGroups = sanitizeForFirestore(groups);
-                await db.collection('dutyShifts').doc('groups').set({
-                        ...sanitizedGroups,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: user.uid
-                });
+                    // Persist both group sets (ενεργό + ανενεργό) ώστε να μην χαθούν οι 4 όταν δουλεύουν οι 3
+                    if (activeGroupMode === '3') groupsThree = groups;
+                    else groupsFour = groups;
+                    const sanitizedGroupsFour = sanitizeForFirestore(groupsFour);
+                    await db.collection('dutyShifts').doc('groups').set({
+                        ...sanitizedGroupsFour,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    const sanitizedGroupsThree = sanitizeForFirestore(groupsThree);
+                    await db.collection('dutyShifts').doc('groupsThree').set({
+                        ...sanitizedGroupsThree,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
                 } catch (error) {
                     console.error('Error saving groups to Firestore:', error);
                 }
@@ -4234,17 +4471,24 @@
                 // Save last rotation positions (this is called separately from executeCalculation)
                 // But we also save it here as a backup
                 try {
-                    if (Object.keys(lastRotationPositions.normal).length > 0 || 
-                        Object.keys(lastRotationPositions.semi).length > 0 ||
-                        Object.keys(lastRotationPositions.weekend).length > 0 ||
-                        Object.keys(lastRotationPositions.special).length > 0) {
-                        const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                    if (activeGroupMode === '3') lastRotationPositionsThree = lastRotationPositions;
+                    else lastRotationPositionsFour = lastRotationPositions;
+                    const hasAnyPos = (p) =>
+                        p &&
+                        (Object.keys(p.normal || {}).length > 0 ||
+                            Object.keys(p.semi || {}).length > 0 ||
+                            Object.keys(p.weekend || {}).length > 0 ||
+                            Object.keys(p.special || {}).length > 0);
+                    if (hasAnyPos(lastRotationPositionsFour) || hasAnyPos(lastRotationPositionsThree)) {
                         await db.collection('dutyShifts').doc('lastRotationPositions').set({
-                            ...sanitizedPositions,
+                            modes: {
+                                '4': sanitizeForFirestore(lastRotationPositionsFour),
+                                '3': sanitizeForFirestore(lastRotationPositionsThree)
+                            },
                             lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                             updatedBy: user.uid
                         });
-                        console.log('Saved lastRotationPositions to Firestore');
+                        console.log('Saved lastRotationPositions (modes 4/3) to Firestore');
                     }
                 } catch (error) {
                     console.error('Error saving lastRotationPositions to Firestore:', error);
@@ -4264,10 +4508,25 @@
 
         // Fallback: Save data to localStorage
         function saveDataToLocalStorage() {
-            for (let gi = 1; gi <= 4; gi++) {
+            for (let gi = 1; gi <= getDutyGroupCount(); gi++) {
                 syncGroupListArraysFromPriorities(gi);
             }
-            localStorage.setItem('dutyShiftsGroups', JSON.stringify(groups));
+            if (activeGroupMode === '3') groupsThree = groups;
+            else groupsFour = groups;
+            localStorage.setItem('dutyShiftsGroups', JSON.stringify(groupsFour));
+            localStorage.setItem('dutyShiftsGroupsThree', JSON.stringify(groupsThree));
+            localStorage.setItem('dutyShiftsActiveGroupMode', getActiveGroupMode());
+            if (activeGroupMode === '3') lastRotationPositionsThree = lastRotationPositions;
+            else lastRotationPositionsFour = lastRotationPositions;
+            localStorage.setItem(
+                'dutyShiftsLastRotationPositions',
+                JSON.stringify({
+                    modes: {
+                        '4': lastRotationPositionsFour,
+                        '3': lastRotationPositionsThree
+                    }
+                })
+            );
             localStorage.setItem('dutyShiftsHolidays', JSON.stringify(holidays));
             localStorage.setItem('dutyShiftsSpecialHolidays', JSON.stringify(specialHolidays));
             try {
@@ -4297,7 +4556,7 @@
                 _thursdaySpacingMarkers: thursdaySpacingMarkers
             }));
             localStorage.setItem('dutyShiftsManualAlternateDeferCarry', JSON.stringify(manualAlternateDeferCarry));
-            localStorage.setItem('dutyShiftsLastRotationPositions', JSON.stringify(lastRotationPositions));
+            // lastRotationPositions already saved above with modes 4/3
             localStorage.setItem('dutyShiftsRankings', JSON.stringify(rankings));
             const locksOnly = {};
             for (const k of Object.keys(monthCalculationLocks || {})) {
@@ -4578,8 +4837,16 @@
             openFirebaseCleanupMonthPicker();
         }
 
-        // Get group name by number
+        // Get group name by number (ανά ενεργό σετ 4 ή 3)
         function getGroupName(groupNum) {
+            if (getActiveGroupMode() === '3') {
+                const names3 = {
+                    1: 'Ομάδα Α',
+                    2: 'Ομάδα Β',
+                    3: 'Ομάδα Γ'
+                };
+                return names3[groupNum] || `Ομάδα ${groupNum}`;
+            }
             const groupNames = {
                 1: 'ΕΠΙΚΕΦΑΛΗΣ-ΑΥΜ',
                 2: 'ΜΗΧΑΝΙΚΟΣ-ΟΠΛΟΥΡΓΟΣ-ΟΔΗΓΟΣ',
@@ -4600,7 +4867,7 @@
                 4: { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, missingPeriods: {}, priorities: {}, disabledPersons: {}, excludedFromDuties: {} }
             };
             
-            for (let i = 1; i <= 4; i++) {
+            for (let i = 1; i <= getDutyGroupCount(); i++) {
                 if (Array.isArray(data[i])) {
                     // Old format - array of names, copy to all lists
                     const people = [...data[i]];
@@ -4971,7 +5238,7 @@
         /** Build canonical assignment string from group → name map (groups 1–4 in order). */
         function groupMapToAssignmentString(map) {
             const parts = [];
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 const nm = map && map[g];
                 if (nm != null && String(nm).trim()) {
                     parts.push(`${String(nm).trim()} (Ομάδα ${g})`);
@@ -4986,7 +5253,7 @@
          */
         function replaceAssignedPersonForGroupInAssignmentString(assignmentStr, groupNum, newPersonName) {
             const g = Number.isFinite(groupNum) ? groupNum : parseInt(groupNum, 10);
-            if (!Number.isFinite(g) || g < 1 || g > 4) {
+            if (!Number.isFinite(g) || g < 1 || g > getDutyGroupCount()) {
                 return groupMapToAssignmentString(extractGroupAssignmentsMap(assignmentStr));
             }
             const map = extractGroupAssignmentsMap(assignmentStr);
@@ -5083,7 +5350,7 @@
 
             const collectDate = (dk) => {
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) return;
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     if (!hasProtectedManualDutyReasonOnDateGroup(dk, g)) continue;
                     if (!snapshot.slots[dk]) snapshot.slots[dk] = {};
                     const str = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dk) : null;
@@ -6802,7 +7069,7 @@
             };
             
             // Generate preview for each group
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                 const groupName = getGroupName(groupNum);
                 const groupData = groups[groupNum];
                 
@@ -7504,7 +7771,7 @@
             const container = document.getElementById('assignmentsCompareGroupPickerChecks');
             if (!container) return;
             container.innerHTML = '';
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 const id = `assignmentsCompareGroupCb${g}`;
                 const label =
                     typeof getGroupName === 'function' ? getGroupName(g) : `Ομάδα ${g}`;
@@ -8176,7 +8443,7 @@ ${content.innerHTML}
                 };
                 
                 const groupNumbersToProcess = [];
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     const gd = groups[g];
                     if (gd && (gd.special?.length || gd.weekend?.length || gd.semi?.length || gd.normal?.length)) {
                         groupNumbersToProcess.push(g);
@@ -9416,7 +9683,7 @@ ${content.innerHTML}
             if (startMonthInput) {
                 startMonthInput.value = `${currentYear}-${currentMonth}`;
             }
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 const stripCb = document.getElementById(`calcStripManualOverridesG${g}`);
                 if (stripCb) stripCb.checked = false;
                 const lab = document.getElementById(`calcStripGroupLabel${g}`);
@@ -9540,7 +9807,7 @@ ${content.innerHTML}
                         }
                     }
 
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         const base = baselineByDate?.[dateKey]?.[groupNum] || null;
                         const comp = computedByDate?.[dateKey]?.[groupNum] || null;
                         if (!base || !comp) continue;
@@ -9693,7 +9960,7 @@ ${content.innerHTML}
                 if (isNaN(dateObj.getTime())) continue;
                 const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const dayName = getGreekDayName(dateObj);
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const base = baselineByDate?.[dateKey]?.[groupNum] || null;
                     const comp = computedByDate?.[dateKey]?.[groupNum] || null;
                     if (!base || !comp) continue;
@@ -9857,7 +10124,7 @@ ${content.innerHTML}
                     for (const dateKey in updatedAssignments) {
                         const groups = updatedAssignments[dateKey];
                         const parts = [];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             if (groups[groupNum]) {
                                 parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
                             }
@@ -9888,7 +10155,7 @@ ${content.innerHTML}
                         const groups = updatedAssignments[dateKey];
                         if (!groups) continue;
                         
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             const assignedPerson = groups[groupNum];
                             if (assignedPerson) {
                                 if (!finalWeekendRotationPositionsByMonth[monthKey]) {
@@ -9906,7 +10173,7 @@ ${content.innerHTML}
                     if (Object.keys(finalWeekendRotationPositionsByMonth).length > 0) {
                         for (const monthKey in finalWeekendRotationPositionsByMonth) {
                             const groupsForMonth = finalWeekendRotationPositionsByMonth[monthKey] || {};
-                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                                 if (groupsForMonth[groupNum] !== undefined) {
                                     setLastRotationPersonForMonth('weekend', monthKey, groupNum, groupsForMonth[groupNum]);
                                 }
@@ -9959,7 +10226,7 @@ ${content.innerHTML}
                     for (const dateKey in updatedAssignments) {
                         const groups = updatedAssignments[dateKey];
                         const parts = [];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             if (groups[groupNum]) {
                                 parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
                             }
@@ -10005,7 +10272,7 @@ ${content.innerHTML}
                         const groups = updatedAssignments[dateKey];
                         if (!groups) continue;
                         
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             const assignedPerson = groups[groupNum];
                             if (assignedPerson) {
                                 if (!finalSemiRotationPositionsByMonth[monthKey]) {
@@ -10021,7 +10288,7 @@ ${content.innerHTML}
                     if (Object.keys(finalSemiRotationPositionsByMonth).length > 0) {
                         for (const monthKey in finalSemiRotationPositionsByMonth) {
                             const groupsForMonth = finalSemiRotationPositionsByMonth[monthKey] || {};
-                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                                 if (groupsForMonth[groupNum] !== undefined) {
                                     setLastRotationPersonForMonth('semi', monthKey, groupNum, groupsForMonth[groupNum]);
                                 }
@@ -11328,7 +11595,7 @@ ${content.innerHTML}
         <h2>${listType.name}</h2>
         <div class="groups-grid">
 `;
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const groupData = groups[groupNum] || { special: [], weekend: [], semi: [], normal: [] };
                     const groupName = getGroupName(groupNum);
                     const list = groupData[listType.key] || [];

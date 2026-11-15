@@ -93,7 +93,7 @@
             insertPersonIntoRankings(personName, rank);
 
             // Prevent duplicates across groups
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 const gd = groups[g];
                 if (!gd) continue;
                 const exists = ['special', 'weekend', 'semi', 'normal'].some(t => (gd[t] || []).includes(personName));
@@ -487,7 +487,7 @@
         function getBestStoredLastDutyDateKeyAcrossGroups(person, listType) {
             const target = normalizePersonKey(person);
             let bestKey = null;
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 const ld = groups?.[g]?.lastDuties || {};
                 for (const k of Object.keys(ld)) {
                     if (normalizePersonKey(k) !== target) continue;
@@ -830,7 +830,7 @@
 
         function captureLastDutiesSnapshot(reason) {
             const data = {};
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 try {
                     data[g] = JSON.parse(JSON.stringify(groups?.[g]?.lastDuties || {}));
                 } catch (_) {
@@ -859,7 +859,7 @@
             const listTypes = ['special', 'weekend', 'semi', 'normal'];
             let changed = 0;
             captureLastDutiesSnapshot(reason);
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                 const g = groups[groupNum];
                 if (!g) continue;
                 if (!g.lastDuties) g.lastDuties = {};
@@ -916,7 +916,7 @@
             ) {
                 return false;
             }
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 if (!groups[g]) continue;
                 try {
                     groups[g].lastDuties = JSON.parse(JSON.stringify(snap.data[g] || {}));
@@ -1505,7 +1505,7 @@
                 if (!dateKeyMatchesDutyCategory(dateKey, cat)) continue;
                 const dateObj = new Date(dateKey + 'T00:00:00');
                 if (isNaN(dateObj.getTime())) continue;
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const baseline = baselineByDate?.[dateKey]?.[groupNum] || null;
                     const assigned = assignmentsByDate?.[dateKey]?.[groupNum] || null;
                     if (!assigned) continue;
@@ -1870,7 +1870,7 @@
             //    Destination group first, then any group (priority often moves with the person).
             let priority = readPriorityFromGroup(groupNum);
             if (priority == null) {
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     if (g === groupNum) continue;
                     priority = readPriorityFromGroup(g);
                     if (priority != null) break;
@@ -2164,7 +2164,7 @@
                 if (isNaN(dt.getTime())) continue;
                 const y = dt.getFullYear();
                 const m = dt.getMonth();
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     const cacheKey = `${y}-${m}-${g}`;
                     if (!monthMapCache.has(cacheKey)) {
                         const map =
@@ -3555,7 +3555,7 @@
                             : null;
                     if (!gmap || !Object.keys(gmap).length) {
                         gmap = {};
-                        for (let g = 1; g <= 4; g++) {
+                        for (let g = 1; g <= getDutyGroupCount(); g++) {
                             const v = raw[g] || raw[String(g)];
                             if (typeof v === 'string' && v.trim()) gmap[g] = v.trim();
                         }
@@ -3565,7 +3565,7 @@
                 }
                 if (!gmap || !Object.keys(gmap).length) return;
                 if (!out[dateKey]) out[dateKey] = {};
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     if (gmap[g]) out[dateKey][g] = gmap[g];
                 }
             };
@@ -4615,7 +4615,7 @@
             if (startMonthInput) {
                 startMonthInput.value = `${currentYear}-${currentMonth}`;
             }
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 const stripCb = document.getElementById(`calcStripManualOverridesG${g}`);
                 if (stripCb) stripCb.checked = false;
                 const lab = document.getElementById(`calcStripGroupLabel${g}`);
@@ -4706,7 +4706,7 @@
                 
                 const startMonth = startMonthInput.value;
                 const stripManualOverrideGroups = [];
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     const el = document.getElementById(`calcStripManualOverridesG${g}`);
                     if (el && el.checked) stripManualOverrideGroups.push(g);
                 }
@@ -4994,7 +4994,7 @@
                         return parseAssignedPersonForGroupFromAssignment(raw, g);
                     return null;
                 };
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
                     const groupPeople = groupData.special || [];
                     if (groupPeople.length === 0) continue;
@@ -5066,7 +5066,7 @@
                 const firstDateKeyInRange = sortedSpecial.length > 0 ? sortedSpecial[0] : null;
                 const addedReturnFromPrevMonths = new Set();
                 const normPerson = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const g = groups[groupNum];
                     const missingMap = g?.missingPeriods || {};
                     const specialList =
@@ -5182,7 +5182,7 @@
                     };
 
                     // Calculate who will be assigned for each group based on rotation order (per-group position from globalSpecialRotationPosition)
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
                             continue;
                         }
@@ -5576,7 +5576,7 @@
                     html += '<tr>';
                     html += `<td><strong>${dateStr}</strong></td>`;
                     html += `<td>${holidayName || 'Ειδική Αργία'}</td>`;
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
                         const groupPeople = groupData.special || [];
                         if (groupPeople.length === 0) {
@@ -5611,7 +5611,7 @@
                 // Store last rotation person for each group (overall, for end-of-range continuation)
                 // Use BASELINE (rotation) person for the last date so that when return-from-missing placed A/B (displacing C/D), we continue from E next month
                 calculationSteps.lastSpecialRotationPositions = {};
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     let lastBaselinePerson = null;
                     for (let i = sortedSpecial.length - 1; i >= 0; i--) {
                         const dateKey = sortedSpecial[i];
@@ -5636,7 +5636,7 @@
                     if (!lastSpecialRotationPositionsByMonth[monthKey]) {
                         lastSpecialRotationPositionsByMonth[monthKey] = {};
                     }
-                    for (let g = 1; g <= 4; g++) {
+                    for (let g = 1; g <= getDutyGroupCount(); g++) {
                         if (lastSpecialRotationPositionsByMonth[monthKey][g] !== undefined) continue;
                         const assignedPerson = tempSpecialAssignments[dateKey]?.[g];
                         if (assignedPerson) {
@@ -5698,7 +5698,7 @@
                         }
                     }
 
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         const base = baselineByDate?.[dateKey]?.[groupNum] || null;
                         const comp = computedByDate?.[dateKey]?.[groupNum] || null;
                         if (!base || !comp) continue;
@@ -5903,7 +5903,7 @@
                 if (Object.keys(lastSpecialRotationPositionsByMonth).length > 0) {
                     for (const monthKey in lastSpecialRotationPositionsByMonth) {
                         const groupsForMonth = lastSpecialRotationPositionsByMonth[monthKey] || {};
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) continue;
                             if (groupsForMonth[groupNum] !== undefined) {
                                 setLastRotationPersonForMonth('special', monthKey, groupNum, groupsForMonth[groupNum]);
@@ -5958,7 +5958,7 @@
                     for (const dateKey in tempWeekendAssignments) {
                         const groups = tempWeekendAssignments[dateKey];
                         const parts = [];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             if (groups[groupNum]) {
                                 parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
                             }
@@ -5986,7 +5986,7 @@
                 if (Object.keys(lastWeekendRotationPositionsByMonth).length > 0) {
                     for (const monthKey in lastWeekendRotationPositionsByMonth) {
                         const groupsForMonth = lastWeekendRotationPositionsByMonth[monthKey] || {};
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) continue;
                             if (groupsForMonth[groupNum] !== undefined) {
                                 setLastRotationPersonForMonth('weekend', monthKey, groupNum, groupsForMonth[groupNum]);
@@ -6218,7 +6218,7 @@
                     typeof getMonthKeyFromDate === 'function'
                         ? getMonthKeyFromDate(date)
                         : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const person = getWeekendPersonForSwapLookup(
                         assignmentsByDate,
                         baselineByDate,
@@ -6253,7 +6253,7 @@
                         ? getMonthKeyFromDate(date)
                         : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                 if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const groupData =
                         (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || {
                             weekend: []
@@ -6379,7 +6379,7 @@
                 tbody += '<tr>';
                 tbody += `<td><strong>${dateStr}</strong></td>`;
                 tbody += `<td>${holidayName || 'Αργία'}</td>`;
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     if (
                         typeof context.shouldRecalculateDutyGroup === 'function' &&
                         !context.shouldRecalculateDutyGroup(groupNum)
@@ -6519,7 +6519,7 @@
                     const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                     if (!skippedInMonth[monthKey]) skippedInMonth[monthKey] = {};
                     if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { weekend: [] };
                         const groupPeople = groupData.weekend || [];
                         if (groupPeople.length === 0) continue;
@@ -6655,7 +6655,7 @@
                         typeof getMonthKeyFromDate === 'function'
                             ? getMonthKeyFromDate(date)
                             : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         const groupData =
                             (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) ||
                             { weekend: [] };
@@ -6729,7 +6729,7 @@
                 if (isNaN(dateObj.getTime())) continue;
                 const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const dayName = getGreekDayName(dateObj);
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const base = baselineByDate?.[dateKey]?.[groupNum] || null;
                     const comp = computedByDate?.[dateKey]?.[groupNum] || null;
                     if (!base || !comp) continue;
@@ -6891,7 +6891,7 @@
                     for (const dateKey in updatedAssignments) {
                         const groups = updatedAssignments[dateKey];
                         const parts = [];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             if (groups[groupNum]) {
                                 parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
                             }
@@ -6932,7 +6932,7 @@
                         const groups = updatedAssignments[dateKey];
                         if (!groups) continue;
                         
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             const assignedPerson = groups[groupNum];
                             if (assignedPerson) {
                                 if (!finalWeekendRotationPositionsByMonth[monthKey]) {
@@ -6950,7 +6950,7 @@
                     if (Object.keys(finalWeekendRotationPositionsByMonth).length > 0) {
                         for (const monthKey in finalWeekendRotationPositionsByMonth) {
                             const groupsForMonth = finalWeekendRotationPositionsByMonth[monthKey] || {};
-                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                                 if (groupsForMonth[groupNum] !== undefined) {
                                     setLastRotationPersonForMonth('weekend', monthKey, groupNum, groupsForMonth[groupNum]);
                                 }
@@ -7161,7 +7161,7 @@
                     const year = date.getFullYear();
                     const monthKey = `${year}-${month}`;
                     
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { semi: [] };
                         const groupPeople = groupData.semi || [];
                         
@@ -7474,7 +7474,7 @@
                 if (isNaN(dateObj.getTime())) continue;
                 const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const dayName = getGreekDayName(dateObj);
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const base = baselineByDate?.[dateKey]?.[groupNum] || null;
                     const comp = computedByDate?.[dateKey]?.[groupNum] || null;
                     if (!base || !comp) continue;
@@ -7652,7 +7652,7 @@
                     for (const dateKey in updatedAssignments) {
                         const groups = updatedAssignments[dateKey];
                         const parts = [];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             if (groups[groupNum]) {
                                 parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
                             }
@@ -7712,7 +7712,7 @@
                         const groups = updatedAssignments[dateKey];
                         if (!groups) continue;
                         
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             const assignedPerson = groups[groupNum];
                             if (assignedPerson) {
                                 if (!finalSemiRotationPositionsByMonth[monthKey]) {
@@ -7728,7 +7728,7 @@
                     if (Object.keys(finalSemiRotationPositionsByMonth).length > 0) {
                         for (const monthKey in finalSemiRotationPositionsByMonth) {
                             const groupsForMonth = finalSemiRotationPositionsByMonth[monthKey] || {};
-                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                                 if (groupsForMonth[groupNum] !== undefined) {
                                     setLastRotationPersonForMonth('semi', monthKey, groupNum, groupsForMonth[groupNum]);
                                 }
@@ -7778,7 +7778,7 @@
                     if (Object.keys(lastNormalRotationPositionsByMonth).length > 0) {
                         for (const monthKey in lastNormalRotationPositionsByMonth) {
                             const groupsForMonth = lastNormalRotationPositionsByMonth[monthKey] || {};
-                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                                 if (groupsForMonth[groupNum] !== undefined) {
                                     setLastRotationPersonForMonth('normal', monthKey, groupNum, groupsForMonth[groupNum]);
                                 }
@@ -8406,7 +8406,7 @@
                             return false; // remove from deferred
                         });
 
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             const g = groups?.[groupNum];
                             const missingMap = g?.missingPeriods || {};
                             for (const personName of Object.keys(missingMap)) {
@@ -8804,7 +8804,7 @@
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
                             continue;
                         }
@@ -9541,7 +9541,7 @@
                 const row = tableBody.rows[normalIndex];
                 if (!row || row.cells.length < 6) continue;
                 const date = new Date(dateKey + 'T00:00:00');
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum]) || { normal: [] };
                     const groupPeople = groupData.normal || [];
                     const assignedPerson = finalAssignments?.[dateKey]?.[groupNum];
@@ -9580,7 +9580,7 @@
                 if (isNaN(dateObj.getTime())) continue;
                 const dateStr = dateObj.toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const dayName = getGreekDayName(dateObj);
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const base = baselineByDate?.[dateKey]?.[groupNum] || null;
                     const comp = computedByDate?.[dateKey]?.[groupNum] || null;
                     if (!base || !comp) continue;
@@ -9826,7 +9826,7 @@
                     for (const dateKey in updatedAssignments) {
                         const groups = updatedAssignments[dateKey];
                         const parts = [];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             if (groups[groupNum]) {
                                 parts.push(`${groups[groupNum]} (Ομάδα ${groupNum})`);
                             }
@@ -9874,7 +9874,7 @@
                         if (isNaN(d.getTime())) continue;
                         const monthKey = getMonthKeyFromDate(d);
                         const groups = updatedAssignments[dateKey];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             let assignedPerson = groups?.[groupNum];
                             if (!assignedPerson) {
                                 assignedPerson = baselineByDateForRotation[dateKey]?.[groupNum] ||
@@ -9895,7 +9895,7 @@
                         calculationSteps.lastNormalRotationPositionsByMonth = lastNormalRotationPositionsByMonthFromFinal;
                         for (const monthKey in lastNormalRotationPositionsByMonthFromFinal) {
                             const groupsForMonth = lastNormalRotationPositionsByMonthFromFinal[monthKey] || {};
-                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                                 if (groupsForMonth[groupNum] !== undefined) {
                                     setLastRotationPersonForMonth('normal', monthKey, groupNum, groupsForMonth[groupNum]);
                                 }
@@ -10074,7 +10074,7 @@
                         const year = dateIterator.getFullYear();
                         const monthKey = `${year}-${month}`;
                         
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
                             const groupPeople = groupData.special || [];
                             
@@ -10188,7 +10188,7 @@
                 } else {
                     for (const dateKey in normalSource) {
                         const parts = [];
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             const person = normalSource[dateKey]?.[groupNum];
                             if (person) {
                                 parts.push(`${person} (Ομάδα ${groupNum})`);
@@ -10406,7 +10406,7 @@
                     ? fromTemp
                     : extractGroupAssignmentsMap(specialHolidayAssignments?.[dateKey]);
 
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const personName = groupMap?.[groupNum];
                     if (!personName) continue;
                     if (!simulatedSpecialAssignments[monthKey][groupNum]) simulatedSpecialAssignments[monthKey][groupNum] = new Set();
@@ -10517,7 +10517,7 @@
                                 date
                             );
                         }
-                        for (let g = 1; g <= 4; g++) {
+                        for (let g = 1; g <= getDutyGroupCount(); g++) {
                             const gd =
                                 (typeof groupsForDuty === 'function'
                                     ? groupsForDuty(g, dk)
@@ -10536,7 +10536,7 @@
                         returnSimPrevMonthKey = monthKeySim;
                     }
                     if (!returnSimAssignedInMonth[monthKeySim]) returnSimAssignedInMonth[monthKeySim] = {};
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         if (
                             typeof shouldRecalculateDutyGroup === 'function' &&
                             !shouldRecalculateDutyGroup(groupNum)
@@ -10824,7 +10824,7 @@
                 if (calcStartKeyW && calcEndKeyW && sortedWeekends.length > 0) {
                     const processedWeekendReturn = new Set();
                     const normW = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         const g = groups[groupNum];
                         const missingMap = g?.missingPeriods || {};
                         for (const personName of Object.keys(missingMap)) {
@@ -11158,7 +11158,7 @@
                         prevCalMonthKeyWeekendDefer = monthKey;
                     }
                     if (prevCalMonthKeyWeekendRot !== monthKey) {
-                        for (let g = 1; g <= 4; g++) {
+                        for (let g = 1; g <= getDutyGroupCount(); g++) {
                             const gd =
                                 (typeof groupsForDuty === 'function'
                                     ? groupsForDuty(g, dateKey)
@@ -11199,7 +11199,7 @@
                     weekendPreviewRowsMeta.push({ dateKey, dateStr, holidayName });
                     
                     // Calculate who will be assigned for each group based on rotation order
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
                             const preserved = simulatedWeekendAssignments[dateKey]?.[groupNum];
                             if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
@@ -11708,7 +11708,7 @@
                     weekendRotationPersons
                 );
                 calculationSteps.lastWeekendRotationPositions = {};
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     const sortedWeekendKeys = [...weekendHolidays].sort();
                     let lastPersonForRotation = null;
                     for (let i = sortedWeekendKeys.length - 1; i >= 0; i--) {
@@ -11730,7 +11730,7 @@
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
-                    for (let g = 1; g <= 4; g++) {
+                    for (let g = 1; g <= getDutyGroupCount(); g++) {
                         const assignedPerson = simulatedWeekendAssignments[dateKey]?.[g];
                         if (assignedPerson) {
                             const personForRotation = getPersonForRotationContinuity(dateKey, g, assignedPerson, simulatedWeekendAssignments);
@@ -11835,7 +11835,7 @@
                 const monthKey = getMonthKeyFromDate(date);
                 if (!simulatedSpecialAssignments[monthKey]) simulatedSpecialAssignments[monthKey] = {};
                 const gmap = calculationSteps.tempSpecialAssignments[dateKey];
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const p = gmap[groupNum];
                     if (!p) continue;
                     if (!simulatedSpecialAssignments[monthKey][groupNum]) simulatedSpecialAssignments[monthKey][groupNum] = new Set();
@@ -11849,7 +11849,7 @@
                 if (!simulatedSpecialAssignments[monthKey]) simulatedSpecialAssignments[monthKey] = {};
                 const gmap = extractGroupAssignmentsMap(specialHolidayAssignments?.[dateKey]);
                 if (!gmap) return;
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const p = gmap[groupNum];
                     if (!p) continue;
                     if (!simulatedSpecialAssignments[monthKey][groupNum]) simulatedSpecialAssignments[monthKey][groupNum] = new Set();
@@ -11929,7 +11929,7 @@
             if (calcStartKey && calcEndKey && sortedSemi.length > 0) {
                 const expectedSemiMapCacheRun = new Map();
                 const processedSemiReturnRun = new Set();
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const g = groups[groupNum];
                     const missingMap = g?.missingPeriods || {};
                     const semiList =
@@ -12153,7 +12153,7 @@
                     prevCalMonthKeySemiDeferRun = monthKey;
                 }
                 if (prevCalMonthKeySemiRot !== monthKey) {
-                    for (let g = 1; g <= 4; g++) {
+                    for (let g = 1; g <= getDutyGroupCount(); g++) {
                         const gd =
                             (typeof groupsForDuty === 'function'
                                 ? groupsForDuty(g, dateKey)
@@ -12167,7 +12167,7 @@
                     prevCalMonthKeySemiRot = monthKey;
                 }
                 if (!baseline[dateKey]) baseline[dateKey] = {};
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
                         const map = extractGroupAssignmentsMap(semiNormalAssignments?.[dateKey]);
                         if (map[groupNum]) {
@@ -12428,7 +12428,7 @@
                 if (!meta) continue;
                 const { monthKey } = meta;
                 const indicesInMonth = semiIndicesByMonth[monthKey] || [];
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) continue;
                     if (swappedSet.has(`${dateKey}:${groupNum}`)) continue;
                     const person = finalAssignments[dateKey]?.[groupNum];
@@ -12533,7 +12533,7 @@
                 if (!lastSemiRotationPositionsByMonth[m.monthKey]) lastSemiRotationPositionsByMonth[m.monthKey] = {};
                 const g = finalAssignments[dateKey];
                 if (g) {
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         if (!g[groupNum]) continue;
                         const personForRotation = typeof getPersonForRotationContinuity === 'function'
                             ? getPersonForRotationContinuity(dateKey, groupNum, g[groupNum], finalAssignments)
@@ -12546,7 +12546,7 @@
             const mergedSemiBaseline = finalizeSemiPreview(finalAssignments, baselineSemiByDate, baseline);
 
             for (const dateKey of sortedSemi) {
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const assigned = finalAssignments[dateKey]?.[groupNum];
                     const base = mergedSemiBaseline[dateKey]?.[groupNum];
                     if (!assigned || !base) continue;
@@ -12599,7 +12599,7 @@
                             await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, 'semiNormalAssignments', organizedFinal);
                             for (const monthKey in lastSemiRotationPositionsByMonth) {
                                 const gmap = lastSemiRotationPositionsByMonth[monthKey];
-                                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                                     if (gmap[groupNum] !== undefined) setLastRotationPersonForMonth('semi', monthKey, groupNum, gmap[groupNum]);
                                 }
                             }
@@ -12635,13 +12635,13 @@
                 html += dutySemiDebug.getDebugToolbarHtml();
             }
             html += '<div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr><th>Ημερομηνία</th><th>Ημέρα</th>';
-            for (let g = 1; g <= 4; g++) html += '<th>' + (getGroupName(g) || 'Ομάδα ' + g) + '</th>';
+            for (let g = 1; g <= getDutyGroupCount(); g++) html += '<th>' + (getGroupName(g) || 'Ομάδα ' + g) + '</th>';
             html += '</tr></thead><tbody>';
             for (const dateKey of sortedSemi) {
                 const m = semiMeta[dateKey];
                 if (!m) continue;
                 html += '<tr><td><strong>' + m.dateStr + '</strong></td><td>' + m.dayName + '</td>';
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     let basePerson =
                         mergedSemiBaseline[dateKey]?.[groupNum] ||
                         baselineSemiByDate[dateKey]?.[groupNum] ||
@@ -12680,7 +12680,7 @@
                     assignedPeoplePreviewWeekend[monthKey] = {};
                 }
                 
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { weekend: [] };
                     const groupPeople = groupData.weekend || [];
                     
@@ -12877,7 +12877,7 @@
                 const baselineSemiRotationPosition = {};
                 for (const dk of sortedSemi) {
                     const dt = new Date(dk + 'T00:00:00');
-                    for (let g = 1; g <= 4; g++) {
+                    for (let g = 1; g <= getDutyGroupCount(); g++) {
                         const grp = groups[g] || { semi: [] };
                         const people = grp.semi || [];
                         if (people.length === 0) continue;
@@ -12903,7 +12903,7 @@
                     const expectedSemiMapCachePreview = new Map();
                     const processedSemiReturn = new Set();
                     const normSemi = (s) => (typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim());
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         const g = groups[groupNum];
                         const missingMap = g?.missingPeriods || {};
                         const semiList = g?.semi || [];
@@ -13065,7 +13065,7 @@
                     html += `<td>${dayName}</td>`;
                     
                     // Calculate who will be assigned for each group
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { semi: [] };
                         const groupPeople = groupData.semi || [];
                         
@@ -13460,7 +13460,7 @@
                 calculationSteps.tempSemiAssignments = semiAssignments;
                 calculationSteps.tempSemiBaselineAssignments = semiRotationPersons;
                 calculationSteps.lastSemiRotationPositions = {};
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     const sortedSemiKeys = [...semiNormalDays].sort();
                     let lastPersonForRotation = null;
                     for (let i = sortedSemiKeys.length - 1; i >= 0; i--) {
@@ -13482,7 +13482,7 @@
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const d = new Date(dateKey + 'T00:00:00');
                     const monthKey = getMonthKeyFromDate(d);
-                    for (let g = 1; g <= 4; g++) {
+                    for (let g = 1; g <= getDutyGroupCount(); g++) {
                         const assignedPerson = semiAssignments[dateKey]?.[g];
                         if (assignedPerson) {
                             const personForRotation = getPersonForRotationContinuity(dateKey, g, assignedPerson, semiAssignments);
@@ -13554,7 +13554,7 @@
                         const beforeType = getDayType(dayBefore);
                         const afterType = getDayType(dayAfter);
 
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             const groupPeople = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.semi || [];
                             if (!groupPeople.length) continue;
 
@@ -13634,7 +13634,7 @@
                             rowHtml += `<td><strong>${dateStr}</strong></td>`;
                             rowHtml += `<td>${dayName}</td>`;
 
-                            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                                 const groupPeople = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum])?.semi || [];
                                 if (!groupPeople.length) {
                                     rowHtml += '<td class="text-muted">-</td>';
@@ -13911,7 +13911,7 @@
             const targets = {};
             const processed = new Set();
 
-            for (let groupNum = 1; groupNum <= 4; groupNum++) {
+            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                 const g = typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum];
                 const missingMap = g?.missingPeriods || {};
                 const groupPeople =
@@ -14099,7 +14099,7 @@
             const targetKeysSorted = Object.keys(targets).sort();
             for (const dateKey of targetKeysSorted) {
                 const date = new Date(dateKey + 'T00:00:00');
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const designated = targets[dateKey]?.[groupNum];
                     if (!designated) continue;
                     const g = typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups?.[groupNum];
@@ -14208,7 +14208,7 @@
                     simulatedSpecialAssignments[monthKey] = {};
                 }
                 
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
                     const groupPeople = groupData.special || [];
                     
@@ -14284,7 +14284,7 @@
                     skippedInMonth[monthKey] = {};
                 }
                 
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { weekend: [] };
                     const groupPeople = groupData.weekend || [];
                     
@@ -14464,7 +14464,7 @@
                         const minDateKey = (a, b) => (!a ? b : (!b ? a : (a < b ? a : b)));
                         const processedMissingReplacements = new Set(); // "g|person|periodEnd" to avoid duplicate processing
                         
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             const g = groups?.[groupNum];
                             const missingMap = g?.missingPeriods || {};
                             const disabledMap = g?.disabledPersons || {};
@@ -14703,7 +14703,7 @@
                     html += `<td>${dayName}</td>`;
                     
                     // Calculate who will be assigned for each group
-                    for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                         if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
                             const preserved = normalAssignments[dateKey]?.[groupNum];
                             if (preserved) {
@@ -15231,7 +15231,7 @@
                 sortedNormal.forEach((dateKey) => {
                 const date = new Date(dateKey + 'T00:00:00');
                 
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) {
                         continue;
                     }
@@ -15796,7 +15796,7 @@
                     let passSwaps = 0;
                     for (const dateKey of sortedNormal) {
                         const date = new Date(dateKey + 'T00:00:00');
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             if (
                                 typeof shouldRecalculateDutyGroup === 'function' &&
                                 !shouldRecalculateDutyGroup(groupNum)
@@ -15988,7 +15988,7 @@
                     let passSwaps = 0;
                     for (const dateKey of sortedNormal) {
                         const date = new Date(dateKey + 'T00:00:00');
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             if (
                                 typeof shouldRecalculateDutyGroup === 'function' &&
                                 !shouldRecalculateDutyGroup(groupNum)
@@ -16155,7 +16155,7 @@
                         rowHtml += `<td><strong>${dateStr}</strong></td>`;
                         rowHtml += `<td>${dayName}</td>`;
                         
-                        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                             const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { normal: [] };
                             const groupPeople = groupData.normal || [];
                             const rotationDays = groupPeople.length;
@@ -16236,7 +16236,7 @@
             }
             calculationSteps.lastNormalRotationPositions = {};
             // Use rotation continuity (manual alternate → baseline slot; swap → swapped-out) for cross-month seeding
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 const sortedNormalKeys = [...normalDays].sort();
                 let lastPersonForRotation = null;
                 for (let i = sortedNormalKeys.length - 1; i >= 0; i--) {
@@ -16259,7 +16259,7 @@
                 if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                 const d = new Date(dateKey + 'T00:00:00');
                 const monthKey = getMonthKeyFromDate(d);
-                for (let g = 1; g <= 4; g++) {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
                     const assignedPerson = normalAssignments[dateKey]?.[g];
                     if (assignedPerson) {
                         const personForRotation = getPersonForNormalRotationContinuity(dateKey, g, assignedPerson, normalAssignments);
@@ -17503,7 +17503,7 @@
         <h2>${listType.name}</h2>
         <div class="groups-grid">
 `;
-                for (let groupNum = 1; groupNum <= 4; groupNum++) {
+                for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [], weekend: [], semi: [], normal: [] };
                     const groupName = getGroupName(groupNum);
                     const list = groupData[listType.key] || [];

@@ -239,7 +239,7 @@
                 typeof getMonthKeyFromDate === 'function'
                     ? getMonthKeyFromDate(d)
                     : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 const base = baselineWeekendByDate?.[dk]?.[g];
                 if (!base) continue;
                 if (typeof isPersonMissingOnDate !== 'function' || !isPersonMissingOnDate(base, g, d, 'weekend')) {
@@ -953,7 +953,7 @@
             if (calcStartKey && dk < calcStartKey) continue;
             if (calcEndKey && dk > calcEndKey) continue;
             const d = new Date(dk + 'T00:00:00');
-            for (let g = 1; g <= 4; g++) {
+            for (let g = 1; g <= getDutyGroupCount(); g++) {
                 const base = baselineSemiByDate?.[dk]?.[g];
                 if (!base) continue;
                 if (typeof isPersonMissingOnDate !== 'function' || !isPersonMissingOnDate(base, g, d, DUTY)) continue;
@@ -1733,7 +1733,7 @@
         if (!isEnabled() || !ctx) return;
         const { sortedNormal, pureBaselineByDate, assignmentsByDate, calcStartKey, calcEndKey } = ctx;
         if (!Array.isArray(sortedNormal) || typeof groups === 'undefined') return;
-        for (let groupNum = 1; groupNum <= 4; groupNum++) {
+        for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
             const g = groups[groupNum];
             const missingMap = g?.missingPeriods || {};
             for (const personName of Object.keys(missingMap || {})) {
