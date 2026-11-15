@@ -562,8 +562,18 @@
             personStatusSchedule._seeded = true;
         }
         function getPersonHomeGroupAtDate(personName, dateKey) {
-            ensurePersonStatusScheduleSeeded();
             const pk = personScheduleKey(personName);
+            // Σετ 3: το shared schedule ανήκει στο ιστορικό των 4 — home μόνο από τις τρέχουσες λίστες.
+            if (getActiveGroupMode() === '3') {
+                for (let g = 1; g <= getDutyGroupCount(); g++) {
+                    for (const lt of DUTY_STATUS_LIST_TYPES) {
+                        const list = groups[g]?.[lt] || [];
+                        if (list.some((p) => personScheduleKey(p) === pk)) return g;
+                    }
+                }
+                return null;
+            }
+            ensurePersonStatusScheduleSeeded();
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
             const hits = personStatusSchedule.membership
                 .filter((e) => e.personKey === pk && compareScheduleDateKeys(e.effectiveFrom, dk) <= 0)
@@ -602,9 +612,13 @@
             return list;
         }
         function getListOrderAtDate(groupNum, listType, dateKey) {
+            const sortedCurrent = getSortedGroupListForRotation(groupNum, listType);
+            // Σετ 3: αγνόησε listOrders του σετ 4 (ίδια groupNum 1–3, λάθος άτομα).
+            if (getActiveGroupMode() === '3') {
+                return sortedCurrent;
+            }
             ensurePersonStatusScheduleSeeded();
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
-            const sortedCurrent = getSortedGroupListForRotation(groupNum, listType);
             const hits = personStatusSchedule.listOrders
                 .filter(
                     (e) =>
@@ -719,6 +733,10 @@
             };
         }
         function getDisabledStateAtDate(groupNum, personName, dateKey) {
+            // Σετ 3: disabled μόνο από το ενεργό groupsThree (όχι schedule των 4).
+            if (getActiveGroupMode() === '3') {
+                return legacyDisabledStateFromGroups(groupNum, personName);
+            }
             ensurePersonStatusScheduleSeeded();
             const pk = personScheduleKey(personName);
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
