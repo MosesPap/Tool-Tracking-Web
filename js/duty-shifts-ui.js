@@ -1195,7 +1195,65 @@
             return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
         }
 
-        /** Υποψήφιοι από όλες τις 4 ομάδες, ταξινόμηση: παλαιότερη lastDuty πρώτα, χωρίς ημερομηνία τελευταία. */
+        /**
+         * Ίδια λογική με τις κάρτες «Τελευταία»: ημερολόγιο πριν από σήμερα,
+         * αλλιώς αποθηκευμένο lastDuties από το σετ 4 (όχι το ενεργό groups των 3).
+         */
+        function resolveBulkAddEffectiveLastDateKey(person, sourceGroupNum, listType) {
+            const todayKey =
+                typeof getTodayDateKeyForLastNext === 'function'
+                    ? getTodayDateKeyForLastNext()
+                    : null;
+            if (typeof getMostRecentAssignmentDateKeyForPerson === 'function') {
+                const assignedKey = getMostRecentAssignmentDateKeyForPerson(
+                    person,
+                    sourceGroupNum,
+                    listType,
+                    new Date(),
+                    { beforeDateKey: todayKey }
+                );
+                if (assignedKey) return assignedKey;
+            }
+
+            const four = typeof getGroupsFour === 'function' ? getGroupsFour() : null;
+            let bestKey = null;
+            if (four) {
+                const target =
+                    typeof normalizePersonKey === 'function'
+                        ? normalizePersonKey(person)
+                        : String(person || '')
+                              .trim()
+                              .toLowerCase();
+                for (let g = 1; g <= 4; g++) {
+                    const ld = four[g]?.lastDuties || {};
+                    for (const k of Object.keys(ld)) {
+                        const same =
+                            typeof normalizePersonKey === 'function'
+                                ? normalizePersonKey(k) === target
+                                : k === person;
+                        if (!same) continue;
+                        const dk = normalizeBulkLastDutyKey(ld[k]?.[listType]);
+                        if (dk && (!bestKey || dk > bestKey)) bestKey = dk;
+                    }
+                }
+            }
+            if (bestKey && todayKey && bestKey >= todayKey) bestKey = null;
+            if (
+                bestKey &&
+                typeof getAssignmentStoreForListType === 'function' &&
+                typeof personAssignedOnDateInStore === 'function'
+            ) {
+                const store = getAssignmentStoreForListType(listType);
+                if (store && store[bestKey] != null) {
+                    if (!personAssignedOnDateInStore(person, store, bestKey)) {
+                        bestKey = null;
+                    }
+                }
+            }
+            return bestKey || null;
+        }
+
+        /** Υποψήφιοι από όλες τις 4 ομάδες, ταξινόμηση: παλαιότερη effective lastDuty πρώτα. */
         function collectBulkAddCandidatesFromFour(listType, alreadyInList) {
             const source =
                 typeof getGroupsFour === 'function' ? getGroupsFour() : null;
@@ -1215,21 +1273,25 @@
                 for (const name of people) {
                     if (!name || already.has(name)) continue;
                     const ld = gd.lastDuties?.[name] || {};
-                    const dateKey = normalizeBulkLastDutyKey(ld[listType]);
+                    const dateKey = resolveBulkAddEffectiveLastDateKey(name, g, listType);
                     const existing = byName.get(name);
                     if (!existing) {
+                        const mergedLd = { ...ld };
+                        if (dateKey) mergedLd[listType] = dateKey;
                         byName.set(name, {
                             name,
                             lastDate: dateKey,
                             sourceGroup: g,
-                            lastDuties: { ...ld },
+                            lastDuties: mergedLd,
                             priorities: { ...(gd.priorities?.[name] || {}) }
                         });
                     } else {
                         if (dateKey && (!existing.lastDate || dateKey > existing.lastDate)) {
                             existing.lastDate = dateKey;
+                            existing.lastDuties[listType] = dateKey;
                         }
                         for (const k of ['special', 'weekend', 'semi', 'normal']) {
+                            if (k === listType) continue;
                             const cand = normalizeBulkLastDutyKey(ld[k]);
                             const cur = normalizeBulkLastDutyKey(existing.lastDuties[k]);
                             if (cand && (!cur || cand > cur)) existing.lastDuties[k] = ld[k];
@@ -1293,7 +1355,7 @@
             }
             if (metaEl) {
                 metaEl.textContent =
-                    'Άτομα από όλες τις 4 ομάδες, ταξινομημένα κατά τελευταία υπηρεσία αυτού του τύπου (παλαιότεροι πρώτα).';
+                    'Άτομα από όλες τις 4 ομάδες. Η «τελευταία» είναι η ίδια με τις κάρτες (ημερολόγιο πριν από σήμερα), παλαιότεροι πρώτα.';
             }
 
             const esc = (s) =>
