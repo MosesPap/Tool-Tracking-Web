@@ -1393,20 +1393,8 @@
                 swapPairId,
                 meta
             );
-            if (
-                typeof recordManualAlternateDeferCarry === 'function' &&
-                dutyCategory &&
-                replacementPersonName &&
-                skippedPersonName
-            ) {
-                recordManualAlternateDeferCarry(
-                    dutyCategory,
-                    dateKey,
-                    groupNum,
-                    replacementPersonName,
-                    skippedPersonName
-                );
-            }
+            // ΜΗΝ γράφεις unavailable στο manualAlternateDeferCarry —
+            // αυτό προκαλεί ψευδή «επιλαχών» παράλειψη τον επόμενο μήνα.
         }
         /** Απουσία/απενεργοποίηση — όχι return-from-missing, swap, χειροκίνητη. */
         function isUnavailableReplacementReason(reason) {

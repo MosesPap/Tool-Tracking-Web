@@ -1674,20 +1674,58 @@
             };
         }
 
+        /** Defer επιλαχών ισχύει μόνο αν και οι δύο είναι στην τρέχουσα λίστα + υπάρχει πραγματικό manualAlternate. */
+        function isValidManualAlternateDeferEntry(entry, dayTypeCategory, groupNum) {
+            if (!entry?.replacementPerson || !dayTypeCategory || !groupNum) return false;
+            const people = groups[groupNum]?.[dayTypeCategory] || [];
+            const norm = normRotPersonName;
+            const inRotationList = (p) => p && people.some((x) => norm(x) === norm(p));
+            if (!inRotationList(entry.replacementPerson)) return false;
+            // Ο baseline (π.χ. Σεργίδης) πρέπει να είναι στη λίστα — αλλιώς είναι παλιό/ξένο reason.
+            if (!entry.baselinePerson || !inRotationList(entry.baselinePerson)) return false;
+            const srcKey = entry.sourceDateKey || entry.dateKey || null;
+            if (srcKey && /^\d{4}-\d{2}-\d{2}$/.test(srcKey)) {
+                const manual = findManualAlternateReplacementForGroup(srcKey, groupNum);
+                if (!manual?.replacementPerson || !manual?.baselinePerson) return false;
+                if (norm(manual.replacementPerson) !== norm(entry.replacementPerson)) return false;
+                if (norm(manual.baselinePerson) !== norm(entry.baselinePerson)) return false;
+            }
+            return true;
+        }
+
         function getManualAlternateDeferFromPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum) {
             if (!dateInCurrentMonth || !dayTypeCategory || !groupNum) return null;
             const prevMonthKey = getPreviousMonthKeyFromDate(dateInCurrentMonth);
             const fromCarry = manualAlternateDeferCarry?.[dayTypeCategory]?.[prevMonthKey]?.[groupNum];
             if (fromCarry?.replacementPerson) {
-                return {
+                const carryEntry = {
                     dateKey: fromCarry.sourceDateKey || null,
+                    sourceDateKey: fromCarry.sourceDateKey || null,
                     replacementPerson: fromCarry.replacementPerson,
                     baselinePerson: fromCarry.baselinePerson || null
                 };
+                if (isValidManualAlternateDeferEntry(carryEntry, dayTypeCategory, groupNum)) {
+                    return {
+                        dateKey: carryEntry.dateKey,
+                        replacementPerson: carryEntry.replacementPerson,
+                        baselinePerson: carryEntry.baselinePerson
+                    };
+                }
             }
-            const fromManual = findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum);
-            if (fromManual?.replacementPerson) return fromManual;
-            return findLatestUnavailableReplacementInPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum);
+            const fromManual = findLatestManualAlternateInPreviousMonth(
+                dayTypeCategory,
+                dateInCurrentMonth,
+                groupNum
+            );
+            if (
+                fromManual?.replacementPerson &&
+                isValidManualAlternateDeferEntry(fromManual, dayTypeCategory, groupNum)
+            ) {
+                return fromManual;
+            }
+            // ΜΗΝ χρησιμοποιείς unavailableReplacement ως «επιλαχών» — βγάζει λάθος λόγο
+            // (π.χ. Σιακόλας↔Σεργίδης χωρίς πραγματική αντικατάσταση επιλαχόντος).
+            return null;
         }
 
         /**
@@ -1761,16 +1799,15 @@
                 if (isNaN(d.getTime())) continue;
                 const manual = findManualAlternateReplacementForGroup(dk, groupNum);
                 if (!manual) continue;
-                if (!inRotationList(manual.baselinePerson) && !inRotationList(manual.replacementPerson)) continue;
-                const assignedOnDate = getPersonAssignedOnDateFromStore(dayTypeCategory, dk, groupNum);
-                const categoryMatches =
-                    getDutyCategoryForDateKeyLocal(dk) === dayTypeCategory ||
-                    !!assignedOnDate ||
-                    inRotationList(manual.baselinePerson);
-                if (!categoryMatches) continue;
+                // Και οι δύο πρέπει να είναι στην τρέχουσα λίστα (όχι παλιά ονόματα εκτός σετ).
+                if (!inRotationList(manual.replacementPerson) || !inRotationList(manual.baselinePerson)) {
+                    continue;
+                }
+                if (getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory) continue;
                 if (!latest || dk > latest.dateKey) {
                     latest = {
                         dateKey: dk,
+                        sourceDateKey: dk,
                         replacementPerson: resolvePersonInGroupRotationList(manual.replacementPerson, groupNum, dayTypeCategory),
                         baselinePerson: resolvePersonInGroupRotationList(manual.baselinePerson, groupNum, dayTypeCategory)
                     };
@@ -1809,26 +1846,15 @@
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
                 const cat = getDutyCategoryForDateKeyLocal(dk);
                 for (let g = 1; g <= getDutyGroupCount(); g++) {
+                    // Μόνο πραγματική «Αντικατάσταση Επιλαχών» — όχι unavailable/απουσία.
                     const manual = findManualAlternateReplacementForGroup(dk, g);
-                    let replacementPerson = null;
-                    let baselinePerson = null;
-                    if (manual) {
-                        replacementPerson = manual.replacementPerson;
-                        baselinePerson = manual.baselinePerson;
-                    } else {
-                        const gmap = getAssignmentReasonsGroupMap(dk, g);
-                        if (gmap) {
-                            for (const replKey in gmap) {
-                                const r = gmap[replKey];
-                                if (!r || r.type !== 'skip' || !r.meta?.unavailableReplacement || !r.swappedWith) {
-                                    continue;
-                                }
-                                replacementPerson = resolvePersonInGroupRotationList(replKey, g, cat);
-                                baselinePerson = resolvePersonInGroupRotationList(r.swappedWith, g, cat);
-                                break;
-                            }
-                        }
-                    }
+                    if (!manual?.replacementPerson || !manual?.baselinePerson) continue;
+                    const people = groups[g]?.[cat] || [];
+                    const norm = normRotPersonName;
+                    const inList = (p) => p && people.some((x) => norm(x) === norm(p));
+                    if (!inList(manual.replacementPerson) || !inList(manual.baselinePerson)) continue;
+                    const replacementPerson = manual.replacementPerson;
+                    const baselinePerson = manual.baselinePerson;
                     if (!replacementPerson || !baselinePerson) continue;
                     const d = new Date(dk + 'T00:00:00');
                     if (isNaN(d.getTime())) continue;
@@ -1841,10 +1867,9 @@
                     };
                 }
             }
+            // Αντικατάσταση (όχι merge): παλιό carry από unavailable/λάθος reasons δεν πρέπει να μένει.
             for (const cat of ['normal', 'semi', 'weekend', 'special']) {
-                const prev = manualAlternateDeferCarry[cat] || {};
-                const next = rebuilt[cat] || {};
-                manualAlternateDeferCarry[cat] = { ...prev, ...next };
+                manualAlternateDeferCarry[cat] = rebuilt[cat] || {};
             }
         }
 
