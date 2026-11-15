@@ -819,6 +819,11 @@
         function getGroupRotationListAtDate(groupNum, listType, dateKey) {
             const dk = dateKey || dutyCalcContextDateKey || formatDateKey(new Date());
             const order = getListOrderAtDate(groupNum, listType, dk);
+            // Σετ 3: οι λίστες είναι ήδη ανά ομάδα Α/Β/Γ — μην φιλτράρεις με home
+            // (αλλιώς άτομο στη λίστα UI μπορεί να «εξαφανιστεί» από τον υπολογισμό χωρίς λόγο).
+            if (getActiveGroupMode() === '3') {
+                return filterExcludedFromDutyList(order, groupNum);
+            }
             return filterExcludedFromDutyList(
                 order.filter((person) => getPersonHomeGroupAtDate(person, dk) === groupNum),
                 groupNum

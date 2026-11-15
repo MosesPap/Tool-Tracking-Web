@@ -2114,8 +2114,24 @@
             let posState;
             const isFeb2026 = year === 2026 && monthIndex0 === 1;
             const isApril = monthIndex0 === 3;
-            if (isFeb2026 || (isApril && (groupNum === 1 || groupNum === 2))) {
+            const mode3Semi =
+                typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
+            // Feb/April hardcode μόνο για σετ 4 — στο σετ 3 / συνέχεια χρησιμοποιούμε seed.
+            if (
+                !mode3Semi &&
+                (isFeb2026 || (isApril && (groupNum === 1 || groupNum === 2)))
+            ) {
                 posState = 0;
+            } else if (
+                typeof computeRotationPositionAtMonthStart === 'function'
+            ) {
+                posState =
+                    computeRotationPositionAtMonthStart(
+                        'semi',
+                        firstDt,
+                        groupNum,
+                        groupPeople
+                    ) % rotLen;
             } else {
                 const last = typeof getRotationSeedPersonForMonthStart === 'function'
                     ? getRotationSeedPersonForMonthStart('semi', firstDt, groupNum)
@@ -12247,8 +12263,20 @@
                                 : groups[g]) || {};
                         const people = gd.semi || [];
                         if (people.length) {
+                            const alreadyContinuing =
+                                globalSemiPos[g] !== undefined && Number.isFinite(globalSemiPos[g]);
                             reseedGlobalRotationPositionAtMonthStart('semi', date, g, people, globalSemiPos);
-                            alignSemiRotationPosToExpectedAtMonthStart(date, g, people, globalSemiPos, sortedSemi);
+                            // Μην ξαναγράφεις τον cursor αν ήδη συνεχίζει από προηγούμενο μήνα
+                            // (το align με expected map μπορεί να προσπεράσει άτομα χωρίς λόγο).
+                            if (!alreadyContinuing) {
+                                alignSemiRotationPosToExpectedAtMonthStart(
+                                    date,
+                                    g,
+                                    people,
+                                    globalSemiPos,
+                                    sortedSemi
+                                );
+                            }
                         }
                     }
                     prevCalMonthKeySemiRot = monthKey;
@@ -13196,9 +13224,14 @@
                                     calculationSteps.startDate.getFullYear() === 2026 && 
                                     calculationSteps.startDate.getMonth() === 1; // Month 1 = February (0-indexed)
                                 const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
+                                const mode3SemiPreview =
+                                    typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
                                 
-                                if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
-                                    // Always start from first person for February 2026
+                                if (
+                                    !mode3SemiPreview &&
+                                    (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2)))
+                                ) {
+                                    // Always start from first person for February 2026 (σετ 4 μόνο)
                                     globalSemiRotationPosition[groupNum] = 0;
                                     console.log(
                                         `[PREVIEW ROTATION] Starting from first person (position 0) for group ${groupNum} semi - ${
