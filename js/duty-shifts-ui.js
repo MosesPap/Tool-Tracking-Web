@@ -7604,12 +7604,16 @@
                         
                         // Save updated rotation positions to Firestore
                         try {
-                            const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
-                            await db.collection('dutyShifts').doc('lastRotationPositions').set({
-                                ...sanitizedPositions,
-                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                                updatedBy: user.uid
-                            });
+                            if (typeof saveLastRotationPositionsToFirestore === 'function') {
+                                await saveLastRotationPositionsToFirestore(db, user);
+                            } else {
+                                const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                                await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                                    ...sanitizedPositions,
+                                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                    updatedBy: user.uid
+                                });
+                            }
                             console.log('Updated last rotation positions for weekends (after skip logic) to Firestore:', finalWeekendRotationPositionsByMonth);
                         } catch (error) {
                             console.error('Error saving updated last rotation positions after weekend skip logic:', error);
@@ -7711,12 +7715,16 @@
                         
                         // Save updated rotation positions to Firestore
                         try {
-                            const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
-                            await db.collection('dutyShifts').doc('lastRotationPositions').set({
-                                ...sanitizedPositions,
-                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                                updatedBy: user.uid
-                            });
+                            if (typeof saveLastRotationPositionsToFirestore === 'function') {
+                                await saveLastRotationPositionsToFirestore(db, user);
+                            } else {
+                                const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                                await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                                    ...sanitizedPositions,
+                                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                    updatedBy: user.uid
+                                });
+                            }
                             console.log('Updated last rotation positions for semi-normal (after swaps) to Firestore:', finalSemiRotationPositionsByMonth);
                         } catch (error) {
                             console.error('Error saving updated last rotation positions after semi-normal swaps:', error);

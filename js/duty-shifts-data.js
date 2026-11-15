@@ -161,6 +161,69 @@
         let lastRotationPositionsFour = createEmptyLastRotationPositions();
         let lastRotationPositionsThree = createEmptyLastRotationPositions();
         let lastRotationPositions = lastRotationPositionsFour;
+
+        function syncActiveLastRotationPositionsMirror() {
+            if (activeGroupMode === '3') lastRotationPositionsThree = lastRotationPositions;
+            else lastRotationPositionsFour = lastRotationPositions;
+        }
+
+        /** Firestore payload: χωριστά modes 4/3 ώστε να μην χάνεται το ιστορικό του άλλου σετ. */
+        function getLastRotationPositionsFirestorePayload() {
+            syncActiveLastRotationPositionsMirror();
+            const sanitize =
+                typeof sanitizeForFirestore === 'function'
+                    ? sanitizeForFirestore
+                    : (x) => x;
+            return {
+                modes: {
+                    '4': sanitize(lastRotationPositionsFour),
+                    '3': sanitize(lastRotationPositionsThree)
+                }
+            };
+        }
+
+        /** true αν το προηγούμενο μήνα έχει ήδη αγκύρωση περιστροφής στο σετ 3. */
+        function hasThreeGroupRotationAnchorForPreviousMonth(dayTypeCategory, dateInMonth, groupNum) {
+            const prevMonthKey =
+                typeof getPreviousMonthKeyFromDate === 'function'
+                    ? getPreviousMonthKeyFromDate(dateInMonth)
+                    : null;
+            if (!prevMonthKey) return false;
+            const byType = lastRotationPositionsThree?.[dayTypeCategory];
+            if (!byType || typeof byType !== 'object') return false;
+            const monthEntry = byType[prevMonthKey];
+            if (!monthEntry || typeof monthEntry !== 'object' || Array.isArray(monthEntry)) return false;
+            if (groupNum == null) return Object.keys(monthEntry).length > 0;
+            return !!(monthEntry[groupNum] || monthEntry[String(groupNum)]);
+        }
+
+        /** Πρώτος μήνας υπολογισμού με 3 ομάδες → ξεκίνα από τον πρώτο της λίστας. */
+        function shouldStartThreeGroupRotationFromListHead(dayTypeCategory, dateInMonth, groupNum) {
+            if (getActiveGroupMode() !== '3') return false;
+            return !hasThreeGroupRotationAnchorForPreviousMonth(
+                dayTypeCategory,
+                dateInMonth,
+                groupNum
+            );
+        }
+
+        async function saveLastRotationPositionsToFirestore(db, user) {
+            if (!db || !user) return;
+            const payload =
+                typeof getLastRotationPositionsFirestorePayload === 'function'
+                    ? getLastRotationPositionsFirestorePayload()
+                    : { modes: { '4': lastRotationPositionsFour, '3': lastRotationPositionsThree } };
+            await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                ...payload,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: user.uid
+            });
+        }
+
+        window.getLastRotationPositionsFirestorePayload = getLastRotationPositionsFirestorePayload;
+        window.saveLastRotationPositionsToFirestore = saveLastRotationPositionsToFirestore;
+        window.shouldStartThreeGroupRotationFromListHead = shouldStartThreeGroupRotationFromListHead;
+        window.hasThreeGroupRotationAnchorForPreviousMonth = hasThreeGroupRotationAnchorForPreviousMonth;
         /** YYYY-MM -> true: month cannot start «Υπολογισμός Υπηρεσιών» until unlocked (Firestore doc monthCalculationLocks). */
         let monthCalculationLocks = {};
         /**
@@ -1930,6 +1993,15 @@
             const prevMonthStart = new Date(dateInMonth.getFullYear(), dateInMonth.getMonth() - 1, 1);
             const prevMonthKey = getPreviousMonthKeyFromDate(dateInMonth);
             const prevManualAlternate = findLatestManualAlternateInPreviousMonth(dayTypeCategory, dateInMonth, groupNum);
+
+            // Σετ 3 — πρώτη φορά (χωρίς αγκύρωση προηγούμενου μήνα στο modes['3']): από την αρχή της λίστας.
+            // Μην «τραβάς» συνέχεια από αναθέσεις/baseline των 4 ομάδων.
+            if (shouldStartThreeGroupRotationFromListHead(dayTypeCategory, dateInMonth, groupNum)) {
+                console.log(
+                    `[ROTATION SEED] Mode 3 first month — group ${groupNum} ${dayTypeCategory} start at index 0 (${groupPeople[0] || 'empty'})`
+                );
+                return 0;
+            }
 
             // Prefer actual last assignment / baseline continuity from previous month whenever available.
             const fromAssignments = getLastAssignmentContinuityPersonForPreviousMonth(
@@ -10150,12 +10222,16 @@ ${content.innerHTML}
                         
                         // Save updated rotation positions to Firestore
                         try {
-                            const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
-                            await db.collection('dutyShifts').doc('lastRotationPositions').set({
-                                ...sanitizedPositions,
-                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                                updatedBy: user.uid
-                            });
+                            if (typeof saveLastRotationPositionsToFirestore === 'function') {
+                                await saveLastRotationPositionsToFirestore(db, user);
+                            } else {
+                                const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                                await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                                    ...sanitizedPositions,
+                                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                    updatedBy: user.uid
+                                });
+                            }
                             console.log('Updated last rotation positions for weekends (after skip logic) to Firestore:', finalWeekendRotationPositionsByMonth);
                         } catch (error) {
                             console.error('Error saving updated last rotation positions after weekend skip logic:', error);
@@ -10265,12 +10341,16 @@ ${content.innerHTML}
                         
                         // Save updated rotation positions to Firestore
                         try {
-                            const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
-                            await db.collection('dutyShifts').doc('lastRotationPositions').set({
-                                ...sanitizedPositions,
-                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                                updatedBy: user.uid
-                            });
+                            if (typeof saveLastRotationPositionsToFirestore === 'function') {
+                                await saveLastRotationPositionsToFirestore(db, user);
+                            } else {
+                                const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                                await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                                    ...sanitizedPositions,
+                                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                    updatedBy: user.uid
+                                });
+                            }
                             console.log('Updated last rotation positions for semi-normal (after swaps) to Firestore:', finalSemiRotationPositionsByMonth);
                         } catch (error) {
                             console.error('Error saving updated last rotation positions after semi-normal swaps:', error);
