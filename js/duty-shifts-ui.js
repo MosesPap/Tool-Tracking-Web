@@ -1554,6 +1554,313 @@
 
         window.openBulkAddFromFourModal = openBulkAddFromFourModal;
         window.confirmBulkAddFromFour = confirmBulkAddFromFour;
+
+        // --- Σύνολα υπηρεσιών ανά άτομο / ομάδα (επιλογή μηνών) ---
+        let _dutyTotalsSelectedMonths = new Set();
+
+        function updateDutyTotalsPickerSummary() {
+            const el = document.getElementById('dutyTotalsSelectionSummary');
+            if (!el) return;
+            const n = _dutyTotalsSelectedMonths.size;
+            if (!n) {
+                el.innerHTML =
+                    '<i class="fas fa-info-circle me-1"></i>Δεν έχει επιλεγεί μήνας.';
+                return;
+            }
+            const keys = [..._dutyTotalsSelectedMonths].sort();
+            el.innerHTML = `<i class="fas fa-check-circle me-1"></i>Επιλεγμένοι μήνες: <strong>${n}</strong> (${keys
+                .map((k) => {
+                    const [y, m] = k.split('-');
+                    return `${m}/${y}`;
+                })
+                .join(', ')})`;
+        }
+
+        function getPeopleInGroupForDutyTotals(groupNum) {
+            const g = groups?.[groupNum];
+            if (!g) return [];
+            const set = new Set();
+            for (const lt of ['special', 'weekend', 'semi', 'normal']) {
+                for (const p of g[lt] || []) {
+                    if (p) set.add(p);
+                }
+            }
+            return [...set].sort((a, b) => String(a).localeCompare(String(b), 'el'));
+        }
+
+        function emptyDutyTotalsBucket() {
+            return { total: 0, special: 0, weekend: 0, semi: 0, normal: 0 };
+        }
+
+        function computeDutyTotalsForMonths(monthKeys) {
+            const monthSet = new Set(monthKeys || []);
+            const maxG =
+                typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4;
+            const byGroup = {};
+            for (let g = 1; g <= maxG; g++) {
+                byGroup[g] = {};
+                for (const person of getPeopleInGroupForDutyTotals(g)) {
+                    byGroup[g][person] = emptyDutyTotalsBucket();
+                }
+            }
+
+            const stores = [
+                { type: 'special', store: typeof specialHolidayAssignments !== 'undefined' ? specialHolidayAssignments : {} },
+                { type: 'weekend', store: typeof weekendAssignments !== 'undefined' ? weekendAssignments : {} },
+                { type: 'semi', store: typeof semiNormalAssignments !== 'undefined' ? semiNormalAssignments : {} },
+                { type: 'normal', store: typeof normalDayAssignments !== 'undefined' ? normalDayAssignments : {} }
+            ];
+
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) =>
+                          String(s || '')
+                              .trim()
+                              .toLowerCase();
+
+            for (const { type, store } of stores) {
+                if (!store || typeof store !== 'object') continue;
+                for (const dateKey of Object.keys(store)) {
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue;
+                    const mk = dateKey.substring(0, 7);
+                    if (!monthSet.has(mk)) continue;
+                    const raw = store[dateKey];
+                    const map =
+                        typeof extractGroupAssignmentsMap === 'function'
+                            ? extractGroupAssignmentsMap(raw)
+                            : {};
+                    for (let g = 1; g <= maxG; g++) {
+                        const person = map[g] || map[String(g)];
+                        if (!person) continue;
+                        const peopleMap = byGroup[g];
+                        if (!peopleMap) continue;
+                        let hitName = null;
+                        if (peopleMap[person]) {
+                            hitName = person;
+                        } else {
+                            const pk = norm(person);
+                            for (const name of Object.keys(peopleMap)) {
+                                if (norm(name) === pk) {
+                                    hitName = name;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!hitName) continue;
+                        peopleMap[hitName][type] += 1;
+                        peopleMap[hitName].total += 1;
+                    }
+                }
+            }
+            return byGroup;
+        }
+
+        function renderDutyTotalsResults(monthKeys) {
+            const content = document.getElementById('dutyTotalsResultsContent');
+            const meta = document.getElementById('dutyTotalsResultsMeta');
+            if (!content) return;
+
+            const keys = [...(monthKeys || [])].sort();
+            if (meta) {
+                meta.textContent = `Μήνες: ${keys
+                    .map((k) => {
+                        const [y, m] = k.split('-');
+                        return `${m}/${y}`;
+                    })
+                    .join(', ')} — μετράει τελικές αναθέσεις στο ημερολόγιο για την ομάδα κάθε ατόμου.`;
+            }
+
+            const byGroup = computeDutyTotalsForMonths(keys);
+            const maxG =
+                typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4;
+            const esc =
+                typeof escapeHtml === 'function'
+                    ? escapeHtml
+                    : (s) =>
+                          String(s)
+                              .replace(/&/g, '&amp;')
+                              .replace(/</g, '&lt;')
+                              .replace(/"/g, '&quot;');
+
+            let html = '';
+            for (let g = 1; g <= maxG; g++) {
+                const groupName =
+                    typeof getGroupName === 'function' ? getGroupName(g) : `Ομάδα ${g}`;
+                const peopleMap = byGroup[g] || {};
+                const rows = Object.keys(peopleMap)
+                    .map((name) => ({ name, ...peopleMap[name] }))
+                    .sort((a, b) => b.total - a.total || String(a.name).localeCompare(String(b.name), 'el'));
+
+                html += `<div class="mb-4">
+                    <h5 class="border-bottom pb-2 mb-2">${esc(groupName)}</h5>`;
+                if (!rows.length) {
+                    html += `<p class="text-muted small">Δεν υπάρχουν άτομα στην ομάδα.</p></div>`;
+                    continue;
+                }
+                html += `<div class="table-responsive"><table class="table table-sm table-striped align-middle mb-0">
+                    <thead><tr>
+                        <th>Άτομο</th>
+                        <th class="text-end">Σύνολο</th>
+                        <th class="text-end">Ειδικές</th>
+                        <th class="text-end">ΣΚ/Αργίες</th>
+                        <th class="text-end">Ημιαργίες</th>
+                        <th class="text-end">Καθημερινές</th>
+                    </tr></thead><tbody>`;
+                for (const r of rows) {
+                    html += `<tr>
+                        <td>${esc(r.name)}</td>
+                        <td class="text-end fw-semibold">${r.total}</td>
+                        <td class="text-end">${r.special}</td>
+                        <td class="text-end">${r.weekend}</td>
+                        <td class="text-end">${r.semi}</td>
+                        <td class="text-end">${r.normal}</td>
+                    </tr>`;
+                }
+                const sumTotal = rows.reduce((s, r) => s + r.total, 0);
+                html += `</tbody><tfoot><tr class="table-light">
+                    <th>Σύνολο ομάδας</th>
+                    <th class="text-end">${sumTotal}</th>
+                    <th class="text-end">${rows.reduce((s, r) => s + r.special, 0)}</th>
+                    <th class="text-end">${rows.reduce((s, r) => s + r.weekend, 0)}</th>
+                    <th class="text-end">${rows.reduce((s, r) => s + r.semi, 0)}</th>
+                    <th class="text-end">${rows.reduce((s, r) => s + r.normal, 0)}</th>
+                </tr></tfoot></table></div></div>`;
+            }
+            content.innerHTML = html || '<p class="text-muted">Δεν υπάρχουν δεδομένα.</p>';
+        }
+
+        function openDutyTotalsResults(monthKeys) {
+            renderDutyTotalsResults(monthKeys);
+            const resultsEl = document.getElementById('dutyTotalsResultsModal');
+            if (!resultsEl) return;
+            const backBtn = document.getElementById('dutyTotalsBackToMonthsBtn');
+            if (backBtn) {
+                backBtn.onclick = () => {
+                    const inst = bootstrap.Modal.getInstance(resultsEl);
+                    const reopen = () => openDutyTotalsMonthPicker();
+                    if (inst) {
+                        resultsEl.addEventListener('hidden.bs.modal', reopen, { once: true });
+                        inst.hide();
+                    } else {
+                        reopen();
+                    }
+                };
+            }
+            bootstrap.Modal.getOrCreateInstance(resultsEl).show();
+        }
+
+        function openDutyTotalsMonthPicker() {
+            const modalEl = document.getElementById('dutyTotalsMonthPickerModal');
+            const yearEl = document.getElementById('dutyTotalsMonthPickerYear');
+            const monthsEl = document.getElementById('dutyTotalsMonthPickerMonths');
+            if (!modalEl || !yearEl || !monthsEl) return;
+
+            const greekMonthNames = [];
+            for (let m = 0; m < 12; m++) {
+                greekMonthNames.push(
+                    new Date(2024, m, 1).toLocaleDateString('el-GR', { month: 'long' })
+                );
+            }
+
+            const base =
+                typeof currentDate !== 'undefined' &&
+                currentDate instanceof Date &&
+                !isNaN(currentDate.getTime())
+                    ? currentDate
+                    : new Date();
+            let pickerYear = base.getFullYear();
+
+            const renderPickerMonths = () => {
+                yearEl.textContent = pickerYear;
+                monthsEl.innerHTML = '';
+                greekMonthNames.forEach((name, index) => {
+                    const monthKey = `${pickerYear}-${String(index + 1).padStart(2, '0')}`;
+                    const col = document.createElement('div');
+                    col.className = 'col-4';
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    const selected = _dutyTotalsSelectedMonths.has(monthKey);
+                    btn.className = selected ? 'btn btn-primary w-100' : 'btn btn-outline-primary w-100';
+                    btn.textContent = name;
+                    btn.addEventListener('click', () => {
+                        if (_dutyTotalsSelectedMonths.has(monthKey)) {
+                            _dutyTotalsSelectedMonths.delete(monthKey);
+                            btn.className = 'btn btn-outline-primary w-100';
+                        } else {
+                            _dutyTotalsSelectedMonths.add(monthKey);
+                            btn.className = 'btn btn-primary w-100';
+                        }
+                        updateDutyTotalsPickerSummary();
+                    });
+                    col.appendChild(btn);
+                    monthsEl.appendChild(col);
+                });
+            };
+
+            const prevBtn = document.getElementById('dutyTotalsMonthPickerPrevYear');
+            const nextBtn = document.getElementById('dutyTotalsMonthPickerNextYear');
+            if (prevBtn) {
+                prevBtn.onclick = () => {
+                    pickerYear--;
+                    renderPickerMonths();
+                };
+            }
+            if (nextBtn) {
+                nextBtn.onclick = () => {
+                    pickerYear++;
+                    renderPickerMonths();
+                };
+            }
+
+            const selectAllBtn = document.getElementById('dutyTotalsSelectAllYear');
+            const clearBtn = document.getElementById('dutyTotalsClearSelection');
+            if (selectAllBtn) {
+                selectAllBtn.onclick = () => {
+                    for (let i = 0; i < 12; i++) {
+                        _dutyTotalsSelectedMonths.add(
+                            `${pickerYear}-${String(i + 1).padStart(2, '0')}`
+                        );
+                    }
+                    renderPickerMonths();
+                    updateDutyTotalsPickerSummary();
+                };
+            }
+            if (clearBtn) {
+                clearBtn.onclick = () => {
+                    _dutyTotalsSelectedMonths.clear();
+                    renderPickerMonths();
+                    updateDutyTotalsPickerSummary();
+                };
+            }
+
+            const showBtn = document.getElementById('dutyTotalsShowBtn');
+            if (showBtn) {
+                showBtn.onclick = () => {
+                    if (_dutyTotalsSelectedMonths.size === 0) {
+                        alert('Επιλέξτε τουλάχιστον έναν μήνα.');
+                        return;
+                    }
+                    const keys = [..._dutyTotalsSelectedMonths].sort();
+                    const pickerModal = bootstrap.Modal.getInstance(modalEl);
+                    const openResults = () => openDutyTotalsResults(keys);
+                    if (pickerModal) {
+                        modalEl.addEventListener('hidden.bs.modal', openResults, { once: true });
+                        pickerModal.hide();
+                    } else {
+                        openResults();
+                    }
+                };
+            }
+
+            updateDutyTotalsPickerSummary();
+            renderPickerMonths();
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+
+        window.openDutyTotalsMonthPicker = openDutyTotalsMonthPicker;
+        window.openDutyTotalsResults = openDutyTotalsResults;
+
         function lastDutyDateKeyForEditField(personName, groupNumber, listType, storedRaw) {
             // Same as lists: calendar before today, else manual stored
             if (typeof resolveEffectiveLastDutyDateKey === 'function') {
