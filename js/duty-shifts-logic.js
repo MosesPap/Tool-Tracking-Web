@@ -3372,8 +3372,30 @@
                 }
                 const otherKey = findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey);
                 if (otherKey) {
-                    const swappedOutPerson = getSemiAssignedPersonFromStore(assignmentsByDate, otherKey, groupNum);
-                if (swappedOutPerson) return swappedOutPerson;
+                    const swappedOutPerson = getSemiAssignedPersonFromStore(
+                        assignmentsByDate,
+                        otherKey,
+                        groupNum
+                    );
+                    if (swappedOutPerson) {
+                        return typeof resolvePersonInGroupRotationList === 'function'
+                            ? resolvePersonInGroupRotationList(swappedOutPerson, groupNum, 'normal') ||
+                                  swappedOutPerson
+                            : swappedOutPerson;
+                    }
+                }
+                // Fallback: ο βασικός της σειράς που ανταλλάχθηκε (όχι ο τελικός στην ημέρα)
+                if (reason.swappedWith) {
+                    return typeof resolvePersonInGroupRotationList === 'function'
+                        ? resolvePersonInGroupRotationList(reason.swappedWith, groupNum, 'normal') ||
+                              reason.swappedWith
+                        : reason.swappedWith;
+                }
+                if (reason.meta?.displacedPerson) {
+                    return typeof resolvePersonInGroupRotationList === 'function'
+                        ? resolvePersonInGroupRotationList(reason.meta.displacedPerson, groupNum, 'normal') ||
+                              reason.meta.displacedPerson
+                        : reason.meta.displacedPerson;
                 }
             }
             return assignedPerson;
@@ -3382,8 +3404,9 @@
         /**
          * Continuity for normal (καθημερινές) month-to-month seed.
          * - preserveBaseline / plain final: continue after who actually served on the calendar.
-         * - mutualTwoDaySwap: use shorter-arc "later of two" (not raw last-day assignee),
-         *   else e.g. Φιλίππος #16 wraps to #1 instead of after Αρέστη (νο 5).
+         * - οποιοδήποτε swap (σύγκρουση, αμοιβαία, Ν Πέμπτη): συνέχεια μετά τον «βασικό» της
+         *   σειράς (αυτόν που βγήκε / displaced), όχι μετά τον τελικό που μπήκε με αλλαγή.
+         *   π.χ. Δεκ: #15↔#14 στην τελευταία μέρα → Ιαν μετά τον #15 (όχι μετά τον #14).
          * - manual-alternate / Thursday-spacing: shared helper rules.
          */
         function getPersonForNormalRotationContinuity(dateKey, groupNum, assignedPerson, normalAssignmentsByDate) {
@@ -3398,19 +3421,27 @@
             if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement) {
                 return assignedPerson;
             }
-            if (
-                reason &&
-                reason.type === 'swap' &&
-                (reason.meta?.mutualTwoDaySwap ||
-                    reason.meta?.semiConsecutiveHolidaySwap ||
-                    reason.meta?.thursdaySpacing)
-            ) {
+            // Όλα τα swap καθημερινών (όχι μόνο mutual/thursday) — αλλιώς ο επόμενος μήνας
+            // ξεκινά μετά τον τελικό (#14) αντί μετά τον βασικό της σειράς (#15).
+            if (reason && reason.type === 'swap') {
                 return getPersonForRotationContinuity(
                     dateKey,
                     groupNum,
                     assignedPerson,
                     normalAssignmentsByDate
                 );
+            }
+            // Fallback: λόγος στο swappedWith / baseline του ζεύγους αν το reason του τελικού χάθηκε
+            if (typeof getAssignmentReasonForGroupOnDate === 'function') {
+                const anyReason = getAssignmentReasonForGroupOnDate(dateKey, groupNum, assignedPerson);
+                if (anyReason && anyReason.type === 'swap') {
+                    return getPersonForRotationContinuity(
+                        dateKey,
+                        groupNum,
+                        assignedPerson,
+                        normalAssignmentsByDate
+                    );
+                }
             }
             return assignedPerson;
         }
@@ -3424,7 +3455,12 @@
                 calculationSteps.startDate.getFullYear() === 2026 &&
                 calculationSteps.startDate.getMonth() === 1;
             const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3;
-            if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
+            const mode3Normal =
+                typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
+            if (
+                !mode3Normal &&
+                (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2)))
+            ) {
                 return 0;
             }
             const lastPersonName =
