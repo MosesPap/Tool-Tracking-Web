@@ -1338,7 +1338,16 @@
             if (!groups[g].lastDuties) groups[g].lastDuties = {};
             if (!groups[g].priorities) groups[g].priorities = {};
 
-            const already = new Set(groups[g][listType] || []);
+            // Αποκλεισμός όσων είναι ήδη σε οποιαδήποτε από τις 3 ομάδες για αυτόν τον τύπο
+            const already = new Set();
+            const maxG =
+                typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 3;
+            for (let og = 1; og <= maxG; og++) {
+                const lst = groups[og]?.[listType] || [];
+                for (const name of lst) {
+                    if (name) already.add(name);
+                }
+            }
             lastBulkAddCandidates = collectBulkAddCandidatesFromFour(listType, already);
 
             const titleEl = document.getElementById('bulkAddFromFourTitle');
@@ -1355,7 +1364,7 @@
             }
             if (metaEl) {
                 metaEl.textContent =
-                    'Άτομα από όλες τις 4 ομάδες. Η «τελευταία» είναι η ίδια με τις κάρτες (ημερολόγιο πριν από σήμερα), παλαιότεροι πρώτα.';
+                    'Εμφανίζονται όσοι δεν είναι ακόμα σε καμία από τις 3 ομάδες για αυτόν τον τύπο. Οι επιλεγμένοι μπαίνουν σε όλους τους τύπους της ίδιας ομάδας· σε κάθε τύπο σειρά από παλαιότερη προς πιο πρόσφατη τελευταία υπηρεσία.';
             }
 
             const esc = (s) =>
@@ -1426,6 +1435,29 @@
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
         }
 
+        function sortGroupListByLastDutyOldestFirst(groupNum, listType) {
+            const g = groups[groupNum];
+            if (!g || !Array.isArray(g[listType])) return;
+            g[listType].sort((a, b) => {
+                const dateA =
+                    normalizeBulkLastDutyKey(g.lastDuties?.[a]?.[listType]) ||
+                    resolveBulkAddEffectiveLastDateKey(a, groupNum, listType);
+                const dateB =
+                    normalizeBulkLastDutyKey(g.lastDuties?.[b]?.[listType]) ||
+                    resolveBulkAddEffectiveLastDateKey(b, groupNum, listType);
+                if (!dateA && !dateB) return String(a).localeCompare(String(b), 'el');
+                if (!dateA) return 1;
+                if (!dateB) return -1;
+                if (dateA !== dateB) return dateA < dateB ? -1 : 1;
+                return String(a).localeCompare(String(b), 'el');
+            });
+            if (!g.priorities) g.priorities = {};
+            g[listType].forEach((person, index) => {
+                if (!g.priorities[person]) g.priorities[person] = {};
+                g.priorities[person][listType] = index + 1;
+            });
+        }
+
         async function confirmBulkAddFromFour() {
             const { groupNum: g, listType } = bulkAddFromFourContext || {};
             if (!g || !listType) return;
@@ -1453,43 +1485,56 @@
                     priorities: {}
                 };
             }
-            if (!groups[g][listType]) groups[g][listType] = [];
             if (!groups[g].lastDuties) groups[g].lastDuties = {};
             if (!groups[g].priorities) groups[g].priorities = {};
 
-            const already = new Set(groups[g][listType]);
-
-            // Σειρά modal = παλαιότεροι πρώτα (διατηρείται από τη σειρά των checkboxes)
-            for (const meta of selectedMetas) {
-                const name = meta.name;
-                if (!name || already.has(name)) continue;
-                groups[g][listType].push(name);
-                already.add(name);
-                const prevLd = groups[g].lastDuties[name] || {};
-                groups[g].lastDuties[name] = {
-                    special: prevLd.special || meta.lastDuties.special || null,
-                    weekend: prevLd.weekend || meta.lastDuties.weekend || null,
-                    semi: prevLd.semi || meta.lastDuties.semi || null,
-                    normal: prevLd.normal || meta.lastDuties.normal || null
-                };
-                if (!groups[g].priorities[name]) groups[g].priorities[name] = {};
+            const allTypes = ['special', 'weekend', 'semi', 'normal'];
+            for (const lt of allTypes) {
+                if (!groups[g][lt]) groups[g][lt] = [];
             }
 
-            // Όλη η λίστα: σειρά κατά lastDuty (παλαιότεροι πρώτα) + priorities 1..n
-            const list = groups[g][listType];
-            list.sort((a, b) => {
-                const dateA = normalizeBulkLastDutyKey(groups[g].lastDuties?.[a]?.[listType]);
-                const dateB = normalizeBulkLastDutyKey(groups[g].lastDuties?.[b]?.[listType]);
-                if (!dateA && !dateB) return String(a).localeCompare(String(b), 'el');
-                if (!dateA) return 1;
-                if (!dateB) return -1;
-                if (dateA !== dateB) return dateA < dateB ? -1 : 1;
-                return String(a).localeCompare(String(b), 'el');
-            });
-            list.forEach((person, index) => {
-                if (!groups[g].priorities[person]) groups[g].priorities[person] = {};
-                groups[g].priorities[person][listType] = index + 1;
-            });
+            // Προσθήκη σε ΟΛΟΥΣ τους τύπους της ίδιας ομάδας
+            for (const meta of selectedMetas) {
+                const name = meta.name;
+                if (!name) continue;
+                const srcG = meta.sourceGroup || 1;
+                const prevLd = groups[g].lastDuties[name] || {};
+                const ld = {
+                    special:
+                        resolveBulkAddEffectiveLastDateKey(name, srcG, 'special') ||
+                        prevLd.special ||
+                        meta.lastDuties?.special ||
+                        null,
+                    weekend:
+                        resolveBulkAddEffectiveLastDateKey(name, srcG, 'weekend') ||
+                        prevLd.weekend ||
+                        meta.lastDuties?.weekend ||
+                        null,
+                    semi:
+                        resolveBulkAddEffectiveLastDateKey(name, srcG, 'semi') ||
+                        prevLd.semi ||
+                        meta.lastDuties?.semi ||
+                        null,
+                    normal:
+                        resolveBulkAddEffectiveLastDateKey(name, srcG, 'normal') ||
+                        prevLd.normal ||
+                        meta.lastDuties?.normal ||
+                        null
+                };
+                groups[g].lastDuties[name] = ld;
+                if (!groups[g].priorities[name]) groups[g].priorities[name] = {};
+
+                for (const lt of allTypes) {
+                    if (!groups[g][lt].includes(name)) {
+                        groups[g][lt].push(name);
+                    }
+                }
+            }
+
+            // Ανά τύπο: παλαιότερη τελευταία υπηρεσία πρώτα, πιο πρόσφατη τελευταία
+            for (const lt of allTypes) {
+                sortGroupListByLastDutyOldestFirst(g, lt);
+            }
 
             try {
                 if (typeof saveData === 'function') await saveData();
@@ -1497,7 +1542,7 @@
                 console.error('confirmBulkAddFromFour save:', e);
             }
             if (typeof renderGroups === 'function') {
-                renderGroups(true, [`${listType}List_${g}`]);
+                renderGroups(true, allTypes.map((lt) => `${lt}List_${g}`));
             }
 
             const modalEl = document.getElementById('bulkAddFromFourModal');
