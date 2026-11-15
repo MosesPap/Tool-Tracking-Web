@@ -182,6 +182,60 @@
             };
         }
 
+        function getThreeGroupCalculatedMonthsMap() {
+            const a = lastRotationPositionsThree?._calculatedMonths;
+            const b =
+                getActiveGroupMode() === '3' ? lastRotationPositions?._calculatedMonths : null;
+            const out = {};
+            if (a && typeof a === 'object') Object.assign(out, a);
+            if (b && typeof b === 'object') Object.assign(out, b);
+            return out;
+        }
+
+        function isThreeGroupMonthCalculated(monthKey) {
+            if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) return false;
+            const map = getThreeGroupCalculatedMonthsMap();
+            return !!map[monthKey];
+        }
+
+        /** Σήμανση μηνών που υπολογίστηκαν με σετ 3 (για συνέχεια τον επόμενο μήνα). */
+        function markThreeGroupMonthsCalculated(monthKeys) {
+            if (getActiveGroupMode() !== '3') return;
+            const keys = Array.isArray(monthKeys) ? monthKeys : [monthKeys];
+            if (!lastRotationPositionsThree || typeof lastRotationPositionsThree !== 'object') {
+                lastRotationPositionsThree = createEmptyLastRotationPositions();
+            }
+            if (!lastRotationPositionsThree._calculatedMonths) {
+                lastRotationPositionsThree._calculatedMonths = {};
+            }
+            for (const mk of keys) {
+                if (mk && /^\d{4}-\d{2}$/.test(mk)) {
+                    lastRotationPositionsThree._calculatedMonths[mk] = true;
+                }
+            }
+            if (lastRotationPositions && getActiveGroupMode() === '3') {
+                if (!lastRotationPositions._calculatedMonths) {
+                    lastRotationPositions._calculatedMonths = {};
+                }
+                Object.assign(
+                    lastRotationPositions._calculatedMonths,
+                    lastRotationPositionsThree._calculatedMonths
+                );
+            }
+        }
+
+        function rotationAnchorExistsInStore(store, dayTypeCategory, monthKey, groupNum) {
+            if (!store || !monthKey) return false;
+            const byType = store[dayTypeCategory];
+            if (!byType || typeof byType !== 'object') return false;
+            const monthEntry = byType[monthKey];
+            if (!monthEntry || typeof monthEntry !== 'object' || Array.isArray(monthEntry)) return false;
+            if (groupNum == null) {
+                return Object.keys(monthEntry).some((k) => k !== '_calculatedMonths' && monthEntry[k]);
+            }
+            return !!(monthEntry[groupNum] || monthEntry[String(groupNum)]);
+        }
+
         /** true αν το προηγούμενο μήνα έχει ήδη αγκύρωση περιστροφής στο σετ 3. */
         function hasThreeGroupRotationAnchorForPreviousMonth(dayTypeCategory, dateInMonth, groupNum) {
             const prevMonthKey =
@@ -189,12 +243,30 @@
                     ? getPreviousMonthKeyFromDate(dateInMonth)
                     : null;
             if (!prevMonthKey) return false;
-            const byType = lastRotationPositionsThree?.[dayTypeCategory];
-            if (!byType || typeof byType !== 'object') return false;
-            const monthEntry = byType[prevMonthKey];
-            if (!monthEntry || typeof monthEntry !== 'object' || Array.isArray(monthEntry)) return false;
-            if (groupNum == null) return Object.keys(monthEntry).length > 0;
-            return !!(monthEntry[groupNum] || monthEntry[String(groupNum)]);
+            if (isThreeGroupMonthCalculated(prevMonthKey)) return true;
+            if (
+                rotationAnchorExistsInStore(
+                    lastRotationPositionsThree,
+                    dayTypeCategory,
+                    prevMonthKey,
+                    groupNum
+                )
+            ) {
+                return true;
+            }
+            // Αν το active pointer έχει τα δεδομένα αλλά το three ref έχει ξεμείνει
+            if (
+                getActiveGroupMode() === '3' &&
+                rotationAnchorExistsInStore(
+                    lastRotationPositions,
+                    dayTypeCategory,
+                    prevMonthKey,
+                    groupNum
+                )
+            ) {
+                return true;
+            }
+            return false;
         }
 
         /** Πρώτος μήνας υπολογισμού με 3 ομάδες → ξεκίνα από τον πρώτο της λίστας. */
@@ -224,6 +296,8 @@
         window.saveLastRotationPositionsToFirestore = saveLastRotationPositionsToFirestore;
         window.shouldStartThreeGroupRotationFromListHead = shouldStartThreeGroupRotationFromListHead;
         window.hasThreeGroupRotationAnchorForPreviousMonth = hasThreeGroupRotationAnchorForPreviousMonth;
+        window.markThreeGroupMonthsCalculated = markThreeGroupMonthsCalculated;
+        window.isThreeGroupMonthCalculated = isThreeGroupMonthCalculated;
         /** YYYY-MM -> true: month cannot start «Υπολογισμός Υπηρεσιών» until unlocked (Firestore doc monthCalculationLocks). */
         let monthCalculationLocks = {};
         /**
@@ -1516,11 +1590,28 @@
 
         function setLastRotationPersonForMonth(dayType, monthKey, groupNum, personName) {
             if (!personName) return;
-            if (!lastRotationPositions[dayType]) lastRotationPositions[dayType] = {};
-            if (!lastRotationPositions[dayType][monthKey] || typeof lastRotationPositions[dayType][monthKey] !== 'object' || Array.isArray(lastRotationPositions[dayType][monthKey])) {
-                lastRotationPositions[dayType][monthKey] = {};
+            const writeInto = (store) => {
+                if (!store || typeof store !== 'object') return;
+                if (!store[dayType]) store[dayType] = {};
+                if (
+                    !store[dayType][monthKey] ||
+                    typeof store[dayType][monthKey] !== 'object' ||
+                    Array.isArray(store[dayType][monthKey])
+                ) {
+                    store[dayType][monthKey] = {};
+                }
+                store[dayType][monthKey][groupNum] = personName;
+            };
+            writeInto(lastRotationPositions);
+            // Dual-write στο αντίστοιχο σετ (αποφυγή χαμένης συνέχειας αν τα refs χωρίσουν)
+            if (getActiveGroupMode() === '3') {
+                if (lastRotationPositionsThree !== lastRotationPositions) {
+                    writeInto(lastRotationPositionsThree);
+                }
+                markThreeGroupMonthsCalculated(monthKey);
+            } else if (lastRotationPositionsFour !== lastRotationPositions) {
+                writeInto(lastRotationPositionsFour);
             }
-            lastRotationPositions[dayType][monthKey][groupNum] = personName;
         }
 
         /** Normalize person name for rotation comparisons (matches logic.js normalizePersonKey style). */
@@ -3597,6 +3688,9 @@
                     if (src.semi) target.semi = normalizeRotationType(src.semi);
                     if (src.weekend) target.weekend = normalizeRotationType(src.weekend);
                     if (src.special) target.special = normalizeRotationType(src.special);
+                    if (src._calculatedMonths && typeof src._calculatedMonths === 'object') {
+                        target._calculatedMonths = { ...src._calculatedMonths };
+                    }
                 };
                 lastRotationPositionsFour = createEmptyLastRotationPositions();
                 lastRotationPositionsThree = createEmptyLastRotationPositions();
@@ -4073,6 +4167,9 @@
                         if (src.semi) target.semi = normalizeRotationTypeLocal(src.semi);
                         if (src.weekend) target.weekend = normalizeRotationTypeLocal(src.weekend);
                         if (src.special) target.special = normalizeRotationTypeLocal(src.special);
+                        if (src._calculatedMonths && typeof src._calculatedMonths === 'object') {
+                            target._calculatedMonths = { ...src._calculatedMonths };
+                        }
                     };
                     lastRotationPositionsFour = createEmptyLastRotationPositions();
                     lastRotationPositionsThree = createEmptyLastRotationPositions();

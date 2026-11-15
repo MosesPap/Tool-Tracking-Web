@@ -3141,7 +3141,13 @@
             const startDate = calculationSteps?.startDate;
             const isFebruary2026 = startDate && startDate.getFullYear() === 2026 && startDate.getMonth() === 1;
             const isAprilStart = startDate && startDate.getMonth() === 3;
-            if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
+            // Τα hardcoded Feb/April ισχύουν μόνο για σετ 4 — στο σετ 3 ακολουθούμε συνέχεια λίστας.
+            const mode3 =
+                typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
+            if (
+                !mode3 &&
+                (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2)))
+            ) {
                 globalPos[groupNum] = 0;
                 return;
             }
@@ -4765,6 +4771,7 @@
                 // Store calculation parameters for step-by-step process
                 calculationSteps.startDate = startDate;
                 calculationSteps.endDate = endDate;
+                calculationSteps.monthKeysForRange = monthKeysForRange.slice();
                 calculationSteps.preserveExisting = preserveExisting;
                 calculationSteps.stripManualOverrideGroups = stripManualOverrideGroups.slice();
                 calculationSteps.currentStep = 1;
@@ -5003,7 +5010,12 @@
                         calculationSteps.startDate.getFullYear() === 2026 &&
                         calculationSteps.startDate.getMonth() === 1;
                     const isAprilStart = calculationSteps.startDate && calculationSteps.startDate.getMonth() === 3; // April
-                    if (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2))) {
+                    const mode3Special =
+                        typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
+                    if (
+                        !mode3Special &&
+                        (isFebruary2026 || (isAprilStart && (groupNum === 1 || groupNum === 2)))
+                    ) {
                         globalSpecialRotationPosition[groupNum] = 0;
                         console.log(
                             `[SPECIAL ROTATION] Starting from first person (position 0) for group ${groupNum} - ${
@@ -10281,6 +10293,12 @@
                 // This tracks where rotation left off for each day type and group (ignoring swaps)
                 // The lastRotationPositions object is updated during calculation, so we just need to save it
                 try {
+                    if (
+                        typeof markThreeGroupMonthsCalculated === 'function' &&
+                        Array.isArray(calculationSteps.monthKeysForRange)
+                    ) {
+                        markThreeGroupMonthsCalculated(calculationSteps.monthKeysForRange);
+                    }
                     if (!window.db) {
                         console.log('Firebase not ready, skipping lastRotationPositions save');
                     } else {
@@ -10299,6 +10317,11 @@
                             }
                             console.log('Saved lastRotationPositions to Firestore:', lastRotationPositions);
                         }
+                    }
+                    if (typeof saveDataToLocalStorage === 'function') {
+                        try {
+                            saveDataToLocalStorage();
+                        } catch (_) {}
                     }
                 } catch (error) {
                     console.error('Error saving lastRotationPositions:', error);
