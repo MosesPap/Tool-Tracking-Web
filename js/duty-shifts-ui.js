@@ -2181,28 +2181,34 @@
                     delete groups[currentGroup].priorities[oldName];
                     console.log(`[EDIT] Renamed priorities key from "${oldName}" to "${name}"`);
                 }
-                
-                // Update all occurrences in dutyAssignments
-                const oldPersonGroupStr = `${oldName} (Ομάδα ${currentGroup})`;
-                const newPersonGroupStr = `${name} (Ομάδα ${currentGroup})`;
-                
-                Object.keys(dutyAssignments).forEach(dateKey => {
-                    if (dutyAssignments[dateKey] && dutyAssignments[dateKey].includes(oldPersonGroupStr)) {
-                        dutyAssignments[dateKey] = dutyAssignments[dateKey].replace(oldPersonGroupStr, newPersonGroupStr);
-                        console.log(`[EDIT] Updated dutyAssignments[${dateKey}]`);
+
+                // Rename hierarchy ranking key (live roster only — do not rewrite past calendar cells)
+                if (typeof rankings === 'object' && rankings && rankings[oldName] !== undefined) {
+                    if (rankings[name] === undefined) {
+                        rankings[name] = rankings[oldName];
                     }
-                });
-                
-                // Update all occurrences in criticalAssignments
-                Object.keys(criticalAssignments).forEach(dateKey => {
-                    if (criticalAssignments[dateKey]) {
-                        const index = criticalAssignments[dateKey].indexOf(oldPersonGroupStr);
-                        if (index !== -1) {
-                            criticalAssignments[dateKey][index] = newPersonGroupStr;
-                            console.log(`[EDIT] Updated criticalAssignments[${dateKey}]`);
-                        }
+                    delete rankings[oldName];
+                }
+                if (groups[currentGroup].disabledPersons) {
+                    const dp = groups[currentGroup].disabledPersons;
+                    if (dp[oldName] !== undefined) {
+                        if (dp[name] === undefined) dp[name] = dp[oldName];
+                        delete dp[oldName];
                     }
-                });
+                }
+                if (groups[currentGroup].excludedFromDuties) {
+                    const ex = groups[currentGroup].excludedFromDuties;
+                    if (ex[oldName] !== undefined) {
+                        if (ex[name] === undefined) ex[name] = ex[oldName];
+                        delete ex[oldName];
+                    }
+                }
+
+                // Past months keep the stored rank/name. Only strip duplicate new-rank copies
+                // of the same person that may already exist from older buggy renames.
+                if (typeof sanitizeAssignmentsAfterPersonRankChange === 'function') {
+                    sanitizeAssignmentsAfterPersonRankChange(oldName, name, currentGroup);
+                }
             }
             
             // Now update lastDuties with new values (using new name as key)
@@ -2385,44 +2391,39 @@
                         // This is a critical baseline assignment that must be preserved
                         const existingAssignment = getAssignmentForDate(dateKey);
                         const personGroupStr = `${personKey} (Ομάδα ${currentGroup})`;
+                        const alreadyAssigned =
+                            typeof assignmentHasPersonGroup === 'function'
+                                ? assignmentHasPersonGroup(existingAssignment, personKey, currentGroup)
+                                : !!(existingAssignment && String(existingAssignment).includes(personGroupStr));
+                        const alreadyCritical =
+                            typeof criticalHasPersonGroup === 'function'
+                                ? criticalHasPersonGroup(criticalAssignments[dateKey], personKey, currentGroup)
+                                : !!(criticalAssignments[dateKey] && criticalAssignments[dateKey].includes(personGroupStr));
                         
                         // Mark this as a critical assignment (from last duty) - NEVER delete these
+                        // Match by identity (ignore rank) so a promotion does not add a second entry.
                         if (!criticalAssignments[dateKey]) {
                             criticalAssignments[dateKey] = [];
                         }
-                        if (!criticalAssignments[dateKey].includes(personGroupStr)) {
+                        if (!alreadyCritical) {
                             criticalAssignments[dateKey].push(personGroupStr);
                             console.log(`[${mode}] ✓ Added to criticalAssignments[${dateKey}]:`, criticalAssignments[dateKey]);
                         } else {
-                            console.log(`[${mode}] ✓ Already in criticalAssignments[${dateKey}]:`, criticalAssignments[dateKey]);
+                            console.log(`[${mode}] ✓ Already in criticalAssignments[${dateKey}] (same person, rank ignored):`, criticalAssignments[dateKey]);
                         }
                         
-                        // Verify criticalAssignments was updated
-                        if (!criticalAssignments[dateKey] || !criticalAssignments[dateKey].includes(personGroupStr)) {
-                            console.error(`[${mode}] ERROR: Failed to add to criticalAssignments for ${dateKey}!`);
-                        }
-                        
-                        // ALWAYS update assignments - even if editing, we want the new dates
+                        // Add to calendar assignment only if this person is not already there
+                        // (same bare name + group under any rank spelling — keep historical text).
                         if (existingAssignment) {
-                            // Check if this person is already assigned
-                            if (!existingAssignment.includes(personGroupStr)) {
-                                // Add this person to existing assignments
+                            if (!alreadyAssigned) {
                                 setAssignmentForDate(dateKey, existingAssignment + `, ${personGroupStr}`);
                                 console.log(`[${mode}] Added to existing assignment for ${dateKey}: ${existingAssignment + ', ' + personGroupStr}`);
                             } else {
-                                console.log(`[${mode}] Person already in assignment for ${dateKey}`);
+                                console.log(`[${mode}] Person already in assignment for ${dateKey} (rank change does not rewrite history)`);
                             }
                         } else {
-                            // Create new assignment
                             setAssignmentForDate(dateKey, personGroupStr);
                             console.log(`[${mode}] Created new assignment for ${dateKey}: ${personGroupStr}`);
-                        }
-                        
-                        // Verify it was added correctly
-                        if (!dutyAssignments[dateKey] || !dutyAssignments[dateKey].includes(personGroupStr)) {
-                            console.error(`[${mode}] ERROR: Failed to add assignment for ${dateKey}! Expected: ${personGroupStr}, Got: ${dutyAssignments[dateKey]}`);
-                        } else {
-                            console.log(`[${mode}] ✓ Verified assignment for ${dateKey}: ${dutyAssignments[dateKey]}`);
                         }
                         
                         addedAssignments.push(dateKey);
@@ -2495,25 +2496,52 @@
                         const shouldRemove = (newDateKey && oldDateKey !== newDateKey) || (!newDateKey && oldDateKey);
                         
                         if (shouldRemove) {
-                            // Use current name (may have been changed) for removal
-                            // If name changed, all references were already updated to use new name
-                            const personGroupStr = `${name} (Ομάδα ${currentGroup})`;
-                            const existingAssignment = dutyAssignments[oldDateKey];
-                            
-                            // Remove from critical assignments
+                            // Match by identity (ignore rank) so old-rank historical spellings are removed
+                            // when the last-duty *date* actually changes — not when only the rank changes.
+                            const idFn =
+                                typeof getPersonIdentityKey === 'function'
+                                    ? getPersonIdentityKey
+                                    : (s) => String(s || '').trim();
+                            const targetIds = new Set(
+                                [name, oldName, editingPersonName]
+                                    .filter(Boolean)
+                                    .map((n) => idFn(n))
+                                    .filter(Boolean)
+                            );
+                            const isSamePersonPart = (raw) => {
+                                const m = String(raw || '').match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                                if (!m) return false;
+                                if (parseInt(m[2], 10) !== currentGroup) return false;
+                                return targetIds.has(idFn(m[1].trim()));
+                            };
+
                             if (criticalAssignments[oldDateKey]) {
-                                criticalAssignments[oldDateKey] = criticalAssignments[oldDateKey].filter(a => a !== personGroupStr);
+                                criticalAssignments[oldDateKey] = criticalAssignments[oldDateKey].filter(
+                                    (a) => !isSamePersonPart(a)
+                                );
                                 if (criticalAssignments[oldDateKey].length === 0) {
                                     delete criticalAssignments[oldDateKey];
                                 }
                                 console.log(`[EDIT] Removed old critical assignment for ${oldDateKey} (${type} changed from ${oldDateKey} to ${newDateKey || 'empty'})`);
                             }
-                            
-                            // Remove from regular assignments
-                            if (existingAssignment && existingAssignment.includes(personGroupStr)) {
-                                const assignments = existingAssignment.split(', ').filter(a => a !== personGroupStr);
-                                if (assignments.length > 0) {
-                                    dutyAssignments[oldDateKey] = assignments.join(', ');
+
+                            const existingAssignment = getAssignmentForDate(oldDateKey);
+                            if (existingAssignment) {
+                                const parts =
+                                    typeof parseDutyAssignmentParts === 'function'
+                                        ? parseDutyAssignmentParts(existingAssignment)
+                                        : String(existingAssignment)
+                                              .split(',')
+                                              .map((p) => p.trim())
+                                              .filter(Boolean)
+                                              .map((raw) => ({ raw }));
+                                const kept = parts
+                                    .filter((p) => !isSamePersonPart(p.raw))
+                                    .map((p) => p.raw);
+                                if (kept.length > 0) {
+                                    setAssignmentForDate(oldDateKey, kept.join(', '));
+                                } else if (typeof deleteAssignmentForDate === 'function') {
+                                    deleteAssignmentForDate(oldDateKey);
                                 } else {
                                     delete dutyAssignments[oldDateKey];
                                 }
@@ -6428,11 +6456,21 @@
                             { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.12)' }
                         ];
                         const entries = [];
+                        const seenIdentityGroup = new Set();
                         for (const part of parts) {
                             const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                             const nameOnly = part.replace(/\s*\(Ομάδα\s*\d+\)\s*/g, '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
                             const personName = m ? m[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '') : nameOnly;
                             const g = m ? parseInt(m[2], 10) : 0;
+                            // Same person under old+new rank after a promotion: show one line (keep first / historical).
+                            const idKey =
+                                (typeof getPersonIdentityKey === 'function'
+                                    ? getPersonIdentityKey(personName)
+                                    : String(personName || '').trim()) +
+                                '|' +
+                                g;
+                            if (seenIdentityGroup.has(idKey)) continue;
+                            seenIdentityGroup.add(idKey);
                             const rank = Number.isFinite(parseInt(rankings?.[personName], 10)) ? parseInt(rankings[personName], 10) : 9999;
                             let underline = false;
                             let isSwap = false;

@@ -2689,6 +2689,182 @@
             return fallbackAssignment;
         }
         
+        function parseDutyAssignmentParts(assignmentValue) {
+            if (assignmentValue == null || assignmentValue === '') return [];
+            if (typeof assignmentValue === 'object' && !Array.isArray(assignmentValue)) {
+                const parts = [];
+                for (const groupNum in assignmentValue) {
+                    const personName = assignmentValue[groupNum];
+                    if (!personName) continue;
+                    const g = parseInt(groupNum, 10);
+                    parts.push({
+                        personName: String(personName).trim(),
+                        groupNum: Number.isFinite(g) ? g : 0,
+                        raw: `${String(personName).trim()} (Ομάδα ${groupNum})`
+                    });
+                }
+                return parts;
+            }
+            return String(assignmentValue)
+                .split(',')
+                .map((p) => p.trim())
+                .filter(Boolean)
+                .map((part) => {
+                    const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                    const personName = m
+                        ? m[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '')
+                        : part.replace(/\s*\(Ομάδα\s*\d+\)\s*/g, '').trim();
+                    return {
+                        personName,
+                        groupNum: m ? parseInt(m[2], 10) : 0,
+                        raw: part
+                    };
+                });
+        }
+
+        function assignmentHasPersonGroup(assignmentValue, personName, groupNum) {
+            const g = parseInt(groupNum, 10);
+            if (!Number.isFinite(g) || !personName) return false;
+            const idFn =
+                typeof getPersonIdentityKey === 'function'
+                    ? getPersonIdentityKey
+                    : (s) => String(s || '').trim();
+            const normFn =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) => String(s || '').trim();
+            const targetId = idFn(personName);
+            const targetNorm = normFn(personName);
+            return parseDutyAssignmentParts(assignmentValue).some((p) => {
+                if (p.groupNum !== g) return false;
+                const pn = normFn(p.personName);
+                return pn === targetNorm || idFn(p.personName) === targetId;
+            });
+        }
+
+        function criticalHasPersonGroup(criticalList, personName, groupNum) {
+            if (!Array.isArray(criticalList) || !criticalList.length) return false;
+            return assignmentHasPersonGroup(criticalList.join(', '), personName, groupNum);
+        }
+
+        /**
+         * Drop duplicate same-person (ignore rank) entries for a group.
+         * Prefer keeping preferKeepName (historical rank) over preferDropName (new rank after promotion).
+         */
+        function dedupeAssignmentValueForPersonGroup(assignmentValue, preferKeepName, preferDropName, groupNum) {
+            if (assignmentValue == null || assignmentValue === '') return assignmentValue;
+            const g = parseInt(groupNum, 10);
+            if (!Number.isFinite(g)) return assignmentValue;
+
+            const idFn =
+                typeof getPersonIdentityKey === 'function'
+                    ? getPersonIdentityKey
+                    : (s) => String(s || '').trim();
+            const normFn =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey
+                    : (s) => String(s || '').trim();
+            const keepNorm = preferKeepName ? normFn(preferKeepName) : '';
+            const dropNorm = preferDropName ? normFn(preferDropName) : '';
+            const targetId = keepNorm
+                ? idFn(preferKeepName)
+                : dropNorm
+                  ? idFn(preferDropName)
+                  : '';
+            if (!targetId) return assignmentValue;
+
+            const isObject =
+                typeof assignmentValue === 'object' &&
+                !Array.isArray(assignmentValue);
+            if (isObject) {
+                // Object form is one person per group — nothing to merge, leave historical value.
+                return assignmentValue;
+            }
+
+            const parts = parseDutyAssignmentParts(assignmentValue);
+            const matching = parts.filter(
+                (p) => p.groupNum === g && idFn(p.personName) === targetId
+            );
+            if (matching.length <= 1) return assignmentValue;
+
+            let keepRaw = matching[0].raw;
+            const keepHit = matching.find((p) => normFn(p.personName) === keepNorm);
+            if (keepHit) keepRaw = keepHit.raw;
+            else {
+                const nonDrop = matching.find((p) => normFn(p.personName) !== dropNorm);
+                if (nonDrop) keepRaw = nonDrop.raw;
+            }
+
+            let keptMatching = false;
+            const rebuilt = [];
+            for (const p of parts) {
+                if (p.groupNum === g && idFn(p.personName) === targetId) {
+                    if (keptMatching) continue;
+                    rebuilt.push(keepRaw);
+                    keptMatching = true;
+                } else {
+                    rebuilt.push(p.raw);
+                }
+            }
+            return rebuilt.join(', ');
+        }
+
+        function dedupeCriticalListForPersonGroup(criticalList, preferKeepName, preferDropName, groupNum) {
+            if (!Array.isArray(criticalList) || !criticalList.length) return criticalList;
+            const deduped = dedupeAssignmentValueForPersonGroup(
+                criticalList.join(', '),
+                preferKeepName,
+                preferDropName,
+                groupNum
+            );
+            if (!deduped) return [];
+            return String(deduped)
+                .split(',')
+                .map((p) => p.trim())
+                .filter(Boolean);
+        }
+
+        /**
+         * After a rank/name edit: do not rewrite historical spellings; only remove
+         * duplicate new-rank copies of the same person that were wrongly appended.
+         */
+        function sanitizeAssignmentsAfterPersonRankChange(oldName, newName, groupNum) {
+            if (!oldName || !newName || oldName === newName) return;
+            const g = parseInt(groupNum, 10);
+            if (!Number.isFinite(g)) return;
+
+            const stores = [
+                dutyAssignments,
+                normalDayAssignments,
+                semiNormalAssignments,
+                weekendAssignments,
+                specialHolidayAssignments
+            ];
+            for (const store of stores) {
+                if (!store || typeof store !== 'object') continue;
+                for (const dateKey of Object.keys(store)) {
+                    const before = store[dateKey];
+                    const after = dedupeAssignmentValueForPersonGroup(before, oldName, newName, g);
+                    if (after !== before) store[dateKey] = after;
+                }
+            }
+            if (criticalAssignments && typeof criticalAssignments === 'object') {
+                for (const dateKey of Object.keys(criticalAssignments)) {
+                    const list = criticalAssignments[dateKey];
+                    if (!Array.isArray(list)) continue;
+                    criticalAssignments[dateKey] = dedupeCriticalListForPersonGroup(
+                        list,
+                        oldName,
+                        newName,
+                        g
+                    );
+                    if (criticalAssignments[dateKey].length === 0) {
+                        delete criticalAssignments[dateKey];
+                    }
+                }
+            }
+        }
+
         // Set assignment for a specific date (saves to correct document based on day type)
         function setAssignmentForDate(dateKey, assignmentValue) {
             try {

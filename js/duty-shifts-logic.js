@@ -2340,6 +2340,24 @@
                 .replace(/\s*,+$/, '')
                 .replace(/\s+/g, ' ');
         }
+        /**
+         * Identity without leading military rank token (e.g. "ΣΜΙΑΣ ΑΘΑΝΑΣΙΟΥ ΗΡΑΚΛΗΣ" → "ΑΘΑΝΑΣΙΟΥ ΗΡΑΚΛΗΣ").
+         * Used so a promotion/rank edit does not treat the same person as a new assignee.
+         */
+        function getPersonIdentityKey(personName) {
+            const n = normalizePersonKey(personName);
+            if (!n) return '';
+            const parts = n.split(' ');
+            if (parts.length >= 3) return parts.slice(1).join(' ');
+            return n;
+        }
+        function personNamesMatchIgnoringRank(a, b) {
+            const na = normalizePersonKey(a);
+            const nb = normalizePersonKey(b);
+            if (!na || !nb) return false;
+            if (na === nb) return true;
+            return getPersonIdentityKey(na) === getPersonIdentityKey(nb);
+        }
         function storeAssignmentReason(dateKey, groupNum, personName, type, reason, swappedWith = null, swapPairId = null, meta = null) {
             const keyName = normalizePersonKey(personName);
             if (!keyName) return;
