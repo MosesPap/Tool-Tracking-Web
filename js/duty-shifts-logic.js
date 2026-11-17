@@ -8931,6 +8931,9 @@
                             normal: updatedAssignments,
                             normalRotationPositions: globalNormalRotationPosition // For cross-month conflict detection
                         };
+                        try {
+                            calculationSteps._activeSwapSimulatedAssignments = simulatedAssignments;
+                        } catch (_) {}
                         
                         const hasConsecutiveConflict = hasConsecutiveDuty(dateKey, currentPerson, groupNum, simulatedAssignments);
 
@@ -9471,7 +9474,7 @@
                                                 },
                                                 body: JSON.stringify({
                                                     sessionId: '73ad17',
-                                                    runId: 'swap-pre',
+                                                    runId: 'post-fix',
                                                     hypothesisId: 'B',
                                                     location:
                                                         'duty-shifts-logic.js:saveSwapPerform',
@@ -14511,6 +14514,27 @@
             dedupeNormalAssignmentsInMonth(sortedNormal, normalAssignments, pureBaselineByDate);
         }
         function renderStep4_Normal() {
+            // #region agent log
+            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Debug-Session-Id': '73ad17'
+                },
+                body: JSON.stringify({
+                    sessionId: '73ad17',
+                    runId: 'post-fix',
+                    hypothesisId: 'B',
+                    location: 'duty-shifts-logic.js:renderStep4_Normal',
+                    message: 'step4_boot_v1662',
+                    data: {
+                        versionMarker: '1.662',
+                        normalKeys: (calculationSteps.dayTypeLists?.normal || []).slice()
+                    },
+                    timestamp: Date.now()
+                })
+            }).catch(() => {});
+            // #endregion
             const stepContent = document.getElementById('stepContent');
             const startDate = calculationSteps.startDate;
             const endDate = calculationSteps.endDate;
@@ -15638,6 +15662,9 @@
                                                 normal: normalAssignments,
                                                 normalRotationPositions: globalNormalRotationPosition // Pass current rotation positions for conflict checking
                                             };
+                    try {
+                        calculationSteps._activeSwapSimulatedAssignments = simulatedAssignments;
+                    } catch (_) {}
                                             
                     const hasConsecutiveConflict = hasConsecutiveDuty(dateKey, currentPerson, groupNum, simulatedAssignments);
                     
@@ -15671,7 +15698,7 @@
                                         },
                                         body: JSON.stringify({
                                             sessionId: '73ad17',
-                                            runId: 'swap-pre',
+                                            runId: 'post-fix',
                                             hypothesisId: 'A',
                                             location: 'duty-shifts-logic.js:previewSwapConflict',
                                             message: 'g3_conflict_detected',
@@ -16123,7 +16150,7 @@
                                             },
                                             body: JSON.stringify({
                                                 sessionId: '73ad17',
-                                                runId: 'swap-pre',
+                                                runId: 'post-fix',
                                                 hypothesisId: 'B',
                                                 location:
                                                     'duty-shifts-logic.js:previewSwapPerform',
@@ -16188,6 +16215,17 @@
                                 swapDateStr: new Date(swapDayKey + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
                                 swapPairId: swapPairId
                             });
+
+                            // Λόγος πριν την ανταλλαγή — αλλιώς χάνεται ο πραγματικός γείτονας.
+                            const conflictNeighborInfoPreview = getConsecutiveConflictNeighborInfo(
+                                dateKey,
+                                currentPerson,
+                                groupNum,
+                                simulatedAssignments
+                            );
+                            const conflictNeighborKeyPreview = conflictNeighborInfoPreview?.neighborKey || dateKey;
+                            const conflictWithLabelPreview =
+                                conflictNeighborInfoPreview?.conflictWithLabel || 'Αργία';
                             
                             // Perform the swap
                             normalAssignments[dateKey][groupNum] = swapCandidate;
@@ -16195,10 +16233,6 @@
 
                             // Όπως στο save path: χωρίς reflow — μόνο ανταλλαγή των δύο ημερών.
                             void applyWeekPairLogic;
-                            
-                            const conflictNeighborInfoPreview = getConsecutiveConflictNeighborInfo(dateKey, currentPerson, groupNum, simulatedAssignments);
-                            const conflictNeighborKeyPreview = conflictNeighborInfoPreview?.neighborKey || dateKey;
-                            const conflictWithLabelPreview = conflictNeighborInfoPreview?.conflictWithLabel || 'Αργία';
                             const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
                             const normalUnifiedReasonPreview = buildNormalConsecutiveDutySwapReason(
                                 swapCandidate,
@@ -17176,7 +17210,14 @@
          * Reject if either would be on a missing day or on a buffer day (immediately before absence start
          * or after absence end), so the Mon↔Wed / Tue↔Thu search can try the next alternative.
          */
-        function isNormalConflictSwapValidForMissingBoundaries(dateKey, swapDayKey, currentPerson, swapCandidate, groupNum) {
+        function isNormalConflictSwapValidForMissingBoundaries(
+            dateKey,
+            swapDayKey,
+            currentPerson,
+            swapCandidate,
+            groupNum,
+            simulatedAssignments = null
+        ) {
             if (!dateKey || !swapDayKey || !currentPerson || !swapCandidate || !Number.isFinite(groupNum)) return true;
             const dConflict = new Date(dateKey + 'T00:00:00');
             const dSwap = new Date(swapDayKey + 'T00:00:00');
@@ -17185,6 +17226,17 @@
             if (isPersonOnMissingBufferDay(currentPerson, groupNum, swapDayKey)) return false;
             if (isPersonMissingOnDate(swapCandidate, groupNum, dConflict, 'normal')) return false;
             if (isPersonOnMissingBufferDay(swapCandidate, groupNum, dateKey)) return false;
+            // Ο μετακινούμενος (currentPerson) πάει στη swapDayKey — μην δημιουργούμε
+            // νέα σύγκρουση με ειδική/ημιαργία/αργία δίπλα (π.χ. 23↔24).
+            const sim =
+                simulatedAssignments ||
+                calculationSteps?._activeSwapSimulatedAssignments ||
+                null;
+            if (sim && typeof hasConsecutiveDuty === 'function') {
+                if (hasConsecutiveDuty(swapDayKey, currentPerson, groupNum, sim)) {
+                    return false;
+                }
+            }
             return true;
         }
 
