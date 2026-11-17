@@ -250,7 +250,29 @@
             };
         }
 
+        const DUTY_CALENDAR_VEHICLE_BADGES_LS_KEY = 'dutyShiftsCalendarShowVehicleBadges';
+
+        function areDutyVehicleBadgesVisibleInCalendar() {
+            try {
+                const v = localStorage.getItem(DUTY_CALENDAR_VEHICLE_BADGES_LS_KEY);
+                if (v === null || v === undefined || v === '') return true;
+                return v === '1' || v === 'true';
+            } catch (_) {
+                return true;
+            }
+        }
+
+        function setDutyVehicleBadgesVisibleInCalendar(visible) {
+            try {
+                localStorage.setItem(
+                    DUTY_CALENDAR_VEHICLE_BADGES_LS_KEY,
+                    visible ? '1' : '0'
+                );
+            } catch (_) {}
+        }
+
         function formatVehicleAuthBadgesHtml(personName, options = {}) {
+            if (options.forCalendar && !areDutyVehicleBadgesVisibleInCalendar()) return '';
             const codes = getPersonAuthorizedVehicles(personName);
             if (!codes.length) return '';
             const esc =
@@ -318,6 +340,8 @@
         window.setPersonVehicleAuthMap = setPersonVehicleAuthMap;
         window.renamePersonVehicleAuthorizations = renamePersonVehicleAuthorizations;
         window.formatVehicleAuthBadgesHtml = formatVehicleAuthBadgesHtml;
+        window.areDutyVehicleBadgesVisibleInCalendar = areDutyVehicleBadgesVisibleInCalendar;
+        window.setDutyVehicleBadgesVisibleInCalendar = setDutyVehicleBadgesVisibleInCalendar;
         window.collectPeopleForVehicleAuthMatrix = collectPeopleForVehicleAuthMatrix;
         
         // Track skip/swap reasons for each assignment

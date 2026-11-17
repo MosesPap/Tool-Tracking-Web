@@ -9494,53 +9494,6 @@
                                     continue;
                                 }
 
-                                // #region agent log
-                                if (groupNum === 3 && String(dateKey).startsWith('2026-12')) {
-                                    try {
-                                        const moverWouldConflictOnTarget = hasConsecutiveDuty(
-                                            swapDayKey,
-                                            currentPerson,
-                                            groupNum,
-                                            simulatedAssignments
-                                        );
-                                        const preInfo = getConsecutiveConflictNeighborInfo(
-                                            dateKey,
-                                            currentPerson,
-                                            groupNum,
-                                            simulatedAssignments
-                                        );
-                                        fetch(
-                                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                            {
-                                                method: 'POST',
-                                                headers: {
-                                                    'Content-Type': 'application/json',
-                                                    'X-Debug-Session-Id': '73ad17'
-                                                },
-                                                body: JSON.stringify({
-                                                    sessionId: '73ad17',
-                                                    runId: 'post-fix',
-                                                    hypothesisId: 'B',
-                                                    location:
-                                                        'duty-shifts-logic.js:saveSwapPerform',
-                                                    message: 'g3_save_swap_about_to_apply',
-                                                    data: {
-                                                        dateKey,
-                                                        swapDayKey,
-                                                        currentPerson,
-                                                        swapCandidate,
-                                                        preConflictNeighbor: preInfo,
-                                                        moverWouldConflictOnTarget,
-                                                        checkedMoverOnTargetInValidate: false
-                                                    },
-                                                    timestamp: Date.now()
-                                                })
-                                            }
-                                        ).catch(() => {});
-                                    } catch (_) {}
-                                }
-                                // #endregion
-                                
                                 // Generate unique swap pair ID for color coding
                                 const swapPairId = swapPairCounter++;
                                 const swapColor = swapColors[swapPairId % swapColors.length];
@@ -11949,27 +11902,6 @@
             }
         }
         async function renderStep3_SemiNormal() {
-            // #region agent log
-            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Debug-Session-Id': '73ad17'
-                },
-                body: JSON.stringify({
-                    sessionId: '73ad17',
-                    runId: 'post-fix',
-                    hypothesisId: 'B-semi',
-                    location: 'duty-shifts-logic.js:renderStep3_SemiNormal',
-                    message: 'step3_boot_v1664',
-                    data: {
-                        versionMarker: '1.664',
-                        semiKeys: (calculationSteps.dayTypeLists?.semi || []).slice()
-                    },
-                    timestamp: Date.now()
-                })
-            }).catch(() => {});
-            // #endregion
             const stepContent = document.getElementById('stepContent');
             const startDate = calculationSteps.startDate;
             const endDate = calculationSteps.endDate;
@@ -12652,45 +12584,7 @@
                     if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) continue;
                     if (swappedSet.has(`${dateKey}:${groupNum}`)) continue;
                     const person = finalAssignments[dateKey]?.[groupNum];
-                    if (!person) continue;
-                    const conflictNow = hasConflict(dateKey, person, groupNum);
-                    // #region agent log
-                    if (groupNum === 3 && String(dateKey).startsWith('2026-12')) {
-                        const m = semiMeta[dateKey];
-                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Debug-Session-Id': '73ad17'
-                            },
-                            body: JSON.stringify({
-                                sessionId: '73ad17',
-                                runId: 'post-fix',
-                                hypothesisId: 'F',
-                                location: 'duty-shifts-logic.js:semiHasConflict',
-                                message: 'semi_conflict_eval',
-                                data: {
-                                    dateKey,
-                                    groupNum,
-                                    person,
-                                    conflictNow,
-                                    afterKey: m?.keyAfter || null,
-                                    afterType: m?.typeAfter || null,
-                                    specialOnAfter: m?.keyAfter
-                                        ? getSpecialAssigneeOnDate(m.keyAfter, groupNum)
-                                        : null,
-                                    monthSetHasPerson: !!(
-                                        simulatedSpecialAssignments?.[m?.monthKeyAfter]?.[
-                                            groupNum
-                                        ]?.has?.(person)
-                                    )
-                                },
-                                timestamp: Date.now()
-                            })
-                        }).catch(() => {});
-                    }
-                    // #endregion
-                    if (!conflictNow) continue;
+                    if (!person || !hasConflict(dateKey, person, groupNum)) continue;
                     let swapped = false;
                     for (let k = 0; k < indicesInMonth.length; k++) {
                         const j = indicesInMonth[k];
@@ -12702,36 +12596,7 @@
                         if (hasConflict(dk2, other, groupNum)) continue;
                         // Μην μετακινείς τον συγκρουόμενο σε άλλη ημιαργία που επίσης συγκρούεται
                         // (π.χ. 30↔31 → 23↔24 ειδική).
-                        if (hasConflict(dk2, person, groupNum)) {
-                            // #region agent log
-                            if (groupNum === 3 && String(dateKey).startsWith('2026-12')) {
-                                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-Debug-Session-Id': '73ad17'
-                                    },
-                                    body: JSON.stringify({
-                                        sessionId: '73ad17',
-                                        runId: 'post-fix',
-                                        hypothesisId: 'B-semi',
-                                        location: 'duty-shifts-logic.js:semiSwapFwd',
-                                        message: 'semi_swap_rejected_mover_conflict',
-                                        data: {
-                                            dateKey,
-                                            dk2,
-                                            groupNum,
-                                            person,
-                                            other,
-                                            direction: 'forward'
-                                        },
-                                        timestamp: Date.now()
-                                    })
-                                }).catch(() => {});
-                            }
-                            // #endregion
-                            continue;
-                        }
+                        if (hasConflict(dk2, person, groupNum)) continue;
                         if (hasConflict(dateKey, other, groupNum)) continue;
                         finalAssignments[dateKey][groupNum] = other;
                         finalAssignments[dk2][groupNum] = person;
@@ -12748,26 +12613,6 @@
                         const semiSwapMetaFwd = getSemiHolidayConflictSwapMeta(other, person, dateKey, dk2);
                         storeAssignmentReason(dateKey, groupNum, other, 'swap', semiUnifiedReasonFwd, person, semiSwapPairId, semiSwapMetaFwd);
                         storeAssignmentReason(dk2, groupNum, person, 'swap', semiUnifiedReasonFwd, other, semiSwapPairId, semiSwapMetaFwd);
-                        // #region agent log
-                        if (groupNum === 3 && String(dateKey).startsWith('2026-12')) {
-                            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-Debug-Session-Id': '73ad17'
-                                },
-                                body: JSON.stringify({
-                                    sessionId: '73ad17',
-                                    runId: 'post-fix',
-                                    hypothesisId: 'B-semi',
-                                    location: 'duty-shifts-logic.js:semiSwapFwd',
-                                    message: 'semi_swap_applied',
-                                    data: { dateKey, dk2, groupNum, person, other, direction: 'forward' },
-                                    timestamp: Date.now()
-                                })
-                            }).catch(() => {});
-                        }
-                        // #endregion
                         swapped = true;
                         break;
                     }
@@ -12780,36 +12625,7 @@
                         const other = finalAssignments[dk2]?.[groupNum];
                         if (!other || other === person) continue;
                         if (hasConflict(dk2, other, groupNum)) continue;
-                        if (hasConflict(dk2, person, groupNum)) {
-                            // #region agent log
-                            if (groupNum === 3 && String(dateKey).startsWith('2026-12')) {
-                                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-Debug-Session-Id': '73ad17'
-                                    },
-                                    body: JSON.stringify({
-                                        sessionId: '73ad17',
-                                        runId: 'post-fix',
-                                        hypothesisId: 'B-semi',
-                                        location: 'duty-shifts-logic.js:semiSwapBack',
-                                        message: 'semi_swap_rejected_mover_conflict',
-                                        data: {
-                                            dateKey,
-                                            dk2,
-                                            groupNum,
-                                            person,
-                                            other,
-                                            direction: 'backward'
-                                        },
-                                        timestamp: Date.now()
-                                    })
-                                }).catch(() => {});
-                            }
-                            // #endregion
-                            continue;
-                        }
+                        if (hasConflict(dk2, person, groupNum)) continue;
                         if (hasConflict(dateKey, other, groupNum)) continue;
                         finalAssignments[dateKey][groupNum] = other;
                         finalAssignments[dk2][groupNum] = person;
@@ -14748,28 +14564,6 @@
             dedupeNormalAssignmentsInMonth(sortedNormal, normalAssignments, pureBaselineByDate);
         }
         function renderStep4_Normal() {
-            // #region agent log
-            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Debug-Session-Id': '73ad17'
-                },
-                body: JSON.stringify({
-                    sessionId: '73ad17',
-                    runId: 'post-fix',
-                    hypothesisId: 'B',
-                    location: 'duty-shifts-logic.js:renderStep4_Normal',
-                    message: 'step4_boot_v1664',
-                    data: {
-                        versionMarker: '1.664',
-                        normalKeys: (calculationSteps.dayTypeLists?.normal || []).slice(),
-                        semiKeys: (calculationSteps.dayTypeLists?.semi || []).slice()
-                    },
-                    timestamp: Date.now()
-                })
-            }).catch(() => {});
-            // #endregion
             const stepContent = document.getElementById('stepContent');
             const startDate = calculationSteps.startDate;
             const endDate = calculationSteps.endDate;
@@ -15904,70 +15698,6 @@
                     const hasConsecutiveConflict = hasConsecutiveDuty(dateKey, currentPerson, groupNum, simulatedAssignments);
                     
                     if (hasConsecutiveConflict) {
-                        // #region agent log
-                        if (groupNum === 3 && String(dateKey).startsWith('2026-12')) {
-                            try {
-                                const info =
-                                    typeof getConsecutiveConflictNeighborInfo === 'function'
-                                        ? getConsecutiveConflictNeighborInfo(
-                                              dateKey,
-                                              currentPerson,
-                                              groupNum,
-                                              simulatedAssignments
-                                          )
-                                        : null;
-                                const dAfter = new Date(dateKey + 'T00:00:00');
-                                dAfter.setDate(dAfter.getDate() + 1);
-                                const dBefore = new Date(dateKey + 'T00:00:00');
-                                dBefore.setDate(dBefore.getDate() - 1);
-                                const afterKey = formatDateKey(dAfter);
-                                const beforeKey = formatDateKey(dBefore);
-                                const mk = getMonthKeyFromDate(dAfter);
-                                fetch(
-                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                    {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'X-Debug-Session-Id': '73ad17'
-                                        },
-                                        body: JSON.stringify({
-                                            sessionId: '73ad17',
-                                            runId: 'post-fix',
-                                            hypothesisId: 'A',
-                                            location: 'duty-shifts-logic.js:previewSwapConflict',
-                                            message: 'g3_conflict_detected',
-                                            data: {
-                                                dateKey,
-                                                groupNum,
-                                                currentPerson,
-                                                neighborInfo: info,
-                                                afterKey,
-                                                afterType: getDayType(dAfter),
-                                                afterSpecialHas:
-                                                    simulatedSpecialAssignments?.[mk]?.[groupNum] instanceof Set
-                                                        ? [
-                                                              ...simulatedSpecialAssignments[mk][groupNum]
-                                                          ]
-                                                        : null,
-                                                afterDutyOnDay:
-                                                    typeof hasDutyOnDay === 'function'
-                                                        ? hasDutyOnDay(afterKey, currentPerson, groupNum)
-                                                        : null,
-                                                beforeKey,
-                                                beforeType: getDayType(dBefore),
-                                                beforeDutyOnDay:
-                                                    typeof hasDutyOnDay === 'function'
-                                                        ? hasDutyOnDay(beforeKey, currentPerson, groupNum)
-                                                        : null
-                                            },
-                                            timestamp: Date.now()
-                                        })
-                                    }
-                                ).catch(() => {});
-                            } catch (_) {}
-                        }
-                        // #endregion
                         if (
                             typeof shouldSkipNormalConflictSwapForThursdaySpacing === 'function' &&
                             shouldSkipNormalConflictSwapForThursdaySpacing(
@@ -16355,87 +16085,6 @@
                                 continue; // Skip to next iteration
                             }
 
-                            // #region agent log
-                            if (groupNum === 3 && String(dateKey).startsWith('2026-12')) {
-                                try {
-                                    const moverWouldConflictOnTarget = hasConsecutiveDuty(
-                                        swapDayKey,
-                                        currentPerson,
-                                        groupNum,
-                                        simulatedAssignments
-                                    );
-                                    const preInfo = getConsecutiveConflictNeighborInfo(
-                                        dateKey,
-                                        currentPerson,
-                                        groupNum,
-                                        simulatedAssignments
-                                    );
-                                    const sd = new Date(swapDayKey + 'T00:00:00');
-                                    const sdAfter = new Date(sd);
-                                    sdAfter.setDate(sdAfter.getDate() + 1);
-                                    const sdAfterKey = formatDateKey(sdAfter);
-                                    const sdMk = getMonthKeyFromDate(sdAfter);
-                                    fetch(
-                                        'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                        {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type': 'application/json',
-                                                'X-Debug-Session-Id': '73ad17'
-                                            },
-                                            body: JSON.stringify({
-                                                sessionId: '73ad17',
-                                                runId: 'post-fix',
-                                                hypothesisId: 'B',
-                                                location:
-                                                    'duty-shifts-logic.js:previewSwapPerform',
-                                                message: 'g3_swap_about_to_apply',
-                                                data: {
-                                                    dateKey,
-                                                    swapDayKey,
-                                                    groupNum,
-                                                    currentPerson,
-                                                    swapCandidate,
-                                                    preConflictNeighbor: preInfo,
-                                                    moverWouldConflictOnTarget,
-                                                    targetAfterKey: sdAfterKey,
-                                                    targetAfterType: getDayType(sdAfter),
-                                                    targetAfterSpecialPeople:
-                                                        simulatedSpecialAssignments?.[sdMk]?.[
-                                                            groupNum
-                                                        ] instanceof Set
-                                                            ? [
-                                                                  ...simulatedSpecialAssignments[
-                                                                      sdMk
-                                                                  ][groupNum]
-                                                              ]
-                                                            : null,
-                                                    moverOnTargetAfterSpecial:
-                                                        simulatedSpecialAssignments?.[sdMk]?.[
-                                                            groupNum
-                                                        ] instanceof Set
-                                                            ? [
-                                                                  ...simulatedSpecialAssignments[
-                                                                      sdMk
-                                                                  ][groupNum]
-                                                              ].some(
-                                                                  (p) =>
-                                                                      normalizePersonKey(p) ===
-                                                                      normalizePersonKey(
-                                                                          currentPerson
-                                                                      )
-                                                              )
-                                                            : null,
-                                                    checkedMoverOnTargetInValidate: false
-                                                },
-                                                timestamp: Date.now()
-                                            })
-                                        }
-                                    ).catch(() => {});
-                                } catch (_) {}
-                            }
-                            // #endregion
-                            
                             // Generate unique swap pair ID for color coding
                             const swapPairId = previewSwapPairCounter++;
                             

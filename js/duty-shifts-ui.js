@@ -26,6 +26,8 @@
                 monthCalculationLockToggle: 'Κλειδώνει ή ξεκλειδώνει τον τρέχοντα μήνα ώστε να αποτρέπεται ή να επιτρέπεται νέος υπολογισμός υπηρεσιών.',
                 calendarMissingDisabledToggle: 'Μετατρέπει την προβολή ώστε να εμφανίζονται μόνο απόντες και απενεργοποιημένοι ανά ημέρα/ομάδα.',
                 calendarLandscapeOnlyToggle: 'Εμφανίζει μόνο το ημερολόγιο του τρέχοντος μήνα σε οριζόντια προβολή πλήρους οθόνης (κινητό/tablet).',
+                toggleVehicleBadgesButton:
+                    'Εμφανίζει ή αποκρύπτει από τα κελιά του ημερολογίου τα σήματα σε ποια οχήματα είναι εξουσιοδοτημένος ο καθένας (IV5, IV10, IV18, M, S).',
                 calendarCellHeight: 'Ρυθμίζει το ύψος των κελιών ημερολογίου για καλύτερη αναγνωσιμότητα όταν υπάρχουν πολλές εγγραφές.',
                 currentMonthYear: 'Ανοίγει επιλογέα μήνα/έτους για άμεση μετάβαση χωρίς διαδοχικά κλικ πλοήγησης.',
                 dutyShiftsAIQuestionInput: 'Δέχεται ερώτηση φυσικής γλώσσας και επιστρέφει σχετική απάντηση από το επίσημο εγχειρίδιο χρήσης.',
@@ -5910,6 +5912,39 @@
             });
         }
 
+        function syncToggleVehicleBadgesButton() {
+            const btn = document.getElementById('toggleVehicleBadgesButton');
+            if (!btn) return;
+            const visible =
+                typeof areDutyVehicleBadgesVisibleInCalendar === 'function'
+                    ? areDutyVehicleBadgesVisibleInCalendar()
+                    : true;
+            btn.classList.toggle('btn-outline-secondary', visible);
+            btn.classList.toggle('btn-secondary', !visible);
+            btn.setAttribute('aria-pressed', visible ? 'true' : 'false');
+            const label = document.getElementById('toggleVehicleBadgesLabel');
+            if (label) {
+                label.textContent = visible ? 'Οχήματα κελιών' : 'Οχήματα κελιών (κρυφά)';
+            }
+            btn.title = visible
+                ? 'Απόκρυψη σημάτων οχημάτων από τα κελιά του ημερολογίου'
+                : 'Εμφάνιση σημάτων οχημάτων στα κελιά του ημερολογίου';
+        }
+
+        function toggleDutyCalendarVehicleBadges() {
+            const currentlyVisible =
+                typeof areDutyVehicleBadgesVisibleInCalendar === 'function'
+                    ? areDutyVehicleBadgesVisibleInCalendar()
+                    : true;
+            if (typeof setDutyVehicleBadgesVisibleInCalendar === 'function') {
+                setDutyVehicleBadgesVisibleInCalendar(!currentlyVisible);
+            }
+            syncToggleVehicleBadgesButton();
+            if (typeof renderCalendar === 'function') renderCalendar();
+        }
+        window.toggleDutyCalendarVehicleBadges = toggleDutyCalendarVehicleBadges;
+        window.syncToggleVehicleBadgesButton = syncToggleVehicleBadgesButton;
+
         let _calendarLandscapeOnlyToggleAttached = false;
         let _calendarLandscapeOnlyResizeBound = false;
 
@@ -6157,6 +6192,9 @@
             syncMonthCalculationLockToggle();
             attachCalendarMissingDisabledToggleOnce();
             attachCalendarLandscapeOnlyToggleOnce();
+            if (typeof syncToggleVehicleBadgesButton === 'function') {
+                syncToggleVehicleBadgesButton();
+            }
             
             // NOTE: criticalAssignments are treated as history only and must not be injected into the calendar.
             
@@ -6612,7 +6650,10 @@
                                     : '';
                             const vehicleBadges =
                                 e.nameOnly && typeof formatVehicleAuthBadgesHtml === 'function'
-                                    ? formatVehicleAuthBadgesHtml(e.nameOnly, { compact: true })
+                                    ? formatVehicleAuthBadgesHtml(e.nameOnly, {
+                                          compact: true,
+                                          forCalendar: true
+                                      })
                                     : '';
                             displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${escapeHtml(e.nameOnly)}${listOrderSuffix}${vehicleBadges ? ' ' + vehicleBadges : ''}${bufferIcon}${spacingIcon}</div>`;
                         });
