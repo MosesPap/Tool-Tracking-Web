@@ -104,29 +104,71 @@
             const aria = String(el.getAttribute('aria-label') || '').trim();
             if (aria) return aria;
 
-            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return 'Πεδίο εισαγωγής παραμέτρων που επηρεάζουν τη λειτουργία της οθόνης.';
-            if (el.tagName === 'SELECT') return 'Λίστα επιλογών που καθορίζει ποια τιμή θα εφαρμοστεί στη σχετική λειτουργία.';
-            if (el.classList.contains('btn') || el.getAttribute('role') === 'button') return 'Εκτελεί την αντίστοιχη ενέργεια στο τρέχον πλαίσιο εργασίας.';
+            // Χωρίς γενικό fallback σε κάθε .btn — δημιουργούσε κενά tooltips που κόλλαγαν στο body.
             return '';
+        }
+
+        const CONTROL_TOOLTIP_SELECTOR =
+            'button, .btn, input, select, textarea, [role="button"], .form-check-input';
+
+        function disposeControlTooltip(el) {
+            if (!el || typeof bootstrap === 'undefined' || !bootstrap.Tooltip) return;
+            try {
+                const inst = bootstrap.Tooltip.getInstance(el);
+                if (inst) inst.dispose();
+            } catch (_) {}
+            if (el instanceof HTMLElement) {
+                el.removeAttribute('data-bs-toggle');
+                el.removeAttribute('data-bs-original-title');
+            }
+        }
+
+        function disposeControlTooltipsInTree(root) {
+            if (!root) return;
+            if (root.nodeType === 1) {
+                if (root.matches?.(CONTROL_TOOLTIP_SELECTOR)) disposeControlTooltip(root);
+                root.querySelectorAll?.(CONTROL_TOOLTIP_SELECTOR)?.forEach(disposeControlTooltip);
+            }
+        }
+
+        function cleanupOrphanBodyTooltips() {
+            document.querySelectorAll('body > .tooltip').forEach((tip) => {
+                try {
+                    tip.remove();
+                } catch (_) {}
+            });
         }
 
         function applyControlTooltips(root = document) {
             if (typeof bootstrap === 'undefined' || !bootstrap.Tooltip || !root || !root.querySelectorAll) return;
-            const selector = 'button, .btn, input, select, textarea, [role="button"], .form-check-input';
-            root.querySelectorAll(selector).forEach((el) => {
+            root.querySelectorAll(CONTROL_TOOLTIP_SELECTOR).forEach((el) => {
                 if (!(el instanceof HTMLElement)) return;
-                if (el.dataset.noTooltip === 'true') return;
-                if (!el.offsetParent && !el.classList.contains('modal')) return;
+                if (el.dataset.noTooltip === 'true') {
+                    disposeControlTooltip(el);
+                    return;
+                }
+                // Απόκρυψη στοιχείων σε κλειστά modals/collapse — μην τα αγγίζουμε εκτός αν είναι ορατά
+                // ή έχουν ήδη instance (ώστε να μην αφήνουμε ορφανά).
                 const txt = getControlTooltipText(el);
-                if (!txt) return;
+                if (!txt) {
+                    disposeControlTooltip(el);
+                    return;
+                }
+                const existing = bootstrap.Tooltip.getInstance(el);
+                const currentTitle =
+                    el.getAttribute('data-bs-original-title') || el.getAttribute('title') || '';
+                if (existing && currentTitle === txt) return;
+                if (existing) disposeControlTooltip(el);
                 if (!el.getAttribute('title')) el.setAttribute('title', txt);
                 el.setAttribute('data-bs-toggle', 'tooltip');
                 el.setAttribute('data-bs-placement', 'top');
                 bootstrap.Tooltip.getOrCreateInstance(el, {
                     container: 'body',
-                    trigger: 'hover focus'
+                    trigger: 'hover focus',
+                    sanitize: true
                 });
             });
+            cleanupOrphanBodyTooltips();
         }
 
         function initializeControlTooltips() {
@@ -136,13 +178,21 @@
             _controlTooltipsObserver = new MutationObserver((mutations) => {
                 let shouldRefresh = false;
                 for (const m of mutations) {
-                    if (m.type === 'childList' && (m.addedNodes?.length || m.removedNodes?.length)) {
-                        shouldRefresh = true;
-                        break;
+                    if (m.type === 'childList') {
+                        if (m.removedNodes?.length) {
+                            m.removedNodes.forEach((node) => disposeControlTooltipsInTree(node));
+                            cleanupOrphanBodyTooltips();
+                        }
+                        if (m.addedNodes?.length) shouldRefresh = true;
                     }
-                    if (m.type === 'attributes' && (m.attributeName === 'title' || m.attributeName === 'placeholder' || m.attributeName === 'aria-label')) {
+                    if (
+                        m.type === 'attributes' &&
+                        (m.attributeName === 'title' ||
+                            m.attributeName === 'placeholder' ||
+                            m.attributeName === 'aria-label' ||
+                            m.attributeName === 'data-tooltip')
+                    ) {
                         shouldRefresh = true;
-                        break;
                     }
                 }
                 if (!shouldRefresh) return;
@@ -153,8 +203,22 @@
                 childList: true,
                 subtree: true,
                 attributes: true,
-                attributeFilter: ['title', 'placeholder', 'aria-label']
+                attributeFilter: ['title', 'placeholder', 'aria-label', 'data-tooltip']
             });
+            document.addEventListener(
+                'hidden.bs.modal',
+                () => {
+                    cleanupOrphanBodyTooltips();
+                },
+                true
+            );
+            document.addEventListener(
+                'show.bs.modal',
+                () => {
+                    cleanupOrphanBodyTooltips();
+                },
+                true
+            );
             if (typeof wireFlexibleStatusEffectiveCheckbox === 'function') {
                 wireFlexibleStatusEffectiveCheckbox();
             }
@@ -1803,6 +1867,7 @@
                     const selected = _dutyTotalsSelectedMonths.has(monthKey);
                     btn.className = selected ? 'btn btn-primary w-100' : 'btn btn-outline-primary w-100';
                     btn.textContent = name;
+                    btn.dataset.noTooltip = 'true';
                     btn.addEventListener('click', () => {
                         if (_dutyTotalsSelectedMonths.has(monthKey)) {
                             _dutyTotalsSelectedMonths.delete(monthKey);
@@ -7062,6 +7127,7 @@
                     btn.type = 'button';
                     btn.className = 'btn btn-outline-primary w-100';
                     btn.textContent = name;
+                    btn.dataset.noTooltip = 'true';
                     btn.dataset.month = String(index);
                     btn.dataset.year = String(pickerYear);
                     btn.addEventListener('click', () => {
@@ -7510,6 +7576,7 @@
                     btn.type = 'button';
                     btn.className = 'btn btn-outline-primary w-100';
                     btn.textContent = name;
+                    btn.dataset.noTooltip = 'true';
                     btn.addEventListener('click', () => {
                         const monthValue = `${pickerYear}-${String(index + 1).padStart(2, '0')}`;
                         const pickerModal = bootstrap.Modal.getInstance(modalEl);

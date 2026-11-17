@@ -5047,6 +5047,7 @@
                 btn.className = selected ? 'btn btn-danger w-100' : 'btn btn-outline-danger w-100';
                 btn.textContent = name;
                 btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                btn.dataset.noTooltip = 'true';
                 btn.addEventListener('click', () => {
                     if (_firebaseCleanupSelectedMonths.has(mk)) {
                         _firebaseCleanupSelectedMonths.delete(mk);
@@ -7371,6 +7372,7 @@
                     btn.type = 'button';
                     btn.className = 'btn btn-outline-success w-100';
                     btn.textContent = name;
+                    btn.dataset.noTooltip = 'true';
                     btn.addEventListener('click', () => {
                         _excelExportDate = new Date(pickerYear, index, 1);
                         const m = bootstrap.Modal.getInstance(modalEl);
@@ -8097,6 +8099,7 @@
                     const selected = _assignmentsCompareSelectedMonths.has(monthKey);
                     btn.className = selected ? 'btn btn-primary w-100' : 'btn btn-outline-primary w-100';
                     btn.textContent = name;
+                    btn.dataset.noTooltip = 'true';
                     btn.addEventListener('click', () => {
                         if (_assignmentsCompareSelectedMonths.has(monthKey)) {
                             _assignmentsCompareSelectedMonths.delete(monthKey);
