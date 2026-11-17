@@ -13937,7 +13937,7 @@
                     },
                     body: JSON.stringify({
                         sessionId: '73ad17',
-                        runId: 'pre-fix',
+                        runId: 'post-fix',
                         hypothesisId: extra?.hypothesisId || 'A-E',
                         location: 'duty-shifts-logic.js:__dbgNormalDupSnapshot',
                         message: stage,
@@ -14052,7 +14052,7 @@
                             },
                             body: JSON.stringify({
                                 sessionId: '73ad17',
-                                runId: 'pre-fix',
+                                runId: 'post-fix',
                                 hypothesisId: 'D',
                                 location: 'duty-shifts-logic.js:dedupeNormal',
                                 message: 'dedupe_attempt',
@@ -14854,10 +14854,61 @@
                 }
                 // Track pending swaps: when Person A is swapped, Person B should be assigned to Person A's next normal day
                 const pendingNormalSwaps = {}; // monthKey -> { groupNum -> { skippedPerson, swapToPosition } }
-                // Track which people have been assigned to which days (to prevent nearby duplicate assignments)
+                // Track which people have been assigned to which days (to prevent same-month rotation reuse)
                 // Structure: monthKey -> { groupNum -> { personName -> dateKey } }
-                // Only prevents duplicates if assigned within 5 days (too close)
+                // Prefer never-assigned-this-month; only reuse after full cycle (everyone already served).
                 const assignedPeoplePreview = {}; // monthKey -> { groupNum -> { personName -> dateKey } }
+                const pickNormalCandidateAvoidingMonthDup = (
+                    groupPeopleLocal,
+                    startIdx,
+                    groupNumLocal,
+                    dateObjLocal,
+                    dateKeyLocal,
+                    assignedMapLocal,
+                    excludePerson
+                ) => {
+                    const n = groupPeopleLocal?.length || 0;
+                    if (!n) return null;
+                    const normEx =
+                        excludePerson && typeof normalizePersonKey === 'function'
+                            ? normalizePersonKey(excludePerson)
+                            : String(excludePerson || '');
+                    const tryPass = (allowReuse) => {
+                        for (let offset = 1; offset <= n * 2; offset++) {
+                            const idx = (startIdx + offset) % n;
+                            const cand = groupPeopleLocal[idx];
+                            if (!cand) continue;
+                            const ck =
+                                typeof normalizePersonKey === 'function'
+                                    ? normalizePersonKey(cand)
+                                    : String(cand);
+                            if (normEx && ck === normEx) continue;
+                            if (isPersonMissingOnDate(cand, groupNumLocal, dateObjLocal, 'normal')) {
+                                continue;
+                            }
+                            if (
+                                typeof isPersonDisabledForDuty === 'function' &&
+                                isPersonDisabledForDuty(cand, groupNumLocal, 'normal')
+                            ) {
+                                continue;
+                            }
+                            const lastKey = assignedMapLocal?.[cand];
+                            if (lastKey) {
+                                const lastDate = new Date(lastKey + 'T00:00:00');
+                                const currentDate = new Date(dateKeyLocal + 'T00:00:00');
+                                const daysDiff = Math.floor(
+                                    (currentDate - lastDate) / (1000 * 60 * 60 * 24)
+                                );
+                                if (daysDiff > 0 && !allowReuse) continue;
+                                // Even on reuse pass (full cycle), avoid stacking within 5 days
+                                if (allowReuse && daysDiff > 0 && daysDiff <= 5) continue;
+                            }
+                            return cand;
+                        }
+                        return null;
+                    };
+                    return tryPass(false) || tryPass(true);
+                };
                 // Track days that have been swapped (to use already-assigned person when we reach them)
                 const swappedDaysPreview = {}; // dateKey -> { groupNum -> true }
                 // Track which people have already been swapped (to prevent swapping them again on subsequent days)
@@ -15268,7 +15319,9 @@
                                         const daysDiff = Math.floor(
                                             (currentDate - lastDate) / (1000 * 60 * 60 * 24)
                                         );
-                                        if (daysDiff <= 5 && daysDiff > 0) return false;
+                                        // Prefer unused-this-month; block any prior assignment here
+                                        // (reuse only via pickNormalCandidateAvoidingMonthDup fallback below).
+                                        if (daysDiff > 0) return false;
                                     }
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
@@ -15288,6 +15341,23 @@
                                         if (tryCandidate(groupPeople[idx], idx)) {
                                             foundReplacement = true;
                                         }
+                                    }
+                                }
+                                if (!foundReplacement) {
+                                    const reuseCand = pickNormalCandidateAvoidingMonthDup(
+                                        groupPeople,
+                                        rotationPosition,
+                                        groupNum,
+                                        date,
+                                        dateKey,
+                                        assignedPeoplePreview[monthKey][groupNum],
+                                        originalRotationPerson
+                                    );
+                                    if (reuseCand) {
+                                        assignedPerson = reuseCand;
+                                        replacementIndex = groupPeople.indexOf(reuseCand);
+                                        wasDisabledPersonSkipped = true;
+                                        foundReplacement = true;
                                     }
                                 }
                                 if (!foundReplacement) {
@@ -15341,81 +15411,73 @@
                                     : originalRotationPerson;
                             normalRotationPersons[dateKey][groupNum] = baselineForDisplay;
                             
-                            // If assigned person was already assigned recently (due to swap), skip to next person
-                            // BUT: Skip this check if we just replaced a disabled person - swap logic will handle duplicates
-                            // Check if assigned within 5 days (too close)
+                            // If assigned person already served earlier this month, take next unused
+                            // (old 5-day window allowed +7d reuse → same people at month end).
                             let wasReplacedDueToFiveDayRule = false;
-                            if (!wasDisabledPersonSkipped && assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal') && assignedPeoplePreview[monthKey][groupNum][assignedPerson]) {
-                                const lastAssignmentDateKey = assignedPeoplePreview[monthKey][groupNum][assignedPerson];
+                            if (
+                                !wasDisabledPersonSkipped &&
+                                assignedPerson &&
+                                !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal') &&
+                                assignedPeoplePreview[monthKey][groupNum][assignedPerson]
+                            ) {
+                                const lastAssignmentDateKey =
+                                    assignedPeoplePreview[monthKey][groupNum][assignedPerson];
                                 const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
                                 const currentDate = new Date(dateKey + 'T00:00:00');
-                                const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
-                                // Only skip if assigned within 5 days (too close)
-                                if (daysDiff <= 5 && daysDiff > 0) {
-                                    // This person was already assigned recently (swapped), find next available person in rotation
-                                    // Keep searching through entire rotation until we find someone not disabled and not already assigned recently
-                                    let foundReplacement = false;
-                                    for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
-                                        const nextIndex = (rotationPosition + offset) % rotationDays;
-                                        const candidate = groupPeople[nextIndex];
-                                        
-                                        if (!candidate) continue;
-                                        if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
-                                        // Check if candidate was assigned recently (within 5 days)
-                                        if (assignedPeoplePreview[monthKey][groupNum][candidate]) {
-                                            const candidateLastDateKey = assignedPeoplePreview[monthKey][groupNum][candidate];
-                                            const candidateLastDate = new Date(candidateLastDateKey + 'T00:00:00');
-                                            const candidateDaysDiff = Math.floor((currentDate - candidateLastDate) / (1000 * 60 * 60 * 24));
-                                            if (candidateDaysDiff <= 5 && candidateDaysDiff > 0) {
-                                                continue; // Too close
-                                            }
-                                        }
-                                    
-                                        // Found available person
-                                        assignedPerson = candidate;
-                                        foundReplacement = true;
-                                        wasReplacedDueToFiveDayRule = true;
-                                        // #region agent log
-                                        if (groupNum <= 2) {
-                                            fetch(
-                                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                                {
-                                                    method: 'POST',
-                                                    headers: {
-                                                        'Content-Type': 'application/json',
-                                                        'X-Debug-Session-Id': '73ad17'
+                                const daysDiff = Math.floor(
+                                    (currentDate - lastDate) / (1000 * 60 * 60 * 24)
+                                );
+                                if (daysDiff > 0) {
+                                    const candidate = pickNormalCandidateAvoidingMonthDup(
+                                        groupPeople,
+                                        rotationPosition,
+                                        groupNum,
+                                        date,
+                                        dateKey,
+                                        assignedPeoplePreview[monthKey][groupNum],
+                                        assignedPerson
+                                    );
+                                    // #region agent log
+                                    if (groupNum <= 2) {
+                                        fetch(
+                                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                            {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                    'X-Debug-Session-Id': '73ad17'
+                                                },
+                                                body: JSON.stringify({
+                                                    sessionId: '73ad17',
+                                                    runId: 'post-fix',
+                                                    hypothesisId: 'B',
+                                                    location:
+                                                        'duty-shifts-logic.js:monthDupAvoid',
+                                                    message: 'month_dup_replacement',
+                                                    data: {
+                                                        dateKey,
+                                                        groupNum,
+                                                        prevLastKey: lastAssignmentDateKey,
+                                                        daysDiff,
+                                                        replacement: candidate,
+                                                        baseline: originalRotationPerson,
+                                                        skipped: assignedPerson
                                                     },
-                                                    body: JSON.stringify({
-                                                        sessionId: '73ad17',
-                                                        runId: 'pre-fix',
-                                                        hypothesisId: 'B',
-                                                        location:
-                                                            'duty-shifts-logic.js:fiveDayRule',
-                                                        message: 'five_day_replacement',
-                                                        data: {
-                                                            dateKey,
-                                                            groupNum,
-                                                            prevLastKey: lastAssignmentDateKey,
-                                                            daysDiff,
-                                                            replacement: candidate,
-                                                            baseline: originalRotationPerson
-                                                        },
-                                                        timestamp: Date.now()
-                                                    })
-                                                }
-                                            ).catch(() => {});
-                                        }
-                                        // #endregion
+                                                    timestamp: Date.now()
+                                                })
+                                            }
+                                        ).catch(() => {});
                                     }
-                                    
-                                    // If still no replacement found after checking everyone twice, leave unassigned
-                                    // (This should be extremely rare - only if everyone is disabled or already assigned recently)
-                                    if (!foundReplacement) {
+                                    // #endregion
+                                    if (candidate) {
+                                        assignedPerson = candidate;
+                                        wasReplacedDueToFiveDayRule = true;
+                                    } else {
                                         assignedPerson = null;
                                     }
                                 }
                             }
-                            // Keep baseline as basic-series slot (originalRotationPerson); 5-day rule only changes final assignee.
+                            // Keep baseline as basic-series slot (originalRotationPerson); month-dup rule only changes final assignee.
                             
                             // Check if there's a pending swap for this position
                             if (pendingNormalSwaps[monthKey][groupNum] && pendingNormalSwaps[monthKey][groupNum].swapToPosition === rotationPosition) {
@@ -15430,32 +15492,17 @@
                             // Swap logic will run when Next is pressed
                             // NOTE: Disabled/missing check already happened above, so this is just a safety check
                             if (assignedPerson && isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
-                                // This should rarely happen (already checked above), but handle it defensively
-                                // Simply skip disabled person and find next person in rotation who is NOT disabled/missing
-                                // Keep going through rotation until we find someone eligible (check entire rotation twice to be thorough)
-                                // IMPORTANT: Also check if replacement was already assigned this month to prevent duplicate assignments
-                                let foundReplacement = false;
-                                for (let offset = 1; offset <= rotationDays * 2 && !foundReplacement; offset++) {
-                                    const idx = (rotationPosition + offset) % rotationDays;
-                                    const candidate = groupPeople[idx];
-                                    if (!candidate) continue;
-                                    if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) continue;
-                                    // Check if candidate was already assigned recently (within 5 days) - prevent nearby duplicates
-                                    if (assignedPeoplePreview[monthKey][groupNum] && assignedPeoplePreview[monthKey][groupNum][candidate]) {
-                                        const lastAssignmentDateKey = assignedPeoplePreview[monthKey][groupNum][candidate];
-                                        const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
-                                        const currentDate = new Date(dateKey + 'T00:00:00');
-                                        const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));
-                                        // Only prevent if assigned within 5 days (too close)
-                                        if (daysDiff <= 5 && daysDiff > 0) {
-                                            continue; // Too close, skip this candidate
-                                        }
-                                        // If daysDiff > 5, allow duplicate (far enough apart, even if they replaced someone before)
-                                    }
-                                    
-                                    // Found eligible replacement
+                                const candidate = pickNormalCandidateAvoidingMonthDup(
+                                    groupPeople,
+                                    rotationPosition,
+                                    groupNum,
+                                    date,
+                                    dateKey,
+                                    assignedPeoplePreview[monthKey][groupNum],
+                                    assignedPerson
+                                );
+                                if (candidate) {
                                     assignedPerson = candidate;
-                                    foundReplacement = true;
                                     const unavailableExtraNormal2 =
                                         deferFulfillmentNormal?.skippedReplacement
                                             ? { deferFulfillment: deferFulfillmentNormal }
@@ -15479,10 +15526,7 @@
                                             rotationPerson: originalRotationPerson
                                         });
                                     }
-                                    break;
-                                }
-                                // If no replacement found after checking everyone twice (everyone disabled or already assigned), leave unassigned
-                                if (!foundReplacement) {
+                                } else {
                                     assignedPerson = null;
                                 }
                             }
