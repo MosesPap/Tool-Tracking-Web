@@ -14150,6 +14150,33 @@
                 }
             }
 
+            const pickNextEligibleForPreviewClear = (groupPeople, startIdx, groupNumLocal, dateObj) => {
+                if (!Array.isArray(groupPeople) || groupPeople.length === 0) return null;
+                const rotationDays = groupPeople.length;
+                for (let off = 1; off <= rotationDays; off++) {
+                    const idx = (startIdx + off) % rotationDays;
+                    const cand = groupPeople[idx];
+                    if (!cand) continue;
+                    if (isPersonMissingOnDate(cand, groupNumLocal, dateObj, 'normal')) continue;
+                    if (
+                        typeof isPersonDisabledForDuty === 'function' &&
+                        isPersonDisabledForDuty(cand, groupNumLocal, 'normal')
+                    ) {
+                        continue;
+                    }
+                    return cand;
+                }
+                return null;
+            };
+            const indexOfPersonForPreviewClear = (list, personName) => {
+                if (!Array.isArray(list) || !personName) return -1;
+                const t = norm(personName);
+                for (let i = 0; i < list.length; i++) {
+                    if (norm(list[i]) === t) return i;
+                }
+                return -1;
+            };
+
             const targetKeysSorted = Object.keys(targets).sort();
             for (const dateKey of targetKeysSorted) {
                 const date = new Date(dateKey + 'T00:00:00');
@@ -14163,6 +14190,43 @@
                             : g?.normal || [];
                     const personInList = groupPeople.find((p) => norm(p) === norm(designated.personName));
                     if (!personInList || isPersonMissingOnDate(personInList, groupNum, date, 'normal')) continue;
+
+                    // Ίδιο pre-clear με το save-path RFM: αλλιώς ο επιστρέφων μένει στις 21/22
+                    // και ξανατοποθετείται στις 28/29 → επανάληψη #9/#10 (ομάδες 1–2).
+                    for (const dk of sortedNormal) {
+                        if (dk < calcStartKey || dk > calcEndKey) continue;
+                        if (dk === dateKey) continue;
+                        const curAssigned = normalAssignments?.[dk]?.[groupNum] || null;
+                        if (!curAssigned || norm(curAssigned) !== norm(personInList)) continue;
+                        const dateObjClear = new Date(dk + 'T00:00:00');
+                        if (isNaN(dateObjClear.getTime())) continue;
+                        const idxP = indexOfPersonForPreviewClear(groupPeople, personInList);
+                        const replacement =
+                            idxP >= 0
+                                ? pickNextEligibleForPreviewClear(groupPeople, idxP, groupNum, dateObjClear)
+                                : null;
+                        if (!replacement) continue;
+                        if (!normalAssignments[dk]) normalAssignments[dk] = {};
+                        normalAssignments[dk][groupNum] = replacement;
+                        storeAssignmentReason(
+                            dk,
+                            groupNum,
+                            replacement,
+                            'shift',
+                            '',
+                            personInList,
+                            null,
+                            {
+                                returnFromMissing: true,
+                                clearedEarlyReturnAssignment: true,
+                                targetKey: dateKey,
+                                missingEnd: designated.pEndKey,
+                                preClearedForReinsertion: true,
+                                previewOnly: true
+                            }
+                        );
+                    }
+
                     const ins = applyNormalReturnShiftFromDate(
                         sortedNormal,
                         dateKey,
