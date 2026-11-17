@@ -9448,68 +9448,13 @@
                                 const isBackwardWithinMonth = false; // no track shift; swap only
                                 const isCrossMonthSwap = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
 
-                                // Rotation continuity reflow only for Mon↔Wed / Tue↔Thu groups (week-pair logic).
-                                // Cursor continues after who actually serves on the later swap day (not the
-                                // conflicted baseline person) so e.g. Sun→Mon fill by Kaparis leaves Fatsitas next.
-                                try {
-                                    if (applyWeekPairLogic && !isCrossMonthSwap && Array.isArray(groupPeople) && groupPeople.length > 0) {
-                                        const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
-                                        const laterAssignedPerson =
-                                            updatedAssignments[laterKey]?.[groupNum] ||
-                                            ((laterKey === dateKey) ? swapCandidate : currentPerson);
-                                        const laterAssignedIdx = groupPeople.indexOf(laterAssignedPerson);
-                                        if (laterAssignedIdx >= 0) {
-                                            let cursorIdx = (laterAssignedIdx + 1) % groupPeople.length;
-                                            const laterPos = sortedNormal.indexOf(laterKey);
-                                            if (laterPos >= 0) {
-                                                for (let ni = laterPos + 1; ni < sortedNormal.length; ni++) {
-                                                    const nextKey = sortedNormal[ni];
-                                                    const nextDateObj = new Date(nextKey + 'T00:00:00');
-                                                    if (isNaN(nextDateObj.getTime())) continue;
-
-                                                    const existingPerson = updatedAssignments?.[nextKey]?.[groupNum] || null;
-                                                    const existingReason = existingPerson ? getAssignmentReason(nextKey, groupNum, existingPerson) : null;
-                                                    if (existingReason && existingReason.meta && (existingReason.meta.returnFromMissing || existingReason.meta.shiftedByReturnFromMissing)) {
-                                                        const existingIdx = groupPeople.indexOf(existingPerson);
-                                                        if (existingIdx >= 0) cursorIdx = (existingIdx + 1) % groupPeople.length;
-                                                        continue;
-                                                    }
-
-                                                    let picked = null;
-                                                    for (let off = 0; off < groupPeople.length; off++) {
-                                                        const candIdx = (cursorIdx + off) % groupPeople.length;
-                                                        const cand = groupPeople[candIdx];
-                                                        if (!cand) continue;
-                                                        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
-                                                        if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) continue;
-                                                        picked = cand;
-                                                        cursorIdx = (candIdx + 1) % groupPeople.length;
-                                                        break;
-                                                    }
-                                                    if (picked) {
-                                                    const prevAssigned = updatedAssignments?.[nextKey]?.[groupNum] || null;
-                                                        if (!updatedAssignments[nextKey]) updatedAssignments[nextKey] = {};
-                                                        updatedAssignments[nextKey][groupNum] = picked;
-                                                    if (prevAssigned && prevAssigned !== picked) {
-                                                        storeAssignmentReason(
-                                                            nextKey,
-                                                            groupNum,
-                                                            picked,
-                                                            'shift',
-                                                            '',
-                                                            prevAssigned,
-                                                            null,
-                                                            { swapContinuity: true, anchorSwapDay: laterKey }
-                                                        );
-                                                    }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                } catch (contErr) {
-                                    console.warn('[SWAP CONTINUITY] Failed to reflow future normal days after swap:', contErr);
-                                }
+                                // ΜΗΝ κάνεις reflow των επόμενων καθημερινών μετά το week-pair swap.
+                                // Το παλιό reflow (cursor από τον τελικό στην ύστερη μέρα) ξανάγραφε όλο το
+                                // υπόλοιπο μήνα για ομάδες 1–2 και έκανε επανάληψη π.χ. Τε#9/Πε#10 → επόμενη Τε#9/Πε#10.
+                                // Το swap αγγίζει μόνο τις δύο μέρες· η βασική σειρά των υπολοίπων μένει.
+                                // Continuity επόμενου μήνα: getPersonForNormalRotationContinuity.
+                                void applyWeekPairLogic;
+                                void isBackwardWithinMonth;
                                 
                                 // Store assignment reasons for BOTH people involved in the swap with swap pair ID
                                 // Improved Greek reasons:
@@ -15776,66 +15721,8 @@
                             normalAssignments[dateKey][groupNum] = swapCandidate;
                             normalAssignments[swapDayKey][groupNum] = currentPerson;
 
-                            // Rotation continuity reflow in preview only for week-pair groups.
-                            // Same as save path: continue after the person who remains on the later swap day.
-                            try {
-                                const isCrossMonthSwapPreview = dateKey.substring(0, 7) !== swapDayKey.substring(0, 7);
-                                if (applyWeekPairLogic && !isCrossMonthSwapPreview && Array.isArray(groupPeople) && groupPeople.length > 0) {
-                                    const laterKey = (dateKey > swapDayKey) ? dateKey : swapDayKey;
-                                    const laterAssignedPerson =
-                                        normalAssignments[laterKey]?.[groupNum] ||
-                                        ((laterKey === dateKey) ? swapCandidate : currentPerson);
-                                    const laterAssignedIdx = groupPeople.indexOf(laterAssignedPerson);
-                                    if (laterAssignedIdx >= 0) {
-                                        let cursorIdx = (laterAssignedIdx + 1) % groupPeople.length;
-                                        const laterPos = sortedNormal.indexOf(laterKey);
-                                        if (laterPos >= 0) {
-                                            for (let ni = laterPos + 1; ni < sortedNormal.length; ni++) {
-                                                const nextKey = sortedNormal[ni];
-                                                const nextDateObj = new Date(nextKey + 'T00:00:00');
-                                                if (isNaN(nextDateObj.getTime())) continue;
-                                                const existingPerson = normalAssignments?.[nextKey]?.[groupNum] || null;
-                                                const existingReason = existingPerson ? getAssignmentReason(nextKey, groupNum, existingPerson) : null;
-                                                if (existingReason && existingReason.meta && (existingReason.meta.returnFromMissing || existingReason.meta.shiftedByReturnFromMissing)) {
-                                                    const existingIdx = groupPeople.indexOf(existingPerson);
-                                                    if (existingIdx >= 0) cursorIdx = (existingIdx + 1) % groupPeople.length;
-                                                    continue;
-                                                }
-                                                let picked = null;
-                                                for (let off = 0; off < groupPeople.length; off++) {
-                                                    const candIdx = (cursorIdx + off) % groupPeople.length;
-                                                    const cand = groupPeople[candIdx];
-                                                    if (!cand) continue;
-                                                    if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(cand, groupNum, 'normal')) continue;
-                                                    if (isPersonMissingOnDate(cand, groupNum, nextDateObj, 'normal')) continue;
-                                                    picked = cand;
-                                                    cursorIdx = (candIdx + 1) % groupPeople.length;
-                                                    break;
-                                                }
-                                                if (picked) {
-                                                    const prevAssigned = normalAssignments?.[nextKey]?.[groupNum] || null;
-                                                    if (!normalAssignments[nextKey]) normalAssignments[nextKey] = {};
-                                                    normalAssignments[nextKey][groupNum] = picked;
-                                                    if (prevAssigned && prevAssigned !== picked) {
-                                                        storeAssignmentReason(
-                                                            nextKey,
-                                                            groupNum,
-                                                            picked,
-                                                            'shift',
-                                                            '',
-                                                            prevAssigned,
-                                                            null,
-                                                            { swapContinuity: true, anchorSwapDay: laterKey }
-                                                        );
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } catch (previewContErr) {
-                                console.warn('[PREVIEW SWAP CONTINUITY] Failed to reflow future normal days after swap:', previewContErr);
-                            }
+                            // Όπως στο save path: χωρίς reflow — μόνο ανταλλαγή των δύο ημερών.
+                            void applyWeekPairLogic;
                             
                             const conflictNeighborInfoPreview = getConsecutiveConflictNeighborInfo(dateKey, currentPerson, groupNum, simulatedAssignments);
                             const conflictNeighborKeyPreview = conflictNeighborInfoPreview?.neighborKey || dateKey;
