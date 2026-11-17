@@ -7904,6 +7904,18 @@
                 }
             }
 
+            const dayTypeListsForDedupe = dayTypeLists || calculationSteps.dayTypeLists || {};
+            const sortedNormalForDedupe = [...(dayTypeListsForDedupe.normal || [])].sort();
+            if (typeof dedupeNormalAssignmentsInMonth === 'function' && sortedNormalForDedupe.length) {
+                dedupeNormalAssignmentsInMonth(
+                    sortedNormalForDedupe,
+                    assignments,
+                    calculationSteps.tempNormalBaselineAssignments ||
+                        calculationSteps.tempNormalBaselineDisplay ||
+                        {}
+                );
+            }
+
             calculationSteps.finalNormalAssignments = JSON.parse(JSON.stringify(assignments));
 
             try {
@@ -8367,8 +8379,19 @@
                                 if (!curAssigned || normName(curAssigned) !== normName(personName)) continue;
                                 const dateObj = dateKeyToDate(dk);
                                 const idxP = indexOfPersonInList(groupPeopleForReturn, personName);
-                                const replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleForReturn, idxP, groupNum, dateObj) : null;
-                                if (!replacement) continue;
+                                let replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleForReturn, idxP, groupNum, dateObj) : null;
+                                if (!replacement || normName(replacement) === normName(personName)) {
+                                    const baseClear =
+                                        calculationSteps.tempNormalBaselineAssignments?.[dk]?.[groupNum] ||
+                                        calculationSteps.tempNormalBaselineDisplay?.[dk]?.[groupNum] ||
+                                        null;
+                                    if (baseClear && normName(baseClear) !== normName(personName)) {
+                                        replacement = baseClear;
+                                    } else if (idxP >= 0 && groupPeopleForReturn.length > 1) {
+                                        replacement = groupPeopleForReturn[(idxP + 1) % groupPeopleForReturn.length] || null;
+                                    }
+                                }
+                                if (!replacement || normName(replacement) === normName(personName)) continue;
                                 if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
                                 updatedAssignments[dk][groupNum] = replacement;
                                 storeAssignmentReason(dk, groupNum, replacement, 'shift', '', personName, null, { returnFromMissing: true, clearedEarlyReturnAssignment: true, targetKey: null, missingEnd: pEndKey, preClearedForReinsertion: true });
@@ -8584,8 +8607,19 @@
                                         if (!curAssigned || normName(curAssigned) !== normName(personName)) continue;
                                         const dateObj = dateKeyToDate(dk);
                                         const idxP = indexOfPersonInList(groupPeopleForReturn, personName);
-                                        const replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleForReturn, idxP, groupNum, dateObj) : null;
-                                        if (!replacement) continue;
+                                        let replacement = idxP >= 0 ? pickNextEligibleIgnoringConflicts(groupPeopleForReturn, idxP, groupNum, dateObj) : null;
+                                        if (!replacement || normName(replacement) === normName(personName)) {
+                                            const baseClear =
+                                                calculationSteps.tempNormalBaselineAssignments?.[dk]?.[groupNum] ||
+                                                calculationSteps.tempNormalBaselineDisplay?.[dk]?.[groupNum] ||
+                                                null;
+                                            if (baseClear && normName(baseClear) !== normName(personName)) {
+                                                replacement = baseClear;
+                                            } else if (idxP >= 0 && groupPeopleForReturn.length > 1) {
+                                                replacement = groupPeopleForReturn[(idxP + 1) % groupPeopleForReturn.length] || null;
+                                            }
+                                        }
+                                        if (!replacement || normName(replacement) === normName(personName)) continue;
                                         if (!updatedAssignments[dk]) updatedAssignments[dk] = {};
                                         updatedAssignments[dk][groupNum] = replacement;
                                         storeAssignmentReason(
@@ -13825,6 +13859,136 @@
         /**
          * Return-from-missing: επανερχόμενος στην ημέρα-στόχο, ο baseline της ημέρας σπρώχνεται στην επόμενη καθημερινή (αλυσίδα).
          */
+        /**
+         * Αν το ίδιο άτομο εμφανίζεται σε ≥2 καθημερινές του μήνα για την ομάδα,
+         * κρατάμε RFM-insert (αν υπάρχει) αλλιώς την πρώτη εμφάνιση· τις υπόλοιπες
+         * επαναφέρουμε από pure baseline / επόμενο ελεύθερο στη λίστα.
+         * Διορθώνει επανάληψη π.χ. 21=#9,22=#10,28=#9,29=#10 στις ομάδες 1–2.
+         */
+        function dedupeNormalAssignmentsInMonth(sortedNormalKeys, assignmentsByDate, pureBaselineByDate) {
+            if (!Array.isArray(sortedNormalKeys) || !assignmentsByDate) return;
+            const norm = (s) =>
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey(s)
+                    : String(s || '').trim();
+            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
+                if (
+                    typeof shouldRecalculateDutyGroup === 'function' &&
+                    !shouldRecalculateDutyGroup(groupNum)
+                ) {
+                    continue;
+                }
+                const datesByPerson = new Map();
+                for (const dk of sortedNormalKeys) {
+                    const p = assignmentsByDate[dk]?.[groupNum];
+                    if (!p) continue;
+                    const k = norm(p);
+                    if (!k) continue;
+                    if (!datesByPerson.has(k)) datesByPerson.set(k, []);
+                    datesByPerson.get(k).push({ dk, person: p });
+                }
+                for (const [, entries] of datesByPerson) {
+                    if (entries.length < 2) continue;
+                    let keepDk = entries[0].dk;
+                    for (const e of entries) {
+                        const r =
+                            typeof getAssignmentReason === 'function'
+                                ? getAssignmentReason(e.dk, groupNum, e.person)
+                                : null;
+                        if (r?.meta?.returnFromMissing && r?.meta?.insertedByShift) {
+                            keepDk = e.dk;
+                            break;
+                        }
+                    }
+                    const keepNorm = norm(
+                        entries.find((e) => e.dk === keepDk)?.person || entries[0].person
+                    );
+                    for (const e of entries) {
+                        if (e.dk === keepDk) continue;
+                        const dateObj = new Date(e.dk + 'T00:00:00');
+                        const groupPeople =
+                            (typeof groupsForDuty === 'function'
+                                ? groupsForDuty(groupNum, e.dk)
+                                : groups?.[groupNum]
+                            )?.normal || [];
+                        const used = new Set();
+                        for (const d2 of sortedNormalKeys) {
+                            if (d2 === e.dk) continue;
+                            const p2 = assignmentsByDate[d2]?.[groupNum];
+                            if (p2) used.add(norm(p2));
+                        }
+                        let replacement = pureBaselineByDate?.[e.dk]?.[groupNum] || null;
+                        if (
+                            replacement &&
+                            (norm(replacement) === keepNorm ||
+                                norm(replacement) === norm(e.person) ||
+                                used.has(norm(replacement)) ||
+                                (typeof isPersonMissingOnDate === 'function' &&
+                                    isPersonMissingOnDate(replacement, groupNum, dateObj, 'normal')))
+                        ) {
+                            replacement = null;
+                        }
+                        if (!replacement) {
+                            for (const cand of groupPeople) {
+                                if (!cand) continue;
+                                const ck = norm(cand);
+                                if (!ck || ck === keepNorm || ck === norm(e.person) || used.has(ck)) {
+                                    continue;
+                                }
+                                if (
+                                    typeof isPersonMissingOnDate === 'function' &&
+                                    isPersonMissingOnDate(cand, groupNum, dateObj, 'normal')
+                                ) {
+                                    continue;
+                                }
+                                if (
+                                    typeof isPersonDisabledForDuty === 'function' &&
+                                    isPersonDisabledForDuty(cand, groupNum, 'normal')
+                                ) {
+                                    continue;
+                                }
+                                replacement = cand;
+                                break;
+                            }
+                        }
+                        if (!replacement || norm(replacement) === norm(e.person)) continue;
+                        if (!assignmentsByDate[e.dk]) assignmentsByDate[e.dk] = {};
+                        const prev = assignmentsByDate[e.dk][groupNum];
+                        assignmentsByDate[e.dk][groupNum] = replacement;
+                        try {
+                            const gmap = assignmentReasons?.[e.dk]?.[groupNum] || assignmentReasons?.[e.dk]?.[String(groupNum)];
+                            if (gmap && prev) {
+                                delete gmap[prev];
+                                const pk = typeof normalizePersonKey === 'function' ? normalizePersonKey(prev) : null;
+                                if (pk && gmap[pk]) delete gmap[pk];
+                            }
+                        } catch (_) {}
+                        try {
+                            if (typeof storeAssignmentReason === 'function') {
+                                storeAssignmentReason(
+                                    e.dk,
+                                    groupNum,
+                                    replacement,
+                                    'shift',
+                                    '',
+                                    prev,
+                                    null,
+                                    {
+                                        dedupedNormalDuplicate: true,
+                                        keptDateKey: keepDk,
+                                        removedDuplicate: prev
+                                    }
+                                );
+                            }
+                        } catch (_) {}
+                        console.log(
+                            `[DEDUP NORMAL] Ομάδα ${groupNum} ${e.dk}: αφαίρεση διπλότυπου ${e.person} → ${replacement} (κρατήθηκε ${keepDk})`
+                        );
+                    }
+                }
+            }
+        }
+
         function applyNormalReturnShiftFromDate(
             sortedNormalKeys,
             startKey,
@@ -14201,11 +14365,19 @@
                         const dateObjClear = new Date(dk + 'T00:00:00');
                         if (isNaN(dateObjClear.getTime())) continue;
                         const idxP = indexOfPersonForPreviewClear(groupPeople, personInList);
-                        const replacement =
+                        let replacement =
                             idxP >= 0
                                 ? pickNextEligibleForPreviewClear(groupPeople, idxP, groupNum, dateObjClear)
                                 : null;
-                        if (!replacement) continue;
+                        if (!replacement || norm(replacement) === norm(personInList)) {
+                            const baseClear = pureBaselineByDate?.[dk]?.[groupNum] || null;
+                            if (baseClear && norm(baseClear) !== norm(personInList)) {
+                                replacement = baseClear;
+                            } else if (idxP >= 0 && groupPeople.length > 1) {
+                                replacement = groupPeople[(idxP + 1) % groupPeople.length] || null;
+                            }
+                        }
+                        if (!replacement || norm(replacement) === norm(personInList)) continue;
                         if (!normalAssignments[dk]) normalAssignments[dk] = {};
                         normalAssignments[dk][groupNum] = replacement;
                         storeAssignmentReason(
@@ -14289,6 +14461,7 @@
                     } catch (_) {}
                 }
             }
+            dedupeNormalAssignmentsInMonth(sortedNormal, normalAssignments, pureBaselineByDate);
         }
         function renderStep4_Normal() {
             const stepContent = document.getElementById('stepContent');
@@ -16188,6 +16361,13 @@
                 if (postRfmSwaps > 0) {
                     console.log(
                         `[PREVIEW RESIDUAL] After return-from-missing resolved ${postRfmSwaps} conflict(s)`
+                    );
+                }
+                if (typeof dedupeNormalAssignmentsInMonth === 'function') {
+                    dedupeNormalAssignmentsInMonth(
+                        sortedNormal,
+                        normalAssignments,
+                        pureNormalRotationByDate
                     );
                 }
             }
