@@ -11904,6 +11904,27 @@
             }
         }
         async function renderStep3_SemiNormal() {
+            // #region agent log
+            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Debug-Session-Id': '73ad17'
+                },
+                body: JSON.stringify({
+                    sessionId: '73ad17',
+                    runId: 'post-fix',
+                    hypothesisId: 'B-semi',
+                    location: 'duty-shifts-logic.js:renderStep3_SemiNormal',
+                    message: 'step3_boot_v1663',
+                    data: {
+                        versionMarker: '1.663',
+                        semiKeys: (calculationSteps.dayTypeLists?.semi || []).slice()
+                    },
+                    timestamp: Date.now()
+                })
+            }).catch(() => {});
+            // #endregion
             const stepContent = document.getElementById('stepContent');
             const startDate = calculationSteps.startDate;
             const endDate = calculationSteps.endDate;
@@ -12568,6 +12589,39 @@
                         const other = finalAssignments[dk2]?.[groupNum];
                         if (!other || other === person) continue;
                         if (hasConflict(dk2, other, groupNum)) continue;
+                        // Μην μετακινείς τον συγκρουόμενο σε άλλη ημιαργία που επίσης συγκρούεται
+                        // (π.χ. 30↔31 → 23↔24 ειδική).
+                        if (hasConflict(dk2, person, groupNum)) {
+                            // #region agent log
+                            if (groupNum === 3 && String(dateKey).startsWith('2026-12')) {
+                                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-Debug-Session-Id': '73ad17'
+                                    },
+                                    body: JSON.stringify({
+                                        sessionId: '73ad17',
+                                        runId: 'post-fix',
+                                        hypothesisId: 'B-semi',
+                                        location: 'duty-shifts-logic.js:semiSwapFwd',
+                                        message: 'semi_swap_rejected_mover_conflict',
+                                        data: {
+                                            dateKey,
+                                            dk2,
+                                            groupNum,
+                                            person,
+                                            other,
+                                            direction: 'forward'
+                                        },
+                                        timestamp: Date.now()
+                                    })
+                                }).catch(() => {});
+                            }
+                            // #endregion
+                            continue;
+                        }
+                        if (hasConflict(dateKey, other, groupNum)) continue;
                         finalAssignments[dateKey][groupNum] = other;
                         finalAssignments[dk2][groupNum] = person;
                         const m2 = semiMeta[dk2];
@@ -12583,6 +12637,26 @@
                         const semiSwapMetaFwd = getSemiHolidayConflictSwapMeta(other, person, dateKey, dk2);
                         storeAssignmentReason(dateKey, groupNum, other, 'swap', semiUnifiedReasonFwd, person, semiSwapPairId, semiSwapMetaFwd);
                         storeAssignmentReason(dk2, groupNum, person, 'swap', semiUnifiedReasonFwd, other, semiSwapPairId, semiSwapMetaFwd);
+                        // #region agent log
+                        if (groupNum === 3 && String(dateKey).startsWith('2026-12')) {
+                            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Debug-Session-Id': '73ad17'
+                                },
+                                body: JSON.stringify({
+                                    sessionId: '73ad17',
+                                    runId: 'post-fix',
+                                    hypothesisId: 'B-semi',
+                                    location: 'duty-shifts-logic.js:semiSwapFwd',
+                                    message: 'semi_swap_applied',
+                                    data: { dateKey, dk2, groupNum, person, other, direction: 'forward' },
+                                    timestamp: Date.now()
+                                })
+                            }).catch(() => {});
+                        }
+                        // #endregion
                         swapped = true;
                         break;
                     }
@@ -12595,6 +12669,37 @@
                         const other = finalAssignments[dk2]?.[groupNum];
                         if (!other || other === person) continue;
                         if (hasConflict(dk2, other, groupNum)) continue;
+                        if (hasConflict(dk2, person, groupNum)) {
+                            // #region agent log
+                            if (groupNum === 3 && String(dateKey).startsWith('2026-12')) {
+                                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-Debug-Session-Id': '73ad17'
+                                    },
+                                    body: JSON.stringify({
+                                        sessionId: '73ad17',
+                                        runId: 'post-fix',
+                                        hypothesisId: 'B-semi',
+                                        location: 'duty-shifts-logic.js:semiSwapBack',
+                                        message: 'semi_swap_rejected_mover_conflict',
+                                        data: {
+                                            dateKey,
+                                            dk2,
+                                            groupNum,
+                                            person,
+                                            other,
+                                            direction: 'backward'
+                                        },
+                                        timestamp: Date.now()
+                                    })
+                                }).catch(() => {});
+                            }
+                            // #endregion
+                            continue;
+                        }
+                        if (hasConflict(dateKey, other, groupNum)) continue;
                         finalAssignments[dateKey][groupNum] = other;
                         finalAssignments[dk2][groupNum] = person;
                         const m2 = semiMeta[dk2];
@@ -12624,6 +12729,8 @@
                             const other = finalAssignments[dk2]?.[groupNum];
                             if (!other || other === person) continue;
                             if (hasConflict(dk2, other, groupNum)) continue;
+                            if (hasConflict(dk2, person, groupNum)) continue;
+                            if (hasConflict(dateKey, other, groupNum)) continue;
                             finalAssignments[dateKey][groupNum] = other;
                             finalAssignments[dk2][groupNum] = person;
                             const otherStr = m2 ? m2.dateStr : new Date(dk2 + 'T00:00:00').toLocaleDateString('el-GR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -14526,10 +14633,11 @@
                     runId: 'post-fix',
                     hypothesisId: 'B',
                     location: 'duty-shifts-logic.js:renderStep4_Normal',
-                    message: 'step4_boot_v1662',
+                    message: 'step4_boot_v1663',
                     data: {
-                        versionMarker: '1.662',
-                        normalKeys: (calculationSteps.dayTypeLists?.normal || []).slice()
+                        versionMarker: '1.663',
+                        normalKeys: (calculationSteps.dayTypeLists?.normal || []).slice(),
+                        semiKeys: (calculationSteps.dayTypeLists?.semi || []).slice()
                     },
                     timestamp: Date.now()
                 })
