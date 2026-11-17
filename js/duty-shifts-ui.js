@@ -2391,14 +2391,20 @@
                         // This is a critical baseline assignment that must be preserved
                         const existingAssignment = getAssignmentForDate(dateKey);
                         const personGroupStr = `${personKey} (Ομάδα ${currentGroup})`;
+                        // Match by identity across ANY group on that date — prevents a promotion
+                        // from appending the same person under a second group slot.
                         const alreadyAssigned =
-                            typeof assignmentHasPersonGroup === 'function'
-                                ? assignmentHasPersonGroup(existingAssignment, personKey, currentGroup)
-                                : !!(existingAssignment && String(existingAssignment).includes(personGroupStr));
+                            typeof assignmentHasPersonIdentity === 'function'
+                                ? assignmentHasPersonIdentity(existingAssignment, personKey)
+                                : typeof assignmentHasPersonGroup === 'function'
+                                  ? assignmentHasPersonGroup(existingAssignment, personKey, currentGroup)
+                                  : !!(existingAssignment && String(existingAssignment).includes(personGroupStr));
                         const alreadyCritical =
-                            typeof criticalHasPersonGroup === 'function'
-                                ? criticalHasPersonGroup(criticalAssignments[dateKey], personKey, currentGroup)
-                                : !!(criticalAssignments[dateKey] && criticalAssignments[dateKey].includes(personGroupStr));
+                            typeof criticalHasPersonIdentity === 'function'
+                                ? criticalHasPersonIdentity(criticalAssignments[dateKey], personKey)
+                                : typeof criticalHasPersonGroup === 'function'
+                                  ? criticalHasPersonGroup(criticalAssignments[dateKey], personKey, currentGroup)
+                                  : !!(criticalAssignments[dateKey] && criticalAssignments[dateKey].includes(personGroupStr));
                         
                         // Mark this as a critical assignment (from last duty) - NEVER delete these
                         // Match by identity (ignore rank) so a promotion does not add a second entry.
@@ -4316,13 +4322,34 @@
             return Array.from(allPeople).sort();
         }
         function getPersonGroup(personName) {
+            if (!personName) return null;
+            const targetNorm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey(personName)
+                    : String(personName).trim();
+            const targetId =
+                typeof getPersonIdentityKey === 'function'
+                    ? getPersonIdentityKey(personName)
+                    : targetNorm;
             for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                 const group = groups[groupNum];
                 if (group) {
                     const listTypes = ['special', 'weekend', 'semi', 'normal'];
                     for (const listType of listTypes) {
-                        if (Array.isArray(group[listType]) && group[listType].includes(personName)) {
-                            return groupNum;
+                        if (!Array.isArray(group[listType])) continue;
+                        if (group[listType].includes(personName)) return groupNum;
+                        for (const p of group[listType]) {
+                            const pn =
+                                typeof normalizePersonKey === 'function'
+                                    ? normalizePersonKey(p)
+                                    : String(p || '').trim();
+                            if (pn === targetNorm) return groupNum;
+                            if (
+                                typeof getPersonIdentityKey === 'function' &&
+                                getPersonIdentityKey(p) === targetId
+                            ) {
+                                return groupNum;
+                            }
                         }
                     }
                 }
@@ -6174,13 +6201,23 @@
                 typeof normalizePersonKey === 'function'
                     ? normalizePersonKey
                     : (s) => String(s || '').trim();
+            const idOf =
+                typeof getPersonIdentityKey === 'function'
+                    ? getPersonIdentityKey
+                    : norm;
             const target = norm(personName);
+            const targetId = idOf(personName);
+            const samePerson = (a, b) => {
+                const na = norm(a);
+                const nb = norm(b);
+                return na === nb || idOf(a) === idOf(b);
+            };
 
             // Prefer the same priority number shown on the person card in the group lists.
             let priority = g.priorities?.[personName]?.[listType];
             if (priority == null && g.priorities) {
                 for (const key of Object.keys(g.priorities)) {
-                    if (norm(key) === target) {
+                    if (samePerson(key, personName)) {
                         priority = g.priorities[key]?.[listType];
                         break;
                     }
@@ -6193,7 +6230,7 @@
             const list = getDutyRotationListForCalendar(groupNum, listType, dateKey);
             if (!Array.isArray(list) || list.length === 0) return null;
             for (let i = 0; i < list.length; i++) {
-                if (norm(list[i]) === target) return i + 1;
+                if (samePerson(list[i], personName)) return i + 1;
             }
             const exactIdx = list.indexOf(personName);
             return exactIdx >= 0 ? exactIdx + 1 : null;
@@ -6213,6 +6250,24 @@
             if (!calendarGrid || !currentMonthYear) {
                 console.error('Calendar elements not found');
                 return;
+            }
+
+            // One-shot cleanup of promotion duplicates already stored (same person, any group).
+            if (
+                !window._rankDedupRanThisSession &&
+                typeof sanitizeRankDuplicateAssignments === 'function'
+            ) {
+                window._rankDedupRanThisSession = true;
+                try {
+                    const n = sanitizeRankDuplicateAssignments();
+                    if (n > 0) {
+                        console.log(`[RANK-DEDUP] Cleaned ${n} date entries on calendar render`);
+                        if (typeof saveData === 'function') saveData();
+                        else if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
+                    }
+                } catch (e) {
+                    console.warn('[RANK-DEDUP] calendar sanitize failed:', e);
+                }
             }
 
             _attachCalendarMonthPickerClick();
@@ -6456,21 +6511,19 @@
                             { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.12)' }
                         ];
                         const entries = [];
-                        const seenIdentityGroup = new Set();
+                        const seenIdentity = new Set();
                         for (const part of parts) {
                             const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                             const nameOnly = part.replace(/\s*\(Ομάδα\s*\d+\)\s*/g, '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
                             const personName = m ? m[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '') : nameOnly;
                             const g = m ? parseInt(m[2], 10) : 0;
-                            // Same person under old+new rank after a promotion: show one line (keep first / historical).
+                            // Same person under old+new rank (or wrongly stored in two groups): one line per day.
                             const idKey =
-                                (typeof getPersonIdentityKey === 'function'
+                                typeof getPersonIdentityKey === 'function'
                                     ? getPersonIdentityKey(personName)
-                                    : String(personName || '').trim()) +
-                                '|' +
-                                g;
-                            if (seenIdentityGroup.has(idKey)) continue;
-                            seenIdentityGroup.add(idKey);
+                                    : String(personName || '').trim();
+                            if (idKey && seenIdentity.has(idKey)) continue;
+                            if (idKey) seenIdentity.add(idKey);
                             const rank = Number.isFinite(parseInt(rankings?.[personName], 10)) ? parseInt(rankings[personName], 10) : 9999;
                             let underline = false;
                             let isSwap = false;
