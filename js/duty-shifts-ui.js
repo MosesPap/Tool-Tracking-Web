@@ -6558,10 +6558,18 @@
                     }
                 }
                 
+                const vehicleCoverageWarn =
+                    !showMdOnly &&
+                    typeof dayNeedsVehicleCoverageWarning === 'function' &&
+                    dayNeedsVehicleCoverageWarning(assignment)
+                        ? `<span class="duty-vehicle-coverage-warn" title="Λιγότερα από 2 άτομα με εξουσιοδότηση οχήματος αυτή την ημέρα">*</span>`
+                        : '';
+
                 dayDiv.innerHTML = `
                     <div class="day-number">${day}</div>
                     ${holidayName ? `<div class="orthodox-holiday-name">${holidayName}</div>` : ''}
                     ${displayAssignmentHtml}
+                    ${vehicleCoverageWarn}
                 `;
 
                 if (selectedDutyHighlightPerson) {

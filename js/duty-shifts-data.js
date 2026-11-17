@@ -173,6 +173,55 @@
             return DUTY_VEHICLE_CODES.filter((c) => !!map[c]);
         }
 
+        function personHasAnyVehicleAuthorization(personName) {
+            return getPersonAuthorizedVehicles(personName).length > 0;
+        }
+
+        /** Πόσα άτομα στην ανάθεση ημέρας έχουν τουλάχιστον ένα όχημα. */
+        function countAssignedPeopleWithVehicleAuth(assignment) {
+            if (!assignment) return 0;
+            const map =
+                typeof extractGroupAssignmentsMap === 'function'
+                    ? extractGroupAssignmentsMap(assignment)
+                    : null;
+            let count = 0;
+            if (map && typeof map === 'object') {
+                const seen = new Set();
+                for (let g = 1; g <= 4; g++) {
+                    const person = map[g] || map[String(g)];
+                    if (!person) continue;
+                    const key = getPersonVehicleAuthKey(person);
+                    if (!key || seen.has(key)) continue;
+                    seen.add(key);
+                    if (personHasAnyVehicleAuthorization(person)) count += 1;
+                }
+                return count;
+            }
+            const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
+            const parts = assignmentStr.split(',').map((p) => p.trim()).filter(Boolean);
+            const seen = new Set();
+            for (const part of parts) {
+                const nameOnly = part
+                    .replace(/\s*\(Ομάδα\s*\d+\)\s*/g, '')
+                    .trim()
+                    .replace(/^,+\s*/, '')
+                    .replace(/\s*,+$/, '');
+                if (!nameOnly) continue;
+                const key = getPersonVehicleAuthKey(nameOnly);
+                if (!key || seen.has(key)) continue;
+                seen.add(key);
+                if (personHasAnyVehicleAuthorization(nameOnly)) count += 1;
+            }
+            return count;
+        }
+
+        function dayNeedsVehicleCoverageWarning(assignment) {
+            if (!assignment) return false;
+            const assignmentStr = typeof assignment === 'string' ? assignment : String(assignment);
+            if (!assignmentStr.trim()) return false;
+            return countAssignedPeopleWithVehicleAuth(assignment) < 2;
+        }
+
         function setPersonVehicleAuthMap(personName, authMap) {
             const key = getPersonVehicleAuthKey(personName);
             if (!key || !personName) return;
@@ -263,6 +312,9 @@
         window.DUTY_VEHICLE_CODES = DUTY_VEHICLE_CODES;
         window.getPersonVehicleAuthMap = getPersonVehicleAuthMap;
         window.getPersonAuthorizedVehicles = getPersonAuthorizedVehicles;
+        window.personHasAnyVehicleAuthorization = personHasAnyVehicleAuthorization;
+        window.countAssignedPeopleWithVehicleAuth = countAssignedPeopleWithVehicleAuth;
+        window.dayNeedsVehicleCoverageWarning = dayNeedsVehicleCoverageWarning;
         window.setPersonVehicleAuthMap = setPersonVehicleAuthMap;
         window.renamePersonVehicleAuthorizations = renamePersonVehicleAuthorizations;
         window.formatVehicleAuthBadgesHtml = formatVehicleAuthBadgesHtml;
