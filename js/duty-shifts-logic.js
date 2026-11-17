@@ -13865,6 +13865,98 @@
          * επαναφέρουμε από pure baseline / επόμενο ελεύθερο στη λίστα.
          * Διορθώνει επανάληψη π.χ. 21=#9,22=#10,28=#9,29=#10 στις ομάδες 1–2.
          */
+        // #region agent log
+        function __dbgNormalDupSnapshot(stage, sortedNormalKeys, assignmentsByDate, pureBaselineByDate, extra) {
+            try {
+                const keys = Array.isArray(sortedNormalKeys) ? [...sortedNormalKeys].sort() : [];
+                const late = keys.slice(-10);
+                const recalc = [];
+                for (let g = 1; g <= (typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4); g++) {
+                    recalc.push({
+                        g,
+                        recalc:
+                            typeof shouldRecalculateDutyGroup === 'function'
+                                ? shouldRecalculateDutyGroup(g)
+                                : null,
+                        weekPair:
+                            typeof shouldApplyNormalWeekPairSwapLogicForGroup === 'function'
+                                ? shouldApplyNormalWeekPairSwapLogicForGroup(g)
+                                : null,
+                        listLen: (
+                            (typeof getSortedGroupListForRotation === 'function'
+                                ? getSortedGroupListForRotation(g, 'normal')
+                                : null) ||
+                            (typeof groupsForDuty === 'function' ? groupsForDuty(g) : groups?.[g])?.normal ||
+                            []
+                        ).length
+                    });
+                }
+                const lateAssign = {};
+                const dups = [];
+                for (let g = 1; g <= 2; g++) {
+                    lateAssign[g] = {};
+                    const byPerson = {};
+                    for (const dk of keys) {
+                        const p = assignmentsByDate?.[dk]?.[g] || null;
+                        if (late.includes(dk)) {
+                            const base = pureBaselineByDate?.[dk]?.[g] || null;
+                            let reasonType = null;
+                            let reasonMeta = null;
+                            try {
+                                const r =
+                                    typeof getAssignmentReason === 'function' && p
+                                        ? getAssignmentReason(dk, g, p)
+                                        : null;
+                                reasonType = r?.type || null;
+                                reasonMeta = r?.meta
+                                    ? {
+                                          returnFromMissing: !!r.meta.returnFromMissing,
+                                          insertedByShift: !!r.meta.insertedByShift,
+                                          cascadingShift: !!r.meta.cascadingShift,
+                                          dedupedNormalDuplicate: !!r.meta.dedupedNormalDuplicate,
+                                          fiveDay: !!r.meta?.wasReplacedDueToFiveDayRule
+                                      }
+                                    : null;
+                            } catch (_) {}
+                            lateAssign[g][dk] = { p, base, reasonType, reasonMeta };
+                        }
+                        if (!p) continue;
+                        const k = String(p);
+                        if (!byPerson[k]) byPerson[k] = [];
+                        byPerson[k].push(dk);
+                    }
+                    for (const [person, dates] of Object.entries(byPerson)) {
+                        if (dates.length >= 2) dups.push({ g, person, dates });
+                    }
+                }
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Debug-Session-Id': '73ad17'
+                    },
+                    body: JSON.stringify({
+                        sessionId: '73ad17',
+                        runId: 'pre-fix',
+                        hypothesisId: extra?.hypothesisId || 'A-E',
+                        location: 'duty-shifts-logic.js:__dbgNormalDupSnapshot',
+                        message: stage,
+                        data: {
+                            stage,
+                            normalCount: keys.length,
+                            lateKeys: late,
+                            recalc,
+                            lateAssign,
+                            dups,
+                            extra: extra || null
+                        },
+                        timestamp: Date.now()
+                    })
+                }).catch(() => {});
+            } catch (_) {}
+        }
+        // #endregion
+
         function dedupeNormalAssignmentsInMonth(sortedNormalKeys, assignmentsByDate, pureBaselineByDate) {
             if (!Array.isArray(sortedNormalKeys) || !assignmentsByDate) return;
             const norm = (s) =>
@@ -13951,6 +14043,35 @@
                                 break;
                             }
                         }
+                        // #region agent log
+                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Debug-Session-Id': '73ad17'
+                            },
+                            body: JSON.stringify({
+                                sessionId: '73ad17',
+                                runId: 'pre-fix',
+                                hypothesisId: 'D',
+                                location: 'duty-shifts-logic.js:dedupeNormal',
+                                message: 'dedupe_attempt',
+                                data: {
+                                    groupNum,
+                                    keepDk,
+                                    dupDk: e.dk,
+                                    person: e.person,
+                                    replacement,
+                                    baselineAtDup: pureBaselineByDate?.[e.dk]?.[groupNum] || null,
+                                    usedSize: used.size,
+                                    willApply: !!(
+                                        replacement && norm(replacement) !== norm(e.person)
+                                    )
+                                },
+                                timestamp: Date.now()
+                            })
+                        }).catch(() => {});
+                        // #endregion
                         if (!replacement || norm(replacement) === norm(e.person)) continue;
                         if (!assignmentsByDate[e.dk]) assignmentsByDate[e.dk] = {};
                         const prev = assignmentsByDate[e.dk][groupNum];
@@ -15254,6 +15375,37 @@
                                         assignedPerson = candidate;
                                         foundReplacement = true;
                                         wasReplacedDueToFiveDayRule = true;
+                                        // #region agent log
+                                        if (groupNum <= 2) {
+                                            fetch(
+                                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                                {
+                                                    method: 'POST',
+                                                    headers: {
+                                                        'Content-Type': 'application/json',
+                                                        'X-Debug-Session-Id': '73ad17'
+                                                    },
+                                                    body: JSON.stringify({
+                                                        sessionId: '73ad17',
+                                                        runId: 'pre-fix',
+                                                        hypothesisId: 'B',
+                                                        location:
+                                                            'duty-shifts-logic.js:fiveDayRule',
+                                                        message: 'five_day_replacement',
+                                                        data: {
+                                                            dateKey,
+                                                            groupNum,
+                                                            prevLastKey: lastAssignmentDateKey,
+                                                            daysDiff,
+                                                            replacement: candidate,
+                                                            baseline: originalRotationPerson
+                                                        },
+                                                        timestamp: Date.now()
+                                                    })
+                                                }
+                                            ).catch(() => {});
+                                        }
+                                        // #endregion
                                     }
                                     
                                     // If still no replacement found after checking everyone twice, leave unassigned
@@ -15490,6 +15642,16 @@
             }
             
             html += '</div>';
+
+            // #region agent log
+            __dbgNormalDupSnapshot(
+                'after_pure_rotation_before_swaps',
+                sortedNormal,
+                normalAssignments,
+                pureNormalRotationByDate,
+                { hypothesisId: 'A' }
+            );
+            // #endregion
             
             // NOW APPLY SWAP LOGIC IN PREVIEW (Monday-Wednesday and Tuesday-Thursday rules)
             // This ensures preview shows exactly what will be saved
@@ -16199,6 +16361,15 @@
             }
 
             if (normalDays.length > 0 && sortedNormal.length > 0) {
+                // #region agent log
+                __dbgNormalDupSnapshot(
+                    'after_swaps_before_rfm',
+                    sortedNormal,
+                    normalAssignments,
+                    pureNormalRotationByDate,
+                    { hypothesisId: 'C' }
+                );
+                // #endregion
                 applyNormalReturnFromMissingPreview({
                     sortedNormal,
                     pureBaselineByDate: pureNormalRotationByDate,
@@ -16207,6 +16378,15 @@
                     startDate,
                     endDate
                 });
+                // #region agent log
+                __dbgNormalDupSnapshot(
+                    'after_rfm_before_post_residual',
+                    sortedNormal,
+                    normalAssignments,
+                    pureNormalRotationByDate,
+                    { hypothesisId: 'D' }
+                );
+                // #endregion
 
                 // Μετά return-from-missing μπορεί να ξαναδημιουργηθούν συγκρούσεις — ξανά residual
                 const postRfmSimulated = {
@@ -16364,11 +16544,29 @@
                     );
                 }
                 if (typeof dedupeNormalAssignmentsInMonth === 'function') {
+                    // #region agent log
+                    __dbgNormalDupSnapshot(
+                        'before_dedupe',
+                        sortedNormal,
+                        normalAssignments,
+                        pureNormalRotationByDate,
+                        { hypothesisId: 'D' }
+                    );
+                    // #endregion
                     dedupeNormalAssignmentsInMonth(
                         sortedNormal,
                         normalAssignments,
                         pureNormalRotationByDate
                     );
+                    // #region agent log
+                    __dbgNormalDupSnapshot(
+                        'after_dedupe_final',
+                        sortedNormal,
+                        normalAssignments,
+                        pureNormalRotationByDate,
+                        { hypothesisId: 'D-E' }
+                    );
+                    // #endregion
                 }
             }
             
