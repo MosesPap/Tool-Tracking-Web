@@ -2518,6 +2518,38 @@
             return null;
         }
 
+        /** Ειδική αργία: ανάθεση για συγκεκριμένη ημερομηνία (όχι «οποιαδήποτε ειδική του μήνα»). */
+        function getSpecialAssigneeOnDate(dateKey, groupNum) {
+            if (!dateKey || !Number.isFinite(groupNum)) return null;
+            const fromTemp = calculationSteps?.tempSpecialAssignments?.[dateKey]?.[groupNum];
+            if (fromTemp) return fromTemp;
+            const raw =
+                typeof specialHolidayAssignments !== 'undefined'
+                    ? specialHolidayAssignments?.[dateKey]
+                    : null;
+            if (!raw) return null;
+            if (typeof extractGroupAssignmentsMap === 'function') {
+                return extractGroupAssignmentsMap(raw)?.[groupNum] || null;
+            }
+            if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+                return raw[groupNum] || raw[String(groupNum)] || null;
+            }
+            return null;
+        }
+
+        function isSameDutyPersonName(a, b) {
+            if (!a || !b) return false;
+            if (a === b) return true;
+            return (
+                typeof normalizePersonKey === 'function' &&
+                normalizePersonKey(a) === normalizePersonKey(b)
+            );
+        }
+
+        function personHasSpecialDutyOnDate(dateKey, person, groupNum) {
+            return isSameDutyPersonName(getSpecialAssigneeOnDate(dateKey, groupNum), person);
+        }
+
         /** Γειτονική ημέρα σύγκρουσης + ετικέτα «Ημιαργία» / «Αργία» για καθημερινές. */
         function getConsecutiveConflictNeighborInfo(dayKey, person, groupNum, simulatedAssignments = null) {
             const date = new Date(dayKey + 'T00:00:00');
@@ -7191,11 +7223,13 @@
                         const neighborType = getDayType(neighborDate);
                         const neighborKey = formatDateKey(neighborDate);
                         if (neighborType === 'weekend-holiday') {
-                            return simulatedWeekendAssignments[neighborKey]?.[groupNum] === person;
+                            return isSameDutyPersonName(
+                                simulatedWeekendAssignments[neighborKey]?.[groupNum],
+                                person
+                            );
                         }
                         if (neighborType === 'special-holiday') {
-                            const neighborMonthKey = getMonthKeyFromDate(neighborDate);
-                            return simulatedSpecialAssignments[neighborMonthKey]?.[groupNum]?.has(person) || false;
+                            return personHasSpecialDutyOnDate(neighborKey, person, groupNum);
                         }
                         return false;
                     };
@@ -7247,22 +7281,33 @@
                         
                         let hasConsecutiveConflict = false;
                         
-                        // Check day before
-                        if (beforeType === 'weekend-holiday' || beforeType === 'special-holiday') {
-                            const personBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] || 
-                                               (beforeType === 'special-holiday' ? 
-                                                (simulatedSpecialAssignments[getMonthKeyFromDate(dayBefore)]?.[groupNum]?.has(currentPerson) ? currentPerson : null) : null);
-                            if (personBefore === currentPerson) {
+                        // Check day before / after — ειδική ανά ημερομηνία, όχι month Set
+                        if (beforeType === 'weekend-holiday') {
+                            if (
+                                isSameDutyPersonName(
+                                    simulatedWeekendAssignments[dayBeforeKey]?.[groupNum],
+                                    currentPerson
+                                )
+                            ) {
+                                hasConsecutiveConflict = true;
+                            }
+                        } else if (beforeType === 'special-holiday') {
+                            if (personHasSpecialDutyOnDate(dayBeforeKey, currentPerson, groupNum)) {
                                 hasConsecutiveConflict = true;
                             }
                         }
                         
-                        // Check day after
-                        if (!hasConsecutiveConflict && (afterType === 'weekend-holiday' || afterType === 'special-holiday')) {
-                            const personAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] || 
-                                               (afterType === 'special-holiday' ? 
-                                                (simulatedSpecialAssignments[getMonthKeyFromDate(dayAfter)]?.[groupNum]?.has(currentPerson) ? currentPerson : null) : null);
-                            if (personAfter === currentPerson) {
+                        if (!hasConsecutiveConflict && afterType === 'weekend-holiday') {
+                            if (
+                                isSameDutyPersonName(
+                                    simulatedWeekendAssignments[dayAfterKey]?.[groupNum],
+                                    currentPerson
+                                )
+                            ) {
+                                hasConsecutiveConflict = true;
+                            }
+                        } else if (!hasConsecutiveConflict && afterType === 'special-holiday') {
+                            if (personHasSpecialDutyOnDate(dayAfterKey, currentPerson, groupNum)) {
                                 hasConsecutiveConflict = true;
                             }
                         }
@@ -11916,9 +11961,9 @@
                     runId: 'post-fix',
                     hypothesisId: 'B-semi',
                     location: 'duty-shifts-logic.js:renderStep3_SemiNormal',
-                    message: 'step3_boot_v1663',
+                    message: 'step3_boot_v1664',
                     data: {
-                        versionMarker: '1.663',
+                        versionMarker: '1.664',
                         semiKeys: (calculationSteps.dayTypeLists?.semi || []).slice()
                     },
                     timestamp: Date.now()
@@ -12550,13 +12595,41 @@
             // 2) Defer Firebase saves until after all sync work (see step 4 block)
 
             // 3) Conflict check: person on semi has weekend or special on day before/after (uses precomputed semiMeta)
+            // Ειδική: ανά γειτονική ημερομηνία — ΟΧΙ «οποιαδήποτε ειδική του μήνα»
+            // (π.χ. υπηρεσία στις 24 δεν δημιουργεί σύγκρουση για ημιαργία στις 30 δίπλα στην 31).
             const hasConflict = (semiDateKey, person, groupNum) => {
                 const m = semiMeta[semiDateKey];
                 if (!m) return false;
-                if (m.typeBefore === 'weekend-holiday' && simulatedWeekendAssignments[m.keyBefore]?.[groupNum] === person) return true;
-                if (m.typeBefore === 'special-holiday' && simulatedSpecialAssignments[m.monthKeyBefore]?.[groupNum]?.has(person)) return true;
-                if (m.typeAfter === 'weekend-holiday' && simulatedWeekendAssignments[m.keyAfter]?.[groupNum] === person) return true;
-                if (m.typeAfter === 'special-holiday' && simulatedSpecialAssignments[m.monthKeyAfter]?.[groupNum]?.has(person)) return true;
+                if (
+                    m.typeBefore === 'weekend-holiday' &&
+                    isSameDutyPersonName(
+                        simulatedWeekendAssignments[m.keyBefore]?.[groupNum],
+                        person
+                    )
+                ) {
+                    return true;
+                }
+                if (
+                    m.typeBefore === 'special-holiday' &&
+                    personHasSpecialDutyOnDate(m.keyBefore, person, groupNum)
+                ) {
+                    return true;
+                }
+                if (
+                    m.typeAfter === 'weekend-holiday' &&
+                    isSameDutyPersonName(
+                        simulatedWeekendAssignments[m.keyAfter]?.[groupNum],
+                        person
+                    )
+                ) {
+                    return true;
+                }
+                if (
+                    m.typeAfter === 'special-holiday' &&
+                    personHasSpecialDutyOnDate(m.keyAfter, person, groupNum)
+                ) {
+                    return true;
+                }
                 return false;
             };
 
@@ -12579,7 +12652,45 @@
                     if (typeof shouldRecalculateDutyGroup === 'function' && !shouldRecalculateDutyGroup(groupNum)) continue;
                     if (swappedSet.has(`${dateKey}:${groupNum}`)) continue;
                     const person = finalAssignments[dateKey]?.[groupNum];
-                    if (!person || !hasConflict(dateKey, person, groupNum)) continue;
+                    if (!person) continue;
+                    const conflictNow = hasConflict(dateKey, person, groupNum);
+                    // #region agent log
+                    if (groupNum === 3 && String(dateKey).startsWith('2026-12')) {
+                        const m = semiMeta[dateKey];
+                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Debug-Session-Id': '73ad17'
+                            },
+                            body: JSON.stringify({
+                                sessionId: '73ad17',
+                                runId: 'post-fix',
+                                hypothesisId: 'F',
+                                location: 'duty-shifts-logic.js:semiHasConflict',
+                                message: 'semi_conflict_eval',
+                                data: {
+                                    dateKey,
+                                    groupNum,
+                                    person,
+                                    conflictNow,
+                                    afterKey: m?.keyAfter || null,
+                                    afterType: m?.typeAfter || null,
+                                    specialOnAfter: m?.keyAfter
+                                        ? getSpecialAssigneeOnDate(m.keyAfter, groupNum)
+                                        : null,
+                                    monthSetHasPerson: !!(
+                                        simulatedSpecialAssignments?.[m?.monthKeyAfter]?.[
+                                            groupNum
+                                        ]?.has?.(person)
+                                    )
+                                },
+                                timestamp: Date.now()
+                            })
+                        }).catch(() => {});
+                    }
+                    // #endregion
+                    if (!conflictNow) continue;
                     let swapped = false;
                     for (let k = 0; k < indicesInMonth.length; k++) {
                         const j = indicesInMonth[k];
@@ -13767,11 +13878,13 @@
                             const neighborType = getDayType(neighborDate);
                             const neighborKey = formatDateKey(neighborDate);
                             if (neighborType === 'weekend-holiday') {
-                                return simulatedWeekendAssignments[neighborKey]?.[groupNum] === person;
+                                return isSameDutyPersonName(
+                                    simulatedWeekendAssignments[neighborKey]?.[groupNum],
+                                    person
+                                );
                             }
                             if (neighborType === 'special-holiday') {
-                                const neighborMonthKey = getMonthKeyFromDate(neighborDate);
-                                return simulatedSpecialAssignments[neighborMonthKey]?.[groupNum]?.has(person) || false;
+                                return personHasSpecialDutyOnDate(neighborKey, person, groupNum);
                             }
                             return false;
                         };
@@ -13807,21 +13920,35 @@
                             if (!currentPerson) continue;
                             if (swappedSemiSet.has(`${dateKey}:${groupNum}`)) continue;
 
-                            // Conflict detection same as runSemiNormalSwapLogic()
+                            // Conflict detection: γείτονας ανά ημερομηνία (όχι month-level special Set)
                             let hasConsecutiveConflict = false;
-                            if (beforeType === 'weekend-holiday' || beforeType === 'special-holiday') {
-                                const personBefore = simulatedWeekendAssignments[dayBeforeKey]?.[groupNum] ||
-                                    (beforeType === 'special-holiday'
-                                        ? (simulatedSpecialAssignments[getMonthKeyFromDate(dayBefore)]?.[groupNum]?.has(currentPerson) ? currentPerson : null)
-                                        : null);
-                                if (personBefore === currentPerson) hasConsecutiveConflict = true;
+                            if (beforeType === 'weekend-holiday') {
+                                if (
+                                    isSameDutyPersonName(
+                                        simulatedWeekendAssignments[dayBeforeKey]?.[groupNum],
+                                        currentPerson
+                                    )
+                                ) {
+                                    hasConsecutiveConflict = true;
+                                }
+                            } else if (beforeType === 'special-holiday') {
+                                if (personHasSpecialDutyOnDate(dayBeforeKey, currentPerson, groupNum)) {
+                                    hasConsecutiveConflict = true;
+                                }
                             }
-                            if (!hasConsecutiveConflict && (afterType === 'weekend-holiday' || afterType === 'special-holiday')) {
-                                const personAfter = simulatedWeekendAssignments[dayAfterKey]?.[groupNum] ||
-                                    (afterType === 'special-holiday'
-                                        ? (simulatedSpecialAssignments[getMonthKeyFromDate(dayAfter)]?.[groupNum]?.has(currentPerson) ? currentPerson : null)
-                                        : null);
-                                if (personAfter === currentPerson) hasConsecutiveConflict = true;
+                            if (!hasConsecutiveConflict && afterType === 'weekend-holiday') {
+                                if (
+                                    isSameDutyPersonName(
+                                        simulatedWeekendAssignments[dayAfterKey]?.[groupNum],
+                                        currentPerson
+                                    )
+                                ) {
+                                    hasConsecutiveConflict = true;
+                                }
+                            } else if (!hasConsecutiveConflict && afterType === 'special-holiday') {
+                                if (personHasSpecialDutyOnDate(dayAfterKey, currentPerson, groupNum)) {
+                                    hasConsecutiveConflict = true;
+                                }
                             }
                             if (!hasConsecutiveConflict) continue;
 
@@ -14633,9 +14760,9 @@
                     runId: 'post-fix',
                     hypothesisId: 'B',
                     location: 'duty-shifts-logic.js:renderStep4_Normal',
-                    message: 'step4_boot_v1663',
+                    message: 'step4_boot_v1664',
                     data: {
-                        versionMarker: '1.663',
+                        versionMarker: '1.664',
                         normalKeys: (calculationSteps.dayTypeLists?.normal || []).slice(),
                         semiKeys: (calculationSteps.dayTypeLists?.semi || []).slice()
                     },
