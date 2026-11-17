@@ -947,6 +947,10 @@
             
             // Get last duty date and calculate next duty date
             const dutyDates = getLastAndNextDutyDates(person, groupNum, listType, listArray.length);
+            const vehicleAuthHtml =
+                typeof formatVehicleAuthBadgesHtml === 'function'
+                    ? formatVehicleAuthBadgesHtml(person)
+                    : '';
             
             // Get priority number for this person in this list type
             const priority = groupData.priorities?.[person]?.[listType] ?? 999;
@@ -981,6 +985,11 @@
                         <div style="font-size: 0.75rem; color: #666; margin-top: 0.25rem; margin-left: 1.5rem;">
                             <div><strong>Τελευταία:</strong> ${dutyDates.lastDuty}</div>
                             <div><strong>Επόμενη:</strong> ${dutyDates.nextDuty}</div>
+                            ${
+                                vehicleAuthHtml
+                                    ? `<div class="mt-1"><strong>Οχήματα:</strong> ${vehicleAuthHtml}</div>`
+                                    : ''
+                            }
                         </div>
                     </div>
                 </div>
@@ -1872,6 +1881,91 @@
         window.openDutyTotalsMonthPicker = openDutyTotalsMonthPicker;
         window.openDutyTotalsResults = openDutyTotalsResults;
 
+        // --- Εξουσιοδοτήσεις οχημάτων (IV5, IV10, IV18, M, S) ---
+        function openVehicleAuthorizationsModal() {
+            const modalEl = document.getElementById('vehicleAuthorizationsModal');
+            const content = document.getElementById('vehicleAuthorizationsContent');
+            if (!modalEl || !content) return;
+
+            const codes =
+                typeof DUTY_VEHICLE_CODES !== 'undefined' && Array.isArray(DUTY_VEHICLE_CODES)
+                    ? DUTY_VEHICLE_CODES
+                    : ['IV5', 'IV10', 'IV18', 'M', 'S'];
+            const people =
+                typeof collectPeopleForVehicleAuthMatrix === 'function'
+                    ? collectPeopleForVehicleAuthMatrix()
+                    : [];
+            const esc =
+                typeof escapeHtml === 'function'
+                    ? escapeHtml
+                    : (s) =>
+                          String(s || '')
+                              .replace(/&/g, '&amp;')
+                              .replace(/</g, '&lt;')
+                              .replace(/"/g, '&quot;');
+
+            if (!people.length) {
+                content.innerHTML =
+                    '<p class="text-muted mb-0">Δεν βρέθηκαν άτομα στις ομάδες.</p>';
+            } else {
+                let html = `<div class="table-responsive"><table class="table table-sm table-striped align-middle vehicle-auth-matrix-table mb-0">
+                    <thead><tr>
+                        <th>Άτομο</th>
+                        <th class="text-muted">Ομάδα</th>
+                        ${codes.map((c) => `<th class="text-center">${esc(c)}</th>`).join('')}
+                    </tr></thead><tbody>`;
+                for (const p of people) {
+                    const auth =
+                        typeof getPersonVehicleAuthMap === 'function'
+                            ? getPersonVehicleAuthMap(p.personName)
+                            : {};
+                    html += `<tr data-person="${esc(p.personName)}">
+                        <td class="fw-semibold">${esc(p.personName)}</td>
+                        <td class="small text-muted">${esc(p.groupLabel || '')}</td>`;
+                    for (const c of codes) {
+                        const checked = auth[c] ? ' checked' : '';
+                        html += `<td class="text-center">
+                            <input type="checkbox" class="form-check-input vehicle-auth-check"
+                                data-person="${esc(p.personName)}" data-vehicle="${esc(c)}"${checked}
+                                aria-label="${esc(p.personName)} — ${esc(c)}">
+                        </td>`;
+                    }
+                    html += `</tr>`;
+                }
+                html += `</tbody></table></div>`;
+                content.innerHTML = html;
+            }
+
+            const saveBtn = document.getElementById('vehicleAuthorizationsSaveBtn');
+            if (saveBtn) {
+                saveBtn.onclick = () => {
+                    const checks = content.querySelectorAll('.vehicle-auth-check');
+                    const byPerson = {};
+                    checks.forEach((el) => {
+                        const name = el.getAttribute('data-person');
+                        const veh = el.getAttribute('data-vehicle');
+                        if (!name || !veh) return;
+                        if (!byPerson[name]) byPerson[name] = {};
+                        byPerson[name][veh] = !!el.checked;
+                    });
+                    for (const name of Object.keys(byPerson)) {
+                        if (typeof setPersonVehicleAuthMap === 'function') {
+                            setPersonVehicleAuthMap(name, byPerson[name]);
+                        }
+                    }
+                    if (typeof saveData === 'function') saveData();
+                    if (typeof renderGroups === 'function') renderGroups();
+                    if (typeof renderCalendar === 'function') renderCalendar();
+                    const inst = bootstrap.Modal.getInstance(modalEl);
+                    if (inst) inst.hide();
+                };
+            }
+
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+
+        window.openVehicleAuthorizationsModal = openVehicleAuthorizationsModal;
+
         function lastDutyDateKeyForEditField(personName, groupNumber, listType, storedRaw) {
             // Same as lists: calendar before today, else manual stored
             if (typeof resolveEffectiveLastDutyDateKey === 'function') {
@@ -1981,6 +2075,10 @@
             // If name changed, we need to update all references
             if (nameChanged) {
                 console.log(`[EDIT] Name changed from "${oldName}" to "${name}"`);
+
+                if (typeof renamePersonVehicleAuthorizations === 'function') {
+                    renamePersonVehicleAuthorizations(oldName, name);
+                }
                 
                 // Update name in all 4 lists
                 const listTypes = getPersonListTypesForGroup(currentGroup);
@@ -2513,6 +2611,17 @@
 
             updateExcludeFromDutiesActionButton(groupNum, personName);
             updateReturnToSavedGroupSlotButton(groupNum, personName);
+
+            const vehEl = document.getElementById('personActionsVehicleAuth');
+            if (vehEl) {
+                const badges =
+                    typeof formatVehicleAuthBadgesHtml === 'function'
+                        ? formatVehicleAuthBadgesHtml(personName)
+                        : '';
+                vehEl.innerHTML = badges
+                    ? `<strong>Οχήματα:</strong> ${badges}`
+                    : `<span class="text-muted">Οχήματα: δεν έχει οριστεί εξουσιοδότηση</span>`;
+            }
 
             const modalEl = document.getElementById('personActionsModal');
             const existing = bootstrap.Modal.getInstance(modalEl);
@@ -6436,7 +6545,11 @@
                                 e.listOrder != null
                                     ? ` <span class="duty-list-order" title="Σειρά / προτεραιότητα στη λίστα ${escapeHtml(DUTY_LIST_TYPE_LABELS[dayTypeCategory] || dayTypeCategory)}">(${e.listOrder})</span>`
                                     : '';
-                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${escapeHtml(e.nameOnly)}${listOrderSuffix}${bufferIcon}${spacingIcon}</div>`;
+                            const vehicleBadges =
+                                e.nameOnly && typeof formatVehicleAuthBadgesHtml === 'function'
+                                    ? formatVehicleAuthBadgesHtml(e.nameOnly, { compact: true })
+                                    : '';
+                            displayAssignmentHtml += `<div class="${cls}${e.underline ? ' duty-person-replacement' : ''}" ${e.swapStyle ? `style="${e.swapStyle}"` : ''}>${groupDisplay}. ${escapeHtml(e.nameOnly)}${listOrderSuffix}${vehicleBadges ? ' ' + vehicleBadges : ''}${bufferIcon}${spacingIcon}</div>`;
                         });
                         if (shouldShowHeavyIndicators && assignmentReasons[key]) {
                             displayAssignmentHtml += `<div class="duty-person-swapped" title="Υπάρχουν λόγοι αλλαγής/παράλειψης">*</div>`;

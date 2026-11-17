@@ -133,6 +133,140 @@
          * Key: personScheduleKey / normalizePersonKey → { personName, homeGroup, slots, ... }
          */
         let transferReturnSlots = {};
+
+        /** Εξουσιοδοτήσεις οχημάτων ανά άτομο (IV5, IV10, IV18, M, S). */
+        const DUTY_VEHICLE_CODES = ['IV5', 'IV10', 'IV18', 'M', 'S'];
+        /** { [normalizePersonKey]: { personName, auth: { IV5: bool, ... } } } */
+        let personVehicleAuthorizations = {};
+
+        function emptyVehicleAuthMap() {
+            const m = {};
+            for (const code of DUTY_VEHICLE_CODES) m[code] = false;
+            return m;
+        }
+
+        function normalizeVehicleAuthMap(raw) {
+            const out = emptyVehicleAuthMap();
+            if (!raw || typeof raw !== 'object') return out;
+            for (const code of DUTY_VEHICLE_CODES) {
+                if (raw[code] === true || raw[code] === 1 || raw[code] === '1') out[code] = true;
+            }
+            return out;
+        }
+
+        function getPersonVehicleAuthKey(personName) {
+            if (typeof normalizePersonKey === 'function') return normalizePersonKey(personName);
+            return String(personName || '')
+                .trim()
+                .toLowerCase();
+        }
+
+        function getPersonVehicleAuthMap(personName) {
+            const key = getPersonVehicleAuthKey(personName);
+            if (!key) return emptyVehicleAuthMap();
+            const entry = personVehicleAuthorizations[key];
+            return normalizeVehicleAuthMap(entry?.auth || entry);
+        }
+
+        function getPersonAuthorizedVehicles(personName) {
+            const map = getPersonVehicleAuthMap(personName);
+            return DUTY_VEHICLE_CODES.filter((c) => !!map[c]);
+        }
+
+        function setPersonVehicleAuthMap(personName, authMap) {
+            const key = getPersonVehicleAuthKey(personName);
+            if (!key || !personName) return;
+            const auth = normalizeVehicleAuthMap(authMap);
+            const hasAny = DUTY_VEHICLE_CODES.some((c) => auth[c]);
+            if (!hasAny) {
+                delete personVehicleAuthorizations[key];
+                return;
+            }
+            personVehicleAuthorizations[key] = {
+                personName: String(personName).trim(),
+                auth
+            };
+        }
+
+        function renamePersonVehicleAuthorizations(oldName, newName) {
+            if (!oldName || !newName || oldName === newName) return;
+            const oldKey = getPersonVehicleAuthKey(oldName);
+            const newKey = getPersonVehicleAuthKey(newName);
+            if (!oldKey || !personVehicleAuthorizations[oldKey]) return;
+            const prev = personVehicleAuthorizations[oldKey];
+            delete personVehicleAuthorizations[oldKey];
+            personVehicleAuthorizations[newKey] = {
+                personName: String(newName).trim(),
+                auth: normalizeVehicleAuthMap(prev?.auth || prev)
+            };
+        }
+
+        function formatVehicleAuthBadgesHtml(personName, options = {}) {
+            const codes = getPersonAuthorizedVehicles(personName);
+            if (!codes.length) return '';
+            const esc =
+                typeof escapeHtml === 'function'
+                    ? escapeHtml
+                    : (s) =>
+                          String(s || '')
+                              .replace(/&/g, '&amp;')
+                              .replace(/</g, '&lt;')
+                              .replace(/"/g, '&quot;');
+            const compact = !!options.compact;
+            const title = `Εξουσιοδοτημένος/η: ${codes.join(', ')}`;
+            const badges = codes
+                .map(
+                    (c) =>
+                        `<span class="vehicle-auth-badge${compact ? ' vehicle-auth-badge-compact' : ''}" title="${esc(c)}">${esc(c)}</span>`
+                )
+                .join('');
+            return `<span class="vehicle-auth-badges" title="${esc(title)}">${badges}</span>`;
+        }
+
+        function collectPeopleForVehicleAuthMatrix() {
+            const byNorm = new Map();
+            const maxG = typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4;
+            const add = (name, groupNum) => {
+                if (!name) return;
+                const key = getPersonVehicleAuthKey(name);
+                if (!key) return;
+                if (!byNorm.has(key)) {
+                    byNorm.set(key, {
+                        personName: name,
+                        groupNum: groupNum || null,
+                        groupLabel:
+                            groupNum && typeof getGroupName === 'function'
+                                ? getGroupName(groupNum)
+                                : groupNum
+                                  ? `Ομάδα ${groupNum}`
+                                  : ''
+                    });
+                }
+            };
+            for (let g = 1; g <= maxG; g++) {
+                const gd = groups?.[g];
+                if (!gd) continue;
+                for (const lt of ['special', 'weekend', 'semi', 'normal']) {
+                    for (const p of gd[lt] || []) add(p, g);
+                }
+            }
+            for (const key of Object.keys(personVehicleAuthorizations || {})) {
+                const entry = personVehicleAuthorizations[key];
+                const name = entry?.personName || key;
+                add(name, null);
+            }
+            return [...byNorm.values()].sort((a, b) =>
+                String(a.personName).localeCompare(String(b.personName), 'el')
+            );
+        }
+
+        window.DUTY_VEHICLE_CODES = DUTY_VEHICLE_CODES;
+        window.getPersonVehicleAuthMap = getPersonVehicleAuthMap;
+        window.getPersonAuthorizedVehicles = getPersonAuthorizedVehicles;
+        window.setPersonVehicleAuthMap = setPersonVehicleAuthMap;
+        window.renamePersonVehicleAuthorizations = renamePersonVehicleAuthorizations;
+        window.formatVehicleAuthBadgesHtml = formatVehicleAuthBadgesHtml;
+        window.collectPeopleForVehicleAuthMatrix = collectPeopleForVehicleAuthMatrix;
         
         // Track skip/swap reasons for each assignment
         // Structure: assignmentReasons[dateKey][groupNum][personName] = { type: 'skip'|'swap'|'shift', reason: '...', swappedWith: '...', swapPairId, meta? }
@@ -3800,6 +3934,30 @@
                         transferReturnSlots = {};
                     }
                 }
+
+                try {
+                    const vehDoc = await dutyShifts.doc('vehicleAuthorizations').get();
+                    if (vehDoc.exists) {
+                        const vd = vehDoc.data() || {};
+                        personVehicleAuthorizations =
+                            vd.byPerson && typeof vd.byPerson === 'object' ? vd.byPerson : {};
+                    } else {
+                        try {
+                            const raw = localStorage.getItem('dutyShiftsVehicleAuthorizations');
+                            personVehicleAuthorizations = raw ? JSON.parse(raw) : {};
+                        } catch (_) {
+                            personVehicleAuthorizations = {};
+                        }
+                    }
+                } catch (e) {
+                    console.warn('load vehicleAuthorizations:', e);
+                    try {
+                        const raw = localStorage.getItem('dutyShiftsVehicleAuthorizations');
+                        personVehicleAuthorizations = raw ? JSON.parse(raw) : {};
+                    } catch (_) {
+                        personVehicleAuthorizations = {};
+                    }
+                }
                 
                 console.log('Data loaded from Firebase');
             } catch (error) {
@@ -4070,6 +4228,12 @@
                 transferReturnSlots = savedSlots ? JSON.parse(savedSlots) : {};
             } catch (_) {
                 transferReturnSlots = {};
+            }
+            try {
+                const savedVeh = localStorage.getItem('dutyShiftsVehicleAuthorizations');
+                personVehicleAuthorizations = savedVeh ? JSON.parse(savedVeh) : {};
+            } catch (_) {
+                personVehicleAuthorizations = {};
             }
             
             // Load critical assignments
@@ -4429,6 +4593,22 @@
                 }
 
                 try {
+                    await db.collection('dutyShifts').doc('vehicleAuthorizations').set({
+                        byPerson: sanitizeForFirestore(personVehicleAuthorizations || {}),
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    try {
+                        localStorage.setItem(
+                            'dutyShiftsVehicleAuthorizations',
+                            JSON.stringify(personVehicleAuthorizations || {})
+                        );
+                    } catch (_) {}
+                } catch (error) {
+                    console.error('Error saving vehicleAuthorizations to Firestore:', error);
+                }
+
+                try {
                     ensurePersonStatusScheduleSeeded();
                     if (typeof sanitizePersonStatusScheduleEffectiveDates === 'function') {
                         sanitizePersonStatusScheduleEffectiveDates();
@@ -4708,6 +4888,12 @@
                 localStorage.setItem(
                     'dutyShiftsTransferReturnSlots',
                     JSON.stringify(transferReturnSlots || {})
+                );
+            } catch (_) {}
+            try {
+                localStorage.setItem(
+                    'dutyShiftsVehicleAuthorizations',
+                    JSON.stringify(personVehicleAuthorizations || {})
                 );
             } catch (_) {}
             // Save separate day-type assignments

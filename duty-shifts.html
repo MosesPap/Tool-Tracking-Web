@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="ToolTrack">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.651 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.652 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -1109,6 +1109,46 @@
             opacity: 1;
             color: #BF360C;
             letter-spacing: 0.02em;
+        }
+
+        .vehicle-auth-badges {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            vertical-align: middle;
+            pointer-events: none;
+        }
+
+        .vehicle-auth-badge {
+            display: inline-block;
+            font-size: 0.65rem;
+            font-weight: 700;
+            line-height: 1.2;
+            padding: 1px 4px;
+            border-radius: 3px;
+            background: #E3F2FD;
+            color: #1565C0;
+            border: 1px solid #90CAF9;
+            letter-spacing: 0.02em;
+        }
+
+        .vehicle-auth-badge-compact {
+            font-size: 0.55rem;
+            padding: 0 3px;
+            background: #FFF3E0;
+            color: #E65100;
+            border-color: #FFCC80;
+        }
+
+        .vehicle-auth-matrix-table th,
+        .vehicle-auth-matrix-table td {
+            white-space: nowrap;
+        }
+
+        .vehicle-auth-matrix-table .form-check-input {
+            cursor: pointer;
+            width: 1.15em;
+            height: 1.15em;
         }
 
         .duty-person-critical {
@@ -2383,7 +2423,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.651</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.652</span></h4>
             </div>
             <div class="title-bar-stats d-flex flex-column align-items-end align-items-lg-end gap-1" style="font-weight: 500; opacity: 0.98;">
                 <div class="title-bar-stats-row d-flex align-items-center flex-wrap gap-3" style="font-size: 1.25em;">
@@ -2490,6 +2530,9 @@
                     </button>
                     <button class="btn btn-sm btn-outline-primary" onclick="openDutyTotalsMonthPicker()" title="Σύνολο υπηρεσιών ανά άτομο για επιλεγμένους μήνες">
                         <i class="fas fa-chart-bar me-1"></i>Σύνολα Υπηρεσιών
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="openVehicleAuthorizationsModal()" title="Εξουσιοδοτήσεις οχημάτων ανά άτομο (IV5, IV10, IV18, M, S)">
+                        <i class="fas fa-truck me-1"></i>Οχήματα
                     </button>
                     <button class="btn btn-sm btn-warning" onclick="analyzeRotationViolations()">
                         <i class="fas fa-exclamation-triangle me-1"></i>Έλεγχος Αναθέσεων Υπηρεσιών
@@ -2905,6 +2948,33 @@
                     <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
                     <button type="button" class="btn btn-sm btn-primary" id="dutyTotalsShowBtn">
                         <i class="fas fa-eye me-1"></i>Εμφάνιση συνόλων
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vehicle authorizations matrix -->
+    <div class="modal fade" id="vehicleAuthorizationsModal" tabindex="-1" aria-labelledby="vehicleAuthorizationsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-secondary text-white">
+                    <h5 class="modal-title" id="vehicleAuthorizationsModalLabel">
+                        <i class="fas fa-truck me-2"></i>Εξουσιοδοτήσεις οχημάτων
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Κλείσιμο"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">
+                        Τικάρετε σε ποια οχήματα είναι εξουσιοδοτημένος/η κάθε άτομο (IV5, IV10, IV18, M, S).
+                        Εμφανίζονται στα στοιχεία του ατόμου και στα κελιά υπηρεσιών.
+                    </p>
+                    <div id="vehicleAuthorizationsContent"></div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Ακύρωση</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="vehicleAuthorizationsSaveBtn">
+                        <i class="fas fa-save me-1"></i>Αποθήκευση
                     </button>
                 </div>
             </div>
@@ -3720,7 +3790,8 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <h6><strong>Άτομο:</strong> <span id="personActionsName"></span></h6>
-                        <p class="text-muted"><strong>Ομάδα:</strong> <span id="personActionsGroup"></span></p>
+                        <p class="text-muted mb-1"><strong>Ομάδα:</strong> <span id="personActionsGroup"></span></p>
+                        <p class="mb-0 small" id="personActionsVehicleAuth"></p>
                     </div>
                     <div class="d-grid gap-2">
                         <button type="button" class="btn btn-outline-info" onclick="openEditPersonFromActions()">
@@ -4280,11 +4351,11 @@
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Load duty-shifts files in order: data -> logic -> ui -->
-    <script src="js/duty-shifts-data.js?v=1.651" charset="UTF-8"></script>
+    <script src="js/duty-shifts-data.js?v=1.652" charset="UTF-8"></script>
     <script src="js/duty-shifts-debug.js" charset="UTF-8"></script>
     <script src="js/duty-shifts-night-changes.js?v=1.591" charset="UTF-8"></script>
-    <script src="js/duty-shifts-logic.js?v=1.651" charset="UTF-8"></script>
-    <script src="js/duty-shifts-ui.js?v=1.651" charset="UTF-8"></script>
+    <script src="js/duty-shifts-logic.js?v=1.652" charset="UTF-8"></script>
+    <script src="js/duty-shifts-ui.js?v=1.652" charset="UTF-8"></script>
     <script src="js/duty-shifts-ai-assistant.js" charset="UTF-8"></script>
     <script>
         // NOTE: Main JavaScript code has been moved to js/duty-shifts.js to reduce memory usage
