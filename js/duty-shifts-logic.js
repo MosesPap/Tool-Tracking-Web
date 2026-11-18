@@ -44,6 +44,69 @@
             entries.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
             return entries;
         }
+        /** Organizational hierarchy number for a person (exact name or same identity ignoring rank). */
+        function getRankingForPerson(personName) {
+            if (!personName || !rankings || typeof rankings !== 'object') return 9999;
+            const direct = parseInt(rankings[personName], 10);
+            if (Number.isFinite(direct) && direct > 0) return direct;
+            const norm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey(personName)
+                    : String(personName || '').trim();
+            const id =
+                typeof getPersonIdentityKey === 'function'
+                    ? getPersonIdentityKey(personName)
+                    : norm;
+            for (const k of Object.keys(rankings)) {
+                const v = parseInt(rankings[k], 10);
+                if (!Number.isFinite(v) || v <= 0) continue;
+                const kn =
+                    typeof normalizePersonKey === 'function' ? normalizePersonKey(k) : String(k || '').trim();
+                if (kn === norm) return v;
+                if (
+                    typeof getPersonIdentityKey === 'function' &&
+                    getPersonIdentityKey(k) === id
+                ) {
+                    return v;
+                }
+            }
+            return 9999;
+        }
+        /**
+         * Rename hierarchy key only — keeps the same rank number. Does not reshuffle 1..N.
+         */
+        function renamePersonInRankings(oldName, newName) {
+            if (!oldName || !newName || oldName === newName) return false;
+            if (!rankings || typeof rankings !== 'object') return false;
+            let changed = false;
+            const apply = (fromKey) => {
+                const v = rankings[fromKey];
+                if (v === undefined) return;
+                if (rankings[newName] === undefined) rankings[newName] = v;
+                if (fromKey !== newName) delete rankings[fromKey];
+                changed = true;
+            };
+            if (rankings[oldName] !== undefined) {
+                apply(oldName);
+            } else {
+                const id =
+                    typeof getPersonIdentityKey === 'function'
+                        ? getPersonIdentityKey(oldName)
+                        : String(oldName || '').trim();
+                for (const k of Object.keys(rankings)) {
+                    const kid =
+                        typeof getPersonIdentityKey === 'function'
+                            ? getPersonIdentityKey(k)
+                            : String(k || '').trim();
+                    if (kid === id) {
+                        apply(k);
+                        break;
+                    }
+                }
+            }
+            if (changed) rankingsModified = true;
+            return changed;
+        }
         function insertPersonIntoRankings(personName, desiredRank) {
             const rank = parseInt(desiredRank, 10);
             if (!Number.isFinite(rank) || rank < 1) return;
@@ -17879,12 +17942,15 @@
         }
         function printRotationAndRankings() {
             const printWindow = window.open('', '_blank', 'width=800,height=600');
-            const allPeople = getAllPeople();
-            const sortedByRanking = [...allPeople].sort((a, b) => {
-                const rankA = rankings[a] || 9999;
-                const rankB = rankings[b] || 9999;
-                return rankA - rankB;
-            });
+            const allPeople =
+                typeof getAllPeopleAcrossGroupSets === 'function'
+                    ? getAllPeopleAcrossGroupSets()
+                    : getAllPeople();
+            const rankOf =
+                typeof getRankingForPerson === 'function'
+                    ? getRankingForPerson
+                    : (p) => rankings[p] || 9999;
+            const sortedByRanking = [...allPeople].sort((a, b) => rankOf(a) - rankOf(b));
             const listTypes = [
                 { key: 'special', name: 'Ειδικές Αργίες' },
                 { key: 'weekend', name: 'Σαββατοκύριακα/Αργίες' },
@@ -17969,7 +18035,11 @@
             <tbody>
 `;
             sortedByRanking.forEach((person) => {
-                const rank = rankings[person] || null;
+                const rankRaw =
+                    typeof getRankingForPerson === 'function'
+                        ? getRankingForPerson(person)
+                        : rankings[person] || 9999;
+                const rank = rankRaw < 9999 ? rankRaw : null;
                 const personGroup = getPersonGroup(person);
                 const groupName = personGroup ? getGroupName(personGroup) : '-';
                 html += `            <tr>

@@ -2136,8 +2136,11 @@
             // Store last duties - use new name (name) for the key
             const personKey = name;
             
-            // IMPORTANT: Read old lastDuties BEFORE updating, so we can compare and remove old assignments
+            // IMPORTANT: Read old lastDuties/priorities BEFORE renaming keys
             const oldLastDuties = isEditingPerson ? (groups[currentGroup].lastDuties[oldName] || {}) : {};
+            const oldPrioritiesSnapshot = isEditingPerson
+                ? { ...(groups[currentGroup].priorities?.[oldName] || {}) }
+                : {};
             
             // If name changed, we need to update all references
             if (nameChanged) {
@@ -2182,12 +2185,15 @@
                     console.log(`[EDIT] Renamed priorities key from "${oldName}" to "${name}"`);
                 }
 
-                // Rename hierarchy ranking key (live roster only — do not rewrite past calendar cells)
-                if (typeof rankings === 'object' && rankings && rankings[oldName] !== undefined) {
+                // Hierarchy: keep the same rank number under the new name — never reshuffle 1..N here
+                if (typeof renamePersonInRankings === 'function') {
+                    renamePersonInRankings(oldName, name);
+                } else if (typeof rankings === 'object' && rankings && rankings[oldName] !== undefined) {
                     if (rankings[name] === undefined) {
                         rankings[name] = rankings[oldName];
                     }
                     delete rankings[oldName];
+                    rankingsModified = true;
                 }
                 if (groups[currentGroup].disabledPersons) {
                     const dp = groups[currentGroup].disabledPersons;
@@ -2218,11 +2224,19 @@
                 semi: lastSemiDuty || null,
                 normal: lastNormalDuty || null
             };
+
+            // Mirror name + lastDuties into the other group set (3↔4) so mode switch keeps edits
+            if (typeof syncPersonEditToInactiveGroupSet === 'function') {
+                syncPersonEditToInactiveGroupSet(
+                    oldName || name,
+                    personKey,
+                    groups[currentGroup].lastDuties[personKey]
+                );
+            }
             
-            // Handle priority position shifts when editing
+            // Handle priority position shifts when editing (active set only — list order is set-specific)
             if (isEditingPerson) {
-                // Get old priorities before updating
-                const oldPriorities = groups[currentGroup].priorities[oldName] || {};
+                const oldPriorities = oldPrioritiesSnapshot;
                 const listTypes = getPersonListTypesForGroup(currentGroup);
                 const priorityInputs = {
                     special: prioritySpecial ? parseInt(prioritySpecial) : null,
@@ -2237,7 +2251,7 @@
                     
                     // Only process if priority actually changed and new priority is provided
                     if (newPriority !== null && oldPriority !== undefined && oldPriority !== newPriority) {
-                        // Get current sorted list to find positions
+                        // Get current sorted list to find positions (list already uses current name after rename)
                         const sortedList = [...groups[currentGroup][listType]].sort((a, b) => {
                             const priorityA = groups[currentGroup].priorities?.[a]?.[listType] ?? 999;
                             const priorityB = groups[currentGroup].priorities?.[b]?.[listType] ?? 999;
@@ -2251,8 +2265,7 @@
                             return new Date(dateB) - new Date(dateA);
                         });
                         
-                        // Find current position (1-based) of the person being edited in the sorted list
-                        const currentPos = sortedList.indexOf(oldName) + 1;
+                        const currentPos = sortedList.indexOf(personKey) + 1;
                         const targetPos = newPriority;
                         
                         // Only shift if positions are different and target is valid
@@ -2265,13 +2278,12 @@
                             });
                             
                             // Create new list order with edited person at target position
-                            // Remove the person being edited from the list
-                            const listWithoutEdited = sortedList.filter(p => p !== oldName);
+                            const listWithoutEdited = sortedList.filter(p => p !== personKey);
                             
                             // Insert edited person at target position (1-based, so insert at index targetPos - 1)
                             const newList = [...listWithoutEdited];
                             const insertIndex = Math.min(targetPos - 1, newList.length);
-                            newList.splice(insertIndex, 0, oldName);
+                            newList.splice(insertIndex, 0, personKey);
                             
                             // Reassign priorities sequentially (1, 2, 3, ...) based on new order
                             // This implements the "bump" behavior: everyone shifts to make room
@@ -2280,12 +2292,10 @@
                                 if (!groups[currentGroup].priorities[person]) {
                                     groups[currentGroup].priorities[person] = {};
                                 }
-                                // Update priority to reflect new position
-                                // Only update if person had a valid priority before (not 999 default) or is the person being edited
-                                const hadValidPriority = person === oldName || 
+                                const hadValidPriority = person === personKey || 
                                     (groups[currentGroup].priorities[person][listType] !== undefined && 
                                      groups[currentGroup].priorities[person][listType] < 999);
-                                if (hadValidPriority || person === oldName) {
+                                if (hadValidPriority || person === personKey) {
                                     groups[currentGroup].priorities[person][listType] = newPos;
                                 }
                             });
@@ -4307,22 +4317,159 @@
                 updateStatistics();
             }
         }
-        function getAllPeople() {
+        function collectPeopleFromGroupSet(groupSet, maxGroups) {
             const allPeople = new Set();
-            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
-                const group = groups[groupNum];
-                if (group) {
-                    ['special', 'weekend', 'semi', 'normal'].forEach(listType => {
-                        if (Array.isArray(group[listType])) {
-                            group[listType].forEach(person => allPeople.add(person));
-                        }
-                    });
+            if (!groupSet || typeof groupSet !== 'object') return allPeople;
+            const maxG = maxGroups || 4;
+            for (let groupNum = 1; groupNum <= maxG; groupNum++) {
+                const group = groupSet[groupNum];
+                if (!group) continue;
+                ['special', 'weekend', 'semi', 'normal'].forEach((listType) => {
+                    if (Array.isArray(group[listType])) {
+                        group[listType].forEach((person) => {
+                            if (person) allPeople.add(person);
+                        });
+                    }
+                });
+            }
+            return allPeople;
+        }
+        /** People in the currently active 3/4 group set only. */
+        function getAllPeople() {
+            return Array.from(
+                collectPeopleFromGroupSet(groups, typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4)
+            ).sort();
+        }
+        /** Union of people across both parallel group sets (for org hierarchy). */
+        function getAllPeopleAcrossGroupSets() {
+            const all = new Set();
+            const four =
+                typeof getGroupsFour === 'function' ? getGroupsFour() : typeof groupsFour !== 'undefined' ? groupsFour : null;
+            const three =
+                typeof getGroupsThree === 'function' ? getGroupsThree() : typeof groupsThree !== 'undefined' ? groupsThree : null;
+            collectPeopleFromGroupSet(four, 4).forEach((p) => all.add(p));
+            collectPeopleFromGroupSet(three, 3).forEach((p) => all.add(p));
+            // Also include active pointer (in case sets not synced to four/three vars yet)
+            collectPeopleFromGroupSet(
+                groups,
+                typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4
+            ).forEach((p) => all.add(p));
+            return Array.from(all).sort();
+        }
+        function personKeysMatchForSync(a, b) {
+            if (!a || !b) return false;
+            if (a === b) return true;
+            if (typeof personNamesMatchIgnoringRank === 'function') {
+                return personNamesMatchIgnoringRank(a, b);
+            }
+            if (typeof getPersonIdentityKey === 'function') {
+                return getPersonIdentityKey(a) === getPersonIdentityKey(b);
+            }
+            return false;
+        }
+        /** Rename person keys inside one group bucket (lists + meta maps). */
+        function renamePersonInsideGroupBucket(bucket, fromName, toName) {
+            if (!bucket || !fromName || !toName || fromName === toName) return false;
+            let changed = false;
+            for (const listType of ['special', 'weekend', 'semi', 'normal']) {
+                const list = bucket[listType];
+                if (!Array.isArray(list)) continue;
+                for (let i = 0; i < list.length; i++) {
+                    if (list[i] === fromName) {
+                        list[i] = toName;
+                        changed = true;
+                    }
                 }
             }
-            return Array.from(allPeople).sort();
+            const renameMapKey = (obj) => {
+                if (!obj || typeof obj !== 'object' || obj[fromName] === undefined) return;
+                if (obj[toName] === undefined) obj[toName] = obj[fromName];
+                delete obj[fromName];
+                changed = true;
+            };
+            renameMapKey(bucket.lastDuties);
+            renameMapKey(bucket.priorities);
+            renameMapKey(bucket.missingPeriods);
+            renameMapKey(bucket.disabledPersons);
+            renameMapKey(bucket.excludedFromDuties);
+            return changed;
         }
-        function getPersonGroup(personName) {
-            if (!personName) return null;
+        /**
+         * Person edits must apply to the inactive 3/4 set too (name + lastDuties).
+         * Priorities stay set-specific (lists differ between modes).
+         */
+        function syncPersonEditToInactiveGroupSet(oldName, newName, lastDutiesObj) {
+            const mode = typeof getActiveGroupMode === 'function' ? getActiveGroupMode() : '4';
+            const inactiveSet =
+                mode === '3'
+                    ? typeof getGroupsFour === 'function'
+                        ? getGroupsFour()
+                        : typeof groupsFour !== 'undefined'
+                          ? groupsFour
+                          : null
+                    : typeof getGroupsThree === 'function'
+                      ? getGroupsThree()
+                      : typeof groupsThree !== 'undefined'
+                        ? groupsThree
+                        : null;
+            const maxG = mode === '3' ? 4 : 3;
+            if (!inactiveSet || !newName) return;
+
+            for (let g = 1; g <= maxG; g++) {
+                const bucket = inactiveSet[g];
+                if (!bucket) continue;
+                let foundKey = null;
+                for (const listType of ['special', 'weekend', 'semi', 'normal']) {
+                    const list = bucket[listType] || [];
+                    for (const p of list) {
+                        if (
+                            p === newName ||
+                            (oldName && p === oldName) ||
+                            personKeysMatchForSync(p, newName) ||
+                            (oldName && personKeysMatchForSync(p, oldName))
+                        ) {
+                            foundKey = p;
+                            break;
+                        }
+                    }
+                    if (foundKey) break;
+                }
+                // Also check meta maps if not in lists
+                if (!foundKey) {
+                    for (const mapName of ['lastDuties', 'priorities', 'missingPeriods', 'disabledPersons']) {
+                        const map = bucket[mapName];
+                        if (!map || typeof map !== 'object') continue;
+                        for (const k of Object.keys(map)) {
+                            if (
+                                k === newName ||
+                                (oldName && k === oldName) ||
+                                personKeysMatchForSync(k, newName) ||
+                                (oldName && personKeysMatchForSync(k, oldName))
+                            ) {
+                                foundKey = k;
+                                break;
+                            }
+                        }
+                        if (foundKey) break;
+                    }
+                }
+                if (!foundKey) continue;
+                if (foundKey !== newName) {
+                    renamePersonInsideGroupBucket(bucket, foundKey, newName);
+                }
+                if (lastDutiesObj && typeof lastDutiesObj === 'object') {
+                    if (!bucket.lastDuties) bucket.lastDuties = {};
+                    bucket.lastDuties[newName] = {
+                        special: lastDutiesObj.special || null,
+                        weekend: lastDutiesObj.weekend || null,
+                        semi: lastDutiesObj.semi || null,
+                        normal: lastDutiesObj.normal || null
+                    };
+                }
+            }
+        }
+        function findPersonGroupInSet(groupSet, maxGroups, personName) {
+            if (!personName || !groupSet) return null;
             const targetNorm =
                 typeof normalizePersonKey === 'function'
                     ? normalizePersonKey(personName)
@@ -4331,30 +4478,42 @@
                 typeof getPersonIdentityKey === 'function'
                     ? getPersonIdentityKey(personName)
                     : targetNorm;
-            for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
-                const group = groups[groupNum];
-                if (group) {
-                    const listTypes = ['special', 'weekend', 'semi', 'normal'];
-                    for (const listType of listTypes) {
-                        if (!Array.isArray(group[listType])) continue;
-                        if (group[listType].includes(personName)) return groupNum;
-                        for (const p of group[listType]) {
-                            const pn =
-                                typeof normalizePersonKey === 'function'
-                                    ? normalizePersonKey(p)
-                                    : String(p || '').trim();
-                            if (pn === targetNorm) return groupNum;
-                            if (
-                                typeof getPersonIdentityKey === 'function' &&
-                                getPersonIdentityKey(p) === targetId
-                            ) {
-                                return groupNum;
-                            }
+            const maxG = maxGroups || 4;
+            for (let groupNum = 1; groupNum <= maxG; groupNum++) {
+                const group = groupSet[groupNum];
+                if (!group) continue;
+                for (const listType of ['special', 'weekend', 'semi', 'normal']) {
+                    if (!Array.isArray(group[listType])) continue;
+                    if (group[listType].includes(personName)) return groupNum;
+                    for (const p of group[listType]) {
+                        const pn =
+                            typeof normalizePersonKey === 'function'
+                                ? normalizePersonKey(p)
+                                : String(p || '').trim();
+                        if (pn === targetNorm) return groupNum;
+                        if (
+                            typeof getPersonIdentityKey === 'function' &&
+                            getPersonIdentityKey(p) === targetId
+                        ) {
+                            return groupNum;
                         }
                     }
                 }
             }
             return null;
+        }
+        function getPersonGroup(personName) {
+            const active = findPersonGroupInSet(
+                groups,
+                typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4,
+                personName
+            );
+            if (active != null) return active;
+            const four =
+                typeof getGroupsFour === 'function' ? getGroupsFour() : typeof groupsFour !== 'undefined' ? groupsFour : null;
+            const three =
+                typeof getGroupsThree === 'function' ? getGroupsThree() : typeof groupsThree !== 'undefined' ? groupsThree : null;
+            return findPersonGroupInSet(four, 4, personName) ?? findPersonGroupInSet(three, 3, personName);
         }
         function getPersonDetails(personName) {
             for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
@@ -4632,7 +4791,11 @@
             window.handleDutyPersonSearchKeydown = handleDutyPersonSearchKeydown;
         }
         function openRankingsModal() {
-            const allPeople = getAllPeople();
+            // Org-wide list: both 3- and 4-group sets so mode switch does not hide / reshuffle people
+            const allPeople =
+                typeof getAllPeopleAcrossGroupSets === 'function'
+                    ? getAllPeopleAcrossGroupSets()
+                    : getAllPeople();
             const container = document.getElementById('rankingsListBody');
             container.innerHTML = '';
             
@@ -4642,28 +4805,33 @@
                 modal.show();
                 return;
             }
+
+            const rankOf =
+                typeof getRankingForPerson === 'function'
+                    ? getRankingForPerson
+                    : (p) => (rankings[p] && rankings[p] > 0 ? rankings[p] : 9999);
             
             // Sort people by ranking from Firestore (rankings loaded from Firestore in loadData)
             // Rankings are stored in the global 'rankings' object: { "Person Name": rankNumber }
             const sortedPeople = [...allPeople].sort((a, b) => {
-                // Get ranking from Firestore data (rankings object)
-                const rankA = rankings[a] || 9999;  // Use 9999 for unranked people (put them at end)
-                const rankB = rankings[b] || 9999;
-                return rankA - rankB;  // Sort ascending: 1, 2, 3, ... 9999
+                const rankA = rankOf(a);
+                const rankB = rankOf(b);
+                return rankA - rankB || String(a).localeCompare(String(b));
             });
             
             // Find the highest ranking to assign sequential numbers to unranked people
-            const rankedPeople = sortedPeople.filter(p => rankings[p] && rankings[p] > 0);
-            const unrankedPeople = sortedPeople.filter(p => !rankings[p] || rankings[p] <= 0);
+            const rankedPeople = sortedPeople.filter(p => rankOf(p) < 9999);
+            const unrankedPeople = sortedPeople.filter(p => rankOf(p) >= 9999);
             const maxRanking = rankedPeople.length > 0 
-                ? Math.max(...rankedPeople.map(p => rankings[p]))
+                ? Math.max(...rankedPeople.map(p => rankOf(p)))
                 : 0;
             
             // Create draggable items for each person
             sortedPeople.forEach((person, index) => {
                 let currentRanking;
-                if (rankings[person] && rankings[person] > 0) {
-                    currentRanking = rankings[person];
+                const existing = rankOf(person);
+                if (existing < 9999) {
+                    currentRanking = existing;
                 } else {
                     // Assign sequential ranking starting from maxRanking + 1
                     const unrankedIndex = unrankedPeople.indexOf(person);
@@ -5000,25 +5168,60 @@
         }
         function normalizeRankingsSequential() {
             // Preserve current ordering by rank, just remove gaps.
-            // Also drop any rankings entries for people who no longer exist in any group lists.
-            const all = new Set(getAllPeople());
-            const entries = getSortedRankingsList().filter(e => all.has(e.name)); // already sorted ascending by rank
+            // Also drop any rankings entries for people who no longer exist in ANY group set (3 or 4).
+            const allNames =
+                typeof getAllPeopleAcrossGroupSets === 'function'
+                    ? getAllPeopleAcrossGroupSets()
+                    : getAllPeople();
+            const all = new Set(allNames);
+            // Keep entries that match exact name OR same identity as someone still in a set
+            const entries = getSortedRankingsList().filter((e) => {
+                if (all.has(e.name)) return true;
+                if (typeof getPersonIdentityKey !== 'function') return false;
+                const id = getPersonIdentityKey(e.name);
+                return allNames.some((p) => getPersonIdentityKey(p) === id);
+            });
             const out = {};
             entries.forEach((e, idx) => {
-                out[e.name] = idx + 1;
+                // Prefer live roster spelling when identity matches a current person
+                let key = e.name;
+                if (!all.has(key) && typeof getPersonIdentityKey === 'function') {
+                    const id = getPersonIdentityKey(e.name);
+                    const live = allNames.find((p) => getPersonIdentityKey(p) === id);
+                    if (live) key = live;
+                }
+                if (out[key] == null) out[key] = idx + 1;
             });
             rankings = out;
             rankingsModified = true;
         }
         function isPersonInAnyGroupLists(personName) {
-            for (let g = 1; g <= getDutyGroupCount(); g++) {
-                const gd = groups?.[g];
-                if (!gd) continue;
-                if (['special', 'weekend', 'semi', 'normal'].some(t => (gd[t] || []).includes(personName))) {
-                    return true;
+            if (!personName) return false;
+            const checkSet = (groupSet, maxG) => {
+                if (!groupSet) return false;
+                for (let g = 1; g <= maxG; g++) {
+                    const gd = groupSet[g];
+                    if (!gd) continue;
+                    if (
+                        ['special', 'weekend', 'semi', 'normal'].some((t) =>
+                            (gd[t] || []).some(
+                                (p) => p === personName || personKeysMatchForSync(p, personName)
+                            )
+                        )
+                    ) {
+                        return true;
+                    }
                 }
+                return false;
+            };
+            if (checkSet(groups, typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4)) {
+                return true;
             }
-            return false;
+            const four =
+                typeof getGroupsFour === 'function' ? getGroupsFour() : typeof groupsFour !== 'undefined' ? groupsFour : null;
+            const three =
+                typeof getGroupsThree === 'function' ? getGroupsThree() : typeof groupsThree !== 'undefined' ? groupsThree : null;
+            return checkSet(four, 4) || checkSet(three, 3);
         }
         function removePerson(groupNumber, index, listType) {
             if (confirm('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτό το άτομο από αυτή τη λίστα;')) {
@@ -6524,7 +6727,12 @@
                                     : String(personName || '').trim();
                             if (idKey && seenIdentity.has(idKey)) continue;
                             if (idKey) seenIdentity.add(idKey);
-                            const rank = Number.isFinite(parseInt(rankings?.[personName], 10)) ? parseInt(rankings[personName], 10) : 9999;
+                            const rank =
+                                typeof getRankingForPerson === 'function'
+                                    ? getRankingForPerson(personName)
+                                    : Number.isFinite(parseInt(rankings?.[personName], 10))
+                                      ? parseInt(rankings[personName], 10)
+                                      : 9999;
                             let underline = false;
                             let isSwap = false;
                             let isThursdaySpacingSwap = false;
@@ -11220,12 +11428,15 @@
                 typeof isPersonExcludedFromDuties === 'function' &&
                 !!groupNum &&
                 isPersonExcludedFromDuties(person, groupNum);
-            const allPeople = getAllPeople();
-            const sortedByRanking = [...allPeople].sort((a, b) => {
-                const rankA = rankings[a] || 9999;
-                const rankB = rankings[b] || 9999;
-                return rankA - rankB;
-            });
+            const allPeople =
+                typeof getAllPeopleAcrossGroupSets === 'function'
+                    ? getAllPeopleAcrossGroupSets()
+                    : getAllPeople();
+            const rankOf =
+                typeof getRankingForPerson === 'function'
+                    ? getRankingForPerson
+                    : (p) => rankings[p] || 9999;
+            const sortedByRanking = [...allPeople].sort((a, b) => rankOf(a) - rankOf(b));
             
             const listTypes = [
                 { key: 'special', name: 'Ειδικές Αργίες' },
@@ -11347,7 +11558,11 @@
             <tbody>
 `;
             sortedByRanking.forEach((person) => {
-                const rank = rankings[person] || null;
+                const rankRaw =
+                    typeof getRankingForPerson === 'function'
+                        ? getRankingForPerson(person)
+                        : rankings[person] || 9999;
+                const rank = rankRaw < 9999 ? rankRaw : null;
                 const personGroup = getPersonGroup(person);
                 const groupName = personGroup ? getGroupName(personGroup) : '-';
                 const excluded = isExcludedPerson(person, personGroup);
