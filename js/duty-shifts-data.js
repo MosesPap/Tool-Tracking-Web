@@ -939,23 +939,36 @@
             const keysB = new Set(orderB.map((p) => personScheduleKey(p)));
             return orderA.every((p) => keysB.has(personScheduleKey(p)));
         }
+        /**
+         * Duty-list sort: excluded-from-duties people always last, then priority, then last-duty date.
+         * Shared by UI lists and rotation order.
+         */
+        function comparePeopleForDutyListSort(groupNum, listType, a, b) {
+            const g = groups?.[groupNum];
+            if (!g) return 0;
+            const exA = typeof isPersonExcludedFromDuties === 'function' && isPersonExcludedFromDuties(a, groupNum);
+            const exB = typeof isPersonExcludedFromDuties === 'function' && isPersonExcludedFromDuties(b, groupNum);
+            if (exA !== exB) return exA ? 1 : -1;
+
+            const priorities = g.priorities || {};
+            const priorityA = priorities[a]?.[listType] ?? 999;
+            const priorityB = priorities[b]?.[listType] ?? 999;
+            if (priorityA !== priorityB) return priorityA - priorityB;
+
+            const dateA = g.lastDuties?.[a]?.[listType];
+            const dateB = g.lastDuties?.[b]?.[listType];
+            if (!dateA && !dateB) return 0;
+            if (!dateA) return 1;
+            if (!dateB) return -1;
+            return new Date(dateB) - new Date(dateA);
+        }
+
         /** Rotation order = priority sort (same rule as renderGroups), not raw array insertion order. */
         function getSortedGroupListForRotation(groupNum, listType) {
             const g = groups[groupNum];
             if (!g) return [];
             const list = (g[listType] || []).slice();
-            const priorities = g.priorities || {};
-            list.sort((a, b) => {
-                const priorityA = priorities[a]?.[listType] ?? 999;
-                const priorityB = priorities[b]?.[listType] ?? 999;
-                if (priorityA !== priorityB) return priorityA - priorityB;
-                const dateA = g.lastDuties?.[a]?.[listType];
-                const dateB = g.lastDuties?.[b]?.[listType];
-                if (!dateA && !dateB) return 0;
-                if (!dateA) return 1;
-                if (!dateB) return -1;
-                return new Date(dateB) - new Date(dateA);
-            });
+            list.sort((a, b) => comparePeopleForDutyListSort(groupNum, listType, a, b));
             return list;
         }
         function getListOrderAtDate(groupNum, listType, dateKey) {
@@ -1009,18 +1022,143 @@
             }
             return false;
         }
-        function setPersonExcludedFromDuties(groupNum, personName, excluded) {
-            const g = groups?.[groupNum];
-            if (!g || !personName) return;
-            if (!g.excludedFromDuties) g.excludedFromDuties = {};
-            const pk = personScheduleKey(personName) || personName;
-            if (excluded) {
-                g.excludedFromDuties[pk] = true;
-                if (pk !== personName) delete g.excludedFromDuties[personName];
-            } else {
-                delete g.excludedFromDuties[pk];
-                delete g.excludedFromDuties[personName];
+        function personMatchesExclusionKey(candidate, personName) {
+            if (!candidate || !personName) return false;
+            if (candidate === personName) return true;
+            const pk = personScheduleKey(personName);
+            const ck = personScheduleKey(candidate);
+            if (pk && ck && pk === ck) return true;
+            if (typeof personNamesMatchIgnoringRank === 'function') {
+                return personNamesMatchIgnoringRank(candidate, personName);
             }
+            if (typeof getPersonIdentityKey === 'function') {
+                return getPersonIdentityKey(candidate) === getPersonIdentityKey(personName);
+            }
+            return false;
+        }
+
+        function isPersonExcludedInBucket(bucket, person) {
+            if (!bucket || !person) return false;
+            const map = bucket.excludedFromDuties || {};
+            const pk = personScheduleKey(person);
+            if (map[person] === true || (pk && map[pk] === true)) return true;
+            if (!pk) return false;
+            for (const k of Object.keys(map)) {
+                if (map[k] === true && personScheduleKey(k) === pk) return true;
+            }
+            return false;
+        }
+
+        /** Sort all duty-type lists in a bucket: excluded last, then priority / last duty. */
+        function syncDutyListOrderInBucket(bucket) {
+            if (!bucket) return;
+            const types = ['special', 'weekend', 'semi', 'normal'];
+            for (const listType of types) {
+                if (!Array.isArray(bucket[listType])) continue;
+                const priorities = bucket.priorities || {};
+                bucket[listType] = bucket[listType].slice().sort((a, b) => {
+                    const exA = isPersonExcludedInBucket(bucket, a);
+                    const exB = isPersonExcludedInBucket(bucket, b);
+                    if (exA !== exB) return exA ? 1 : -1;
+                    const priorityA = priorities[a]?.[listType] ?? 999;
+                    const priorityB = priorities[b]?.[listType] ?? 999;
+                    if (priorityA !== priorityB) return priorityA - priorityB;
+                    const dateA = bucket.lastDuties?.[a]?.[listType];
+                    const dateB = bucket.lastDuties?.[b]?.[listType];
+                    if (!dateA && !dateB) return 0;
+                    if (!dateA) return 1;
+                    if (!dateB) return -1;
+                    return new Date(dateB) - new Date(dateA);
+                });
+            }
+        }
+
+        function setExclusionFlagInBucket(bucket, personName, excluded) {
+            if (!bucket || !personName) return false;
+            if (!bucket.excludedFromDuties) bucket.excludedFromDuties = {};
+            const pk = personScheduleKey(personName) || personName;
+            // Clear any alias keys for same identity first
+            for (const k of Object.keys(bucket.excludedFromDuties)) {
+                if (personMatchesExclusionKey(k, personName)) {
+                    delete bucket.excludedFromDuties[k];
+                }
+            }
+            if (excluded) {
+                bucket.excludedFromDuties[pk] = true;
+            }
+            syncDutyListOrderInBucket(bucket);
+            return true;
+        }
+
+        /**
+         * Apply exclusion to every group bucket in a set where the person appears (lists or meta).
+         * @returns {number} buckets updated
+         */
+        function setPersonExcludedInGroupSet(groupSet, maxGroups, personName, excluded) {
+            if (!groupSet || !personName) return 0;
+            let updated = 0;
+            for (let g = 1; g <= maxGroups; g++) {
+                const bucket = groupSet[g];
+                if (!bucket) continue;
+                let found = false;
+                for (const listType of ['special', 'weekend', 'semi', 'normal']) {
+                    const list = bucket[listType] || [];
+                    if (list.some((p) => personMatchesExclusionKey(p, personName))) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    for (const mapName of ['lastDuties', 'priorities', 'missingPeriods', 'disabledPersons', 'excludedFromDuties']) {
+                        const map = bucket[mapName];
+                        if (!map || typeof map !== 'object') continue;
+                        if (Object.keys(map).some((k) => personMatchesExclusionKey(k, personName))) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (!found) continue;
+                // Prefer live list spelling as key when present
+                let liveName = personName;
+                for (const listType of ['special', 'weekend', 'semi', 'normal']) {
+                    const hit = (bucket[listType] || []).find((p) => personMatchesExclusionKey(p, personName));
+                    if (hit) {
+                        liveName = hit;
+                        break;
+                    }
+                }
+                if (setExclusionFlagInBucket(bucket, liveName, excluded)) updated++;
+            }
+            return updated;
+        }
+
+        function setPersonExcludedFromDuties(groupNum, personName, excluded) {
+            if (!personName) return;
+            const g = groups?.[groupNum];
+            if (g) {
+                if (!g.excludedFromDuties) g.excludedFromDuties = {};
+                const pk = personScheduleKey(personName) || personName;
+                for (const k of Object.keys(g.excludedFromDuties)) {
+                    if (personMatchesExclusionKey(k, personName)) delete g.excludedFromDuties[k];
+                }
+                if (excluded) {
+                    g.excludedFromDuties[pk] = true;
+                }
+                if (typeof syncGroupListArraysFromPriorities === 'function') {
+                    syncGroupListArraysFromPriorities(groupNum);
+                } else {
+                    syncDutyListOrderInBucket(g);
+                }
+            }
+
+            // Mirror exclusion + list order to the other parallel set (3 ↔ 4) and refresh active set too.
+            const four =
+                typeof getGroupsFour === 'function' ? getGroupsFour() : typeof groupsFour !== 'undefined' ? groupsFour : null;
+            const three =
+                typeof getGroupsThree === 'function' ? getGroupsThree() : typeof groupsThree !== 'undefined' ? groupsThree : null;
+            setPersonExcludedInGroupSet(four, 4, personName, excluded);
+            setPersonExcludedInGroupSet(three, 3, personName, excluded);
         }
         function filterExcludedFromDutyList(list, groupNum) {
             if (!Array.isArray(list) || !list.length) return Array.isArray(list) ? list.slice() : [];
@@ -1215,6 +1353,7 @@
         window.setDutyCalcContextDateKey = setDutyCalcContextDateKey;
         window.clearDutyCalcContextDateKey = clearDutyCalcContextDateKey;
         window.groupsForDuty = groupsForDuty;
+        window.comparePeopleForDutyListSort = comparePeopleForDutyListSort;
         window.getSortedGroupListForRotation = getSortedGroupListForRotation;
         window.getGroupRotationListAtDate = getGroupRotationListAtDate;
         window.syncGroupListArraysFromPriorities = syncGroupListArraysFromPriorities;

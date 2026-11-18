@@ -827,24 +827,25 @@
                 listTypes.forEach(listType => {
                     if (groupData[listType]) {
                         groupData[listType].sort((a, b) => {
-                            // Get priorities (default to 999 if not set)
+                            if (typeof comparePeopleForDutyListSort === 'function') {
+                                return comparePeopleForDutyListSort(i, listType, a, b);
+                            }
+                            // Fallback: excluded last, then priority, then last duty
+                            const exA =
+                                typeof isPersonExcludedFromDuties === 'function' &&
+                                isPersonExcludedFromDuties(a, i);
+                            const exB =
+                                typeof isPersonExcludedFromDuties === 'function' &&
+                                isPersonExcludedFromDuties(b, i);
+                            if (exA !== exB) return exA ? 1 : -1;
                             const priorityA = groupData.priorities[a]?.[listType] ?? 999;
                             const priorityB = groupData.priorities[b]?.[listType] ?? 999;
-                            
-                            // First sort by priority (lower number = higher priority)
-                            if (priorityA !== priorityB) {
-                                return priorityA - priorityB;
-                            }
-                            
-                            // If priorities are equal, sort by last duty date (most recent first, no date last)
+                            if (priorityA !== priorityB) return priorityA - priorityB;
                             const dateA = groupData.lastDuties?.[a]?.[listType];
                             const dateB = groupData.lastDuties?.[b]?.[listType];
-                            
-                            if (!dateA && !dateB) return 0; // Both have no date, maintain order
-                            if (!dateA) return 1; // A has no date, put it last
-                            if (!dateB) return -1; // B has no date, put it last
-                            
-                            // Both have dates, sort by date (most recent first)
+                            if (!dateA && !dateB) return 0;
+                            if (!dateA) return 1;
+                            if (!dateB) return -1;
                             return new Date(dateB) - new Date(dateA);
                         });
                     }
@@ -1514,6 +1515,13 @@
             const g = groups[groupNum];
             if (!g || !Array.isArray(g[listType])) return;
             g[listType].sort((a, b) => {
+                const exA =
+                    typeof isPersonExcludedFromDuties === 'function' &&
+                    isPersonExcludedFromDuties(a, groupNum);
+                const exB =
+                    typeof isPersonExcludedFromDuties === 'function' &&
+                    isPersonExcludedFromDuties(b, groupNum);
+                if (exA !== exB) return exA ? 1 : -1;
                 const dateA =
                     normalizeBulkLastDutyKey(g.lastDuties?.[a]?.[listType]) ||
                     resolveBulkAddEffectiveLastDateKey(a, groupNum, listType);
@@ -2577,28 +2585,28 @@
                 });
             }
                 
-            // Sort each list by priority (lower number = higher priority), then by last duty date
+            // Sort each list: excluded last, then priority, then last duty date
             const listTypes = getPersonListTypesForGroup(currentGroup);
                 listTypes.forEach(listType => {
                     groups[currentGroup][listType].sort((a, b) => {
-                    // Get priorities (default to 999 if not set)
-                    const priorityA = groups[currentGroup].priorities?.[a]?.[listType] ?? 999;
-                    const priorityB = groups[currentGroup].priorities?.[b]?.[listType] ?? 999;
-                    
-                    // First sort by priority (lower number = higher priority)
-                    if (priorityA !== priorityB) {
-                        return priorityA - priorityB;
-                    }
-                    
-                    // If priorities are equal, sort by last duty date (most recent first, no date last)
+                        if (typeof comparePeopleForDutyListSort === 'function') {
+                            return comparePeopleForDutyListSort(currentGroup, listType, a, b);
+                        }
+                        const exA =
+                            typeof isPersonExcludedFromDuties === 'function' &&
+                            isPersonExcludedFromDuties(a, currentGroup);
+                        const exB =
+                            typeof isPersonExcludedFromDuties === 'function' &&
+                            isPersonExcludedFromDuties(b, currentGroup);
+                        if (exA !== exB) return exA ? 1 : -1;
+                        const priorityA = groups[currentGroup].priorities?.[a]?.[listType] ?? 999;
+                        const priorityB = groups[currentGroup].priorities?.[b]?.[listType] ?? 999;
+                        if (priorityA !== priorityB) return priorityA - priorityB;
                         const dateA = groups[currentGroup].lastDuties[a]?.[listType];
                         const dateB = groups[currentGroup].lastDuties[b]?.[listType];
-                        
-                        if (!dateA && !dateB) return 0; // Both have no date, maintain order
-                        if (!dateA) return 1; // A has no date, put it last
-                        if (!dateB) return -1; // B has no date, put it last
-                        
-                        // Both have dates, sort by date (most recent first)
+                        if (!dateA && !dateB) return 0;
+                        if (!dateA) return 1;
+                        if (!dateB) return -1;
                         return new Date(dateB) - new Date(dateA);
                     });
                 
