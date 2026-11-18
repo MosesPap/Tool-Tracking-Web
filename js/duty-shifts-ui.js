@@ -4283,33 +4283,9 @@
                     // Always normalize to close any numbering gaps, and persist to Firestore via saveData()
                     normalizeRankingsSequential();
                 }
-                
-                // Remove from critical assignments and duty assignments
-                Object.keys(criticalAssignments).forEach(dateKey => {
-                    if (criticalAssignments[dateKey]) {
-                        criticalAssignments[dateKey] = criticalAssignments[dateKey].filter(a => 
-                            !a.includes(`${currentPersonActionsName} (Ομάδα ${currentPersonActionsGroup})`)
-                        );
-                        if (criticalAssignments[dateKey].length === 0) {
-                            delete criticalAssignments[dateKey];
-                        }
-                    }
-                });
-                
-                Object.keys(dutyAssignments).forEach(dateKey => {
-                    if (dutyAssignments[dateKey]) {
-                        const personGroupStr = `${currentPersonActionsName} (Ομάδα ${currentPersonActionsGroup})`;
-                        if (dutyAssignments[dateKey].includes(personGroupStr)) {
-                            dutyAssignments[dateKey] = dutyAssignments[dateKey]
-                                .split(', ')
-                                .filter(a => a !== personGroupStr)
-                                .join(', ');
-                            if (dutyAssignments[dateKey] === '') {
-                                delete dutyAssignments[dateKey];
-                            }
-                        }
-                    }
-                });
+
+                // Do NOT strip this person from dutyAssignments / typed month stores / criticalAssignments.
+                // Past calculated months must keep historical names even after roster deletion.
                 
                 saveData();
                 renderGroups();
