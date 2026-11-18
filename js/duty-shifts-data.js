@@ -997,6 +997,26 @@
             }
             return sortedCurrent;
         }
+        /**
+         * After excluded-last sort: renumber priorities 1..N in list order.
+         * Relative order of non-excluded people stays the same; excluded get the last numbers.
+         * Does not touch calculated month assignments.
+         */
+        function renumberDutyListPrioritiesInBucket(bucket) {
+            if (!bucket) return;
+            if (!bucket.priorities) bucket.priorities = {};
+            const types = ['special', 'weekend', 'semi', 'normal'];
+            for (const listType of types) {
+                const list = bucket[listType];
+                if (!Array.isArray(list)) continue;
+                list.forEach((person, index) => {
+                    if (!person) return;
+                    if (!bucket.priorities[person]) bucket.priorities[person] = {};
+                    bucket.priorities[person][listType] = index + 1;
+                });
+            }
+        }
+
         /** Keep stored arrays aligned with priority order (Firestore groups doc + schedule snapshots). */
         function syncGroupListArraysFromPriorities(groupNum) {
             const g = groups[groupNum];
@@ -1008,6 +1028,8 @@
             for (const listType of types) {
                 g[listType] = getSortedGroupListForRotation(groupNum, listType);
             }
+            // Do not renumber priorities here — that is reserved for exclusion moves
+            // (renumberDutyListPrioritiesInBucket) so manual priority values stay intact.
         }
         function isPersonExcludedFromDuties(person, groupNum) {
             if (!person || !groupNum) return false;
@@ -1049,7 +1071,7 @@
             return false;
         }
 
-        /** Sort all duty-type lists in a bucket: excluded last, then priority / last duty. */
+        /** Sort all duty-type lists in a bucket: excluded last, then priority / last duty; renumber 1..N. */
         function syncDutyListOrderInBucket(bucket) {
             if (!bucket) return;
             const types = ['special', 'weekend', 'semi', 'normal'];
@@ -1071,6 +1093,8 @@
                     return new Date(dateB) - new Date(dateA);
                 });
             }
+            // New sequential numbering for remaining order; does not rewrite past months.
+            renumberDutyListPrioritiesInBucket(bucket);
         }
 
         function setExclusionFlagInBucket(bucket, personName, excluded) {
@@ -1145,11 +1169,8 @@
                 if (excluded) {
                     g.excludedFromDuties[pk] = true;
                 }
-                if (typeof syncGroupListArraysFromPriorities === 'function') {
-                    syncGroupListArraysFromPriorities(groupNum);
-                } else {
-                    syncDutyListOrderInBucket(g);
-                }
+                // Sort excluded last and renumber priorities 1..N (active people keep relative order).
+                syncDutyListOrderInBucket(g);
             }
 
             // Mirror exclusion + list order to the other parallel set (3 ↔ 4) and refresh active set too.
