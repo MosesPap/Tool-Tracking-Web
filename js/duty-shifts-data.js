@@ -1037,10 +1037,51 @@
             }
         }
 
+        function groupBucketHasExcludedPeople(bucket) {
+            if (!bucket || !bucket.excludedFromDuties) return false;
+            const map = bucket.excludedFromDuties;
+            return Object.keys(map).some((k) => map[k] === true);
+        }
+
+        /**
+         * If the group has excluded people: sort (excluded last) and renumber priorities 1..N
+         * so active people have contiguous numbers (no 1→3 gap when #2 is excluded).
+         */
+        function ensureExcludedLastWithContiguousPriorities(groupNum) {
+            const g = groups?.[groupNum];
+            if (!g || !groupBucketHasExcludedPeople(g)) return false;
+            const types =
+                typeof getDutyListTypesForGroup === 'function'
+                    ? getDutyListTypesForGroup(groupNum)
+                    : DUTY_STATUS_LIST_TYPES;
+            let changed = false;
+            for (const listType of types) {
+                const before = JSON.stringify(g[listType] || []);
+                const sorted = getSortedGroupListForRotation(groupNum, listType);
+                g[listType] = sorted;
+                if (!g.priorities) g.priorities = {};
+                sorted.forEach((person, index) => {
+                    if (!person) return;
+                    if (!g.priorities[person]) g.priorities[person] = {};
+                    const next = index + 1;
+                    if (g.priorities[person][listType] !== next) {
+                        g.priorities[person][listType] = next;
+                        changed = true;
+                    }
+                });
+                if (JSON.stringify(g[listType] || []) !== before) changed = true;
+            }
+            return changed;
+        }
+
         /** Keep stored arrays aligned with priority order (Firestore groups doc + schedule snapshots). */
         function syncGroupListArraysFromPriorities(groupNum) {
             const g = groups[groupNum];
             if (!g) return;
+            if (groupBucketHasExcludedPeople(g)) {
+                ensureExcludedLastWithContiguousPriorities(groupNum);
+                return;
+            }
             const types =
                 typeof getDutyListTypesForGroup === 'function'
                     ? getDutyListTypesForGroup(groupNum)
@@ -1048,8 +1089,12 @@
             for (const listType of types) {
                 g[listType] = getSortedGroupListForRotation(groupNum, listType);
             }
-            // Do not renumber priorities here — that is reserved for exclusion moves
-            // (renumberDutyListPrioritiesInBucket) so manual priority values stay intact.
+        }
+
+        if (typeof window !== 'undefined') {
+            window.renumberDutyListPrioritiesInBucket = renumberDutyListPrioritiesInBucket;
+            window.ensureExcludedLastWithContiguousPriorities = ensureExcludedLastWithContiguousPriorities;
+            window.groupBucketHasExcludedPeople = groupBucketHasExcludedPeople;
         }
         function isPersonExcludedFromDuties(person, groupNum) {
             if (!person || !groupNum) return false;

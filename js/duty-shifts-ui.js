@@ -1044,6 +1044,20 @@
                         });
                     }
                 });
+
+                // Excluded at end + contiguous 1..N (no gap like 1→3 when #2 is excluded)
+                if (typeof ensureExcludedLastWithContiguousPriorities === 'function') {
+                    if (ensureExcludedLastWithContiguousPriorities(i)) {
+                        window._excludedPriorityRenumberDirty = true;
+                    }
+                } else if (
+                    typeof renumberDutyListPrioritiesInBucket === 'function' &&
+                    typeof groupBucketHasExcludedPeople === 'function' &&
+                    groupBucketHasExcludedPeople(groupData)
+                ) {
+                    renumberDutyListPrioritiesInBucket(groupData);
+                    window._excludedPriorityRenumberDirty = true;
+                }
                 
                 const specialList = groupData.special || [];
                 const weekendList = groupData.weekend || [];
@@ -1151,6 +1165,17 @@
             // Restore open lists if preserveOpenLists is true
             if (preserveOpenLists && openLists.length > 0) {
                 restoreOpenLists(openLists);
+            }
+
+            // Persist contiguous priority renumber after exclusion (once when dirty)
+            if (window._excludedPriorityRenumberDirty) {
+                window._excludedPriorityRenumberDirty = false;
+                try {
+                    if (typeof saveData === 'function') saveData();
+                    else if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
+                } catch (e) {
+                    console.warn('[EXCLUDE-RENUMBER] save failed:', e);
+                }
             }
         }
         function createPersonItem(groupNum, person, index, listType, listArray) {
