@@ -2593,6 +2593,17 @@
                         }
                         const dateKey = formatDateKey(dateObj);
                         const dayType = getDayType(dateObj);
+
+                        // Locked months: never mutate assignment / critical cells
+                        if (
+                            typeof isDateKeyMonthCalculationLocked === 'function' &&
+                            isDateKeyMonthCalculationLocked(dateKey)
+                        ) {
+                            console.log(
+                                `[LOCK] Skip last-duty write for ${dateKey} — month is calculation-locked`
+                            );
+                            return;
+                        }
                         
                         // Always add as critical assignment - these are manually entered baseline dates
                         // personKey is already defined above, use it here
@@ -2714,6 +2725,15 @@
                         const shouldRemove = (newDateKey && oldDateKey !== newDateKey) || (!newDateKey && oldDateKey);
                         
                         if (shouldRemove) {
+                            if (
+                                typeof isDateKeyMonthCalculationLocked === 'function' &&
+                                isDateKeyMonthCalculationLocked(oldDateKey)
+                            ) {
+                                console.log(
+                                    `[LOCK] Skip last-duty removal for ${oldDateKey} — month is calculation-locked`
+                                );
+                                return;
+                            }
                             // Match by identity (ignore rank) so old-rank historical spellings are removed
                             // when the last-duty *date* actually changes — not when only the rank changes.
                             const idFn =

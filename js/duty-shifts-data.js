@@ -648,6 +648,26 @@
             else delete monthCalculationLocks[monthKey];
         }
 
+        /** YYYY-MM from a YYYY-MM-DD (or longer) date key. */
+        function monthKeyFromDateKey(dateKey) {
+            if (!dateKey || typeof dateKey !== 'string') return null;
+            const m = String(dateKey).match(/^(\d{4}-\d{2})/);
+            return m ? m[1] : null;
+        }
+
+        /** True when the calendar month of this date is calculation-locked (immutable assignments). */
+        function isDateKeyMonthCalculationLocked(dateKey) {
+            const mk = monthKeyFromDateKey(dateKey);
+            return !!(mk && isMonthCalculationLocked(mk));
+        }
+
+        if (typeof window !== 'undefined') {
+            window.isMonthCalculationLocked = isMonthCalculationLocked;
+            window.setMonthCalculationLocked = setMonthCalculationLocked;
+            window.monthKeyFromDateKey = monthKeyFromDateKey;
+            window.isDateKeyMonthCalculationLocked = isDateKeyMonthCalculationLocked;
+        }
+
         // ============================================================================
         // Scheduled status changes (disabled / group / list order)
         // Recorded in last 10 days of month → effective 1st of next month.
@@ -3106,6 +3126,9 @@
             Object.keys(criticalAssignments || {}).forEach((k) => allDateKeys.add(k));
 
             for (const dateKey of allDateKeys) {
+                // Locked months are immutable — never repair/rewrite their cells.
+                if (isDateKeyMonthCalculationLocked(dateKey)) continue;
+
                 const donors = [];
                 if (dutyAssignments?.[dateKey]) {
                     donors.push(...parseDutyAssignmentParts(dutyAssignments[dateKey]));
@@ -3159,6 +3182,7 @@
             for (const store of stores) {
                 if (!store || typeof store !== 'object') continue;
                 for (const dateKey of Object.keys(store)) {
+                    if (isDateKeyMonthCalculationLocked(dateKey)) continue;
                     const before = store[dateKey];
                     const after = dedupeAssignmentValueByIdentity(
                         before,
@@ -3173,6 +3197,7 @@
             }
             if (criticalAssignments && typeof criticalAssignments === 'object') {
                 for (const dateKey of Object.keys(criticalAssignments)) {
+                    if (isDateKeyMonthCalculationLocked(dateKey)) continue;
                     const list = criticalAssignments[dateKey];
                     if (!Array.isArray(list)) continue;
                     const next = dedupeCriticalListByIdentity(list, preferKeepName, preferDropName);
@@ -3210,6 +3235,12 @@
         // Set assignment for a specific date (saves to correct document based on day type)
         function setAssignmentForDate(dateKey, assignmentValue) {
             try {
+                if (isDateKeyMonthCalculationLocked(dateKey)) {
+                    console.warn(
+                        `[LOCK] Skip setAssignmentForDate(${dateKey}) — month is calculation-locked`
+                    );
+                    return;
+                }
                 const date = new Date(dateKey + 'T00:00:00');
                 if (isNaN(date.getTime())) {
                     console.error(`Invalid date key: ${dateKey}`);
@@ -3237,6 +3268,12 @@
         // Delete assignment for a specific date
         function deleteAssignmentForDate(dateKey) {
             try {
+                if (isDateKeyMonthCalculationLocked(dateKey)) {
+                    console.warn(
+                        `[LOCK] Skip deleteAssignmentForDate(${dateKey}) — month is calculation-locked`
+                    );
+                    return;
+                }
                 const date = new Date(dateKey + 'T00:00:00');
                 if (isNaN(date.getTime())) return;
                 
