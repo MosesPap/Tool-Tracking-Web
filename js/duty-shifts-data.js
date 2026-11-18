@@ -2949,34 +2949,14 @@
         }
 
         /**
-         * Pick which duplicate part to keep for one identity on a day.
-         * Prefer home-group slot, then historical spelling (preferKeepName), then first non-drop.
+         * Within ONE group slot only: pick which rank-spelling duplicate to keep.
+         * Never drops a different group on the same day (that deleted real assignments e.g. Θεοφανους Ομάδα 4).
          */
-        function pickPreferredDuplicatePart(matching, preferKeepName, preferDropName) {
+        function pickPreferredDuplicatePartSameGroup(matching, preferKeepName, preferDropName) {
             if (!matching || matching.length === 0) return null;
             if (matching.length === 1) return matching[0];
             const keepNorm = preferKeepName ? _normPersonFn(preferKeepName) : '';
             const dropNorm = preferDropName ? _normPersonFn(preferDropName) : '';
-            const sampleName = matching[0].personName;
-            const homeG = findPersonHomeGroupByIdentity(sampleName);
-            if (homeG != null) {
-                const homeHit = matching.find((p) => p.groupNum === homeG);
-                if (homeHit) {
-                    if (keepNorm) {
-                        const homeKeep = matching.find(
-                            (p) => p.groupNum === homeG && _normPersonFn(p.personName) === keepNorm
-                        );
-                        if (homeKeep) return homeKeep;
-                    }
-                    const homeNonDrop = matching.find(
-                        (p) =>
-                            p.groupNum === homeG &&
-                            (!dropNorm || _normPersonFn(p.personName) !== dropNorm)
-                    );
-                    if (homeNonDrop) return homeNonDrop;
-                    return homeHit;
-                }
-            }
             if (keepNorm) {
                 const keepHit = matching.find((p) => _normPersonFn(p.personName) === keepNorm);
                 if (keepHit) return keepHit;
@@ -2989,64 +2969,42 @@
         }
 
         /**
-         * One person (ignore rank) → one entry per day, even if stored under different groups.
-         * Works for string and { group: name } object stores.
+         * Collapse same-person + same-group rank duplicates only (ΣΜΙΑΣ/ΕΣΜΙΑΣ in Ομάδα N).
+         * Does NOT remove the person from another group slot on the same day.
          */
         function dedupeAssignmentValueByIdentity(assignmentValue, preferKeepName, preferDropName) {
             if (assignmentValue == null || assignmentValue === '') return assignmentValue;
 
             const isObject =
                 typeof assignmentValue === 'object' && !Array.isArray(assignmentValue);
+            // Object form is already one person per group — nothing to collapse across ranks in-place
+            // without risking group loss; leave as-is.
+            if (isObject) return assignmentValue;
+
             const parts = parseDutyAssignmentParts(assignmentValue);
             if (parts.length <= 1) return assignmentValue;
 
-            const byId = new Map();
+            const byIdGroup = new Map();
             for (const p of parts) {
                 const id = _idPersonFn(p.personName) || _normPersonFn(p.personName);
                 if (!id) continue;
-                if (!byId.has(id)) byId.set(id, []);
-                byId.get(id).push(p);
+                const key = `${id}|${p.groupNum || 0}`;
+                if (!byIdGroup.has(key)) byIdGroup.set(key, []);
+                byIdGroup.get(key).push(p);
             }
 
-            const hasDupes = [...byId.values()].some((arr) => arr.length > 1);
+            const hasDupes = [...byIdGroup.values()].some((arr) => arr.length > 1);
             if (!hasDupes) return assignmentValue;
 
-            const keepById = new Map();
-            for (const [id, arr] of byId) {
-                keepById.set(id, pickPreferredDuplicatePart(arr, preferKeepName, preferDropName));
+            const keepByKey = new Map();
+            for (const [key, arr] of byIdGroup) {
+                keepByKey.set(
+                    key,
+                    pickPreferredDuplicatePartSameGroup(arr, preferKeepName, preferDropName)
+                );
             }
 
-            if (isObject) {
-                // Rebuild object: one slot per kept identity. Prefer home group when free.
-                const next = {};
-                const claimed = new Set();
-                for (const preferred of keepById.values()) {
-                    if (!preferred || !preferred.personName) continue;
-                    let g = preferred.groupNum;
-                    const homeG = findPersonHomeGroupByIdentity(preferred.personName);
-                    if (
-                        homeG != null &&
-                        Number.isFinite(homeG) &&
-                        !claimed.has(homeG) &&
-                        next[homeG] == null
-                    ) {
-                        const occupant = parts.find((p) => p.groupNum === homeG);
-                        const occId = occupant
-                            ? _idPersonFn(occupant.personName) || _normPersonFn(occupant.personName)
-                            : null;
-                        const prefId =
-                            _idPersonFn(preferred.personName) || _normPersonFn(preferred.personName);
-                        if (!occupant || occId === prefId) g = homeG;
-                    }
-                    if (!Number.isFinite(g) || g < 1) continue;
-                    if (claimed.has(g) || next[g] != null) continue;
-                    next[g] = preferred.personName;
-                    claimed.add(g);
-                }
-                return next;
-            }
-
-            const seenId = new Set();
+            const seen = new Set();
             const rebuilt = [];
             for (const p of parts) {
                 const id = _idPersonFn(p.personName) || _normPersonFn(p.personName);
@@ -3054,21 +3012,21 @@
                     rebuilt.push(p.raw);
                     continue;
                 }
-                const matches = byId.get(id) || [];
+                const key = `${id}|${p.groupNum || 0}`;
+                const matches = byIdGroup.get(key) || [];
                 if (matches.length <= 1) {
                     rebuilt.push(p.raw);
                     continue;
                 }
-                if (seenId.has(id)) continue;
-                seenId.add(id);
-                const preferred = keepById.get(id) || p;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                const preferred = keepByKey.get(key) || p;
                 rebuilt.push(preferred.raw);
             }
             return rebuilt.join(', ');
         }
 
         function dedupeAssignmentValueForPersonGroup(assignmentValue, preferKeepName, preferDropName, groupNum) {
-            // Back-compat: full identity dedupe across groups (groupNum kept for callers).
             void groupNum;
             return dedupeAssignmentValueByIdentity(assignmentValue, preferKeepName, preferDropName);
         }
@@ -3093,7 +3051,100 @@
         }
 
         /**
-         * Remove same-person duplicates (different ranks / wrong extra group slots) from all stores.
+         * Restore missing group slots from legacy dutyAssignments / criticalAssignments
+         * into typed day stores (e.g. after aggressive cross-group dedupe removed Ομάδα 4).
+         * Never deletes existing assignees — only fills empty group slots.
+         * @returns {number} dates repaired
+         */
+        function repairMissingGroupSlotsFromLegacyStores() {
+            const stores = [
+                normalDayAssignments,
+                semiNormalAssignments,
+                weekendAssignments,
+                specialHolidayAssignments
+            ];
+            let repaired = 0;
+
+            const fillStoreDate = (store, dateKey, donorParts) => {
+                if (!store || !dateKey || !donorParts.length) return false;
+                const current = store[dateKey];
+                if (current == null) return false;
+                const curParts = parseDutyAssignmentParts(current);
+                const byGroup = new Map();
+                for (const p of curParts) {
+                    if (p.groupNum >= 1) byGroup.set(p.groupNum, p);
+                }
+                let changed = false;
+                for (const d of donorParts) {
+                    if (!d.groupNum || d.groupNum < 1 || !d.personName) continue;
+                    if (byGroup.has(d.groupNum)) continue;
+                    byGroup.set(d.groupNum, d);
+                    changed = true;
+                }
+                if (!changed) return false;
+
+                if (typeof current === 'object' && !Array.isArray(current)) {
+                    const next = { ...current };
+                    for (const [g, p] of byGroup) {
+                        if (!next[g] && !next[String(g)]) next[g] = p.personName;
+                    }
+                    store[dateKey] = next;
+                } else {
+                    store[dateKey] = [...byGroup.values()]
+                        .sort((a, b) => a.groupNum - b.groupNum)
+                        .map((p) => p.raw || `${p.personName} (Ομάδα ${p.groupNum})`)
+                        .join(', ');
+                }
+                return true;
+            };
+
+            const allDateKeys = new Set();
+            for (const store of stores) {
+                if (store) Object.keys(store).forEach((k) => allDateKeys.add(k));
+            }
+            Object.keys(dutyAssignments || {}).forEach((k) => allDateKeys.add(k));
+            Object.keys(criticalAssignments || {}).forEach((k) => allDateKeys.add(k));
+
+            for (const dateKey of allDateKeys) {
+                const donors = [];
+                if (dutyAssignments?.[dateKey]) {
+                    donors.push(...parseDutyAssignmentParts(dutyAssignments[dateKey]));
+                }
+                if (Array.isArray(criticalAssignments?.[dateKey])) {
+                    donors.push(
+                        ...parseDutyAssignmentParts(criticalAssignments[dateKey].join(', '))
+                    );
+                }
+                if (!donors.length) continue;
+
+                let dateRepaired = false;
+                for (const store of stores) {
+                    if (fillStoreDate(store, dateKey, donors)) dateRepaired = true;
+                }
+                // Also fill legacy if typed has a group legacy lacks
+                if (dutyAssignments?.[dateKey] != null) {
+                    const typedParts = [];
+                    for (const store of stores) {
+                        if (store?.[dateKey] != null) {
+                            typedParts.push(...parseDutyAssignmentParts(store[dateKey]));
+                        }
+                    }
+                    if (fillStoreDate(dutyAssignments, dateKey, [...donors, ...typedParts])) {
+                        dateRepaired = true;
+                    }
+                }
+                if (dateRepaired) repaired++;
+            }
+            if (repaired > 0) {
+                console.log(
+                    `[ASSIGN-REPAIR] Restored missing group slots on ${repaired} date(s) from legacy/critical`
+                );
+            }
+            return repaired;
+        }
+
+        /**
+         * Same-group rank duplicates only (never drop another group on the day).
          * @returns {number} number of date keys changed
          */
         function sanitizeRankDuplicateAssignments(preferKeepName, preferDropName) {
@@ -3138,16 +3189,22 @@
         }
 
         /**
-         * After a rank/name edit: do not rewrite historical spellings; only remove
-         * duplicate new-rank copies of the same person (any group on the day).
+         * After a rank/name edit: strip same-group duplicate new-rank copies only.
+         * Then try to restore any group slots still present in legacy/critical.
          */
         function sanitizeAssignmentsAfterPersonRankChange(oldName, newName, groupNum) {
             void groupNum;
             if (!oldName || !newName || oldName === newName) {
                 sanitizeRankDuplicateAssignments();
-                return;
+            } else {
+                sanitizeRankDuplicateAssignments(oldName, newName);
             }
-            sanitizeRankDuplicateAssignments(oldName, newName);
+            repairMissingGroupSlotsFromLegacyStores();
+        }
+
+        if (typeof window !== 'undefined') {
+            window.repairMissingGroupSlotsFromLegacyStores = repairMissingGroupSlotsFromLegacyStores;
+            window.sanitizeRankDuplicateAssignments = sanitizeRankDuplicateAssignments;
         }
 
         // Set assignment for a specific date (saves to correct document based on day type)
@@ -4509,6 +4566,18 @@
                         console.warn('[ROSTER-DEDUP] after Firebase load failed:', e);
                     }
                 }
+                // Restore group slots wiped by older cross-group assignment dedupe (e.g. missing Ομάδα 4).
+                if (typeof repairMissingGroupSlotsFromLegacyStores === 'function') {
+                    try {
+                        const n = repairMissingGroupSlotsFromLegacyStores();
+                        if (n > 0) {
+                            if (typeof saveData === 'function') saveData();
+                            else if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
+                        }
+                    } catch (e) {
+                        console.warn('[ASSIGN-REPAIR] after Firebase load failed:', e);
+                    }
+                }
             } catch (error) {
                 console.error('Error loading data from Firebase:', error);
                 // Fallback to localStorage
@@ -4952,6 +5021,14 @@
                     }
                 } catch (e) {
                     console.warn('[ROSTER-DEDUP] after localStorage load failed:', e);
+                }
+            }
+            if (typeof repairMissingGroupSlotsFromLegacyStores === 'function') {
+                try {
+                    const n = repairMissingGroupSlotsFromLegacyStores();
+                    if (n > 0) saveDataToLocalStorage();
+                } catch (e) {
+                    console.warn('[ASSIGN-REPAIR] after localStorage load failed:', e);
                 }
             }
         }

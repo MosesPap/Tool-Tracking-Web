@@ -6872,7 +6872,12 @@
                 window._rosterDedupRanThisSession = true;
                 try {
                     const r = mergeDuplicatePeopleInRosterAndRankings();
-                    if (r && r.merged > 0) {
+                    let needSave = !!(r && r.merged > 0);
+                    if (typeof repairMissingGroupSlotsFromLegacyStores === 'function') {
+                        const n = repairMissingGroupSlotsFromLegacyStores();
+                        if (n > 0) needSave = true;
+                    }
+                    if (needSave) {
                         if (typeof saveData === 'function') saveData();
                         else if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
                         if (typeof renderGroups === 'function') renderGroups();
@@ -7123,19 +7128,20 @@
                             { border: '#FF4081', bg: 'rgba(255, 64, 129, 0.12)' }
                         ];
                         const entries = [];
-                        const seenIdentity = new Set();
+                        const seenIdentityGroup = new Set();
                         for (const part of parts) {
                             const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
                             const nameOnly = part.replace(/\s*\(Ομάδα\s*\d+\)\s*/g, '').trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
                             const personName = m ? m[1].trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '') : nameOnly;
                             const g = m ? parseInt(m[2], 10) : 0;
-                            // Same person under old+new rank (or wrongly stored in two groups): one line per day.
-                            const idKey =
+                            // Same person + same group under old/new rank: one line. Never hide another group slot.
+                            const idBase =
                                 typeof getPersonIdentityKey === 'function'
                                     ? getPersonIdentityKey(personName)
                                     : String(personName || '').trim();
-                            if (idKey && seenIdentity.has(idKey)) continue;
-                            if (idKey) seenIdentity.add(idKey);
+                            const idKey = idBase ? `${idBase}|${g}` : '';
+                            if (idKey && seenIdentityGroup.has(idKey)) continue;
+                            if (idKey) seenIdentityGroup.add(idKey);
                             const rank =
                                 typeof getRankingForPerson === 'function'
                                     ? getRankingForPerson(personName)
