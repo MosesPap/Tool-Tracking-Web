@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="ToolTrack">
     <meta name="format-detection" content="telephone=no">
-    <title>Διαχείριση Υπηρεσιών v1.674 - Tool Tracking</title>
+    <title>Διαχείριση Υπηρεσιών v1.675 - Tool Tracking</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
@@ -482,6 +482,62 @@
         body:has(#infoMessageModal.show) .modal-backdrop:last-of-type,
         body:has(#confirmModal.show) .modal-backdrop:last-of-type {
             z-index: 1065 !important;
+        }
+
+        /* ===== Floating windows (draggable / resizable / main page usable) ===== */
+        body.modal-open:not(:has(.modal.modal-locked.show)) {
+            overflow: auto !important;
+            padding-right: 0 !important;
+        }
+        .modal.modal-floating {
+            /* Let clicks reach the page outside the dialog */
+            pointer-events: none;
+            background: transparent !important;
+        }
+        .modal.modal-floating.show {
+            display: block;
+        }
+        .modal.modal-floating .modal-dialog {
+            pointer-events: auto;
+            margin: 1rem auto;
+            max-width: min(96vw, 1200px);
+        }
+        .modal.modal-floating .modal-dialog.modal-sm {
+            max-width: min(96vw, 400px);
+        }
+        .modal.modal-floating .modal-dialog.modal-lg {
+            max-width: min(96vw, 900px);
+        }
+        .modal.modal-floating .modal-dialog.modal-xl,
+        .modal.modal-floating .modal-dialog.modal-superwide {
+            max-width: min(98vw, 1400px);
+        }
+        .modal.modal-floating .modal-content {
+            resize: both;
+            overflow: auto;
+            min-width: 300px;
+            min-height: 180px;
+            max-width: 98vw;
+            max-height: 92vh;
+        }
+        .modal.modal-floating .modal-header {
+            cursor: move;
+            user-select: none;
+            touch-action: none;
+        }
+        .modal.modal-floating .modal-header .btn-close,
+        .modal.modal-floating .modal-header button,
+        .modal.modal-floating .modal-header a,
+        .modal.modal-floating .modal-header input,
+        .modal.modal-floating .modal-header select {
+            cursor: pointer;
+            user-select: auto;
+        }
+        .modal.modal-floating.modal-floating-raised {
+            z-index: 1060 !important;
+        }
+        .modal.modal-locked {
+            /* keep Bootstrap default blocking behavior */
         }
 
         /* 3D modal shell */
@@ -2437,7 +2493,7 @@
                 <a href="main-menu.html" class="text-white me-3" style="text-decoration: none;">
                     <i class="fas fa-arrow-left fa-lg"></i>
                 </a>
-                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.674</span></h4>
+                <h4 class="mb-0">Διαχείριση Υπηρεσιών <span style="font-size: 0.7em; opacity: 0.8;">v1.675</span></h4>
             </div>
             <div class="title-bar-stats d-flex flex-column align-items-end align-items-lg-end gap-1" style="font-weight: 500; opacity: 0.98;">
                 <div class="title-bar-stats-row d-flex align-items-center flex-wrap gap-3" style="font-size: 1.25em;">
@@ -4368,11 +4424,11 @@
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Load duty-shifts files in order: data -> logic -> ui -->
-    <script src="js/duty-shifts-data.js?v=1.674" charset="UTF-8"></script>
+    <script src="js/duty-shifts-data.js?v=1.675" charset="UTF-8"></script>
     <script src="js/duty-shifts-debug.js" charset="UTF-8"></script>
     <script src="js/duty-shifts-night-changes.js?v=1.591" charset="UTF-8"></script>
-    <script src="js/duty-shifts-logic.js?v=1.674" charset="UTF-8"></script>
-    <script src="js/duty-shifts-ui.js?v=1.674" charset="UTF-8"></script>
+    <script src="js/duty-shifts-logic.js?v=1.675" charset="UTF-8"></script>
+    <script src="js/duty-shifts-ui.js?v=1.675" charset="UTF-8"></script>
     <script src="js/duty-shifts-ai-assistant.js" charset="UTF-8"></script>
     <script>
         // NOTE: Main JavaScript code has been moved to js/duty-shifts.js to reduce memory usage

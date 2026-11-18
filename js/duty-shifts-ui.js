@@ -231,6 +231,200 @@
             initializeControlTooltips();
         }
 
+        // -------------------------------------------------------------------------
+        // Floating modals: draggable, resizable, main page remains usable
+        // Locked (blocking) modals keep classic Bootstrap backdrop behavior.
+        // -------------------------------------------------------------------------
+        const LOCKED_FLOATING_MODAL_IDS = new Set([
+            'confirmModal',
+            'infoMessageModal',
+            'manualAssignConfirmModal',
+            'replacementConfirmModal',
+            'mutualSwapConfirmModal',
+            'statusChangeEffectiveModal',
+            'firebaseCleanupMonthModal',
+            'transferTargetGroupModal',
+            'transferPositionModal',
+            'transferReturnSelectModal'
+        ]);
+        let _floatingModalZ = 1055;
+
+        function isLockedFloatingModal(modalEl) {
+            if (!modalEl) return true;
+            if (modalEl.classList.contains('modal-locked')) return true;
+            if (modalEl.getAttribute('data-modal-locked') === 'true') return true;
+            if (modalEl.getAttribute('data-bs-backdrop') === 'static') return true;
+            return LOCKED_FLOATING_MODAL_IDS.has(modalEl.id);
+        }
+
+        function enableModalDrag(modalEl) {
+            const dialog = modalEl.querySelector('.modal-dialog');
+            const header = modalEl.querySelector('.modal-header');
+            if (!dialog || !header || header.dataset.floatingDragBound === '1') return;
+            header.dataset.floatingDragBound = '1';
+
+            let dragging = false;
+            let startX = 0;
+            let startY = 0;
+            let origLeft = 0;
+            let origTop = 0;
+
+            const onMove = (clientX, clientY) => {
+                if (!dragging) return;
+                const dx = clientX - startX;
+                const dy = clientY - startY;
+                let left = origLeft + dx;
+                let top = origTop + dy;
+                const maxL = Math.max(8, window.innerWidth - 80);
+                const maxT = Math.max(8, window.innerHeight - 40);
+                left = Math.min(Math.max(-40, left), maxL);
+                top = Math.min(Math.max(0, top), maxT);
+                dialog.style.left = `${left}px`;
+                dialog.style.top = `${top}px`;
+            };
+
+            const stopDrag = () => {
+                dragging = false;
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', stopDrag);
+                document.removeEventListener('touchmove', onTouchMove);
+                document.removeEventListener('touchend', stopDrag);
+            };
+
+            const onMouseMove = (e) => onMove(e.clientX, e.clientY);
+            const onTouchMove = (e) => {
+                if (!e.touches || !e.touches[0]) return;
+                onMove(e.touches[0].clientX, e.touches[0].clientY);
+            };
+
+            const startDrag = (clientX, clientY, target) => {
+                if (target && target.closest('button, .btn-close, input, select, textarea, a, label')) return;
+                const rect = dialog.getBoundingClientRect();
+                dialog.classList.remove('modal-dialog-centered');
+                dialog.style.position = 'fixed';
+                dialog.style.margin = '0';
+                dialog.style.transform = 'none';
+                dialog.style.left = `${rect.left}px`;
+                dialog.style.top = `${rect.top}px`;
+                startX = clientX;
+                startY = clientY;
+                origLeft = rect.left;
+                origTop = rect.top;
+                dragging = true;
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', stopDrag);
+                document.addEventListener('touchmove', onTouchMove, { passive: true });
+                document.addEventListener('touchend', stopDrag);
+            };
+
+            header.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                startDrag(e.clientX, e.clientY, e.target);
+            });
+            header.addEventListener(
+                'touchstart',
+                (e) => {
+                    if (!e.touches || !e.touches[0]) return;
+                    startDrag(e.touches[0].clientX, e.touches[0].clientY, e.target);
+                },
+                { passive: true }
+            );
+        }
+
+        function raiseFloatingModal(modalEl) {
+            if (!modalEl || isLockedFloatingModal(modalEl)) return;
+            _floatingModalZ += 1;
+            modalEl.style.zIndex = String(_floatingModalZ);
+            modalEl.classList.add('modal-floating-raised');
+        }
+
+        function prepareFloatingModalElement(modalEl) {
+            if (!modalEl || !modalEl.classList.contains('modal')) return;
+            if (isLockedFloatingModal(modalEl)) {
+                modalEl.classList.add('modal-locked');
+                modalEl.classList.remove('modal-floating');
+                return;
+            }
+            modalEl.classList.add('modal-floating');
+            modalEl.classList.remove('modal-locked');
+            modalEl.setAttribute('data-bs-backdrop', 'false');
+            modalEl.setAttribute('data-bs-keyboard', 'true');
+            modalEl.setAttribute('data-bs-focus', 'false');
+            enableModalDrag(modalEl);
+            if (!modalEl.dataset.floatingRaiseBound) {
+                modalEl.dataset.floatingRaiseBound = '1';
+                modalEl.addEventListener('mousedown', () => raiseFloatingModal(modalEl));
+                modalEl.addEventListener(
+                    'show.bs.modal',
+                    () => {
+                        raiseFloatingModal(modalEl);
+                        // Allow page scroll / interaction while floating windows are open
+                        requestAnimationFrame(() => {
+                            if (![...document.querySelectorAll('.modal.modal-locked.show')].length) {
+                                document.body.classList.remove('modal-open');
+                                document.body.style.removeProperty('overflow');
+                                document.body.style.removeProperty('padding-right');
+                            }
+                        });
+                    }
+                );
+                modalEl.addEventListener('shown.bs.modal', () => {
+                    if (![...document.querySelectorAll('.modal.modal-locked.show')].length) {
+                        document.body.classList.remove('modal-open');
+                        document.body.style.removeProperty('overflow');
+                        document.body.style.removeProperty('padding-right');
+                    }
+                });
+            }
+        }
+
+        function initFloatingModals() {
+            document.querySelectorAll('.modal').forEach((el) => prepareFloatingModalElement(el));
+        }
+
+        // Ensure new bootstrap.Modal(...) on floating elements uses backdrop:false even if caller omits options
+        (function patchBootstrapModalForFloating() {
+            const applyPatch = () => {
+                if (!window.bootstrap || !bootstrap.Modal || bootstrap.Modal.__floatingPatched) return;
+                const Original = bootstrap.Modal;
+                function FloatingAwareModal(element, options) {
+                    const el =
+                        typeof element === 'string' ? document.querySelector(element) : element;
+                    if (el && !isLockedFloatingModal(el)) {
+                        prepareFloatingModalElement(el);
+                        options = Object.assign(
+                            { backdrop: false, keyboard: true, focus: false },
+                            options || {}
+                        );
+                    }
+                    return new Original(el, options);
+                }
+                FloatingAwareModal.prototype = Original.prototype;
+                FloatingAwareModal.Default = Original.Default;
+                FloatingAwareModal.getInstance = Original.getInstance.bind(Original);
+                FloatingAwareModal.getOrCreateInstance = function (element, config) {
+                    const el =
+                        typeof element === 'string' ? document.querySelector(element) : element;
+                    const existing = Original.getInstance(el);
+                    if (existing) return existing;
+                    return new FloatingAwareModal(el, config);
+                };
+                FloatingAwareModal.__floatingPatched = true;
+                bootstrap.Modal = FloatingAwareModal;
+            };
+            if (window.bootstrap && bootstrap.Modal) applyPatch();
+            else document.addEventListener('DOMContentLoaded', applyPatch);
+        })();
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initFloatingModals);
+        } else {
+            initFloatingModals();
+        }
+        if (typeof window !== 'undefined') {
+            window.initFloatingModals = initFloatingModals;
+        }
+
         // When true, after the current child modal closes we reopen the Person Actions (Ενεργειες Ατόμου) modal
         let reopenPersonActionsModalWhenClosed = false;
         let reopenPersonActionsAfterTransferFlow = false;
