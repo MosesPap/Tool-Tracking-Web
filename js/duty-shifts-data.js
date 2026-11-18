@@ -4337,16 +4337,16 @@
                 }
                 
                 console.log('Data loaded from Firebase');
-                if (typeof sanitizeRankDuplicateAssignments === 'function') {
-                    const n = sanitizeRankDuplicateAssignments();
-                    if (n > 0) {
-                        console.log(`[RANK-DEDUP] Cleaned ${n} date entries after Firebase load`);
-                        try {
+                // Merge duplicate live names (ΣΜΙΑΣ/ΕΣΜΙΑΣ) in lists+hierarchy only — never rewrite past months.
+                if (typeof mergeDuplicatePeopleInRosterAndRankings === 'function') {
+                    try {
+                        const r = mergeDuplicatePeopleInRosterAndRankings();
+                        if (r && r.merged > 0) {
                             if (typeof saveData === 'function') saveData();
                             else if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
-                        } catch (e) {
-                            console.warn('[RANK-DEDUP] save after sanitize failed:', e);
                         }
+                    } catch (e) {
+                        console.warn('[ROSTER-DEDUP] after Firebase load failed:', e);
                     }
                 }
             } catch (error) {
@@ -4784,15 +4784,14 @@
             // IMPORTANT: Do not auto-rebuild/restore critical assignments into the schedule.
             // criticalAssignments are kept as history only and must not affect the current calendar.
 
-            if (typeof sanitizeRankDuplicateAssignments === 'function') {
-                const n = sanitizeRankDuplicateAssignments();
-                if (n > 0) {
-                    console.log(`[RANK-DEDUP] Cleaned ${n} date entries after localStorage load`);
-                    try {
+            if (typeof mergeDuplicatePeopleInRosterAndRankings === 'function') {
+                try {
+                    const r = mergeDuplicatePeopleInRosterAndRankings();
+                    if (r && r.merged > 0) {
                         saveDataToLocalStorage();
-                    } catch (e) {
-                        console.warn('[RANK-DEDUP] local save after sanitize failed:', e);
                     }
+                } catch (e) {
+                    console.warn('[ROSTER-DEDUP] after localStorage load failed:', e);
                 }
             }
         }

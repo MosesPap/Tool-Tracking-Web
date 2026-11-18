@@ -4468,6 +4468,225 @@
                 }
             }
         }
+
+        /** Rough military-rank seniority for live roster spelling (higher = prefer after promotion). */
+        function liveMilitaryRankSeniority(personName) {
+            const first = (
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey(personName)
+                    : String(personName || '').trim()
+            )
+                .split(/\s+/)[0]
+                .toUpperCase();
+            const table = {
+                ΣΤΡ: 1,
+                ΥΠΚΟΣ: 5,
+                ΥΠΚΑΣ: 5,
+                ΛΧΙΑΣ: 8,
+                ΣΜΙΑΣ: 10,
+                ΕΣΜΙΑΣ: 20,
+                ΑΛΧΙΑΣ: 25,
+                ΕΠΛΧΙΑΣ: 28,
+                ΑΝΘΣΤΗΣ: 30,
+                ΑΝΘΥΠΑΣΠΙΣΤΗΣ: 30,
+                ΑΝΘΣΓΟΣ: 40,
+                ΥΠΣΓΟΣ: 50,
+                ΣΓΟΣ: 60,
+                ΤΧΗΣ: 70,
+                ΑΝΧΗΣ: 80,
+                ΣΧΗΣ: 90
+            };
+            return table[first] || 0;
+        }
+
+        function pickPreferredLivePersonName(names) {
+            const uniq = [...new Set((names || []).filter(Boolean))];
+            if (uniq.length === 0) return null;
+            if (uniq.length === 1) return uniq[0];
+            const rankOf =
+                typeof getRankingForPerson === 'function'
+                    ? getRankingForPerson
+                    : (p) => {
+                          const v = parseInt(rankings?.[p], 10);
+                          return Number.isFinite(v) && v > 0 ? v : 9999;
+                      };
+            uniq.sort((a, b) => {
+                const ra = rankOf(a);
+                const rb = rankOf(b);
+                if (ra !== rb) return ra - rb; // better hierarchy first
+                const sa = liveMilitaryRankSeniority(a);
+                const sb = liveMilitaryRankSeniority(b);
+                if (sa !== sb) return sb - sa; // higher military rank spelling (ΕΣΜΙΑΣ > ΣΜΙΑΣ)
+                return String(b).localeCompare(String(a), 'el');
+            });
+            return uniq[0];
+        }
+
+        /** Merge fromName → toName inside one group bucket without leaving both spellings. */
+        function mergePersonKeysInGroupBucket(bucket, fromName, toName) {
+            if (!bucket || !fromName || !toName || fromName === toName) return false;
+            let changed = false;
+            for (const listType of ['special', 'weekend', 'semi', 'normal']) {
+                const list = bucket[listType];
+                if (!Array.isArray(list) || list.length === 0) continue;
+                const hasFrom = list.includes(fromName);
+                const hasTo = list.includes(toName);
+                if (!hasFrom) continue;
+                if (hasTo) {
+                    bucket[listType] = list.filter((p) => p !== fromName);
+                    changed = true;
+                } else {
+                    for (let i = 0; i < list.length; i++) {
+                        if (list[i] === fromName) {
+                            list[i] = toName;
+                            changed = true;
+                        }
+                    }
+                }
+            }
+            const mergeMap = (obj, deepMerge) => {
+                if (!obj || typeof obj !== 'object' || obj[fromName] === undefined) return;
+                if (obj[toName] === undefined) {
+                    obj[toName] = obj[fromName];
+                } else if (typeof deepMerge === 'function') {
+                    obj[toName] = deepMerge(obj[toName], obj[fromName]);
+                }
+                delete obj[fromName];
+                changed = true;
+            };
+            mergeMap(bucket.lastDuties, (keep, drop) => {
+                const out = { ...(keep || {}) };
+                for (const k of ['special', 'weekend', 'semi', 'normal']) {
+                    if (!out[k] && drop && drop[k]) out[k] = drop[k];
+                }
+                return out;
+            });
+            mergeMap(bucket.priorities, (keep, drop) => {
+                const out = { ...(keep || {}) };
+                for (const k of ['special', 'weekend', 'semi', 'normal']) {
+                    const a = out[k];
+                    const b = drop?.[k];
+                    if (a == null && b != null) out[k] = b;
+                    else if (a != null && b != null) out[k] = Math.min(a, b);
+                }
+                return out;
+            });
+            mergeMap(bucket.missingPeriods, (keep, drop) => {
+                const a = Array.isArray(keep) ? keep : [];
+                const b = Array.isArray(drop) ? drop : [];
+                return a.length ? a : b;
+            });
+            mergeMap(bucket.disabledPersons);
+            mergeMap(bucket.excludedFromDuties);
+            return changed;
+        }
+
+        function mergePersonKeysInGroupSet(groupSet, maxGroups, fromName, toName) {
+            if (!groupSet || !fromName || !toName || fromName === toName) return 0;
+            let n = 0;
+            for (let g = 1; g <= maxGroups; g++) {
+                if (mergePersonKeysInGroupBucket(groupSet[g], fromName, toName)) n++;
+            }
+            return n;
+        }
+
+        /**
+         * Collapse duplicate live roster spellings (same person, different βαθμός) in
+         * lists + hierarchy for both 3- and 4-group sets.
+         * Does NOT modify historical month assignments / calendar cell text.
+         * @returns {{ merged: number, preferredNames: string[] }}
+         */
+        function mergeDuplicatePeopleInRosterAndRankings() {
+            const idFn =
+                typeof getPersonIdentityKey === 'function'
+                    ? getPersonIdentityKey
+                    : (s) => String(s || '').trim();
+            const allNames = new Set(
+                typeof getAllPeopleAcrossGroupSets === 'function'
+                    ? getAllPeopleAcrossGroupSets()
+                    : getAllPeople()
+            );
+            if (rankings && typeof rankings === 'object') {
+                Object.keys(rankings).forEach((k) => allNames.add(k));
+            }
+
+            const byId = new Map();
+            for (const name of allNames) {
+                if (!name) continue;
+                const id = idFn(name) || name;
+                if (!byId.has(id)) byId.set(id, []);
+                byId.get(id).push(name);
+            }
+
+            const four =
+                typeof getGroupsFour === 'function' ? getGroupsFour() : typeof groupsFour !== 'undefined' ? groupsFour : null;
+            const three =
+                typeof getGroupsThree === 'function' ? getGroupsThree() : typeof groupsThree !== 'undefined' ? groupsThree : null;
+
+            let merged = 0;
+            const preferredNames = [];
+
+            for (const [, variants] of byId) {
+                const uniq = [...new Set(variants)];
+                if (uniq.length < 2) continue;
+                const preferred = pickPreferredLivePersonName(uniq);
+                if (!preferred) continue;
+                preferredNames.push(preferred);
+
+                for (const other of uniq) {
+                    if (other === preferred) continue;
+
+                    merged += mergePersonKeysInGroupSet(four, 4, other, preferred);
+                    merged += mergePersonKeysInGroupSet(three, 3, other, preferred);
+                    merged += mergePersonKeysInGroupSet(
+                        groups,
+                        typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4,
+                        other,
+                        preferred
+                    );
+
+                    if (rankings && typeof rankings === 'object' && rankings[other] !== undefined) {
+                        const otherRank = parseInt(rankings[other], 10);
+                        const prefRank = parseInt(rankings[preferred], 10);
+                        if (!Number.isFinite(prefRank) || prefRank <= 0) {
+                            rankings[preferred] = otherRank;
+                        } else if (Number.isFinite(otherRank) && otherRank > 0) {
+                            rankings[preferred] = Math.min(prefRank, otherRank);
+                        }
+                        delete rankings[other];
+                        rankingsModified = true;
+                        merged++;
+                    }
+
+                    if (typeof renamePersonVehicleAuthorizations === 'function') {
+                        try {
+                            renamePersonVehicleAuthorizations(other, preferred);
+                        } catch (_) {}
+                    }
+                }
+            }
+
+            // Keep mode pointers consistent with mutated sets
+            try {
+                const mode = typeof getActiveGroupMode === 'function' ? getActiveGroupMode() : '4';
+                if (mode === '3' && three) {
+                    // groups should already be three
+                } else if (four && typeof groups !== 'undefined') {
+                    // no-op — same references
+                }
+            } catch (_) {}
+
+            if (merged > 0) {
+                console.log(
+                    `[ROSTER-DEDUP] Merged ${merged} duplicate list/hierarchy entries →`,
+                    preferredNames
+                );
+            }
+            return { merged, preferredNames };
+        }
+        if (typeof window !== 'undefined') {
+            window.mergeDuplicatePeopleInRosterAndRankings = mergeDuplicatePeopleInRosterAndRankings;
+        }
         function findPersonGroupInSet(groupSet, maxGroups, personName) {
             if (!personName || !groupSet) return null;
             const targetNorm =
@@ -4791,6 +5010,18 @@
             window.handleDutyPersonSearchKeydown = handleDutyPersonSearchKeydown;
         }
         function openRankingsModal() {
+            // Ensure promotion duplicates are collapsed before showing hierarchy
+            if (typeof mergeDuplicatePeopleInRosterAndRankings === 'function') {
+                try {
+                    const r = mergeDuplicatePeopleInRosterAndRankings();
+                    if (r && r.merged > 0) {
+                        if (typeof saveData === 'function') saveData();
+                        else if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
+                    }
+                } catch (e) {
+                    console.warn('[ROSTER-DEDUP] before rankings modal failed:', e);
+                }
+            }
             // Org-wide list: both 3- and 4-group sets so mode switch does not hide / reshuffle people
             const allPeople =
                 typeof getAllPeopleAcrossGroupSets === 'function'
@@ -6455,21 +6686,21 @@
                 return;
             }
 
-            // One-shot cleanup of promotion duplicates already stored (same person, any group).
+            // One-shot: merge duplicate live roster spellings in lists/hierarchy (not past months).
             if (
-                !window._rankDedupRanThisSession &&
-                typeof sanitizeRankDuplicateAssignments === 'function'
+                !window._rosterDedupRanThisSession &&
+                typeof mergeDuplicatePeopleInRosterAndRankings === 'function'
             ) {
-                window._rankDedupRanThisSession = true;
+                window._rosterDedupRanThisSession = true;
                 try {
-                    const n = sanitizeRankDuplicateAssignments();
-                    if (n > 0) {
-                        console.log(`[RANK-DEDUP] Cleaned ${n} date entries on calendar render`);
+                    const r = mergeDuplicatePeopleInRosterAndRankings();
+                    if (r && r.merged > 0) {
                         if (typeof saveData === 'function') saveData();
                         else if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
+                        if (typeof renderGroups === 'function') renderGroups();
                     }
                 } catch (e) {
-                    console.warn('[RANK-DEDUP] calendar sanitize failed:', e);
+                    console.warn('[ROSTER-DEDUP] calendar merge failed:', e);
                 }
             }
 
