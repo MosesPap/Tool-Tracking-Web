@@ -7394,8 +7394,8 @@
          * χρονολογικά από τελικές αναθέσεις (ποιος βγαίνει πραγματικά κάθε μέρα στο Excel)
          * καθημερινές / ημιαργίες / αργίες / ειδικές: 1ες vs επαναλήψεις
          *   χωρίς πτώση→max· με wrap/swaps→αύξουσα κάλυψη
-         *   (π.χ. #12,#11,#3,#2,#1 → άγκυρα #3· ειδικές: τελευταίος #2 με #3 ήδη → άγκυρα #3)
-         * ειδικές: lookback ιστορικού· 3 επιλαχόντες ανά επόμενη ειδική ημερομηνία
+         * ειδικές: lookback· παραλειφθέντες (# κενά, απουσία/χειροκίνητα) πρώτοι επιλαχόντες
+         *   π.χ. βγήκαν #4,#6,#7 (παράλειψη #5) → επιλαχόντες #5,#8,#9
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
@@ -7898,18 +7898,93 @@
                 };
             };
 
+            /**
+             * Ενεργό τμήμα # για κενά (ειδικές): αν υπάρχουν επαναλήψεις, από την 1η επανάληψη.
+             */
+            const getChronoOrderNosForGapAnalysis = (entries, resolved) => {
+                const all = (entries || [])
+                    .map((e) => e.orderNo)
+                    .filter((n) => n != null && Number.isFinite(n));
+                if (!all.length) return [];
+                if (!resolved?.repeatsOrderNos?.length) return all;
+                const seen = new Set();
+                let startIdx = 0;
+                for (let i = 0; i < all.length; i++) {
+                    if (seen.has(all[i])) {
+                        startIdx = i;
+                        break;
+                    }
+                    seen.add(all[i]);
+                }
+                return all.slice(startIdx);
+            };
+
+            /**
+             * Παραλείψεις στη σειρά μέχρι τον τελευταίο που βγήκε (wrap-aware).
+             * π.χ. #4,#6,#7 → skipped [#5], coveredThrough #7, next #8
+             */
+            const analyzeRotationGaps = (chronoNos, listLen) => {
+                const empty = {
+                    skippedOrderNos: [],
+                    coveredThrough: null,
+                    nextStartOrderNo: 1,
+                    startOrderNo: null
+                };
+                if (!listLen) return empty;
+                const nos = (chronoNos || []).filter(
+                    (n) => Number.isFinite(n) && n >= 1 && n <= listLen
+                );
+                if (!nos.length) return empty;
+                const served = new Set(nos);
+                const start = nos[0];
+                let furthestStep = 0;
+                let pos = start;
+                for (let step = 0; step < listLen; step++) {
+                    if (served.has(pos)) furthestStep = step;
+                    pos = pos === listLen ? 1 : pos + 1;
+                }
+                const skippedOrderNos = [];
+                pos = start;
+                let coveredThrough = start;
+                for (let step = 0; step <= furthestStep; step++) {
+                    if (!served.has(pos)) skippedOrderNos.push(pos);
+                    if (step === furthestStep) coveredThrough = pos;
+                    else pos = pos === listLen ? 1 : pos + 1;
+                }
+                const nextStartOrderNo = coveredThrough === listLen ? 1 : coveredThrough + 1;
+                return {
+                    skippedOrderNos,
+                    coveredThrough,
+                    nextStartOrderNo,
+                    startOrderNo: start
+                };
+            };
+
             for (const t of ['normal', 'semi', 'weekend', 'special']) {
                 const entries = collectAssignedChronoEntriesForType(t);
                 const orderList = orderListForType(t);
                 let resolved;
                 // Όλοι οι τύποι: τελικές αναθέσεις + 1ες/επαναλήψεις / αύξουσα κάλυψη.
-                // Αργίες: μικρή πιθανότητα επαναλήψεων (όπως καθημερινές).
-                // Ειδικές: σχεδόν ποτέ επαναλήψεις· χειροκίνητες ανταλλαγές μπορεί να αφήσουν
-                //   ημερολογιακά τελευταίο το #2 ενώ βγήκε και το #3 → άγκυρα #3 (όχι #2).
                 {
                     const orderNos = entries.map((e) => e.orderNo).filter((n) => n != null);
                     resolved = resolveAnchorFromChronoOrderNos(orderNos, orderList);
                     resolved = extendAnchorIfLastContinuesSequence(entries, orderList, resolved);
+                }
+                let specialGapInfo = null;
+                if (t === 'special' && orderList.length) {
+                    // Ειδικές: άγκυρα = τελευταίος που βγήκε στο ενεργό τμήμα· κενά = παραλείψεις.
+                    const gapNos = getChronoOrderNosForGapAnalysis(entries, resolved);
+                    specialGapInfo = analyzeRotationGaps(gapNos, orderList.length);
+                    if (specialGapInfo.coveredThrough != null) {
+                        const ct = specialGapInfo.coveredThrough;
+                        resolved = {
+                            ...resolved,
+                            coveredThrough: ct,
+                            idx: ct - 1,
+                            person: normName(orderList[ct - 1] || resolved.person || ''),
+                            method: `${resolved.method || 'none'}+special-gaps`
+                        };
+                    }
                 }
                 lastAssigned[t] = resolved.person || '';
                 lastAssignedIdx[t] = Number.isFinite(resolved.idx) ? resolved.idx : -1;
@@ -7925,7 +8000,9 @@
                     method: resolved.method || 'none',
                     anchorOrderNo: resolved.idx >= 0 ? resolved.idx + 1 : null,
                     coveredThrough: resolved.coveredThrough ?? null,
-                    anchorPerson: resolved.person || ''
+                    anchorPerson: resolved.person || '',
+                    skippedOrderNos: specialGapInfo?.skippedOrderNos || [],
+                    specialGapInfo: specialGapInfo || null
                 };
             }
 
@@ -8027,26 +8104,50 @@
                 const rawList = orderListForType('special');
                 if (rawList.length === 0) return { names: ['', '', ''], notes: ['', '', ''] };
                 const specialDates = findNextSpecialDates(3, 3650);
-                // Ανά θέση επιλαχόντα: διαθεσιμότητα στην αντίστοιχη επόμενη ειδική (όχι «οποιαδήποτε απουσία στον μήνα»).
-                let startIdx = resolveStartIndexAfterAnchor('special', rawList);
+                const gapInfo = debugByType.special?.specialGapInfo || null;
                 const outNames = [];
-                let cursor = startIdx;
-                let checked = 0;
-                while (checked < rawList.length * 2 && outNames.length < 3) {
-                    const person = rawList[cursor];
+                const used = new Set();
+                const tryPick = (person) => {
+                    if (!person || outNames.length >= 3) return;
+                    const key = normName(person);
+                    if (!key || used.has(key)) return;
                     const slotDate = specialDates[outNames.length];
                     const slotKey =
                         slotDate && !isNaN(slotDate.getTime()) ? formatDateKey(slotDate) : null;
-                    if (
-                        person &&
-                        isAvailableForSpecialOnDate(person, slotKey, { allowIneligible: true })
-                    ) {
-                        outNames.push(person);
+                    if (!isAvailableForSpecialOnDate(person, slotKey, { allowIneligible: true })) {
+                        return;
                     }
+                    if (
+                        typeof isPersonExcludedFromDuties === 'function' &&
+                        isPersonExcludedFromDuties(person, groupNum)
+                    ) {
+                        return;
+                    }
+                    outNames.push(person);
+                    used.add(key);
+                };
+
+                // 1) Παραλειφθέντες πρώτοι (απουσία / χειροκίνητη απόρριψη) — συντομότερη επόμενη ειδική.
+                const skipped = gapInfo?.skippedOrderNos || [];
+                for (const orderNo of skipped) {
+                    if (outNames.length >= 3) break;
+                    if (!(orderNo >= 1 && orderNo <= rawList.length)) continue;
+                    tryPick(rawList[orderNo - 1]);
+                }
+
+                // 2) Συνέχεια μετά τον τελευταίο που βγήκε (όχι από την άγκυρα που σταματά σε κενό).
+                let cursor =
+                    gapInfo?.nextStartOrderNo != null && gapInfo.nextStartOrderNo >= 1
+                        ? gapInfo.nextStartOrderNo - 1
+                        : resolveStartIndexAfterAnchor('special', rawList);
+                let checked = 0;
+                while (checked < rawList.length * 2 && outNames.length < 3) {
+                    tryPick(rawList[cursor]);
                     cursor = (cursor + 1) % rawList.length;
                     checked++;
                 }
                 while (outNames.length < 3) outNames.push('');
+
                 const outNotes = [];
                 for (let i = 0; i < 3; i++) {
                     const name = outNames[i] || '';
@@ -8061,7 +8162,11 @@
                             outNotes.push('');
                             continue;
                         }
-                        if (isDisabledForTypeAtDate(name, 'special', specialDateKey)) {
+                        const skippedSet = new Set(skipped);
+                        const orderNo = findIdxInList(rawList, name) + 1;
+                        if (orderNo > 0 && skippedSet.has(orderNo)) {
+                            note = 'ΠΑΡΑΛΕΙΨΗ → επόμενη ειδική';
+                        } else if (isDisabledForTypeAtDate(name, 'special', specialDateKey)) {
                             note = 'ΕΚΤΟΣ ΥΠΗΡΕΣΙΑΣ';
                         } else {
                             const r = getMissingReasonOverRange(name, specialDateKey, specialDateKey);
@@ -8733,6 +8838,13 @@
                                     ${d.method === 'ascending-chain' ? ` (${chain})` : ''}</div>
                                 <div>Άγκυρα: <strong>${d.anchorOrderNo != null ? '#' + d.anchorOrderNo : '—'}</strong>
                                     ${d.anchorPerson ? escapeHtml(d.anchorPerson) : ''}</div>
+                                ${
+                                    Array.isArray(d.skippedOrderNos) && d.skippedOrderNos.length
+                                        ? `<div>Παραλείψεις (πρώτοι επιλαχόντες): <strong>${d.skippedOrderNos
+                                              .map((n) => '#' + n)
+                                              .join(', ')}</strong></div>`
+                                        : ''
+                                }
                                 <div>Αναπληρωματικοί: ${nextLine || '—'}</div>
                             </div>`;
                     }).join('');
