@@ -15600,9 +15600,10 @@
                                     : originalRotationPerson;
                             normalRotationPersons[dateKey][groupNum] = baselineForDisplay;
                             
-                            // If baseline already served earlier this month, prefer a still-unused
-                            // eligible person (don't leave anyone behind). If nobody unused remains,
-                            // KEEP the baseline so the visible series continues (no jump to later names).
+                            // If baseline already served earlier this month:
+                            // 1) prefer still-unused eligible (don't leave anyone behind);
+                            // 2) else KEEP baseline so the series continues — EXCEPT when their last
+                            //    duty was the previous normal day (would stack consecutive normals, e.g. B 28→29).
                             let wasReplacedDueToFiveDayRule = false;
                             if (
                                 !wasDisabledPersonSkipped &&
@@ -15648,12 +15649,25 @@
                                         }
                                         return !isMarkedAssigned(p);
                                     });
+                                    const prevNormalIdx = sortedNormal.indexOf(dateKey) - 1;
+                                    const prevNormalKey =
+                                        prevNormalIdx >= 0 ? sortedNormal[prevNormalIdx] : null;
+                                    const lastKeyForBaseline = (() => {
+                                        if (assignedMapMd[assignedPerson]) return assignedMapMd[assignedPerson];
+                                        const id = idOf(assignedPerson);
+                                        const hit = Object.keys(assignedMapMd).find((k) => idOf(k) === id);
+                                        return hit ? assignedMapMd[hit] : lastAssignmentDateKey;
+                                    })();
+                                    const consecutiveNormal =
+                                        !!prevNormalKey && lastKeyForBaseline === prevNormalKey;
+                                    const shouldDisplace = hasUnusedEligible || consecutiveNormal;
                                     // #region agent log
                                     if (
                                         dateKey === '2026-12-21' ||
                                         dateKey === '2026-12-22' ||
                                         dateKey === '2026-12-28' ||
-                                        dateKey === '2026-12-29'
+                                        dateKey === '2026-12-29' ||
+                                        groupNum === 2
                                     ) {
                                         fetch(
                                             'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
@@ -15666,7 +15680,7 @@
                                                 body: JSON.stringify({
                                                     sessionId: '73ad17',
                                                     runId: 'post-fix',
-                                                    hypothesisId: 'H10',
+                                                    hypothesisId: 'H11',
                                                     location:
                                                         'duty-shifts-logic.js:monthDupBaselineGate',
                                                     message: 'month-dup baseline gate',
@@ -15675,7 +15689,10 @@
                                                         groupNum,
                                                         baseline: assignedPerson,
                                                         hasUnusedEligible,
-                                                        willDisplace: !!hasUnusedEligible
+                                                        consecutiveNormal,
+                                                        prevNormalKey,
+                                                        lastKeyForBaseline,
+                                                        willDisplace: !!shouldDisplace
                                                     },
                                                     timestamp: Date.now()
                                                 })
@@ -15683,7 +15700,7 @@
                                         ).catch(() => {});
                                     }
                                     // #endregion
-                                    if (hasUnusedEligible) {
+                                    if (shouldDisplace) {
                                         const candidate = pickNormalCandidateAvoidingMonthDup(
                                             groupPeople,
                                             rotationPosition,
@@ -15693,16 +15710,23 @@
                                             assignedMapMd,
                                             assignedPerson
                                         );
-                                        if (candidate && !isMarkedAssigned(candidate)) {
-                                            assignedPerson = candidate;
-                                            wasReplacedDueToFiveDayRule = true;
+                                        if (candidate && candidate !== assignedPerson) {
+                                            // Unused path: only accept never-assigned.
+                                            // Consecutive path: reuse OK (pickNormal already skips ≤5d).
+                                            if (
+                                                hasUnusedEligible
+                                                    ? !isMarkedAssigned(candidate)
+                                                    : true
+                                            ) {
+                                                assignedPerson = candidate;
+                                                wasReplacedDueToFiveDayRule = true;
+                                            }
                                         }
-                                        // else keep baseline (sequence) — do not null out
                                     }
-                                    // else: everyone eligible already served → keep baseline, continue series
+                                    // else: already served, not consecutive, nobody unused → keep baseline
                                 }
                             }
-                            // Keep baseline as basic-series slot (originalRotationPerson); month-dup only steals slot for unused people.
+                            // Keep baseline as basic-series slot; month-dup steals only for unused or anti-consecutive.
 
                             // #region agent log
                             {
