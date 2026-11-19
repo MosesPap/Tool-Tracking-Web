@@ -14975,26 +14975,20 @@
                         return true;
                     };
                     const tryPass = (allowReuse) => {
-                        // Prefer people with no duty yet this month (eligible unused), in list order.
-                        if (!allowReuse) {
-                            for (const cand of unused) {
-                                if (candEligible(cand, false)) {
-                                    return { cand, allowReuse: false, fromUnused: true };
-                                }
-                            }
-                        }
+                        // Walk rotation order from startIdx (do NOT jump to earliest unused in list —
+                        // that broke series continuity: rotPos 0 → assign index 9 → nextRot 10).
                         for (let offset = 1; offset <= n * 2; offset++) {
                             const idx = (startIdx + offset) % n;
                             const cand = groupPeopleLocal[idx];
                             if (!candEligible(cand, allowReuse)) continue;
-                            return { cand, allowReuse, fromUnused: false };
+                            return { cand, allowReuse, pickIdx: idx };
                         }
                         return null;
                     };
                     const first = tryPass(false);
                     const picked = first || tryPass(true);
                     // #region agent log
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'post-fix',hypothesisId:'B',location:'duty-shifts-logic.js:pickNormalCandidateAvoidingMonthDup',message:'month-dup pick',data:{dateKey:dateKeyLocal,groupNum:groupNumLocal,startIdx,unusedEligible:unused.length,unusedBlocked:unusedBlocked.slice(0,6),unusedSample:unused.slice(0,8),picked:picked?.cand||null,usedReuse:!first&&!!picked,fromUnused:!!picked?.fromUnused,listLen:n},timestamp:Date.now()})}).catch(()=>{});
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'post-fix',hypothesisId:'G',location:'duty-shifts-logic.js:pickNormalCandidateAvoidingMonthDup',message:'month-dup pick',data:{dateKey:dateKeyLocal,groupNum:groupNumLocal,startIdx,unusedEligible:unused.length,unusedBlocked:unusedBlocked.slice(0,6),unusedSample:unused.slice(0,8),picked:picked?.cand||null,pickIdx:picked?.pickIdx??null,usedReuse:!first&&!!picked,listLen:n},timestamp:Date.now()})}).catch(()=>{});
                     // #endregion
                     return picked ? picked.cand : null;
                 };
@@ -15512,7 +15506,6 @@
                             // If assigned person already served earlier this month, take next unused
                             // (old 5-day window allowed +7d reuse → same people at month end).
                             let wasReplacedDueToFiveDayRule = false;
-                            let wasCatchUpSkippedUnused = false;
                             if (
                                 !wasDisabledPersonSkipped &&
                                 assignedPerson &&
@@ -15543,56 +15536,6 @@
                                         assignedPerson = null;
                                     }
                                 }
-                            }
-                            // Catch up people whose slot was skipped earlier (disabled/missing) once available again.
-                            // Do not rewind the basic series — only insert them as final assignee.
-                            {
-                                const mapNow = assignedPeoplePreview[monthKey][groupNum] || {};
-                                const passedUnused = [];
-                                for (let ui = 0; ui < groupPeople.length; ui++) {
-                                    const up = groupPeople[ui];
-                                    if (!up || mapNow[up]) continue;
-                                    if (ui >= rotationPosition) continue;
-                                    if (isPersonMissingOnDate(up, groupNum, date, 'normal')) continue;
-                                    if (
-                                        typeof isPersonDisabledForDuty === 'function' &&
-                                        isPersonDisabledForDuty(up, groupNum, 'normal')
-                                    ) {
-                                        continue;
-                                    }
-                                    passedUnused.push(up);
-                                }
-                                if (passedUnused.length) {
-                                    const catchPerson = passedUnused[0];
-                                    const catchIdx = groupPeople.indexOf(catchPerson);
-                                    const normC =
-                                        typeof normalizePersonKey === 'function'
-                                            ? normalizePersonKey
-                                            : (nm) => String(nm || '').trim();
-                                    let curIdx = assignedPerson
-                                        ? groupPeople.indexOf(assignedPerson)
-                                        : -1;
-                                    if (curIdx < 0 && assignedPerson) {
-                                        curIdx = groupPeople.findIndex(
-                                            (p) => normC(p) === normC(assignedPerson)
-                                        );
-                                    }
-                                    const assignedAlready =
-                                        !!(assignedPerson && mapNow[assignedPerson]);
-                                    if (
-                                        !assignedPerson ||
-                                        assignedAlready ||
-                                        (curIdx >= 0 && catchIdx >= 0 && curIdx > catchIdx)
-                                    ) {
-                                        assignedPerson = catchPerson;
-                                        wasCatchUpSkippedUnused = true;
-                                    }
-                                }
-                                // #region agent log
-                                if (sortedNormal && sortedNormal.length && sortedNormal.indexOf(dateKey) >= Math.max(0, sortedNormal.length - 6)) {
-                                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'post-fix',hypothesisId:'F',location:'duty-shifts-logic.js:catchUpSkippedUnused',message:'catch-up check',data:{dateKey,groupNum,rotPos:rotationPosition,passedUnused:passedUnused.slice(0,8),catchUp:wasCatchUpSkippedUnused,assigned:assignedPerson},timestamp:Date.now()})}).catch(()=>{});
-                                }
-                                // #endregion
                             }
                             // Keep baseline as basic-series slot (originalRotationPerson); month-dup rule only changes final assignee.
                             
@@ -15651,15 +15594,15 @@
                             // Check if assigned person has a conflict (will be swapped later)
                             // If so, DO NOT assign anyone to this day - leave it for swap logic to handle
                             // Also DO NOT assign the next person in rotation to this day
-                            // IMPORTANT: Advance rotation from the ASSIGNED person (replacement), not only baseline+1.
-                            // baseline+1 after a replacement caused a cascade: next day baseline was the person
-                            // who just served → perpetual month-dup and sequence broke on late weekdays.
-                            // BUT: Skip if rotation was already advanced (e.g., by pending swap)
+                            // Advance rule:
+                            // - Disabled/missing replacement: advance past the ASSIGNED person (avoids cascade
+                            //   where next baseline is who just served).
+                            // - Month-dup / normal: advance baseline+1 only (keeps series continuity).
+                            // Jumping to assignedIdx after month-dup caused rotPos 0 → nextRot 10.
                             if (!rotationAlreadyAdvanced) {
-                                const advanceNormalCursorFromAssigned = () => {
-                                    // Never rewind past the baseline slot (catch-up can assign an earlier index).
+                                const advanceNormalCursor = () => {
                                     let advanceFrom = rotationPosition;
-                                    if (assignedPerson) {
+                                    if (wasDisabledPersonSkipped && assignedPerson) {
                                         const normP =
                                             typeof normalizePersonKey === 'function'
                                                 ? normalizePersonKey
@@ -15695,10 +15638,10 @@
                                     if (hasConflict) {
                                         // Person has conflict - STORE THEM so swap logic can process them.
                                         markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
-                                        advanceNormalCursorFromAssigned();
+                                        advanceNormalCursor();
                                     } else {
                                         markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
-                                        advanceNormalCursorFromAssigned();
+                                        advanceNormalCursor();
                                     }
                                 } else {
                                     // Person is missing or no person assigned - advance from baseline slot
@@ -15721,7 +15664,7 @@
                             if (sortedNormal && sortedNormal.length && sortedNormal.indexOf(dateKey) >= Math.max(0, sortedNormal.length - 6)) {
                                 const assignedMap = assignedPeoplePreview?.[monthKey]?.[groupNum] || {};
                                 const unusedNow = (groupPeople || []).filter((p) => p && !assignedMap[p] && p !== assignedPerson);
-                                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'post-fix',hypothesisId:'E',location:'duty-shifts-logic.js:afterNormalAssign',message:'late normal assign result',data:{dateKey,groupNum,baseline:originalRotationPerson,assigned:assignedPerson,rotPos:rotationPosition,nextRot:globalNormalRotationPosition?.[groupNum],monthDupRepl:wasReplacedDueToFiveDayRule,disabledSkip:wasDisabledPersonSkipped,catchUp:wasCatchUpSkippedUnused,unusedAfter:unusedNow.length,unusedNames:unusedNow.slice(0,10)},timestamp:Date.now()})}).catch(()=>{});
+                                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'post-fix',hypothesisId:'G',location:'duty-shifts-logic.js:afterNormalAssign',message:'late normal assign result',data:{dateKey,groupNum,baseline:originalRotationPerson,assigned:assignedPerson,rotPos:rotationPosition,nextRot:globalNormalRotationPosition?.[groupNum],monthDupRepl:wasReplacedDueToFiveDayRule,disabledSkip:wasDisabledPersonSkipped,unusedAfter:unusedNow.length,unusedNames:unusedNow.slice(0,10)},timestamp:Date.now()})}).catch(()=>{});
                             }
                             // #endregion
                             
