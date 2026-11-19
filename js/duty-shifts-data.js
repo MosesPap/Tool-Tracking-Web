@@ -1010,7 +1010,63 @@
             if (hits.length && Array.isArray(hits[0].order)) {
                 const scheduled = hits[0].order.slice();
                 // Live priorities / UI reorder win over stale seeded schedule when roster is unchanged.
-                if (sameRotationListMembership(scheduled, sortedCurrent)) {
+                const membershipMatch = sameRotationListMembership(scheduled, sortedCurrent);
+                // #region agent log
+                if (
+                    groupNum === 1 &&
+                    (listType === 'semi' || listType === 'weekend' || listType === 'special')
+                ) {
+                    const onlySched = scheduled.filter(
+                        (p) =>
+                            !sortedCurrent.some(
+                                (c) =>
+                                    personScheduleKey(c) === personScheduleKey(p) ||
+                                    (typeof personNamesMatchIgnoringRank === 'function' &&
+                                        personNamesMatchIgnoringRank(c, p))
+                            )
+                    );
+                    const onlyLive = sortedCurrent.filter(
+                        (p) =>
+                            !scheduled.some(
+                                (c) =>
+                                    personScheduleKey(c) === personScheduleKey(p) ||
+                                    (typeof personNamesMatchIgnoringRank === 'function' &&
+                                        personNamesMatchIgnoringRank(c, p))
+                            )
+                    );
+                    if (!membershipMatch || scheduled.length !== sortedCurrent.length || onlySched.length) {
+                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Debug-Session-Id': '73ad17'
+                            },
+                            body: JSON.stringify({
+                                sessionId: '73ad17',
+                                runId: 'semi-holiday-list',
+                                hypothesisId: 'H1',
+                                location: 'duty-shifts-data.js:getListOrderAtDate',
+                                message: 'listOrders vs live roster mismatch',
+                                data: {
+                                    groupNum,
+                                    listType,
+                                    dk,
+                                    membershipMatch,
+                                    using: membershipMatch ? 'sortedCurrent' : 'scheduled',
+                                    liveLen: sortedCurrent.length,
+                                    schedLen: scheduled.length,
+                                    onlyInSchedule: onlySched.slice(0, 8),
+                                    onlyInLive: onlyLive.slice(0, 8),
+                                    schedTail: scheduled.slice(-5),
+                                    liveTail: sortedCurrent.slice(-5)
+                                },
+                                timestamp: Date.now()
+                            })
+                        }).catch(() => {});
+                    }
+                }
+                // #endregion
+                if (membershipMatch) {
                     return sortedCurrent;
                 }
                 return scheduled;
@@ -1278,10 +1334,62 @@
             if (getActiveGroupMode() === '3') {
                 return Array.isArray(order) ? order.slice() : [];
             }
-            return filterExcludedFromDutyList(
-                order.filter((person) => getPersonHomeGroupAtDate(person, dk) === groupNum),
-                groupNum
+            const homeFiltered = (Array.isArray(order) ? order : []).filter(
+                (person) => getPersonHomeGroupAtDate(person, dk) === groupNum
             );
+            const result = filterExcludedFromDutyList(homeFiltered, groupNum);
+            // #region agent log
+            if (
+                groupNum === 1 &&
+                (listType === 'semi' || listType === 'weekend' || listType === 'special')
+            ) {
+                const live = getSortedGroupListForRotation(groupNum, listType) || [];
+                const liveActive = filterExcludedFromDutyList(live, groupNum);
+                const extras = result.filter(
+                    (p) =>
+                        !liveActive.some(
+                            (c) =>
+                                personScheduleKey(c) === personScheduleKey(p) ||
+                                (typeof personNamesMatchIgnoringRank === 'function' &&
+                                    personNamesMatchIgnoringRank(c, p))
+                        )
+                );
+                if (result.length > liveActive.length || extras.length || result.length > 13) {
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Debug-Session-Id': '73ad17'
+                        },
+                        body: JSON.stringify({
+                            sessionId: '73ad17',
+                            runId: 'semi-holiday-list',
+                            hypothesisId: 'H2',
+                            location: 'duty-shifts-data.js:getGroupRotationListAtDate',
+                            message: 'rotation list vs live active list',
+                            data: {
+                                groupNum,
+                                listType,
+                                dk,
+                                mode: getActiveGroupMode(),
+                                orderLen: Array.isArray(order) ? order.length : 0,
+                                resultLen: result.length,
+                                liveActiveLen: liveActive.length,
+                                extras: extras.slice(0, 8),
+                                resultTail: result.slice(-5).map((p, i) => ({
+                                    no: result.length - 4 + i,
+                                    p
+                                })),
+                                droppedHome: homeFiltered.length - (Array.isArray(order) ? order.length : 0),
+                                droppedExcl: homeFiltered.length - result.length
+                            },
+                            timestamp: Date.now()
+                        })
+                    }).catch(() => {});
+                }
+            }
+            // #endregion
+            return result;
         }
         function groupsForDuty(groupNum, dateKey) {
             const g = groups[groupNum] || {
