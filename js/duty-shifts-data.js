@@ -7542,6 +7542,88 @@
                 return false;
             };
 
+            const addDaysKeyLocal = (dk, days) => {
+                if (typeof addCalendarDaysToDateKey === 'function') {
+                    return addCalendarDaysToDateKey(dk, days);
+                }
+                if (!dk || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
+                const d = new Date(dk + 'T00:00:00');
+                if (isNaN(d.getTime())) return null;
+                d.setDate(d.getDate() + (days || 0));
+                return formatDateKey(d);
+            };
+
+            /** Πρώτη ημέρα του τύπου στον επόμενο μήνα (για έλεγχο επιλαχόντων). */
+            const findFirstDutyDateKeyInNextMonth = (dutyType) => {
+                const start = new Date(year, month + 1, 1);
+                const end = new Date(year, month + 2, 0);
+                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                    const dt = getDayType(d);
+                    if (dutyType === 'weekend' && dt === 'weekend-holiday') return formatDateKey(d);
+                    if (dutyType === 'semi' && dt === 'semi-normal-day') return formatDateKey(d);
+                    if (dutyType === 'normal' && dt === 'normal-day') return formatDateKey(d);
+                }
+                return null;
+            };
+
+            const findNthNormalOnOrAfter = (thresholdKey, n) => {
+                if (!thresholdKey || !(n >= 1)) return null;
+                const start = new Date(thresholdKey + 'T00:00:00');
+                if (isNaN(start.getTime())) return null;
+                let count = 0;
+                for (let i = 0; i < 120; i++) {
+                    const d = new Date(start);
+                    d.setDate(start.getDate() + i);
+                    if (getDayType(d) !== 'normal-day') continue;
+                    count++;
+                    if (count === n) return formatDateKey(d);
+                }
+                return null;
+            };
+
+            /**
+             * Επιστροφή από απουσία → όχι αυτόματος επιλαχών πριν τον κανόνα του τύπου
+             * (αργίες/ημιαργίες: E+3 · καθημερινές: 3η καθημερινή από E+1).
+             * Ειδικές: δεν εφαρμόζεται εδώ.
+             */
+            const isTooSoonAfterAbsenceReturnForType = (personName, dutyType) => {
+                if (!personName || dutyType === 'special') return false;
+                const periods = getMissingPeriodsForPerson(personName);
+                if (!Array.isArray(periods) || periods.length === 0) return false;
+
+                for (const p of periods) {
+                    const endKey = inputValueToDateKey(p?.end);
+                    if (!endKey) continue;
+                    // Απουσία που καλύπτει ακόμα την πρώτη ημέρα τύπου → το isMissing* το πιάνει.
+                    if (endKey >= nextMonthEndKey) continue;
+
+                    if (dutyType === 'weekend') {
+                        const firstWk = findFirstDutyDateKeyInNextMonth('weekend');
+                        if (!firstWk || endKey >= firstWk) continue;
+                        if (typeof isWeekendDutyTooSoonAfterAbsenceReturn === 'function') {
+                            if (isWeekendDutyTooSoonAfterAbsenceReturn(personName, groupNum, firstWk)) {
+                                return true;
+                            }
+                        } else {
+                            const eligibleFrom = addDaysKeyLocal(endKey, 3);
+                            if (eligibleFrom && firstWk < eligibleFrom) return true;
+                        }
+                    } else if (dutyType === 'semi') {
+                        const firstSemi = findFirstDutyDateKeyInNextMonth('semi');
+                        if (!firstSemi || endKey >= firstSemi) continue;
+                        const eligibleFrom = addDaysKeyLocal(endKey, 3);
+                        if (eligibleFrom && firstSemi < eligibleFrom) return true;
+                    } else if (dutyType === 'normal') {
+                        const returnKey = addDaysKeyLocal(endKey, 1);
+                        if (!returnKey || returnKey > nextMonthEndKey) continue;
+                        const thirdNormal = findNthNormalOnOrAfter(returnKey, 3);
+                        const firstNormal = findFirstDutyDateKeyInNextMonth('normal');
+                        if (firstNormal && thirdNormal && firstNormal < thirdNormal) return true;
+                    }
+                }
+                return false;
+            };
+
             const isAvailableForNextMonth = (personName, dutyType, { allowIneligible = false } = {}) => {
                 if (
                     typeof isPersonExcludedFromDuties === 'function' &&
@@ -7554,6 +7636,13 @@
                 if (dutyType !== 'special' && isMissingAnyPartOfNextMonth(personName)) return false;
                 if (allowIneligible) return true;
                 if (isDisabledForNextMonth(personName, dutyType)) return false;
+                // Επιστροφή από απουσία: buffer πριν την 1η ημέρα τύπου του επόμενου μήνα.
+                if (
+                    dutyType !== 'special' &&
+                    isTooSoonAfterAbsenceReturnForType(personName, dutyType)
+                ) {
+                    return false;
+                }
                 return true;
             };
 
@@ -8475,6 +8564,27 @@
                     if (isNaN(d.getTime())) return endKey;
                     return typeof formatDate === 'function' ? formatDate(d) : endKey;
                 };
+                const addDaysKeyPreview = (dk, days) => {
+                    if (typeof addCalendarDaysToDateKey === 'function') {
+                        return addCalendarDaysToDateKey(dk, days);
+                    }
+                    if (!dk || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return null;
+                    const d = new Date(dk + 'T00:00:00');
+                    if (isNaN(d.getTime())) return null;
+                    d.setDate(d.getDate() + (days || 0));
+                    return formatDateKey(d);
+                };
+                const findFirstDutyInNextMonthPreview = (dutyType) => {
+                    const start = new Date(year, month + 1, 1);
+                    const end = new Date(year, month + 2, 0);
+                    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                        const dt = getDayType(d);
+                        if (dutyType === 'weekend' && dt === 'weekend-holiday') return formatDateKey(d);
+                        if (dutyType === 'semi' && dt === 'semi-normal-day') return formatDateKey(d);
+                        if (dutyType === 'normal' && dt === 'normal-day') return formatDateKey(d);
+                    }
+                    return null;
+                };
                 const getPersonAltStatus = (personName, type) => {
                     const markers = [];
                     let optClass = '';
@@ -8515,6 +8625,62 @@
                         optClass = optClass
                             ? `${optClass} excel-alt-opt-absent`
                             : 'excel-alt-opt-absent';
+                    }
+                    // Buffer επιστροφής για επιλαχόντες (όχι ειδικές).
+                    if (type !== 'special' && Array.isArray(periods) && periods.length) {
+                        let returnTooSoon = false;
+                        for (const per of periods) {
+                            const eKey = inputValueToDateKey(per?.end);
+                            if (!eKey || eKey >= nextMonthEndKey) continue;
+                            if (type === 'weekend') {
+                                const firstWk = findFirstDutyInNextMonthPreview('weekend');
+                                if (
+                                    firstWk &&
+                                    eKey < firstWk &&
+                                    typeof isWeekendDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                    isWeekendDutyTooSoonAfterAbsenceReturn(personName, groupNum, firstWk)
+                                ) {
+                                    returnTooSoon = true;
+                                    break;
+                                }
+                            } else if (type === 'semi') {
+                                const firstSemi = findFirstDutyInNextMonthPreview('semi');
+                                const eligible = addDaysKeyPreview(eKey, 3);
+                                if (firstSemi && eligible && eKey < firstSemi && firstSemi < eligible) {
+                                    returnTooSoon = true;
+                                    break;
+                                }
+                            } else if (type === 'normal') {
+                                const returnKey = addDaysKeyPreview(eKey, 1);
+                                const firstNormal = findFirstDutyInNextMonthPreview('normal');
+                                if (returnKey && firstNormal && returnKey <= nextMonthEndKey) {
+                                    let count = 0;
+                                    let third = null;
+                                    const start = new Date(returnKey + 'T00:00:00');
+                                    for (let i = 0; i < 120 && !third; i++) {
+                                        const d = new Date(start);
+                                        d.setDate(start.getDate() + i);
+                                        if (getDayType(d) !== 'normal-day') continue;
+                                        count++;
+                                        if (count === 3) third = formatDateKey(d);
+                                    }
+                                    if (third && firstNormal < third) {
+                                        returnTooSoon = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (returnTooSoon) {
+                            markers.push(
+                                type === 'normal'
+                                    ? 'Επιστροφή — μετά 3η καθημερινή'
+                                    : 'Επιστροφή — μετά E+3'
+                            );
+                            optClass = optClass
+                                ? `${optClass} excel-alt-opt-absent`
+                                : 'excel-alt-opt-absent';
+                        }
                     }
                     return { markers, optClass, isDisabled, absenceEndKey };
                 };
