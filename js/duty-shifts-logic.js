@@ -14933,6 +14933,12 @@
                         excludePerson && typeof normalizePersonKey === 'function'
                             ? normalizePersonKey(excludePerson)
                             : String(excludePerson || '');
+                    const unused = [];
+                    for (const p of groupPeopleLocal || []) {
+                        if (!p) continue;
+                        if (normEx && (typeof normalizePersonKey === 'function' ? normalizePersonKey(p) : String(p)) === normEx) continue;
+                        if (!assignedMapLocal?.[p]) unused.push(p);
+                    }
                     const tryPass = (allowReuse) => {
                         for (let offset = 1; offset <= n * 2; offset++) {
                             const idx = (startIdx + offset) % n;
@@ -14963,11 +14969,16 @@
                                 // Even on reuse pass (full cycle), avoid stacking within 5 days
                                 if (allowReuse && daysDiff > 0 && daysDiff <= 5) continue;
                             }
-                            return cand;
+                            return { cand, allowReuse, unusedLeft: unused.length };
                         }
                         return null;
                     };
-                    return tryPass(false) || tryPass(true);
+                    const first = tryPass(false);
+                    const picked = first || tryPass(true);
+                    // #region agent log
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'pre-fix',hypothesisId:'B',location:'duty-shifts-logic.js:pickNormalCandidateAvoidingMonthDup',message:'month-dup pick',data:{dateKey:dateKeyLocal,groupNum:groupNumLocal,startIdx,unusedCount:unused.length,unusedSample:unused.slice(0,8),picked:picked?.cand||null,usedReuse:!first&&!!picked,listLen:n},timestamp:Date.now()})}).catch(()=>{});
+                    // #endregion
+                    return picked ? picked.cand : null;
                 };
                 // Track days that have been swapped (to use already-assigned person when we reach them)
                 const swappedDaysPreview = {}; // dateKey -> { groupNum -> true }
@@ -15243,6 +15254,15 @@
                                 ? groupsForDuty(groupNum, dateKey)
                                 : groups[groupNum]) || { normal: [] };
                         const groupPeople = groupData.normal || [];
+                        // #region agent log
+                        if (sortedNormal && sortedNormal.length && sortedNormal.indexOf(dateKey) >= Math.max(0, sortedNormal.length - 6)) {
+                            const exclFlags = (groupPeople || []).map((p) => ({
+                                p: String(p || '').slice(0, 40),
+                                excl: typeof isPersonExcludedFromDuties === 'function' && isPersonExcludedFromDuties(p, groupNum)
+                            }));
+                            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'pre-fix',hypothesisId:'A',location:'duty-shifts-logic.js:normalPreviewLoop',message:'late normal day list',data:{dateKey,groupNum,mode:typeof getActiveGroupMode==='function'?getActiveGroupMode():null,listLen:groupPeople.length,exclInList:exclFlags.filter(x=>x.excl).length,people:exclFlags,rotPos:globalNormalRotationPosition?.[groupNum]},timestamp:Date.now()})}).catch(()=>{});
+                        }
+                        // #endregion
                         
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
@@ -15609,6 +15629,13 @@
                                 normalAssignments[dateKey] = {};
                             }
                             normalAssignments[dateKey][groupNum] = assignedPerson;
+                            // #region agent log
+                            if (sortedNormal && sortedNormal.length && sortedNormal.indexOf(dateKey) >= Math.max(0, sortedNormal.length - 6)) {
+                                const assignedMap = assignedPeoplePreview?.[monthKey]?.[groupNum] || {};
+                                const unusedNow = (groupPeople || []).filter((p) => p && !assignedMap[p] && p !== assignedPerson);
+                                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'pre-fix',hypothesisId:'E',location:'duty-shifts-logic.js:afterNormalAssign',message:'late normal assign result',data:{dateKey,groupNum,baseline:originalRotationPerson,assigned:assignedPerson,rotPos:rotationPosition,nextRot:globalNormalRotationPosition?.[groupNum],monthDupRepl:wasReplacedDueToFiveDayRule,disabledSkip:wasDisabledPersonSkipped,unusedAfter:unusedNow.length,unusedNames:unusedNow.slice(0,10)},timestamp:Date.now()})}).catch(()=>{});
+                            }
+                            // #endregion
                             
                             if (
                                 assignedPerson &&
@@ -15707,6 +15734,28 @@
                     
                     html += '</tr>';
                 });
+                // #region agent log
+                try {
+                    const monthKeys = [...new Set((sortedNormal || []).map((dk) => String(dk).slice(0, 7)))];
+                    for (const mk of monthKeys) {
+                        for (let g = 1; g <= getDutyGroupCount(); g++) {
+                            const gd =
+                                typeof groupsForDuty === 'function'
+                                    ? groupsForDuty(g, `${mk}-28`)
+                                    : groups[g];
+                            const people = gd?.normal || [];
+                            const assignedMap = assignedPeoplePreview?.[mk]?.[g] || {};
+                            const never = people.filter((p) => p && !assignedMap[p]);
+                            const counts = {};
+                            Object.keys(assignedMap).forEach((p) => {
+                                counts[p] = (counts[p] || 0) + 1;
+                            });
+                            // recount properly: assignedMap is person->lastDate only one each
+                            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'pre-fix',hypothesisId:'E',location:'duty-shifts-logic.js:normalPreviewEnd',message:'month unused summary',data:{monthKey:mk,groupNum:g,listLen:people.length,assignedUnique:Object.keys(assignedMap).length,neverAssigned:never.length,neverNames:never.slice(0,12),mode:typeof getActiveGroupMode==='function'?getActiveGroupMode():null},timestamp:Date.now()})}).catch(()=>{});
+                        }
+                    }
+                } catch (_) {}
+                // #endregion
                 
                 html += '</tbody>';
                 html += '</table>';
