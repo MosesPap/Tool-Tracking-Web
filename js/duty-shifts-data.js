@@ -7648,17 +7648,24 @@
             };
 
             /**
-             * Επιστροφή από απουσία δίπλα σε ειδική / σε συνεχόμενο μπλοκ ειδικών
-             * (π.χ. λήξη 31/12 → όχι 1/1 · λήξη 24 με 24–25 διπλές → όχι 25).
+             * Επιστροφή δίπλα σε ειδική / συνεχόμενο μπλοκ — ίδια λογική με υπολογισμό υπηρεσιών.
              */
             const isSpecialTooSoonAfterAbsenceReturn = (personName, specialDateKey) => {
+                if (
+                    typeof isSpecialDutyTooSoonAfterAbsenceReturn === 'function' &&
+                    specialDateKey
+                ) {
+                    return isSpecialDutyTooSoonAfterAbsenceReturn(
+                        personName,
+                        groupNum,
+                        specialDateKey
+                    );
+                }
                 if (!personName || !specialDateKey) return false;
                 const periods = getMissingPeriodsForPerson(personName);
                 if (!Array.isArray(periods) || periods.length === 0) return false;
                 const specialDate = new Date(specialDateKey + 'T00:00:00');
                 if (isNaN(specialDate.getTime())) return false;
-
-                // Αρχή συνεχόμενου μπλοκ ειδικών που περιέχει την specialDateKey.
                 let blockStartDate = new Date(specialDate);
                 for (;;) {
                     const prev = new Date(blockStartDate);
@@ -7667,15 +7674,12 @@
                     blockStartDate = prev;
                 }
                 const blockStartKey = formatDateKey(blockStartDate);
-
                 for (const p of periods) {
                     const endKey = inputValueToDateKey(p?.end);
                     if (!endKey) continue;
                     const dayAfterEnd = addDaysKeyLocal(endKey, 1);
                     if (!dayAfterEnd) continue;
-                    // Ακριβώς η επόμενη μέρα μετά τη λήξη.
                     if (specialDateKey === dayAfterEnd) return true;
-                    // Συνεχόμενο μπλοκ ειδικών που αγγίζει την ημέρα επιστροφής (E+1) ή τη λήξη.
                     if (blockStartKey <= dayAfterEnd && specialDateKey >= dayAfterEnd) return true;
                     if (specialDateKey > endKey && blockStartKey <= endKey && specialDateKey >= endKey) {
                         return true;

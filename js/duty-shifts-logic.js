@@ -5392,7 +5392,20 @@
                             const rotationPersonDisabled = rotationPerson && isPersonDisabledForDuty(rotationPerson, groupNum, 'special');
                             const alreadyOnAnotherSpecialRaw = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === rotationPerson);
                             const baselineWouldBeMissing = !rotationPersonDisabled && !alreadyOnAnotherSpecialRaw && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
-                            const hasUnassignedReturnFromMissing = returnFromMissingSpecial.some(e => e.groupNum === groupNum && isUnassignedReturnFromMissingForDate(e.personName, groupNum) && !isPersonMissingOnDate(e.personName, groupNum, date, 'special'));
+                            const hasUnassignedReturnFromMissing = returnFromMissingSpecial.some(
+                                (e) =>
+                                    e.groupNum === groupNum &&
+                                    isUnassignedReturnFromMissingForDate(e.personName, groupNum) &&
+                                    !isPersonMissingOnDate(e.personName, groupNum, date, 'special') &&
+                                    !(
+                                        typeof isSpecialDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                        isSpecialDutyTooSoonAfterAbsenceReturn(
+                                            e.personName,
+                                            groupNum,
+                                            dateKey
+                                        )
+                                    )
+                            );
                             const displacedPersonPeek = displacedQueue.length > 0 ? displacedQueue[0] : null;
                             const displacedAvailableOnThisDate = displacedPersonPeek && !isPersonMissingOnDate(displacedPersonPeek, groupNum, date, 'special');
                             // Displaced cascade: only use displaced when (1) they are not missing today, (2) slot not fillable by return-from-missing (so we never skip a return-from-missing).
@@ -5424,6 +5437,12 @@
                                     if (reservedReturnFromMissingByGroup[groupNum]?.has(candidate)) continue;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
+                                    if (
+                                        typeof isSpecialDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                        isSpecialDutyTooSoonAfterAbsenceReturn(candidate, groupNum, dateKey)
+                                    ) {
+                                        continue;
+                                    }
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
                                     wasReplaced = true;
@@ -5453,6 +5472,12 @@
                                     if (reservedReturnFromMissingByGroup[groupNum]?.has(candidate)) continue;
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
+                                    if (
+                                        typeof isSpecialDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                        isSpecialDutyTooSoonAfterAbsenceReturn(candidate, groupNum, dateKey)
+                                    ) {
+                                        continue;
+                                    }
                                     const candidateAlreadyOnAnother = sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === candidate);
                                     if (candidateAlreadyOnAnother) continue;
                                     assignedPerson = candidate;
@@ -5467,9 +5492,20 @@
                             // 1) Always keep baseline: rotation person is the reference for this date/group.
                             specialRotationPersons[dateKey][groupNum] = rotationPerson;
 
-                            // 2) If baseline (rotation) person is missing on this date: fill slot with (a) unassigned previous-missing, or (b) next eligible in baseline. Keep record.
-                            const baselineIsMissingHere = !wasReplaced && !isRotationPersonDisabledSpecial && !alreadyOnAnotherSpecial && isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
-                            if (baselineIsMissingHere) {
+                            // 2) If baseline missing ή επιστροφή δίπλα σε ειδική/συνεχόμενο μπλοκ: fill slot…
+                            const baselineTooSoonAfterReturn =
+                                !wasReplaced &&
+                                !isRotationPersonDisabledSpecial &&
+                                !alreadyOnAnotherSpecial &&
+                                rotationPerson &&
+                                typeof isSpecialDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                isSpecialDutyTooSoonAfterAbsenceReturn(rotationPerson, groupNum, dateKey);
+                            const baselineIsMissingHere =
+                                !wasReplaced &&
+                                !isRotationPersonDisabledSpecial &&
+                                !alreadyOnAnotherSpecial &&
+                                isPersonMissingOnDate(rotationPerson, groupNum, date, 'special');
+                            if (baselineIsMissingHere || baselineTooSoonAfterReturn) {
                                 let foundReplacement = false;
                                 const pendingForGroup = returnFromMissingSpecial.filter(e => e.groupNum === groupNum);
                                 const pendingReturnFromMissingForGroup = new Set(pendingForGroup.map(e => e.personName));
@@ -5486,6 +5522,16 @@
                                     const prevMissingPerson = entry.personName;
                                     if (!isUnassignedReturnFromMissingForDate(prevMissingPerson, groupNum)) continue;
                                     if (isPersonMissingOnDate(prevMissingPerson, groupNum, date, 'special')) continue;
+                                    if (
+                                        typeof isSpecialDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                        isSpecialDutyTooSoonAfterAbsenceReturn(
+                                            prevMissingPerson,
+                                            groupNum,
+                                            dateKey
+                                        )
+                                    ) {
+                                        continue;
+                                    }
                                     assignedPerson = prevMissingPerson;
                                     wasReplaced = true;
                                     replacementIndex = rotationPosition;
@@ -5514,16 +5560,25 @@
                                         if (reservedReturnFromMissingByGroup[groupNum]?.has(candidate)) continue;
                                         if (isPersonDisabledForDuty(candidate, groupNum, 'special')) continue;
                                         if (isPersonMissingOnDate(candidate, groupNum, date, 'special')) continue;
+                                        if (
+                                            typeof isSpecialDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                            isSpecialDutyTooSoonAfterAbsenceReturn(candidate, groupNum, dateKey)
+                                        ) {
+                                            continue;
+                                        }
                                         if (sortedSpecial.some(dk => dk !== dateKey && tempSpecialAssignments[dk]?.[groupNum] === candidate)) continue;
                                         assignedPerson = candidate;
                                         replacementIndex = idx;
                                         wasReplaced = true;
                                         foundReplacement = true;
-                                        const reasonNext = `Βασική σειρά: ${rotationPerson} (απουσία). Αντικατάσταση: ${assignedPerson} (επόμενος στη σειρά).`;
+                                        const reasonNext = baselineTooSoonAfterReturn
+                                            ? `Βασική σειρά: ${rotationPerson} (επιστροφή δίπλα σε ειδική). Αντικατάσταση: ${assignedPerson} (επόμενος στη σειρά).`
+                                            : `Βασική σειρά: ${rotationPerson} (απουσία). Αντικατάσταση: ${assignedPerson} (επόμενος στη σειρά).`;
                                         storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonNext, rotationPerson, null, {
                                             baselinePerson: rotationPerson,
                                             replacementType: 'next-in-baseline',
-                                            missedDateKey: dateKey
+                                            missedDateKey: dateKey,
+                                            specialReturnAdjacent: !!baselineTooSoonAfterReturn
                                         });
                                         returnFromMissingSpecial.push({ personName: rotationPerson, groupNum, missedDateKey: dateKey });
                                         if (!reservedReturnFromMissingByGroup[groupNum]) reservedReturnFromMissingByGroup[groupNum] = new Set();
@@ -5645,11 +5700,17 @@
                         const d = new Date(dk + 'T00:00:00');
                         return getMonthKeyFromDate(d) === missedMonthKey && dk !== missedDateKey;
                     });
-                    // Prefer same-month specials (excluding the missed date). Only assign to a date when the person is NOT missing (they must be back).
+                    // Prefer same-month specials (excluding the missed date). Only assign when back και όχι δίπλα στην επιστροφή.
                     for (const dk of sameMonthSpecials) {
                         if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
                         const dateObj = new Date(dk + 'T00:00:00');
                         if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
+                        if (
+                            typeof isSpecialDutyTooSoonAfterAbsenceReturn === 'function' &&
+                            isSpecialDutyTooSoonAfterAbsenceReturn(personName, groupNum, dk)
+                        ) {
+                            continue;
+                        }
                         targetKey = dk;
                         break;
                     }
@@ -5659,6 +5720,12 @@
                             if (usedReturnFromMissingSpecial.has(`${dk}:${groupNum}`)) continue;
                             const dateObj = new Date(dk + 'T00:00:00');
                             if (isPersonMissingOnDate(personName, groupNum, dateObj, 'special')) continue;
+                            if (
+                                typeof isSpecialDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                isSpecialDutyTooSoonAfterAbsenceReturn(personName, groupNum, dk)
+                            ) {
+                                continue;
+                            }
                             targetKey = dk;
                             break;
                         }
@@ -6504,6 +6571,44 @@
                 if (endKey >= dateKey) continue;
                 const eligibleFrom = addCalendarDaysToDateKey(endKey, 3);
                 if (eligibleFrom && dateKey < eligibleFrom) return true;
+            }
+            return false;
+        }
+
+        /**
+         * Ειδική αργία αμέσως μετά επιστροφή από απουσία ή μέσα σε συνεχόμενο μπλοκ ειδικών
+         * που αγγίζει τη λήξη/E+1 (π.χ. λήξη 31/12 → όχι 1/1 · λήξη 24 με 24–25 → όχι 25).
+         */
+        function isSpecialDutyTooSoonAfterAbsenceReturn(personName, groupNum, dateKey) {
+            if (!personName || !dateKey || !Number.isFinite(groupNum)) return false;
+            const periods =
+                typeof getMissingPeriodsForPersonNorm === 'function'
+                    ? getMissingPeriodsForPersonNorm(groupNum, personName)
+                    : [];
+            if (!Array.isArray(periods) || periods.length === 0) return false;
+            const specialDate = new Date(dateKey + 'T00:00:00');
+            if (isNaN(specialDate.getTime())) return false;
+            let blockStartDate = new Date(specialDate);
+            for (;;) {
+                const prev = new Date(blockStartDate);
+                prev.setDate(prev.getDate() - 1);
+                if (typeof getDayType !== 'function' || getDayType(prev) !== 'special-holiday') break;
+                blockStartDate = prev;
+            }
+            const blockStartKey =
+                typeof formatDateKey === 'function' ? formatDateKey(blockStartDate) : null;
+            if (!blockStartKey) return false;
+            for (const p of periods) {
+                const endKey =
+                    typeof inputValueToDateKey === 'function' ? inputValueToDateKey(p?.end) : null;
+                if (!endKey) continue;
+                // Ακόμα απουσιάζει αυτή την ημέρα → isPersonMissingOnDate.
+                if (endKey >= dateKey) continue;
+                const dayAfterEnd = addCalendarDaysToDateKey(endKey, 1);
+                if (!dayAfterEnd) continue;
+                if (dateKey === dayAfterEnd) return true;
+                if (blockStartKey <= dayAfterEnd && dateKey >= dayAfterEnd) return true;
+                if (dateKey > endKey && blockStartKey <= endKey && dateKey >= endKey) return true;
             }
             return false;
         }
