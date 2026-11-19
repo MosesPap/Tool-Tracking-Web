@@ -960,6 +960,44 @@
             return orderA.every((p) => keysB.has(personScheduleKey(p)));
         }
         /**
+         * When listOrders snapshot drifts from the live duty list, keep scheduled relative order
+         * only for people still on the live roster; drop ghosts; append live-only members.
+         * Prevents stale νο.14/15 (ex-members) from driving ημιαργία/αργία επιλαχόντες.
+         */
+        function mergeScheduledOrderWithLiveRoster(scheduled, live) {
+            const liveArr = Array.isArray(live) ? live : [];
+            const schedArr = Array.isArray(scheduled) ? scheduled : [];
+            if (!liveArr.length) return [];
+            if (!schedArr.length) return liveArr.slice();
+            const used = new Set();
+            const out = [];
+            const findLiveMatch = (person) => {
+                const pk = personScheduleKey(person);
+                let hit = liveArr.find((p) => personScheduleKey(p) === pk);
+                if (hit) return hit;
+                if (typeof personNamesMatchIgnoringRank === 'function') {
+                    hit = liveArr.find((p) => personNamesMatchIgnoringRank(p, person));
+                    if (hit) return hit;
+                }
+                return null;
+            };
+            for (const p of schedArr) {
+                const match = findLiveMatch(p);
+                if (!match) continue;
+                const mk = personScheduleKey(match);
+                if (used.has(mk)) continue;
+                used.add(mk);
+                out.push(match);
+            }
+            for (const p of liveArr) {
+                const mk = personScheduleKey(p);
+                if (used.has(mk)) continue;
+                used.add(mk);
+                out.push(p);
+            }
+            return out;
+        }
+        /**
          * Duty-list sort: excluded-from-duties people always last, then priority, then last-duty date.
          * Shared by UI lists and rotation order.
          */
@@ -1052,11 +1090,15 @@
                                     listType,
                                     dk,
                                     membershipMatch,
-                                    using: membershipMatch ? 'sortedCurrent' : 'scheduled',
+                                    using: membershipMatch ? 'sortedCurrent' : 'mergedLive',
                                     liveLen: sortedCurrent.length,
                                     schedLen: scheduled.length,
                                     onlyInSchedule: onlySched.slice(0, 8),
                                     onlyInLive: onlyLive.slice(0, 8),
+                                    mergedLen: membershipMatch
+                                        ? sortedCurrent.length
+                                        : mergeScheduledOrderWithLiveRoster(scheduled, sortedCurrent)
+                                              .length,
                                     schedTail: scheduled.slice(-5),
                                     liveTail: sortedCurrent.slice(-5)
                                 },
@@ -1069,7 +1111,8 @@
                 if (membershipMatch) {
                     return sortedCurrent;
                 }
-                return scheduled;
+                // Do not use raw stale schedule (reintroduces people no longer on the UI list).
+                return mergeScheduledOrderWithLiveRoster(scheduled, sortedCurrent);
             }
             return sortedCurrent;
         }
@@ -1382,6 +1425,7 @@
                     },
                     timestamp: Date.now()
                 };
+                payload.runId = 'post-fix';
                 fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
                     method: 'POST',
                     headers: {
@@ -1390,9 +1434,6 @@
                     },
                     body: JSON.stringify(payload)
                 }).catch(() => {});
-                try {
-                    console.info('[DBG-73ad17]', payload.message, payload.data);
-                } catch (_) {}
             }
             // #endregion
             return result;
