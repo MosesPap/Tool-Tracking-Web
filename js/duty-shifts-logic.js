@@ -14943,6 +14943,12 @@
                                     ? normalizePersonKey(cand)
                                     : String(cand);
                             if (normEx && ck === normEx) continue;
+                            if (
+                                typeof isSkippedInBasicRotation === 'function' &&
+                                isSkippedInBasicRotation(cand, groupNumLocal)
+                            ) {
+                                continue;
+                            }
                             if (isPersonMissingOnDate(cand, groupNumLocal, dateObjLocal, 'normal')) {
                                 continue;
                             }
@@ -15404,8 +15410,20 @@
                             const deferFulfillmentNormal = manualAltResolvedNormal.deferFulfillment;
                             
                             // IMPORTANT: Baseline slot = who the basic series points to (before final replacement).
-                            // Basic series skips ONLY εξαίρεση (already filtered from groupPeople).
+                            // Basic series skips ONLY εξαίρεση (mode 4 filters them; mode 3 / stale rank keys may still include them).
                             // Disabled / absent KEEP their baseline slot; final calendar may replace them.
+                            {
+                                let exclSkip = 0;
+                                while (
+                                    exclSkip < rotationDays &&
+                                    groupPeople[rotationPosition] &&
+                                    typeof isSkippedInBasicRotation === 'function' &&
+                                    isSkippedInBasicRotation(groupPeople[rotationPosition], groupNum)
+                                ) {
+                                    rotationPosition = (rotationPosition + 1) % rotationDays;
+                                    exclSkip++;
+                                }
+                            }
                             const originalRotationPerson = groupPeople[rotationPosition];
                             if (originalRotationPerson) {
                                 if (!pureNormalRotationByDate[dateKey]) pureNormalRotationByDate[dateKey] = {};
@@ -15444,6 +15462,12 @@
                                 let foundReplacement = false;
                                 const tryCandidate = (candidate, idx) => {
                                     if (!candidate || candidate === originalRotationPerson) return false;
+                                    if (
+                                        typeof isSkippedInBasicRotation === 'function' &&
+                                        isSkippedInBasicRotation(candidate, groupNum)
+                                    ) {
+                                        return false;
+                                    }
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) return false;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) return false;
                                     if (

@@ -1102,7 +1102,20 @@
             if (!g) return false;
             const map = g.excludedFromDuties || {};
             const pk = personScheduleKey(person);
-            if (map[person] === true || map[pk] === true) {
+            const matchesExclKey = (k) => {
+                if (!k || map[k] !== true) return false;
+                if (k === person || (pk && k === pk)) return true;
+                if (personScheduleKey(k) === pk) return true;
+                // Rank may differ after προαγωγή (ΕΣΜΙΑΣ vs ΣΜΙΑΣ) — match identity.
+                if (typeof personNamesMatchIgnoringRank === 'function') {
+                    return personNamesMatchIgnoringRank(k, person);
+                }
+                if (typeof getPersonIdentityKey === 'function') {
+                    return getPersonIdentityKey(k) === getPersonIdentityKey(person);
+                }
+                return false;
+            };
+            if (map[person] === true || (pk && map[pk] === true)) {
                 // #region agent log
                 if (String(person).includes('ΙΤΤΑΛΟΣ') || String(pk).includes('ΙΤΤΑΛΟΣ')) {
                     fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
@@ -1113,6 +1126,7 @@
                         },
                         body: JSON.stringify({
                             sessionId: '73ad17',
+                            runId: 'post-fix',
                             hypothesisId: 'E',
                             location: 'duty-shifts-data.js:isPersonExcludedFromDuties',
                             message: 'ΙΤΤΑΛΟΣ exclusion HIT',
@@ -1124,30 +1138,29 @@
                 // #endregion
                 return true;
             }
-            if (!pk) return false;
             for (const k of Object.keys(map)) {
-                if (map[k] === true && personScheduleKey(k) === pk) {
-                    // #region agent log
-                    if (String(person).includes('ΙΤΤΑΛΟΣ') || String(k).includes('ΙΤΤΑΛΟΣ')) {
-                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Debug-Session-Id': '73ad17'
-                            },
-                            body: JSON.stringify({
-                                sessionId: '73ad17',
-                                hypothesisId: 'E',
-                                location: 'duty-shifts-data.js:isPersonExcludedFromDuties',
-                                message: 'ΙΤΤΑΛΟΣ exclusion HIT via alias key',
-                                data: { person, groupNum, pk, aliasKey: k },
-                                timestamp: Date.now()
-                            })
-                        }).catch(() => {});
-                    }
-                    // #endregion
-                    return true;
+                if (!matchesExclKey(k)) continue;
+                // #region agent log
+                if (String(person).includes('ΙΤΤΑΛΟΣ') || String(k).includes('ΙΤΤΑΛΟΣ')) {
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Debug-Session-Id': '73ad17'
+                        },
+                        body: JSON.stringify({
+                            sessionId: '73ad17',
+                            runId: 'post-fix',
+                            hypothesisId: 'E',
+                            location: 'duty-shifts-data.js:isPersonExcludedFromDuties',
+                            message: 'ΙΤΤΑΛΟΣ exclusion HIT via identity/alias',
+                            data: { person, groupNum, pk, aliasKey: k },
+                            timestamp: Date.now()
+                        })
+                    }).catch(() => {});
                 }
+                // #endregion
+                return true;
             }
             // #region agent log
             if (String(person).includes('ΙΤΤΑΛΟΣ')) {
@@ -1159,6 +1172,7 @@
                     },
                     body: JSON.stringify({
                         sessionId: '73ad17',
+                        runId: 'post-fix',
                         hypothesisId: 'E',
                         location: 'duty-shifts-data.js:isPersonExcludedFromDuties',
                         message: 'ΙΤΤΑΛΟΣ exclusion MISS',
@@ -1195,9 +1209,18 @@
             const map = bucket.excludedFromDuties || {};
             const pk = personScheduleKey(person);
             if (map[person] === true || (pk && map[pk] === true)) return true;
-            if (!pk) return false;
             for (const k of Object.keys(map)) {
-                if (map[k] === true && personScheduleKey(k) === pk) return true;
+                if (map[k] !== true) continue;
+                if (pk && personScheduleKey(k) === pk) return true;
+                if (typeof personNamesMatchIgnoringRank === 'function' && personNamesMatchIgnoringRank(k, person)) {
+                    return true;
+                }
+                if (
+                    typeof getPersonIdentityKey === 'function' &&
+                    getPersonIdentityKey(k) === getPersonIdentityKey(person)
+                ) {
+                    return true;
+                }
             }
             return false;
         }
