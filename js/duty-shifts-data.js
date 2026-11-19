@@ -7418,9 +7418,16 @@
                 }
                 return (groupData?.[type] || []).filter(Boolean);
             };
-            // Same list the preview uses for #N (groupData), so anchor index matches on-screen numbers.
+            // Ενεργή λίστα περιστροφής (χωρίς εξαίρεση στο τέλος).
+            // Τα #1…N των ενεργών μένουν ίδια· αλλιώς wrap π.χ. #13→#14 αντί #13→#1
+            // και η αύξουσα κάλυψη κολλάει άγκυρα στο #13 αντί #4.
             const orderListForType = (type) => {
-                const fromGroup = (groupData?.[type] || []).filter(Boolean);
+                let fromGroup = (groupData?.[type] || []).filter(Boolean);
+                if (fromGroup.length && typeof isPersonExcludedFromDuties === 'function') {
+                    fromGroup = fromGroup.filter((p) => !isPersonExcludedFromDuties(p, groupNum));
+                } else if (fromGroup.length && typeof filterExcludedFromDutyList === 'function') {
+                    fromGroup = filterExcludedFromDutyList(fromGroup, groupNum);
+                }
                 if (fromGroup.length) return fromGroup;
                 return rotationListForType(type, exportMonthEndKey);
             };
