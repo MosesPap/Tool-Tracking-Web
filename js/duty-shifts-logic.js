@@ -14934,49 +14934,67 @@
                             ? normalizePersonKey(excludePerson)
                             : String(excludePerson || '');
                     const unused = [];
+                    const unusedBlocked = [];
                     for (const p of groupPeopleLocal || []) {
                         if (!p) continue;
                         if (normEx && (typeof normalizePersonKey === 'function' ? normalizePersonKey(p) : String(p)) === normEx) continue;
-                        if (!assignedMapLocal?.[p]) unused.push(p);
+                        if (!assignedMapLocal?.[p]) {
+                            const missing = isPersonMissingOnDate(p, groupNumLocal, dateObjLocal, 'normal');
+                            const disabled =
+                                typeof isPersonDisabledForDuty === 'function' &&
+                                isPersonDisabledForDuty(p, groupNumLocal, 'normal');
+                            if (missing || disabled) unusedBlocked.push({ p, missing: !!missing, disabled: !!disabled });
+                            else unused.push(p);
+                        }
                     }
+                    const candEligible = (cand, allowReuse) => {
+                        if (!cand) return false;
+                        const ck =
+                            typeof normalizePersonKey === 'function'
+                                ? normalizePersonKey(cand)
+                                : String(cand);
+                        if (normEx && ck === normEx) return false;
+                        if (isPersonMissingOnDate(cand, groupNumLocal, dateObjLocal, 'normal')) return false;
+                        if (
+                            typeof isPersonDisabledForDuty === 'function' &&
+                            isPersonDisabledForDuty(cand, groupNumLocal, 'normal')
+                        ) {
+                            return false;
+                        }
+                        const lastKey = assignedMapLocal?.[cand];
+                        if (lastKey) {
+                            const lastDate = new Date(lastKey + 'T00:00:00');
+                            const currentDate = new Date(dateKeyLocal + 'T00:00:00');
+                            const daysDiff = Math.floor(
+                                (currentDate - lastDate) / (1000 * 60 * 60 * 24)
+                            );
+                            if (daysDiff > 0 && !allowReuse) return false;
+                            // Even on reuse pass (full cycle), avoid stacking within 5 days
+                            if (allowReuse && daysDiff > 0 && daysDiff <= 5) return false;
+                        }
+                        return true;
+                    };
                     const tryPass = (allowReuse) => {
+                        // Prefer people with no duty yet this month (eligible unused), in list order.
+                        if (!allowReuse) {
+                            for (const cand of unused) {
+                                if (candEligible(cand, false)) {
+                                    return { cand, allowReuse: false, fromUnused: true };
+                                }
+                            }
+                        }
                         for (let offset = 1; offset <= n * 2; offset++) {
                             const idx = (startIdx + offset) % n;
                             const cand = groupPeopleLocal[idx];
-                            if (!cand) continue;
-                            const ck =
-                                typeof normalizePersonKey === 'function'
-                                    ? normalizePersonKey(cand)
-                                    : String(cand);
-                            if (normEx && ck === normEx) continue;
-                            if (isPersonMissingOnDate(cand, groupNumLocal, dateObjLocal, 'normal')) {
-                                continue;
-                            }
-                            if (
-                                typeof isPersonDisabledForDuty === 'function' &&
-                                isPersonDisabledForDuty(cand, groupNumLocal, 'normal')
-                            ) {
-                                continue;
-                            }
-                            const lastKey = assignedMapLocal?.[cand];
-                            if (lastKey) {
-                                const lastDate = new Date(lastKey + 'T00:00:00');
-                                const currentDate = new Date(dateKeyLocal + 'T00:00:00');
-                                const daysDiff = Math.floor(
-                                    (currentDate - lastDate) / (1000 * 60 * 60 * 24)
-                                );
-                                if (daysDiff > 0 && !allowReuse) continue;
-                                // Even on reuse pass (full cycle), avoid stacking within 5 days
-                                if (allowReuse && daysDiff > 0 && daysDiff <= 5) continue;
-                            }
-                            return { cand, allowReuse, unusedLeft: unused.length };
+                            if (!candEligible(cand, allowReuse)) continue;
+                            return { cand, allowReuse, fromUnused: false };
                         }
                         return null;
                     };
                     const first = tryPass(false);
                     const picked = first || tryPass(true);
                     // #region agent log
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'pre-fix',hypothesisId:'B',location:'duty-shifts-logic.js:pickNormalCandidateAvoidingMonthDup',message:'month-dup pick',data:{dateKey:dateKeyLocal,groupNum:groupNumLocal,startIdx,unusedCount:unused.length,unusedSample:unused.slice(0,8),picked:picked?.cand||null,usedReuse:!first&&!!picked,listLen:n},timestamp:Date.now()})}).catch(()=>{});
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'post-fix',hypothesisId:'B',location:'duty-shifts-logic.js:pickNormalCandidateAvoidingMonthDup',message:'month-dup pick',data:{dateKey:dateKeyLocal,groupNum:groupNumLocal,startIdx,unusedEligible:unused.length,unusedBlocked:unusedBlocked.slice(0,6),unusedSample:unused.slice(0,8),picked:picked?.cand||null,usedReuse:!first&&!!picked,fromUnused:!!picked?.fromUnused,listLen:n},timestamp:Date.now()})}).catch(()=>{});
                     // #endregion
                     return picked ? picked.cand : null;
                 };
@@ -15582,10 +15600,32 @@
                             // Check if assigned person has a conflict (will be swapped later)
                             // If so, DO NOT assign anyone to this day - leave it for swap logic to handle
                             // Also DO NOT assign the next person in rotation to this day
-                            // IMPORTANT: Advance rotation position from the ASSIGNED person (replacement), not the skipped person
-                            // This ensures that when Person A is replaced by Person B, next month starts from Person C (after Person B)
+                            // IMPORTANT: Advance rotation from the ASSIGNED person (replacement), not only baseline+1.
+                            // baseline+1 after a replacement caused a cascade: next day baseline was the person
+                            // who just served → perpetual month-dup and sequence broke on late weekdays.
                             // BUT: Skip if rotation was already advanced (e.g., by pending swap)
                             if (!rotationAlreadyAdvanced) {
+                                const advanceNormalCursorFromAssigned = () => {
+                                    if (assignedPerson) {
+                                        const normP =
+                                            typeof normalizePersonKey === 'function'
+                                                ? normalizePersonKey
+                                                : (nm) => String(nm || '').trim();
+                                        let assignedIdx = groupPeople.indexOf(assignedPerson);
+                                        if (assignedIdx < 0) {
+                                            assignedIdx = groupPeople.findIndex(
+                                                (p) => normP(p) === normP(assignedPerson)
+                                            );
+                                        }
+                                        if (assignedIdx >= 0) {
+                                            globalNormalRotationPosition[groupNum] =
+                                                (assignedIdx + 1) % rotationDays;
+                                            return;
+                                        }
+                                    }
+                                    globalNormalRotationPosition[groupNum] =
+                                        (rotationPosition + 1) % rotationDays;
+                                };
                                 if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
                                     const reasonForAssigned = getAssignmentReason(dateKey, groupNum, assignedPerson);
                                     const isManualAlternateReplacement = !!(reasonForAssigned && reasonForAssigned.type === 'skip' && reasonForAssigned.meta && reasonForAssigned.meta.manualAlternateReplacement);
@@ -15603,17 +15643,14 @@
                                     
                                     if (hasConflict) {
                                         // Person has conflict - STORE THEM so swap logic can process them.
-                                        // Basic series always advances by one slot from the baseline position
-                                        // (replacements must not jump the rotation cursor).
                                         markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
-                                            globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
-                                        } else {
-                                        // No conflict — same rule: advance basic series by one from baseline slot
+                                        advanceNormalCursorFromAssigned();
+                                    } else {
                                         markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
-                                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                        advanceNormalCursorFromAssigned();
                                     }
                                 } else {
-                                    // Person is missing or no person assigned - advance rotation position from rotation position
+                                    // Person is missing or no person assigned - advance from baseline slot
                                     globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                 }
                             }
@@ -15633,7 +15670,7 @@
                             if (sortedNormal && sortedNormal.length && sortedNormal.indexOf(dateKey) >= Math.max(0, sortedNormal.length - 6)) {
                                 const assignedMap = assignedPeoplePreview?.[monthKey]?.[groupNum] || {};
                                 const unusedNow = (groupPeople || []).filter((p) => p && !assignedMap[p] && p !== assignedPerson);
-                                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'pre-fix',hypothesisId:'E',location:'duty-shifts-logic.js:afterNormalAssign',message:'late normal assign result',data:{dateKey,groupNum,baseline:originalRotationPerson,assigned:assignedPerson,rotPos:rotationPosition,nextRot:globalNormalRotationPosition?.[groupNum],monthDupRepl:wasReplacedDueToFiveDayRule,disabledSkip:wasDisabledPersonSkipped,unusedAfter:unusedNow.length,unusedNames:unusedNow.slice(0,10)},timestamp:Date.now()})}).catch(()=>{});
+                                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'73ad17'},body:JSON.stringify({sessionId:'73ad17',runId:'post-fix',hypothesisId:'E',location:'duty-shifts-logic.js:afterNormalAssign',message:'late normal assign result',data:{dateKey,groupNum,baseline:originalRotationPerson,assigned:assignedPerson,rotPos:rotationPosition,nextRot:globalNormalRotationPosition?.[groupNum],monthDupRepl:wasReplacedDueToFiveDayRule,disabledSkip:wasDisabledPersonSkipped,unusedAfter:unusedNow.length,unusedNames:unusedNow.slice(0,10)},timestamp:Date.now()})}).catch(()=>{});
                             }
                             // #endregion
                             
