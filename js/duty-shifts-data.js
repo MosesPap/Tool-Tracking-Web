@@ -8191,7 +8191,26 @@
                 return 0;
             };
 
-            const nextNFromRotationListAfterAnchor = (type, count, { allowIneligible = false } = {}) => {
+            const personMatchesAny = (person, list) => {
+                if (!person || !Array.isArray(list) || !list.length) return false;
+                for (const other of list) {
+                    if (!other) continue;
+                    if (normName(other) === normName(person)) return true;
+                    if (
+                        typeof personNamesMatchIgnoringRank === 'function' &&
+                        personNamesMatchIgnoringRank(other, person)
+                    ) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            const nextNFromRotationListAfterAnchor = (
+                type,
+                count,
+                { allowIneligible = false, excludePeople = null } = {}
+            ) => {
                 const rawList = orderListForType(type);
                 if (rawList.length === 0) return Array(count).fill('');
 
@@ -8209,9 +8228,12 @@
                     const excluded =
                         typeof isPersonExcludedFromDuties === 'function' &&
                         isPersonExcludedFromDuties(person, groupNum);
+                    const blockedBySpecial =
+                        type === 'weekend' && personMatchesAny(person, excludePeople);
                     if (
                         person &&
                         !excluded &&
+                        !blockedBySpecial &&
                         isAvailableForNextMonth(person, type, { allowIneligible })
                     ) {
                         picks.push(person);
@@ -8223,12 +8245,17 @@
                 return picks.slice(0, count);
             };
 
-            const nextTwoForType = (type) => {
+            const nextTwoForType = (type, opts = {}) => {
                 const rawList = orderListForType(type);
                 if (rawList.length === 0) return ['', ''];
-                const eligibleCount = rawList.filter((p) => isAvailableForNextMonth(p, type)).length;
+                const excludePeople = opts.excludePeople || null;
+                const eligibleCount = rawList.filter(
+                    (p) =>
+                        isAvailableForNextMonth(p, type) &&
+                        !(type === 'weekend' && personMatchesAny(p, excludePeople))
+                ).length;
                 if (eligibleCount === 0) return ['', ''];
-                const picks = nextNFromRotationListAfterAnchor(type, 2);
+                const picks = nextNFromRotationListAfterAnchor(type, 2, { excludePeople });
                 return [picks[0] || '', picks[1] || ''];
             };
 
@@ -8329,12 +8356,45 @@
                 return { names: outNames, notes: outNotes };
             };
             const specialNext = nextThreeForSpecial();
+            // Αργίες: εξαιρούνται όσοι είναι επιλαχόντες ειδικής στον ίδιο (επόμενο) μήνα
+            // ή έχουν ήδη ειδική ανάθεση εκεί (π.χ. Σιακόλας 1/1 → όχι και επιλαχών αργιών).
+            const excludeWeekendDueToSpecial = [];
+            const nextSpecialDates = findNextSpecialDates(3, 3650);
+            for (let i = 0; i < 3; i++) {
+                const nm = specialNext.names?.[i];
+                const d = nextSpecialDates[i];
+                if (!nm || !d || isNaN(d.getTime())) continue;
+                const dk = formatDateKey(d);
+                if (dk >= nextMonthStartKey && dk <= nextMonthEndKey) {
+                    excludeWeekendDueToSpecial.push(nm);
+                }
+            }
+            const nextMonthDays = lastDayOfNextMonth.getDate();
+            for (let day = 1; day <= nextMonthDays; day++) {
+                const d = new Date(year, month + 1, day);
+                if (getDayType(d) !== 'special-holiday') continue;
+                const dk = formatDateKey(d);
+                const assigned =
+                    (typeof getPersonAssignedOnDateFromStore === 'function'
+                        ? getPersonAssignedOnDateFromStore('special', dk, groupNum)
+                        : '') ||
+                    finalAssignedOnDate(dk, 'special') ||
+                    '';
+                if (assigned) excludeWeekendDueToSpecial.push(assigned);
+            }
             const nextResult = {
                 normal: nextTwoForType('normal'),
                 semi: nextTwoForType('semi'),
-                weekend: nextTwoForType('weekend'),
+                weekend: nextTwoForType('weekend', {
+                    excludePeople: excludeWeekendDueToSpecial
+                }),
                 special: specialNext.names
             };
+            if (debugByType.weekend) {
+                debugByType.weekend.excludedForSpecialInMonth = excludeWeekendDueToSpecial
+                    .filter(Boolean)
+                    .map((p) => normName(p));
+            }
             for (const t of ['normal', 'semi', 'weekend', 'special']) {
                 if (!debugByType[t]) continue;
                 const orderList = orderListForType(t);
@@ -9074,6 +9134,15 @@
                                                   : 'Κενά σειράς (δεν μπαίνουν πρώτα στους επιλαχόντες)'
                                           }: <strong>${d.skippedOrderNos
                                               .map((n) => '#' + n)
+                                              .join(', ')}</strong></div>`
+                                        : ''
+                                }
+                                ${
+                                    t === 'weekend' &&
+                                    Array.isArray(d.excludedForSpecialInMonth) &&
+                                    d.excludedForSpecialInMonth.length
+                                        ? `<div>Εξαίρεση λόγω ειδικής στον μήνα: <strong>${d.excludedForSpecialInMonth
+                                              .map((p) => escapeHtml(p))
                                               .join(', ')}</strong></div>`
                                         : ''
                                 }
