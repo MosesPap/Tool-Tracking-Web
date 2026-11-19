@@ -2423,6 +2423,17 @@
             if (na === nb) return true;
             return getPersonIdentityKey(na) === getPersonIdentityKey(nb);
         }
+        /** Set.has με ταυτότητα χωρίς βαθμό (προαγωγή μέσα στον μήνα). */
+        function personSetHasIgnoringRank(set, personName) {
+            if (!set || !personName) return false;
+            if (typeof set.has === 'function' && set.has(personName)) return true;
+            if (typeof set[Symbol.iterator] !== 'function') return false;
+            for (const p of set) {
+                if (!p) continue;
+                if (personNamesMatchIgnoringRank(p, personName)) return true;
+            }
+            return false;
+        }
         function storeAssignmentReason(dateKey, groupNum, personName, type, reason, swappedWith = null, swapPairId = null, meta = null) {
             const keyName = normalizePersonKey(personName);
             if (!keyName) return;
@@ -6535,8 +6546,22 @@
                 ) {
                     continue;
                 }
-                if (specialMonthSet && specialMonthSet.has(candidate)) continue;
-                if (assignedSet && assignedSet.has(candidate)) continue;
+                if (
+                    specialMonthSet &&
+                    (typeof personSetHasIgnoringRank === 'function'
+                        ? personSetHasIgnoringRank(specialMonthSet, candidate)
+                        : specialMonthSet.has(candidate))
+                ) {
+                    continue;
+                }
+                if (
+                    assignedSet &&
+                    (typeof personSetHasIgnoringRank === 'function'
+                        ? personSetHasIgnoringRank(assignedSet, candidate)
+                        : assignedSet.has(candidate))
+                ) {
+                    continue;
+                }
                 return { person: candidate, index: nextIndex };
             }
             return null;
@@ -6708,8 +6733,18 @@
                             }
                             continue;
                         }
-                        const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(currentPerson) || false;
-                        const alreadyAssignedThisMonth = assignedWeekendInMonth[monthKey][groupNum].has(currentPerson);
+                        const specialSet = simulatedSpecialAssignments[monthKey]?.[groupNum];
+                        const assignedSet = assignedWeekendInMonth[monthKey][groupNum];
+                        const hasSpecialHoliday = specialSet
+                            ? typeof personSetHasIgnoringRank === 'function'
+                                ? personSetHasIgnoringRank(specialSet, currentPerson)
+                                : specialSet.has(currentPerson)
+                            : false;
+                        const alreadyAssignedThisMonth = assignedSet
+                            ? typeof personSetHasIgnoringRank === 'function'
+                                ? personSetHasIgnoringRank(assignedSet, currentPerson)
+                                : assignedSet.has(currentPerson)
+                            : false;
                         if (!hasSpecialHoliday && !alreadyAssignedThisMonth) {
                             assignedWeekendInMonth[monthKey][groupNum].add(currentPerson);
                             if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
@@ -6738,8 +6773,18 @@
                             if (!candidate) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
                             if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
-                            const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
-                            const candidateAlreadyAssigned = assignedWeekendInMonth[monthKey][groupNum].has(candidate);
+                            const candSpecialSet = simulatedSpecialAssignments[monthKey]?.[groupNum];
+                            const candAssignedSet = assignedWeekendInMonth[monthKey][groupNum];
+                            const candidateHasSpecial = candSpecialSet
+                                ? typeof personSetHasIgnoringRank === 'function'
+                                    ? personSetHasIgnoringRank(candSpecialSet, candidate)
+                                    : candSpecialSet.has(candidate)
+                                : false;
+                            const candidateAlreadyAssigned = candAssignedSet
+                                ? typeof personSetHasIgnoringRank === 'function'
+                                    ? personSetHasIgnoringRank(candAssignedSet, candidate)
+                                    : candAssignedSet.has(candidate)
+                                : false;
                             if (!candidateHasSpecial && !candidateAlreadyAssigned) {
                                 replacementPerson = candidate;
                                 break;
@@ -11631,8 +11676,18 @@
                             }
                             // Phase 1: Replacements only for special duty same month (and cascade: already assigned this month)
                             if (assignedPerson) {
-                                const hasSpecialHoliday = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(assignedPerson) || false;
-                                const alreadyAssignedThisMonthPreview = assignedWeekendInMonthPreview[monthKey][groupNum].has(assignedPerson);
+                                const previewSpecialSet = simulatedSpecialAssignments[monthKey]?.[groupNum];
+                                const previewAssignedSet = assignedWeekendInMonthPreview[monthKey][groupNum];
+                                const hasSpecialHoliday = previewSpecialSet
+                                    ? typeof personSetHasIgnoringRank === 'function'
+                                        ? personSetHasIgnoringRank(previewSpecialSet, assignedPerson)
+                                        : previewSpecialSet.has(assignedPerson)
+                                    : false;
+                                const alreadyAssignedThisMonthPreview = previewAssignedSet
+                                    ? typeof personSetHasIgnoringRank === 'function'
+                                        ? personSetHasIgnoringRank(previewAssignedSet, assignedPerson)
+                                        : previewAssignedSet.has(assignedPerson)
+                                    : false;
                                 if (hasSpecialHoliday || alreadyAssignedThisMonthPreview) {
                                     if (hasSpecialHoliday) skippedInMonth[monthKey][groupNum].add(assignedPerson);
                                     let currentIndex = groupPeople.indexOf(assignedPerson);
@@ -11644,8 +11699,18 @@
                                         if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
                                         if (isWeekendDutyTooSoonAfterAbsenceReturn(candidate, groupNum, dateKey)) continue;
                                         if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
-                                        const candidateHasSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum]?.has(candidate) || false;
-                                        const candidateAlreadyAssigned = assignedWeekendInMonthPreview[monthKey][groupNum].has(candidate);
+                                        const candPrevSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum];
+                                        const candPrevAssigned = assignedWeekendInMonthPreview[monthKey][groupNum];
+                                        const candidateHasSpecial = candPrevSpecial
+                                            ? typeof personSetHasIgnoringRank === 'function'
+                                                ? personSetHasIgnoringRank(candPrevSpecial, candidate)
+                                                : candPrevSpecial.has(candidate)
+                                            : false;
+                                        const candidateAlreadyAssigned = candPrevAssigned
+                                            ? typeof personSetHasIgnoringRank === 'function'
+                                                ? personSetHasIgnoringRank(candPrevAssigned, candidate)
+                                                : candPrevAssigned.has(candidate)
+                                            : false;
                                         if (!candidateHasSpecial && !candidateAlreadyAssigned) {
                                             replacementPerson = candidate;
                                             break;
@@ -17303,9 +17368,20 @@
                 if (!alreadyAssignedSet) return false;
                 // Handle both Set (legacy) and Object (new structure)
                 if (alreadyAssignedSet instanceof Set) {
-                    return alreadyAssignedSet.has(candidate);
-                } else if (typeof alreadyAssignedSet === 'object' && alreadyAssignedSet[candidate]) {
-                    const lastAssignmentDateKey = alreadyAssignedSet[candidate];
+                    return typeof personSetHasIgnoringRank === 'function'
+                        ? personSetHasIgnoringRank(alreadyAssignedSet, candidate)
+                        : alreadyAssignedSet.has(candidate);
+                } else if (typeof alreadyAssignedSet === 'object') {
+                    let lastAssignmentDateKey = alreadyAssignedSet[candidate];
+                    if (!lastAssignmentDateKey && typeof personNamesMatchIgnoringRank === 'function') {
+                        for (const k of Object.keys(alreadyAssignedSet)) {
+                            if (personNamesMatchIgnoringRank(k, candidate)) {
+                                lastAssignmentDateKey = alreadyAssignedSet[k];
+                                break;
+                            }
+                        }
+                    }
+                    if (!lastAssignmentDateKey) return false;
                     const lastDate = new Date(lastAssignmentDateKey + 'T00:00:00');
                     const currentDate = new Date(dateKey + 'T00:00:00');
                     const daysDiff = Math.floor((currentDate - lastDate) / (1000 * 60 * 60 * 24));

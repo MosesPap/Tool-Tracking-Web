@@ -2126,7 +2126,19 @@
             if (!Array.isArray(list) || list.length === 0) return personName;
             const n = normRotPersonName(personName);
             const found = list.find((p) => normRotPersonName(p) === n);
-            return found || personName;
+            if (found) return found;
+            // Προαγωγή/αλλαγή βαθμού: ίδιο άτομο με διαφορετικό rank στη λίστα.
+            if (typeof personNamesMatchIgnoringRank === 'function') {
+                const byId = list.find((p) => personNamesMatchIgnoringRank(p, personName));
+                if (byId) return byId;
+            } else if (typeof identityKeyIgnoringRankLocal === 'function') {
+                const id = identityKeyIgnoringRankLocal(personName);
+                if (id) {
+                    const byId = list.find((p) => identityKeyIgnoringRankLocal(p) === id);
+                    if (byId) return byId;
+                }
+            }
+            return personName;
         }
 
         function isManualAlternateReasonEntry(r) {
@@ -2599,7 +2611,13 @@
             const norm = normRotPersonName;
             const findIdx = (name) => {
                 if (!name) return -1;
-                return groupPeople.findIndex((p) => norm(p) === norm(name));
+                let i = groupPeople.findIndex((p) => norm(p) === norm(name));
+                if (i >= 0) return i;
+                if (typeof personNamesMatchIgnoringRank === 'function') {
+                    i = groupPeople.findIndex((p) => personNamesMatchIgnoringRank(p, name));
+                    if (i >= 0) return i;
+                }
+                return -1;
             };
             const prevMonthStart = new Date(dateInMonth.getFullYear(), dateInMonth.getMonth() - 1, 1);
             const prevMonthKey = getPreviousMonthKeyFromDate(dateInMonth);
@@ -6300,7 +6318,13 @@
         }
 
         function parseAssignedPersonForGroupFromAssignment(assignmentStr, groupNum) {
-            if (!assignmentStr) return null;
+            if (!assignmentStr && assignmentStr !== 0) return null;
+            // Object map {1:"Name",...} ή string "Name (Ομάδα 1)" — ίδια πηγή με extractGroupAssignmentsMap.
+            if (typeof extractGroupAssignmentsMap === 'function') {
+                const map = extractGroupAssignmentsMap(assignmentStr);
+                const direct = map?.[groupNum] ?? map?.[String(groupNum)];
+                if (direct) return String(direct).trim();
+            }
             const parts = String(assignmentStr).split(',').map(p => p.trim()).filter(Boolean);
             for (const part of parts) {
                 const m = part.match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
@@ -7407,14 +7431,64 @@
                 const n = normName(personName);
                 let i = list.indexOf(personName);
                 if (i >= 0) return i;
-                return list.findIndex((p) => normName(p) === n);
+                i = list.findIndex((p) => normName(p) === n);
+                if (i >= 0) return i;
+                // Προαγωγή: ανάθεση με παλιό βαθμό vs λίστα με νέο (ή αντίστροφα).
+                if (typeof personNamesMatchIgnoringRank === 'function') {
+                    i = list.findIndex((p) => personNamesMatchIgnoringRank(p, personName));
+                    if (i >= 0) return i;
+                } else if (typeof identityKeyIgnoringRankLocal === 'function') {
+                    const id = identityKeyIgnoringRankLocal(personName);
+                    if (id) {
+                        i = list.findIndex((p) => identityKeyIgnoringRankLocal(p) === id);
+                        if (i >= 0) return i;
+                    }
+                }
+                return -1;
             };
 
-            const finalAssignedOnDate = (dk) => {
+            /** Διαβάζει τελική ανάθεση από type-store (object ή string), μετά fallback. */
+            const finalAssignedOnDate = (dk, type) => {
+                let name = '';
+                if (type && typeof getPersonAssignedOnDateFromStore === 'function') {
+                    name = getPersonAssignedOnDateFromStore(type, dk, groupNum) || '';
+                }
+                if (!name && type && typeof getFinalAssignmentForType === 'function') {
+                    name =
+                        getAssignedPersonNameForGroupFromAssignment(
+                            getFinalAssignmentForType(type, dk),
+                            groupNum
+                        ) || '';
+                }
+                if (name) return String(name).trim().replace(/^,+\s*/, '').replace(/\s*,+$/, '');
                 const assignment =
                     (typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dk) : null) ??
                     (dutyAssignments?.[dk] || null);
                 return getAssignedPersonNameForGroupFromAssignment(assignment, groupNum);
+            };
+
+            const getMissingPeriodsForPerson = (personName) => {
+                const mp = groupData?.missingPeriods;
+                if (!mp || typeof mp !== 'object' || !personName) return [];
+                if (Array.isArray(mp[personName])) return mp[personName];
+                const n = normName(personName);
+                for (const k of Object.keys(mp)) {
+                    if (!Array.isArray(mp[k])) continue;
+                    if (normName(k) === n) return mp[k];
+                    if (
+                        typeof personNamesMatchIgnoringRank === 'function' &&
+                        personNamesMatchIgnoringRank(k, personName)
+                    ) {
+                        return mp[k];
+                    }
+                    if (
+                        typeof identityKeyIgnoringRankLocal === 'function' &&
+                        identityKeyIgnoringRankLocal(k) === identityKeyIgnoringRankLocal(personName)
+                    ) {
+                        return mp[k];
+                    }
+                }
+                return [];
             };
 
             const isDisabledForTypeAtDate = (personName, dutyType, dateKey) => {
@@ -7435,7 +7509,7 @@
                 isDisabledForTypeAtDate(personName, dutyType, nextMonthStartKey);
             /** Οποιαδήποτε επικάλυψη απουσίας με τον επόμενο μήνα (μερική ή ολόκληρη). */
             const isMissingAnyPartOfNextMonth = (personName) => {
-                const periods = groupData?.missingPeriods?.[personName];
+                const periods = getMissingPeriodsForPerson(personName);
                 if (!Array.isArray(periods) || periods.length === 0) return false;
                 for (const p of periods) {
                     const pStartKey = inputValueToDateKey(p?.start);
@@ -7450,7 +7524,7 @@
 
             const isMissingOnDateKey = (personName, dateKey) => {
                 if (!personName || !dateKey) return false;
-                const periods = groupData?.missingPeriods?.[personName];
+                const periods = getMissingPeriodsForPerson(personName);
                 if (!Array.isArray(periods) || periods.length === 0) return false;
                 for (const p of periods) {
                     const pStartKey = inputValueToDateKey(p?.start);
@@ -7501,8 +7575,21 @@
             const findAssignmentReasonForPerson = (dk, personName) => {
                 const gmap = assignmentReasons?.[dk]?.[groupNum];
                 if (!gmap || !personName) return null;
+                const target = normName(personName);
                 for (const p of Object.keys(gmap)) {
-                    if (normName(p) === normName(personName)) return gmap[p];
+                    if (normName(p) === target) return gmap[p];
+                    if (
+                        typeof personNamesMatchIgnoringRank === 'function' &&
+                        personNamesMatchIgnoringRank(p, personName)
+                    ) {
+                        return gmap[p];
+                    }
+                    if (
+                        typeof identityKeyIgnoringRankLocal === 'function' &&
+                        identityKeyIgnoringRankLocal(p) === identityKeyIgnoringRankLocal(personName)
+                    ) {
+                        return gmap[p];
+                    }
                 }
                 return null;
             };
@@ -7511,9 +7598,13 @@
                 let baselinePerson = '';
                 if (typeof getRotationBaselineAssignmentForType === 'function') {
                     const baselineRaw = getRotationBaselineAssignmentForType(type, dk);
-                    if (baselineRaw && typeof parseAssignedPersonForGroupFromAssignment === 'function') {
+                    if (baselineRaw) {
                         baselinePerson =
-                            parseAssignedPersonForGroupFromAssignment(baselineRaw, groupNum) || '';
+                            getAssignedPersonNameForGroupFromAssignment(baselineRaw, groupNum) ||
+                            (typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                                ? parseAssignedPersonForGroupFromAssignment(baselineRaw, groupNum)
+                                : '') ||
+                            '';
                     }
                 }
                 if (baselinePerson) return { person: baselinePerson, fromBaseline: true, via: 'baseline' };
@@ -7586,11 +7677,16 @@
             };
             const pushChronoEntryIfAssigned = (type, orderList, dk, out) => {
                 if (getDutyCategoryForDateKeyLocal(dk) !== type) return;
-                const finalPerson = finalAssignedOnDate(dk);
+                const finalPerson = finalAssignedOnDate(dk, type);
                 const resolved = resolveRotationPersonForChrono(type, dk, finalPerson);
                 if (!resolved.person) return;
-                const name = normName(resolved.person);
-                const idx = findIdxInList(orderList, name);
+                // Χαρτογράφηση στο όνομα της λίστας (ίδιο άτομο με διαφορετικό βαθμό).
+                let listPerson = resolved.person;
+                if (typeof resolvePersonInGroupRotationList === 'function') {
+                    listPerson = resolvePersonInGroupRotationList(resolved.person, groupNum, type) || resolved.person;
+                }
+                const idx = findIdxInList(orderList, listPerson);
+                const name = idx >= 0 ? normName(orderList[idx]) : normName(listPerson);
                 out.push({
                     dateKey: dk,
                     person: name,
@@ -7845,7 +7941,7 @@
             }
 
             const getMissingReasonOverRange = (personName, rangeStartKey, rangeEndKey) => {
-                const periods = groupData?.missingPeriods?.[personName];
+                const periods = getMissingPeriodsForPerson(personName);
                 if (!Array.isArray(periods) || periods.length === 0) return '';
                 if (!rangeStartKey || !rangeEndKey) return '';
                 for (const p of periods) {
@@ -8166,8 +8262,12 @@
                 return swapPairLabelByKey.get(k);
             };
             const getOrderNo = (groupData, type, personName) => {
-                const list = (groupData?.[type] || []).map(normName);
-                const idx = list.findIndex(n => n === normName(personName));
+                const rawList = (groupData?.[type] || []).filter(Boolean);
+                const target = normName(personName);
+                let idx = rawList.findIndex((p) => normName(p) === target);
+                if (idx < 0 && typeof personNamesMatchIgnoringRank === 'function') {
+                    idx = rawList.findIndex((p) => personNamesMatchIgnoringRank(p, personName));
+                }
                 return idx >= 0 ? idx + 1 : null;
             };
             const getMissingPeriodsOverMonth = (groupData, personName, mStart, mEnd) => {
