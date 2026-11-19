@@ -1067,7 +1067,7 @@
                 const allPeople = new Set([...specialList, ...weekendList, ...semiList, ...normalList]);
                 const isMode3 =
                     typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
-
+                
                 if (allPeople.size === 0 && !isMode3) {
                     container.innerHTML = '<p class="text-muted text-center">Δεν έχουν προστεθεί άτομα ακόμα</p>';
                 } else {
@@ -1085,7 +1085,7 @@
                     specialDiv.innerHTML = `
                         <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('specialList_${i}', 'specialChevron_${i}')">
                             <div class="d-flex align-items-center flex-wrap gap-1">
-                                <strong class="text-warning"><i class="fas fa-star me-1"></i>Σειρά Ειδικών Αργιών:</strong>
+                            <strong class="text-warning"><i class="fas fa-star me-1"></i>Σειρά Ειδικών Αργιών:</strong>
                                 ${bulkBtnHtml('special')}
                             </div>
                             <i id="specialChevron_${i}" class="fas fa-chevron-down"></i>
@@ -1093,13 +1093,13 @@
                         <div id="specialList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(specialDiv);
-
+                    
                     const weekendDiv = document.createElement('div');
                     weekendDiv.className = 'mb-3 border rounded p-2';
                     weekendDiv.innerHTML = `
                         <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('weekendList_${i}', 'weekendChevron_${i}')">
                             <div class="d-flex align-items-center flex-wrap gap-1">
-                                <strong class="text-info"><i class="fas fa-calendar-week me-1"></i>Σειρά Σαββατοκύριακων/Αργιών:</strong>
+                            <strong class="text-info"><i class="fas fa-calendar-week me-1"></i>Σειρά Σαββατοκύριακων/Αργιών:</strong>
                                 ${bulkBtnHtml('weekend')}
                             </div>
                             <i id="weekendChevron_${i}" class="fas fa-chevron-down"></i>
@@ -1107,13 +1107,13 @@
                         <div id="weekendList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(weekendDiv);
-
+                    
                     const semiDiv = document.createElement('div');
                     semiDiv.className = 'mb-3 border rounded p-2';
                     semiDiv.innerHTML = `
                         <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('semiList_${i}', 'semiChevron_${i}')">
                             <div class="d-flex align-items-center flex-wrap gap-1">
-                                <strong class="text-warning"><i class="fas fa-calendar-alt me-1"></i>Σειρά Ημιαργιών:</strong>
+                            <strong class="text-warning"><i class="fas fa-calendar-alt me-1"></i>Σειρά Ημιαργιών:</strong>
                                 ${bulkBtnHtml('semi')}
                             </div>
                             <i id="semiChevron_${i}" class="fas fa-chevron-down"></i>
@@ -1121,13 +1121,13 @@
                         <div id="semiList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(semiDiv);
-
+                    
                     const normalDiv = document.createElement('div');
                     normalDiv.className = 'mb-3 border rounded p-2';
                     normalDiv.innerHTML = `
                         <div class="list-header d-flex justify-content-between align-items-center mb-2" onclick="toggleListCollapse('normalList_${i}', 'normalChevron_${i}')">
                             <div class="d-flex align-items-center flex-wrap gap-1">
-                                <strong class="text-primary"><i class="fas fa-calendar-day me-1"></i>Σειρά Καθημερινών:</strong>
+                            <strong class="text-primary"><i class="fas fa-calendar-day me-1"></i>Σειρά Καθημερινών:</strong>
                                 ${bulkBtnHtml('normal')}
                             </div>
                             <i id="normalChevron_${i}" class="fas fa-chevron-down"></i>
@@ -1135,7 +1135,7 @@
                         <div id="normalList_${i}" class="collapse"></div>
                     `;
                     container.appendChild(normalDiv);
-
+                    
                     if (allPeople.size === 0 && isMode3) {
                         const hint = document.createElement('p');
                         hint.className = 'text-muted text-center small mb-2';
@@ -1150,7 +1150,7 @@
                         { type: 'semi', list: semiList, containerId: `semiList_${i}` },
                         { type: 'normal', list: normalList, containerId: `normalList_${i}` }
                     ];
-
+                    
                     lists.forEach(({ type, list, containerId }) => {
                         const listContainer = document.getElementById(containerId);
                         groupListRenderRegistry.set(containerId, { groupNum: i, type, list });
@@ -2411,7 +2411,7 @@
                     delete groups[currentGroup].priorities[oldName];
                     console.log(`[EDIT] Renamed priorities key from "${oldName}" to "${name}"`);
                 }
-
+                
                 // Hierarchy: keep the same rank number under the new name — never reshuffle 1..N here
                 if (typeof renamePersonInRankings === 'function') {
                     renamePersonInRankings(oldName, name);
@@ -2451,7 +2451,7 @@
                 semi: lastSemiDuty || null,
                 normal: lastNormalDuty || null
             };
-
+            
             // Mirror name + lastDuties into the other group set (3↔4) so mode switch keeps edits
             if (typeof syncPersonEditToInactiveGroupSet === 'function') {
                 syncPersonEditToInactiveGroupSet(
@@ -2787,7 +2787,7 @@
                                 }
                                 console.log(`[EDIT] Removed old critical assignment for ${oldDateKey} (${type} changed from ${oldDateKey} to ${newDateKey || 'empty'})`);
                             }
-
+                            
                             const existingAssignment = getAssignmentForDate(oldDateKey);
                             if (existingAssignment) {
                                 const parts =
@@ -2838,8 +2838,8 @@
                             typeof isPersonExcludedFromDuties === 'function' &&
                             isPersonExcludedFromDuties(b, currentGroup);
                         if (exA !== exB) return exA ? 1 : -1;
-                        const priorityA = groups[currentGroup].priorities?.[a]?.[listType] ?? 999;
-                        const priorityB = groups[currentGroup].priorities?.[b]?.[listType] ?? 999;
+                    const priorityA = groups[currentGroup].priorities?.[a]?.[listType] ?? 999;
+                    const priorityB = groups[currentGroup].priorities?.[b]?.[listType] ?? 999;
                         if (priorityA !== priorityB) return priorityA - priorityB;
                         const dateA = groups[currentGroup].lastDuties[a]?.[listType];
                         const dateB = groups[currentGroup].lastDuties[b]?.[listType];
@@ -4530,7 +4530,7 @@
                     // Always normalize to close any numbering gaps, and persist to Firestore via saveData()
                     normalizeRankingsSequential();
                 }
-
+                
                 // Do NOT strip this person from dutyAssignments / typed month stores / criticalAssignments.
                 // Past calculated months must keep historical names even after roster deletion.
                 
@@ -5655,7 +5655,7 @@
                 if (!groupSet) return false;
                 for (let g = 1; g <= maxG; g++) {
                     const gd = groupSet[g];
-                    if (!gd) continue;
+                if (!gd) continue;
                     if (
                         ['special', 'weekend', 'semi', 'normal'].some((t) =>
                             (gd[t] || []).some(
@@ -5663,10 +5663,10 @@
                             )
                         )
                     ) {
-                        return true;
-                    }
+                    return true;
                 }
-                return false;
+            }
+            return false;
             };
             if (checkSet(groups, typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4)) {
                 return true;
@@ -5823,9 +5823,9 @@
 
             const eligibleCount = listEligibleTransferReturnEntries().length;
             if (lastTransferUndo) {
-                const p = lastTransferUndo.person || '';
-                const fromName = getGroupName(lastTransferUndo.fromGroup);
-                const toName = getGroupName(lastTransferUndo.toGroup);
+            const p = lastTransferUndo.person || '';
+            const fromName = getGroupName(lastTransferUndo.fromGroup);
+            const toName = getGroupName(lastTransferUndo.toGroup);
                 const extra =
                     eligibleCount > 1
                         ? `<br><small class="text-white-50">Διαθέσιμες επιστροφές: ${eligibleCount} άτομα</small>`
@@ -5952,8 +5952,8 @@
                 const rankText = chosen?.isSelfMatch || r?.selfMatch
                     ? `Θέση:${selfPos ?? '?'}`
                     : chosen
-                        ? `A:${r.rankA ?? ''} / B:${r.rankB ?? ''}`
-                        : `A:${r.rankA ?? ''}`;
+                    ? `A:${r.rankA ?? ''} / B:${r.rankB ?? ''}`
+                    : `A:${r.rankA ?? ''}`;
 
                 return `<tr>
                     <td><strong>${label}</strong></td>
@@ -7429,7 +7429,7 @@
                     dayNeedsVehicleCoverageWarning(assignment)
                         ? `<span class="duty-vehicle-coverage-warn" title="Λιγότερα από 2 άτομα με εξουσιοδότηση οχήματος αυτή την ημέρα">*</span>`
                         : '';
-
+                
                 dayDiv.innerHTML = `
                     <div class="day-number">${day}</div>
                     ${holidayName ? `<div class="orthodox-holiday-name">${holidayName}</div>` : ''}
@@ -8913,12 +8913,12 @@
                             if (typeof saveLastRotationPositionsToFirestore === 'function') {
                                 await saveLastRotationPositionsToFirestore(db, user);
                             } else {
-                                const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
-                                await db.collection('dutyShifts').doc('lastRotationPositions').set({
-                                    ...sanitizedPositions,
-                                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                                    updatedBy: user.uid
-                                });
+                            const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                            await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                                ...sanitizedPositions,
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                updatedBy: user.uid
+                            });
                             }
                             console.log('Updated last rotation positions for weekends (after skip logic) to Firestore:', finalWeekendRotationPositionsByMonth);
                         } catch (error) {
@@ -9024,12 +9024,12 @@
                             if (typeof saveLastRotationPositionsToFirestore === 'function') {
                                 await saveLastRotationPositionsToFirestore(db, user);
                             } else {
-                                const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
-                                await db.collection('dutyShifts').doc('lastRotationPositions').set({
-                                    ...sanitizedPositions,
-                                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                                    updatedBy: user.uid
-                                });
+                            const sanitizedPositions = sanitizeForFirestore(lastRotationPositions);
+                            await db.collection('dutyShifts').doc('lastRotationPositions').set({
+                                ...sanitizedPositions,
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                updatedBy: user.uid
+                            });
                             }
                             console.log('Updated last rotation positions for semi-normal (after swaps) to Firestore:', finalSemiRotationPositionsByMonth);
                         } catch (error) {

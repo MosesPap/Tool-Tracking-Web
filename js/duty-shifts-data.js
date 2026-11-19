@@ -7394,9 +7394,11 @@
          * χρονολογικά από τελικές αναθέσεις (ποιος βγαίνει πραγματικά κάθε μέρα στο Excel)
          * καθημερινές / ημιαργίες / αργίες / ειδικές: 1ες vs επαναλήψεις
          *   χωρίς πτώση→max· με wrap/swaps→αύξουσα κάλυψη
-         * ειδικές/αργές: παραλειφθέντες (# κενά) πρώτοι επιλαχόντες· άγκυρα = πιο μακρινός που βγήκε
-         *   π.χ. #7..#10,#13,#14,#2 (κενά #11,#12) → άγκυρα #2· επιλαχόντες #11,#12
-         *   ακόμα με ανταλλαγή #2↔#13: τελική #7..#10,#2,#14,#13 → άγκυρα #2
+         * ειδικές/αργίες: κενά στη σειρά (παράλειψη) μέχρι furthest που βγήκε (wrap-aware)
+         *   π.χ. #7..#10,#13,#14,#2 → άγκυρα #2 (όχι σταμάτημα στο #10)
+         *   ανταλλαγή #2↔#13: #7..#10,#2,#14,#13 → άγκυρα ακόμα #2
+         *   αργίες: επιλαχόντες συνέχεια μετά την άγκυρα (όχι τα κενά πρώτα)
+         *   ειδικές: παραλειφθέντες πρώτοι επιλαχόντες· μετά συνέχεια μετά την άγκυρα
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
@@ -7900,7 +7902,7 @@
             };
 
             /**
-             * Ενεργό τμήμα # για κενά (ειδικές/αργίες): αν υπάρχουν επαναλήψεις, από την 1η επανάληψη.
+             * Ενεργό τμήμα # για κενά (ειδικές): αν υπάρχουν επαναλήψεις, από την 1η επανάληψη.
              */
             const getChronoOrderNosForGapAnalysis = (entries, resolved) => {
                 const all = (entries || [])
@@ -7972,7 +7974,7 @@
                     resolved = extendAnchorIfLastContinuesSequence(entries, orderList, resolved);
                 }
                 let gapInfo = null;
-                // Ειδικές + αργίες: άγκυρα = πιο μακρινός που βγήκε (όχι stop στο 1ο κενό)· κενά = παραλείψεις.
+                // Ειδικές + αργίες: μην σταματάς στο πρώτο κενό (#10)· άγκυρα = furthest που βγήκε (#2).
                 if ((t === 'special' || t === 'weekend') && orderList.length) {
                     const gapNos = getChronoOrderNosForGapAnalysis(entries, resolved);
                     gapInfo = analyzeRotationGaps(gapNos, orderList.length);
@@ -8004,7 +8006,7 @@
                     anchorPerson: resolved.person || '',
                     skippedOrderNos: gapInfo?.skippedOrderNos || [],
                     gapInfo: gapInfo || null,
-                    // alias για συμβατότητα με nextThreeForSpecial
+                    // alias για παλιό debug ειδικών
                     specialGapInfo: t === 'special' ? gapInfo : null
                 };
             }
@@ -8060,7 +8062,12 @@
                 const rawList = orderListForType(type);
                 if (rawList.length === 0) return Array(count).fill('');
 
-                let startIdx = resolveStartIndexAfterAnchor(type, rawList);
+                // Αργίες/κ.λπ.: συνέχεια μετά την άγκυρα — όχι τα κενά ως πρώτοι επιλαχόντες.
+                const gapInfo = debugByType[type]?.gapInfo || null;
+                let startIdx =
+                    gapInfo?.nextStartOrderNo != null && gapInfo.nextStartOrderNo >= 1
+                        ? gapInfo.nextStartOrderNo - 1
+                        : resolveStartIndexAfterAnchor(type, rawList);
                 const picks = [];
                 let cursor = startIdx;
                 let checked = 0;
@@ -8088,43 +8095,6 @@
                 if (rawList.length === 0) return ['', ''];
                 const eligibleCount = rawList.filter((p) => isAvailableForNextMonth(p, type)).length;
                 if (eligibleCount === 0) return ['', ''];
-
-                // Αργίες: παραλειφθέντες πρώτοι, μετά συνέχεια μετά τον πιο μακρινό που βγήκε.
-                if (type === 'weekend') {
-                    const gapInfo = debugByType.weekend?.gapInfo || null;
-                    const outNames = [];
-                    const used = new Set();
-                    const tryPick = (person) => {
-                        if (!person || outNames.length >= 2) return;
-                        const key = normName(person);
-                        if (!key || used.has(key)) return;
-                        const excluded =
-                            typeof isPersonExcludedFromDuties === 'function' &&
-                            isPersonExcludedFromDuties(person, groupNum);
-                        if (excluded) return;
-                        if (!isAvailableForNextMonth(person, type)) return;
-                        outNames.push(person);
-                        used.add(key);
-                    };
-                    for (const orderNo of gapInfo?.skippedOrderNos || []) {
-                        if (outNames.length >= 2) break;
-                        if (!(orderNo >= 1 && orderNo <= rawList.length)) continue;
-                        tryPick(rawList[orderNo - 1]);
-                    }
-                    let cursor =
-                        gapInfo?.nextStartOrderNo != null && gapInfo.nextStartOrderNo >= 1
-                            ? gapInfo.nextStartOrderNo - 1
-                            : resolveStartIndexAfterAnchor(type, rawList);
-                    let checked = 0;
-                    while (checked < rawList.length * 2 && outNames.length < 2) {
-                        tryPick(rawList[cursor]);
-                        cursor = (cursor + 1) % rawList.length;
-                        checked++;
-                    }
-                    while (outNames.length < 2) outNames.push('');
-                    return [outNames[0] || '', outNames[1] || ''];
-                }
-
                 const picks = nextNFromRotationListAfterAnchor(type, 2);
                 return [picks[0] || '', picks[1] || ''];
             };
@@ -8881,7 +8851,11 @@
                                     ${d.anchorPerson ? escapeHtml(d.anchorPerson) : ''}</div>
                                 ${
                                     Array.isArray(d.skippedOrderNos) && d.skippedOrderNos.length
-                                        ? `<div>Παραλείψεις (πρώτοι επιλαχόντες): <strong>${d.skippedOrderNos
+                                        ? `<div>${
+                                              t === 'special'
+                                                  ? 'Παραλείψεις (πρώτοι επιλαχόντες)'
+                                                  : 'Κενά σειράς (δεν μπαίνουν πρώτα στους επιλαχόντες)'
+                                          }: <strong>${d.skippedOrderNos
                                               .map((n) => '#' + n)
                                               .join(', ')}</strong></div>`
                                         : ''
