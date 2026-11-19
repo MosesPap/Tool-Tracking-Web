@@ -1096,6 +1096,13 @@
             window.ensureExcludedLastWithContiguousPriorities = ensureExcludedLastWithContiguousPriorities;
             window.groupBucketHasExcludedPeople = groupBucketHasExcludedPeople;
         }
+        function identityKeyIgnoringRankLocal(name) {
+            const n = personScheduleKey(name);
+            if (!n) return '';
+            if (typeof getPersonIdentityKey === 'function') return getPersonIdentityKey(n);
+            const parts = n.split(' ');
+            return parts.length >= 3 ? parts.slice(1).join(' ') : n;
+        }
         function isPersonExcludedFromDuties(person, groupNum) {
             if (!person || !groupNum) return false;
             const g = groups?.[groupNum];
@@ -1110,10 +1117,7 @@
                 if (typeof personNamesMatchIgnoringRank === 'function') {
                     return personNamesMatchIgnoringRank(k, person);
                 }
-                if (typeof getPersonIdentityKey === 'function') {
-                    return getPersonIdentityKey(k) === getPersonIdentityKey(person);
-                }
-                return false;
+                return identityKeyIgnoringRankLocal(k) === identityKeyIgnoringRankLocal(person);
             };
             if (map[person] === true || (pk && map[pk] === true)) {
                 // #region agent log
@@ -1215,12 +1219,7 @@
                 if (typeof personNamesMatchIgnoringRank === 'function' && personNamesMatchIgnoringRank(k, person)) {
                     return true;
                 }
-                if (
-                    typeof getPersonIdentityKey === 'function' &&
-                    getPersonIdentityKey(k) === getPersonIdentityKey(person)
-                ) {
-                    return true;
-                }
+                if (identityKeyIgnoringRankLocal(k) === identityKeyIgnoringRankLocal(person)) return true;
             }
             return false;
         }

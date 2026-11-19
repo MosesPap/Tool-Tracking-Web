@@ -10375,6 +10375,33 @@
                         if (parts.length > 0) {
                             normalDayAssignments[dateKey] = parts.join(', ');
                         }
+                        // #region agent log
+                        if (/^2026-12-2[1289]$/.test(dateKey)) {
+                            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Debug-Session-Id': '73ad17'
+                                },
+                                body: JSON.stringify({
+                                    sessionId: '73ad17',
+                                    runId: 'persist-normal',
+                                    hypothesisId: 'H6',
+                                    location: 'duty-shifts-logic.js:persistNormalDayAssignments',
+                                    message: 'writing normalDayAssignments for late Dec',
+                                    data: {
+                                        dateKey,
+                                        parts,
+                                        hasIttalos: parts.some((p) => String(p).includes('ΙΤΤΑΛΟΣ')),
+                                        source: calculationSteps?.finalNormalAssignments
+                                            ? 'finalNormalAssignments'
+                                            : 'tempAssignments.normal'
+                                    },
+                                    timestamp: Date.now()
+                                })
+                            }).catch(() => {});
+                        }
+                        // #endregion
                     }
                 }
                 

@@ -7052,6 +7052,42 @@
                 const key = formatDateKey(date);
                 // Get assignment from the correct day-type-specific document
                 const assignment = getAssignmentForDate(key);
+                // #region agent log
+                if (
+                    year === 2026 &&
+                    month === 11 &&
+                    (day === 21 || day === 22 || day === 28 || day === 29)
+                ) {
+                    const rawObj = normalDayAssignments?.[key];
+                    const locked =
+                        typeof isMonthCalculationLocked === 'function' &&
+                        typeof getMonthKeyFromDate === 'function'
+                            ? isMonthCalculationLocked(getMonthKeyFromDate(date))
+                            : null;
+                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Debug-Session-Id': '73ad17'
+                        },
+                        body: JSON.stringify({
+                            sessionId: '73ad17',
+                            runId: 'calendar-view',
+                            hypothesisId: 'H6',
+                            location: 'duty-shifts-ui.js:renderCalendar',
+                            message: 'calendar cell late Dec day',
+                            data: {
+                                key,
+                                locked,
+                                assignment: String(assignment || '').slice(0, 220),
+                                rawType: typeof rawObj,
+                                hasIttalos: String(assignment || '').includes('ΙΤΤΑΛΟΣ')
+                            },
+                            timestamp: Date.now()
+                        })
+                    }).catch(() => {});
+                }
+                // #endregion
                 
                 const dayDiv = document.createElement('div');
                 // dayType is determined by getDayType() which handles:
