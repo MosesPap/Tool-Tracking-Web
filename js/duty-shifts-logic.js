@@ -10375,33 +10375,6 @@
                         if (parts.length > 0) {
                             normalDayAssignments[dateKey] = parts.join(', ');
                         }
-                        // #region agent log
-                        if (/^2026-12-2[1289]$/.test(dateKey)) {
-                            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-Debug-Session-Id': '73ad17'
-                                },
-                                body: JSON.stringify({
-                                    sessionId: '73ad17',
-                                    runId: 'persist-normal',
-                                    hypothesisId: 'H6',
-                                    location: 'duty-shifts-logic.js:persistNormalDayAssignments',
-                                    message: 'writing normalDayAssignments for late Dec',
-                                    data: {
-                                        dateKey,
-                                        parts,
-                                        hasIttalos: parts.some((p) => String(p).includes('ΙΤΤΑΛΟΣ')),
-                                        source: calculationSteps?.finalNormalAssignments
-                                            ? 'finalNormalAssignments'
-                                            : 'tempAssignments.normal'
-                                    },
-                                    timestamp: Date.now()
-                                })
-                            }).catch(() => {});
-                        }
-                        // #endregion
                     }
                 }
                 
@@ -15000,43 +14973,7 @@
                         }
                         return null;
                     };
-                    const picked = tryPass(false) || tryPass(true);
-                    // #region agent log
-                    if (picked) {
-                        const day = String(dateKeyLocal || '').slice(-2);
-                        const isLate = day === '21' || day === '22' || day === '28' || day === '29';
-                        const isExcl =
-                            typeof isPersonExcludedFromDuties === 'function' &&
-                            isPersonExcludedFromDuties(picked, groupNumLocal);
-                        const isIttalos = String(picked).includes('ΙΤΤΑΛΟΣ');
-                        if (isLate || isExcl || isIttalos) {
-                            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-Debug-Session-Id': '73ad17'
-                                },
-                                body: JSON.stringify({
-                                    sessionId: '73ad17',
-                                    hypothesisId: 'B',
-                                    location: 'duty-shifts-logic.js:pickNormalCandidateAvoidingMonthDup',
-                                    message: 'picked candidate',
-                                    data: {
-                                        dateKeyLocal,
-                                        groupNumLocal,
-                                        picked,
-                                        isExcluded: !!isExcl,
-                                        startIdx,
-                                        listLen: n,
-                                        assignedCount: Object.keys(assignedMapLocal || {}).length
-                                    },
-                                    timestamp: Date.now()
-                                })
-                            }).catch(() => {});
-                        }
-                    }
-                    // #endregion
-                    return picked;
+                    return tryPass(false) || tryPass(true);
                 };
                 // Track days that have been swapped (to use already-assigned person when we reach them)
                 const swappedDaysPreview = {}; // dateKey -> { groupNum -> true }
@@ -15312,48 +15249,6 @@
                                 ? groupsForDuty(groupNum, dateKey)
                                 : groups[groupNum]) || { normal: [] };
                         const groupPeople = groupData.normal || [];
-                        // #region agent log
-                        {
-                            const day = String(dateKey || '').slice(-2);
-                            const isLate = day === '21' || day === '22' || day === '28' || day === '29';
-                            const exclIn =
-                                (groupPeople || []).filter(
-                                    (p) =>
-                                        typeof isPersonExcludedFromDuties === 'function' &&
-                                        isPersonExcludedFromDuties(p, groupNum)
-                                ) || [];
-                            if (isLate || exclIn.length) {
-                                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-Debug-Session-Id': '73ad17'
-                                    },
-                                    body: JSON.stringify({
-                                        sessionId: '73ad17',
-                                        hypothesisId: 'A',
-                                        location: 'duty-shifts-logic.js:renderStep4_Normal:groupPeople',
-                                        message: 'groupPeople for normal day',
-                                        data: {
-                                            dateKey,
-                                            groupNum,
-                                            mode:
-                                                typeof getActiveGroupMode === 'function'
-                                                    ? getActiveGroupMode()
-                                                    : '?',
-                                            listLen: groupPeople.length,
-                                            excludedStillInList: exclIn,
-                                            rotPos: globalNormalRotationPosition[groupNum],
-                                            assignedSoFar: Object.keys(
-                                                assignedPeoplePreview[monthKey]?.[groupNum] || {}
-                                            ).length
-                                        },
-                                        timestamp: Date.now()
-                                    })
-                                }).catch(() => {});
-                            }
-                        }
-                        // #endregion
                         
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
@@ -15661,45 +15556,6 @@
                                     const consecutiveNormal =
                                         !!prevNormalKey && lastKeyForBaseline === prevNormalKey;
                                     const shouldDisplace = hasUnusedEligible || consecutiveNormal;
-                                    // #region agent log
-                                    if (
-                                        dateKey === '2026-12-21' ||
-                                        dateKey === '2026-12-22' ||
-                                        dateKey === '2026-12-28' ||
-                                        dateKey === '2026-12-29' ||
-                                        groupNum === 2
-                                    ) {
-                                        fetch(
-                                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                            {
-                                                method: 'POST',
-                                                headers: {
-                                                    'Content-Type': 'application/json',
-                                                    'X-Debug-Session-Id': '73ad17'
-                                                },
-                                                body: JSON.stringify({
-                                                    sessionId: '73ad17',
-                                                    runId: 'post-fix',
-                                                    hypothesisId: 'H11',
-                                                    location:
-                                                        'duty-shifts-logic.js:monthDupBaselineGate',
-                                                    message: 'month-dup baseline gate',
-                                                    data: {
-                                                        dateKey,
-                                                        groupNum,
-                                                        baseline: assignedPerson,
-                                                        hasUnusedEligible,
-                                                        consecutiveNormal,
-                                                        prevNormalKey,
-                                                        lastKeyForBaseline,
-                                                        willDisplace: !!shouldDisplace
-                                                    },
-                                                    timestamp: Date.now()
-                                                })
-                                            }
-                                        ).catch(() => {});
-                                    }
-                                    // #endregion
                                     if (shouldDisplace) {
                                         const candidate = pickNormalCandidateAvoidingMonthDup(
                                             groupPeople,
@@ -15727,70 +15583,6 @@
                                 }
                             }
                             // Keep baseline as basic-series slot; month-dup steals only for unused or anti-consecutive.
-
-                            // #region agent log
-                            {
-                                const day = String(dateKey || '').slice(-2);
-                                const isLate = day === '21' || day === '22' || day === '28' || day === '29';
-                                const isExcl =
-                                    assignedPerson &&
-                                    typeof isPersonExcludedFromDuties === 'function' &&
-                                    isPersonExcludedFromDuties(assignedPerson, groupNum);
-                                const baseExcl =
-                                    originalRotationPerson &&
-                                    typeof isPersonExcludedFromDuties === 'function' &&
-                                    isPersonExcludedFromDuties(originalRotationPerson, groupNum);
-                                if (isLate || isExcl || baseExcl || String(assignedPerson || '').includes('ΙΤΤΑΛΟΣ')) {
-                                    const assignedMap = assignedPeoplePreview[monthKey]?.[groupNum] || {};
-                                    const neverAssigned = (groupPeople || []).filter((p) => {
-                                        if (!p) return false;
-                                        if (
-                                            typeof isPersonExcludedFromDuties === 'function' &&
-                                            isPersonExcludedFromDuties(p, groupNum)
-                                        ) {
-                                            return false;
-                                        }
-                                        const hit = Object.keys(assignedMap).some(
-                                            (k) =>
-                                                k === p ||
-                                                (typeof normalizePersonKey === 'function' &&
-                                                    normalizePersonKey(k) === normalizePersonKey(p))
-                                        );
-                                        return !hit;
-                                    });
-                                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'X-Debug-Session-Id': '73ad17'
-                                        },
-                                        body: JSON.stringify({
-                                            sessionId: '73ad17',
-                                            runId: 'post-fix',
-                                            hypothesisId: 'H10',
-                                            location: 'duty-shifts-logic.js:renderStep4_Normal:finalAssign',
-                                            message: 'final normal assignee before conflict/swap',
-                                            data: {
-                                                dateKey,
-                                                groupNum,
-                                                rotationPosition,
-                                                originalRotationPerson,
-                                                assignedPerson,
-                                                assignedIsExcluded: !!isExcl,
-                                                baselineIsExcluded: !!baseExcl,
-                                                wasReplacedDueToFiveDayRule,
-                                                wasDisabledPersonSkipped,
-                                                neverAssignedCount: neverAssigned.length,
-                                                neverAssignedSample: neverAssigned.slice(0, 8),
-                                                assignedCount: Object.keys(assignedMap).length,
-                                                listLen: groupPeople.length
-                                            },
-                                            timestamp: Date.now()
-                                        })
-                                    }).catch(() => {});
-                                }
-                            }
-                            // #endregion
                             
                             // Check if there's a pending swap for this position
                             if (pendingNormalSwaps[monthKey][groupNum] && pendingNormalSwaps[monthKey][groupNum].swapToPosition === rotationPosition) {

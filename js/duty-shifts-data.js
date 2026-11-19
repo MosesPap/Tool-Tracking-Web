@@ -1119,78 +1119,10 @@
                 }
                 return identityKeyIgnoringRankLocal(k) === identityKeyIgnoringRankLocal(person);
             };
-            if (map[person] === true || (pk && map[pk] === true)) {
-                // #region agent log
-                if (String(person).includes('ΙΤΤΑΛΟΣ') || String(pk).includes('ΙΤΤΑΛΟΣ')) {
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Debug-Session-Id': '73ad17'
-                        },
-                        body: JSON.stringify({
-                            sessionId: '73ad17',
-                            runId: 'post-fix',
-                            hypothesisId: 'E',
-                            location: 'duty-shifts-data.js:isPersonExcludedFromDuties',
-                            message: 'ΙΤΤΑΛΟΣ exclusion HIT',
-                            data: { person, groupNum, pk, hit: 'direct' },
-                            timestamp: Date.now()
-                        })
-                    }).catch(() => {});
-                }
-                // #endregion
-                return true;
-            }
+            if (map[person] === true || (pk && map[pk] === true)) return true;
             for (const k of Object.keys(map)) {
-                if (!matchesExclKey(k)) continue;
-                // #region agent log
-                if (String(person).includes('ΙΤΤΑΛΟΣ') || String(k).includes('ΙΤΤΑΛΟΣ')) {
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Debug-Session-Id': '73ad17'
-                        },
-                        body: JSON.stringify({
-                            sessionId: '73ad17',
-                            runId: 'post-fix',
-                            hypothesisId: 'E',
-                            location: 'duty-shifts-data.js:isPersonExcludedFromDuties',
-                            message: 'ΙΤΤΑΛΟΣ exclusion HIT via identity/alias',
-                            data: { person, groupNum, pk, aliasKey: k },
-                            timestamp: Date.now()
-                        })
-                    }).catch(() => {});
-                }
-                // #endregion
-                return true;
+                if (matchesExclKey(k)) return true;
             }
-            // #region agent log
-            if (String(person).includes('ΙΤΤΑΛΟΣ')) {
-                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Debug-Session-Id': '73ad17'
-                    },
-                    body: JSON.stringify({
-                        sessionId: '73ad17',
-                        runId: 'post-fix',
-                        hypothesisId: 'E',
-                        location: 'duty-shifts-data.js:isPersonExcludedFromDuties',
-                        message: 'ΙΤΤΑΛΟΣ exclusion MISS',
-                        data: {
-                            person,
-                            groupNum,
-                            pk,
-                            exclKeys: Object.keys(map).filter((k) => map[k] === true)
-                        },
-                        timestamp: Date.now()
-                    })
-                }).catch(() => {});
-            }
-            // #endregion
             return false;
         }
         function personMatchesExclusionKey(candidate, personName) {
@@ -1344,40 +1276,6 @@
             // Σετ 3: ίδια λίστα με το UI. Μην αφαιρείς εξαίρεση/home — αλλιώς ο νο.N
             // «εξαφανίζεται» χωρίς λόγο. Η εξαίρεση/απενεργοποίηση χειρίζεται στο Step με λόγο.
             if (getActiveGroupMode() === '3') {
-                // #region agent log
-                if (listType === 'normal' && Array.isArray(order)) {
-                    const excl = order.filter(
-                        (p) =>
-                            typeof isPersonExcludedFromDuties === 'function' &&
-                            isPersonExcludedFromDuties(p, groupNum)
-                    );
-                    if (excl.length || (dk && /-2[1289]$/.test(dk))) {
-                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Debug-Session-Id': '73ad17'
-                            },
-                            body: JSON.stringify({
-                                sessionId: '73ad17',
-                                hypothesisId: 'A',
-                                location: 'duty-shifts-data.js:getGroupRotationListAtDate',
-                                message: 'mode3 returns list WITHOUT filtering excluded',
-                                data: {
-                                    groupNum,
-                                    listType,
-                                    dk,
-                                    mode: '3',
-                                    listLen: order.length,
-                                    excludedInList: excl,
-                                    sampleTail: order.slice(-3)
-                                },
-                                timestamp: Date.now()
-                            })
-                        }).catch(() => {});
-                    }
-                }
-                // #endregion
                 return Array.isArray(order) ? order.slice() : [];
             }
             return filterExcludedFromDutyList(
