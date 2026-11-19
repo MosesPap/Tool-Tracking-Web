@@ -7394,8 +7394,9 @@
          * χρονολογικά από τελικές αναθέσεις (ποιος βγαίνει πραγματικά κάθε μέρα στο Excel)
          * καθημερινές / ημιαργίες / αργίες / ειδικές: 1ες vs επαναλήψεις
          *   χωρίς πτώση→max· με wrap/swaps→αύξουσα κάλυψη
-         * ειδικές: lookback· παραλειφθέντες (# κενά, απουσία/χειροκίνητα) πρώτοι επιλαχόντες
-         *   π.χ. βγήκαν #4,#6,#7 (παράλειψη #5) → επιλαχόντες #5,#8,#9
+         * ειδικές/αργές: παραλειφθέντες (# κενά) πρώτοι επιλαχόντες· άγκυρα = πιο μακρινός που βγήκε
+         *   π.χ. #7..#10,#13,#14,#2 (κενά #11,#12) → άγκυρα #2· επιλαχόντες #11,#12
+         *   ακόμα με ανταλλαγή #2↔#13: τελική #7..#10,#2,#14,#13 → άγκυρα #2
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
@@ -7899,7 +7900,7 @@
             };
 
             /**
-             * Ενεργό τμήμα # για κενά (ειδικές): αν υπάρχουν επαναλήψεις, από την 1η επανάληψη.
+             * Ενεργό τμήμα # για κενά (ειδικές/αργίες): αν υπάρχουν επαναλήψεις, από την 1η επανάληψη.
              */
             const getChronoOrderNosForGapAnalysis = (entries, resolved) => {
                 const all = (entries || [])
@@ -7970,19 +7971,19 @@
                     resolved = resolveAnchorFromChronoOrderNos(orderNos, orderList);
                     resolved = extendAnchorIfLastContinuesSequence(entries, orderList, resolved);
                 }
-                let specialGapInfo = null;
-                if (t === 'special' && orderList.length) {
-                    // Ειδικές: άγκυρα = τελευταίος που βγήκε στο ενεργό τμήμα· κενά = παραλείψεις.
+                let gapInfo = null;
+                // Ειδικές + αργίες: άγκυρα = πιο μακρινός που βγήκε (όχι stop στο 1ο κενό)· κενά = παραλείψεις.
+                if ((t === 'special' || t === 'weekend') && orderList.length) {
                     const gapNos = getChronoOrderNosForGapAnalysis(entries, resolved);
-                    specialGapInfo = analyzeRotationGaps(gapNos, orderList.length);
-                    if (specialGapInfo.coveredThrough != null) {
-                        const ct = specialGapInfo.coveredThrough;
+                    gapInfo = analyzeRotationGaps(gapNos, orderList.length);
+                    if (gapInfo.coveredThrough != null) {
+                        const ct = gapInfo.coveredThrough;
                         resolved = {
                             ...resolved,
                             coveredThrough: ct,
                             idx: ct - 1,
                             person: normName(orderList[ct - 1] || resolved.person || ''),
-                            method: `${resolved.method || 'none'}+special-gaps`
+                            method: `${resolved.method || 'none'}+${t}-gaps`
                         };
                     }
                 }
@@ -8001,8 +8002,10 @@
                     anchorOrderNo: resolved.idx >= 0 ? resolved.idx + 1 : null,
                     coveredThrough: resolved.coveredThrough ?? null,
                     anchorPerson: resolved.person || '',
-                    skippedOrderNos: specialGapInfo?.skippedOrderNos || [],
-                    specialGapInfo: specialGapInfo || null
+                    skippedOrderNos: gapInfo?.skippedOrderNos || [],
+                    gapInfo: gapInfo || null,
+                    // alias για συμβατότητα με nextThreeForSpecial
+                    specialGapInfo: t === 'special' ? gapInfo : null
                 };
             }
 
@@ -8085,6 +8088,43 @@
                 if (rawList.length === 0) return ['', ''];
                 const eligibleCount = rawList.filter((p) => isAvailableForNextMonth(p, type)).length;
                 if (eligibleCount === 0) return ['', ''];
+
+                // Αργίες: παραλειφθέντες πρώτοι, μετά συνέχεια μετά τον πιο μακρινό που βγήκε.
+                if (type === 'weekend') {
+                    const gapInfo = debugByType.weekend?.gapInfo || null;
+                    const outNames = [];
+                    const used = new Set();
+                    const tryPick = (person) => {
+                        if (!person || outNames.length >= 2) return;
+                        const key = normName(person);
+                        if (!key || used.has(key)) return;
+                        const excluded =
+                            typeof isPersonExcludedFromDuties === 'function' &&
+                            isPersonExcludedFromDuties(person, groupNum);
+                        if (excluded) return;
+                        if (!isAvailableForNextMonth(person, type)) return;
+                        outNames.push(person);
+                        used.add(key);
+                    };
+                    for (const orderNo of gapInfo?.skippedOrderNos || []) {
+                        if (outNames.length >= 2) break;
+                        if (!(orderNo >= 1 && orderNo <= rawList.length)) continue;
+                        tryPick(rawList[orderNo - 1]);
+                    }
+                    let cursor =
+                        gapInfo?.nextStartOrderNo != null && gapInfo.nextStartOrderNo >= 1
+                            ? gapInfo.nextStartOrderNo - 1
+                            : resolveStartIndexAfterAnchor(type, rawList);
+                    let checked = 0;
+                    while (checked < rawList.length * 2 && outNames.length < 2) {
+                        tryPick(rawList[cursor]);
+                        cursor = (cursor + 1) % rawList.length;
+                        checked++;
+                    }
+                    while (outNames.length < 2) outNames.push('');
+                    return [outNames[0] || '', outNames[1] || ''];
+                }
+
                 const picks = nextNFromRotationListAfterAnchor(type, 2);
                 return [picks[0] || '', picks[1] || ''];
             };
@@ -8104,7 +8144,8 @@
                 const rawList = orderListForType('special');
                 if (rawList.length === 0) return { names: ['', '', ''], notes: ['', '', ''] };
                 const specialDates = findNextSpecialDates(3, 3650);
-                const gapInfo = debugByType.special?.specialGapInfo || null;
+                const gapInfo =
+                    debugByType.special?.gapInfo || debugByType.special?.specialGapInfo || null;
                 const outNames = [];
                 const used = new Set();
                 const tryPick = (person) => {
