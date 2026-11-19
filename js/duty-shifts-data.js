@@ -7398,7 +7398,8 @@
          *   π.χ. #7..#10,#13,#14,#2 → άγκυρα #2 (όχι σταμάτημα στο #10)
          *   ανταλλαγή #2↔#13: #7..#10,#2,#14,#13 → άγκυρα ακόμα #2
          *   αργίες: επιλαχόντες συνέχεια μετά την άγκυρα (όχι τα κενά πρώτα)
-         *   ειδικές: παραλειφθέντες πρώτοι επιλαχόντες· μετά συνέχεια μετά την άγκυρα
+         *   ειδικές: παραλειφθέντες πρώτοι· όχι ειδική δίπλα στην επιστροφή / συνεχόμενο μπλοκ
+         *     (λήξη 31→όχι 1/1 · λήξη 24 με 24–25→όχι 25)· τοποθέτηση στην 1η διαθέσιμη θέση
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
@@ -7646,6 +7647,43 @@
                 return true;
             };
 
+            /**
+             * Επιστροφή από απουσία δίπλα σε ειδική / σε συνεχόμενο μπλοκ ειδικών
+             * (π.χ. λήξη 31/12 → όχι 1/1 · λήξη 24 με 24–25 διπλές → όχι 25).
+             */
+            const isSpecialTooSoonAfterAbsenceReturn = (personName, specialDateKey) => {
+                if (!personName || !specialDateKey) return false;
+                const periods = getMissingPeriodsForPerson(personName);
+                if (!Array.isArray(periods) || periods.length === 0) return false;
+                const specialDate = new Date(specialDateKey + 'T00:00:00');
+                if (isNaN(specialDate.getTime())) return false;
+
+                // Αρχή συνεχόμενου μπλοκ ειδικών που περιέχει την specialDateKey.
+                let blockStartDate = new Date(specialDate);
+                for (;;) {
+                    const prev = new Date(blockStartDate);
+                    prev.setDate(prev.getDate() - 1);
+                    if (getDayType(prev) !== 'special-holiday') break;
+                    blockStartDate = prev;
+                }
+                const blockStartKey = formatDateKey(blockStartDate);
+
+                for (const p of periods) {
+                    const endKey = inputValueToDateKey(p?.end);
+                    if (!endKey) continue;
+                    const dayAfterEnd = addDaysKeyLocal(endKey, 1);
+                    if (!dayAfterEnd) continue;
+                    // Ακριβώς η επόμενη μέρα μετά τη λήξη.
+                    if (specialDateKey === dayAfterEnd) return true;
+                    // Συνεχόμενο μπλοκ ειδικών που αγγίζει την ημέρα επιστροφής (E+1) ή τη λήξη.
+                    if (blockStartKey <= dayAfterEnd && specialDateKey >= dayAfterEnd) return true;
+                    if (specialDateKey > endKey && blockStartKey <= endKey && specialDateKey >= endKey) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
             const isAvailableForSpecialOnDate = (personName, dateKey, { allowIneligible = false } = {}) => {
                 if (
                     typeof isPersonExcludedFromDuties === 'function' &&
@@ -7654,6 +7692,8 @@
                     return false;
                 }
                 if (dateKey && isMissingOnDateKey(personName, dateKey)) return false;
+                // Πάντα: όχι ειδική αμέσως δίπλα στην επιστροφή / σε συνεχόμενο μπλοκ.
+                if (dateKey && isSpecialTooSoonAfterAbsenceReturn(personName, dateKey)) return false;
                 if (allowIneligible) return true;
                 if (dateKey && isDisabledForTypeAtDate(personName, 'special', dateKey)) return false;
                 return true;
@@ -8205,59 +8245,64 @@
                 const specialDates = findNextSpecialDates(3, 3650);
                 const gapInfo =
                     debugByType.special?.gapInfo || debugByType.special?.specialGapInfo || null;
-                const outNames = [];
+                const outNames = ['', '', ''];
                 const used = new Set();
-                const tryPick = (person) => {
-                    if (!person || outNames.length >= 3) return;
+                const slotKeyAt = (slotIndex) => {
+                    const slotDate = specialDates[slotIndex];
+                    return slotDate && !isNaN(slotDate.getTime()) ? formatDateKey(slotDate) : null;
+                };
+                const canPlaceOnSlot = (person, slotIndex) => {
+                    if (!person || outNames[slotIndex]) return false;
                     const key = normName(person);
-                    if (!key || used.has(key)) return;
-                    const slotDate = specialDates[outNames.length];
-                    const slotKey =
-                        slotDate && !isNaN(slotDate.getTime()) ? formatDateKey(slotDate) : null;
-                    if (!isAvailableForSpecialOnDate(person, slotKey, { allowIneligible: true })) {
-                        return;
-                    }
+                    if (!key || used.has(key)) return false;
                     if (
                         typeof isPersonExcludedFromDuties === 'function' &&
                         isPersonExcludedFromDuties(person, groupNum)
                     ) {
-                        return;
+                        return false;
                     }
-                    outNames.push(person);
-                    used.add(key);
+                    const slotKey = slotKeyAt(slotIndex);
+                    return isAvailableForSpecialOnDate(person, slotKey, { allowIneligible: true });
+                };
+                const placeOnSlot = (person, slotIndex) => {
+                    if (!canPlaceOnSlot(person, slotIndex)) return false;
+                    outNames[slotIndex] = person;
+                    used.add(normName(person));
+                    return true;
                 };
 
-                // 1) Παραλειφθέντες πρώτοι (απουσία / χειροκίνητη απόρριψη) — συντομότερη επόμενη ειδική.
+                // 1) Παραλειφθέντες: πρώτη διαθέσιμη ειδική (όχι δίπλα στην επιστροφή / συνεχόμενο μπλοκ).
                 const skipped = gapInfo?.skippedOrderNos || [];
                 for (const orderNo of skipped) {
-                    if (outNames.length >= 3) break;
                     if (!(orderNo >= 1 && orderNo <= rawList.length)) continue;
-                    tryPick(rawList[orderNo - 1]);
+                    const person = rawList[orderNo - 1];
+                    if (!person || used.has(normName(person))) continue;
+                    for (let slot = 0; slot < 3; slot++) {
+                        if (placeOnSlot(person, slot)) break;
+                    }
                 }
 
-                // 2) Συνέχεια μετά τον τελευταίο που βγήκε (όχι από την άγκυρα που σταματά σε κενό).
+                // 2) Γέμισμα κενών θέσεων από συνέχεια μετά την άγκυρα.
                 let cursor =
                     gapInfo?.nextStartOrderNo != null && gapInfo.nextStartOrderNo >= 1
                         ? gapInfo.nextStartOrderNo - 1
                         : resolveStartIndexAfterAnchor('special', rawList);
-                let checked = 0;
-                while (checked < rawList.length * 2 && outNames.length < 3) {
-                    tryPick(rawList[cursor]);
-                    cursor = (cursor + 1) % rawList.length;
-                    checked++;
+                for (let slot = 0; slot < 3; slot++) {
+                    if (outNames[slot]) continue;
+                    let checked = 0;
+                    while (checked < rawList.length * 2 && !outNames[slot]) {
+                        placeOnSlot(rawList[cursor], slot);
+                        cursor = (cursor + 1) % rawList.length;
+                        checked++;
+                    }
                 }
-                while (outNames.length < 3) outNames.push('');
 
                 const outNotes = [];
                 for (let i = 0; i < 3; i++) {
                     const name = outNames[i] || '';
                     let note = '';
                     if (name) {
-                        const specialDate = specialDates[i];
-                        const specialDateKey =
-                            specialDate && !isNaN(specialDate.getTime())
-                                ? formatDateKey(specialDate)
-                                : '';
+                        const specialDateKey = slotKeyAt(i) || '';
                         if (!specialDateKey) {
                             outNotes.push('');
                             continue;
@@ -8266,6 +8311,8 @@
                         const orderNo = findIdxInList(rawList, name) + 1;
                         if (orderNo > 0 && skippedSet.has(orderNo)) {
                             note = 'ΠΑΡΑΛΕΙΨΗ → επόμενη ειδική';
+                        } else if (isSpecialTooSoonAfterAbsenceReturn(name, specialDateKey)) {
+                            note = 'ΕΠΙΣΤΡΟΦΗ δίπλα σε ειδική';
                         } else if (isDisabledForTypeAtDate(name, 'special', specialDateKey)) {
                             note = 'ΕΚΤΟΣ ΥΠΗΡΕΣΙΑΣ';
                         } else {
