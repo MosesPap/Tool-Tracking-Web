@@ -7391,13 +7391,13 @@
 
         /**
          * Excel ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ (background, όλοι οι τύποι):
-         * χρονολογικά (baseline, αγνοεί swaps): στρώση 1ες εμφανίσεις vs επαναλήψεις (2η+)
+         * χρονολογικά από τελικές αναθέσεις (ποιος βγαίνει πραγματικά κάθε μέρα στο Excel)
+         * στρώση 1ες εμφανίσεις vs επαναλήψεις (2η+)
          * ενεργή = επαναλήψεις αν υπάρχουν, αλλιώς 1ες
-         * χωρίς επαναλήψεις: αύξουσα κυκλική κάλυψη από τον πρώτο # (εκτός σειράς = ανταλλαγή, μετράνε στο covered)
+         * χωρίς επαναλήψεις: αύξουσα κυκλική κάλυψη από τον πρώτο #
          *   → συνέχεια μετά το τέλος του καλυμμένου κύκλου (π.χ. …12,1,2 → επόμενοι #3,#4)
          * με επαναλήψεις χωρίς πτώση: συνέχεια μετά το max των επαναλήψεων
          * με επαναλήψεις με πτώση/wrap (π.χ. #13,#14,#1..#4): max μόνο μετά την πτώση
-         * ανταλλαγή: chrono # από baseline/swappedWith (όχι τελικό όνομα) — σενάρια 1–2 παραμένουν
          * ειδικές: lookback· άγκυρα = τελευταίος χρονολογικά σε ειδική
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
@@ -7594,7 +7594,11 @@
                 return null;
             };
             const resolveRotationPersonForChrono = (type, dk, finalPerson) => {
-                // 1) Baseline store (καθαρή σειρά — προτεραιότητα για wrap #13,#14,#3,#4,#5)
+                // Προτεραιότητα: τελική ανάθεση (ίδιο άτομο με το Excel της ημέρας).
+                if (finalPerson) {
+                    return { person: finalPerson, fromBaseline: false, via: 'final' };
+                }
+                // Fallback μόνο αν λείπει τελική (π.χ. ημιτελή δεδομένα).
                 let baselinePerson = '';
                 if (typeof getRotationBaselineAssignmentForType === 'function') {
                     const baselineRaw = getRotationBaselineAssignmentForType(type, dk);
@@ -7607,19 +7611,7 @@
                             '';
                     }
                 }
-                if (baselinePerson) return { person: baselinePerson, fromBaseline: true, via: 'baseline' };
-                // 2) Swap μόνο αν λείπει baseline
-                if (finalPerson) {
-                    const reason = findAssignmentReasonForPerson(dk, finalPerson);
-                    if (reason && reason.type === 'swap' && reason.swappedWith) {
-                        return {
-                            person: String(reason.swappedWith),
-                            fromBaseline: true,
-                            via: 'swap-reason'
-                        };
-                    }
-                }
-                if (finalPerson) return { person: finalPerson, fromBaseline: false, via: 'final' };
+                if (baselinePerson) return { person: baselinePerson, fromBaseline: true, via: 'baseline-fallback' };
                 return { person: '', fromBaseline: false, via: 'none' };
             };
             /**
@@ -7907,20 +7899,16 @@
                 const orderList = orderListForType(t);
                 let resolved;
                 if (t === 'special') {
-                    // Αραιές ειδικές: άγκυρα = τελευταίος χρονολογικά
+                    // Αραιές ειδικές: άγκυρα = τελευταίος χρονολογικά (τελική ανάθεση)
                     resolved = resolveLastChronoAnchor(entries, orderList, 'last-special-chrono');
                 } else if (t === 'weekend') {
-                    // Αργίες: άγκυρα = τελευταία αργία του μήνα (π.χ. #7 → επιλαχόντες #8,#9).
-                    // Η 1ες/επαναλήψεις έδινε λάθος εκκίνηση από #1 όταν έλειπε σταθερό match ονόματος.
+                    // Αργίες: άγκυρα = τελευταία αργία του μήνα από τελική ανάθεση.
                     resolved = resolveLastChronoAnchor(entries, orderList, 'last-weekend-chrono');
-                    resolved = bumpAnchorIfLastDaySwap(entries, orderList, resolved);
                 } else {
                     const orderNos = entries.map((e) => e.orderNo).filter((n) => n != null);
                     resolved = resolveAnchorFromChronoOrderNos(orderNos, orderList);
                     // Wrap συνέχεια: άγκυρα #4 + τελευταία μέρα #5 → #5
                     resolved = extendAnchorIfLastContinuesSequence(entries, orderList, resolved);
-                    // Μόνο ανταλλαγή στην τελευταία μέρα: #10↔#11 → άγκυρα #11
-                    resolved = bumpAnchorIfLastDaySwap(entries, orderList, resolved);
                 }
                 lastAssigned[t] = resolved.person || '';
                 lastAssignedIdx[t] = Number.isFinite(resolved.idx) ? resolved.idx : -1;
@@ -8735,7 +8723,7 @@
                             <div class="mb-2 pb-2 border-bottom">
                                 <div class="fw-semibold">${escapeHtml(d.label || t)}</div>
                                 <div class="text-muted mb-1">Χρονολογικά: ${chronoLine || '—'}</div>
-                                <div class="text-muted mb-1">baseline σειρά · 1ες/επαναλήψεις · χωρίς πτώση→max · επαναλήψεις με πτώση→max μετά wrap · 1ες με πτώση→κυκλική κάλυψη</div>
+                                <div class="text-muted mb-1">τελικές αναθέσεις · 1ες/επαναλήψεις · χωρίς πτώση→max · επαναλήψεις με πτώση→max μετά wrap · 1ες με πτώση→κυκλική κάλυψη</div>
                                 <div class="mb-1">${lapsLine || 'Ένας γύρος'}</div>
                                 <div>Κάλυψη μέχρι: <strong>${d.coveredThrough != null ? '#' + d.coveredThrough : '—'}</strong></div>
                                 <div>Τελευταίος γύρος: <strong>${lastLap}</strong></div>
