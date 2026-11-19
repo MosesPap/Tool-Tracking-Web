@@ -7392,12 +7392,10 @@
         /**
          * Excel ΑΝΑΠΛΗΡΩΜΑΤΙΚΟΙ (background, όλοι οι τύποι):
          * χρονολογικά από τελικές αναθέσεις (ποιος βγαίνει πραγματικά κάθε μέρα στο Excel)
-         * καθημερινές: στρώση 1ες εμφανίσεις vs επαναλήψεις (2η+)
-         *   χωρίς επαναλήψεις: αύξουσα κυκλική κάλυψη / max· με επαναλήψεις: max (ή μετά wrap)
-         * ημιαργίες: τελικές· χωρίς πτώση→max· με wrap/swaps→αύξουσα κάλυψη
-         *   (π.χ. #12,#11,#3,#2,#1 → άγκυρα #3, όχι ημερολογιακά #1)
-         * αργίες: άγκυρα = ημερολογιακά τελευταία ανάθεση
-         * ειδικές: lookback· άγκυρα = τελευταίος χρονολογικά σε ειδική
+         * καθημερινές / ημιαργίες / αργίες / ειδικές: 1ες vs επαναλήψεις
+         *   χωρίς πτώση→max· με wrap/swaps→αύξουσα κάλυψη
+         *   (π.χ. #12,#11,#3,#2,#1 → άγκυρα #3· ειδικές: τελευταίος #2 με #3 ήδη → άγκυρα #3)
+         * ειδικές: lookback ιστορικού· 3 επιλαχόντες ανά επόμενη ειδική ημερομηνία
          */
         function getNextTwoRotationPeopleForCurrentMonth({ year, month, daysInMonth, groupNum, groupData, dutyAssignments }) {
             const lastAssigned = { normal: '', semi: '', weekend: '', special: '' };
@@ -7904,28 +7902,13 @@
                 const entries = collectAssignedChronoEntriesForType(t);
                 const orderList = orderListForType(t);
                 let resolved;
-                if (t === 'special') {
-                    // Αραιές ειδικές: άγκυρα = τελευταίος χρονολογικά (τελική ανάθεση)
-                    resolved = resolveLastChronoAnchor(entries, orderList, 'last-special-chrono');
-                } else if (t === 'weekend') {
-                    // Αργίες: άγκυρα = τελευταία αργία του μήνα από τελική ανάθεση.
-                    resolved = resolveLastChronoAnchor(entries, orderList, 'last-weekend-chrono');
-                } else if (t === 'semi') {
-                    // Ημιαργίες (τελικές): λίγες μέρες → σχεδόν ποτέ επαναλήψεις.
-                    // Αύξουσα χωρίς πτώση: άγκυρα = max / ημερολογιακά τελευταίος
-                    //   π.χ. #2..#6→#6 · #7..#10→#10
-                    // Με wrap/πτώση ή swaps: αύξουσα κυκλική κάλυψη από τον πρώτο #
-                    //   π.χ. #11,#12,#1,#2,#3→#3
-                    //   swaps #12,#11,#3,#2,#1 → κάλυψη μέχρι #3 (βγήκαν 1,2,3) → επιλαχόντες #4,#5
-                    //   (όχι ημερολογιακά τελευταίος #1)
+                // Όλοι οι τύποι: τελικές αναθέσεις + 1ες/επαναλήψεις / αύξουσα κάλυψη.
+                // Αργίες: μικρή πιθανότητα επαναλήψεων (όπως καθημερινές).
+                // Ειδικές: σχεδόν ποτέ επαναλήψεις· χειροκίνητες ανταλλαγές μπορεί να αφήσουν
+                //   ημερολογιακά τελευταίο το #2 ενώ βγήκε και το #3 → άγκυρα #3 (όχι #2).
+                {
                     const orderNos = entries.map((e) => e.orderNo).filter((n) => n != null);
                     resolved = resolveAnchorFromChronoOrderNos(orderNos, orderList);
-                    resolved = extendAnchorIfLastContinuesSequence(entries, orderList, resolved);
-                } else {
-                    // Καθημερινές: 1ες/επαναλήψεις (πολλές μέρες → γύροι).
-                    const orderNos = entries.map((e) => e.orderNo).filter((n) => n != null);
-                    resolved = resolveAnchorFromChronoOrderNos(orderNos, orderList);
-                    // Wrap συνέχεια: άγκυρα #4 + τελευταία μέρα #5 → #5
                     resolved = extendAnchorIfLastContinuesSequence(entries, orderList, resolved);
                 }
                 lastAssigned[t] = resolved.person || '';
