@@ -12381,8 +12381,40 @@
                         }
                         continue;
                     }
-                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { semi: [] };
+                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum, dateKey) : groups[groupNum]) || { semi: [] };
                     const groupPeople = groupData.semi || [];
+                    // #region agent log
+                    if (Number(groupNum) === 1 && !renderStep3_SemiNormal._loggedG1) {
+                        renderStep3_SemiNormal._loggedG1 = 1;
+                        const liveSemi = groups?.[1]?.semi || [];
+                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Debug-Session-Id': '73ad17'
+                            },
+                            body: JSON.stringify({
+                                sessionId: '73ad17',
+                                runId: 'semi-holiday-list',
+                                hypothesisId: 'H2',
+                                location: 'duty-shifts-logic.js:renderStep3_SemiNormal',
+                                message: 'semi groupPeople for group 1',
+                                data: {
+                                    dateKey,
+                                    groupPeopleLen: groupPeople.length,
+                                    rawGroupsSemiLen: liveSemi.length,
+                                    groupPeopleTail: groupPeople.slice(-5),
+                                    rawTail: liveSemi.slice(-5),
+                                    mode:
+                                        typeof getActiveGroupMode === 'function'
+                                            ? getActiveGroupMode()
+                                            : '?'
+                                },
+                                timestamp: Date.now()
+                            })
+                        }).catch(() => {});
+                    }
+                    // #endregion
                     if (groupPeople.length === 0) continue;
                     const rotationDays = groupPeople.length;
                     const designated = returnFromMissingSemiTargetsRun[dateKey]?.[groupNum];

@@ -1331,21 +1331,28 @@
             const order = getListOrderAtDate(groupNum, listType, dk);
             // Σετ 3: ίδια λίστα με το UI. Μην αφαιρείς εξαίρεση/home — αλλιώς ο νο.N
             // «εξαφανίζεται» χωρίς λόγο. Η εξαίρεση/απενεργοποίηση χειρίζεται στο Step με λόγο.
-            if (getActiveGroupMode() === '3') {
-                return Array.isArray(order) ? order.slice() : [];
+            const mode = getActiveGroupMode();
+            let result;
+            if (mode === '3') {
+                result = Array.isArray(order) ? order.slice() : [];
+            } else {
+                const homeFiltered = (Array.isArray(order) ? order : []).filter(
+                    (person) => getPersonHomeGroupAtDate(person, dk) === groupNum
+                );
+                result = filterExcludedFromDutyList(homeFiltered, groupNum);
             }
-            const homeFiltered = (Array.isArray(order) ? order : []).filter(
-                (person) => getPersonHomeGroupAtDate(person, dk) === groupNum
-            );
-            const result = filterExcludedFromDutyList(homeFiltered, groupNum);
             // #region agent log
             if (
-                groupNum === 1 &&
-                (listType === 'semi' || listType === 'weekend' || listType === 'special')
+                Number(groupNum) === 1 &&
+                (listType === 'semi' || listType === 'weekend' || listType === 'special') &&
+                !getGroupRotationListAtDate._loggedTypes?.[`${listType}|${dk}`]
             ) {
+                if (!getGroupRotationListAtDate._loggedTypes) getGroupRotationListAtDate._loggedTypes = {};
+                getGroupRotationListAtDate._loggedTypes[`${listType}|${dk}`] = 1;
                 const live = getSortedGroupListForRotation(groupNum, listType) || [];
-                const liveActive = filterExcludedFromDutyList(live, groupNum);
-                const extras = result.filter(
+                const liveActive =
+                    mode === '3' ? live.slice() : filterExcludedFromDutyList(live, groupNum);
+                const extras = (result || []).filter(
                     (p) =>
                         !liveActive.some(
                             (c) =>
@@ -1354,39 +1361,38 @@
                                     personNamesMatchIgnoringRank(c, p))
                         )
                 );
-                if (result.length > liveActive.length || extras.length || result.length > 13) {
-                    fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Debug-Session-Id': '73ad17'
-                        },
-                        body: JSON.stringify({
-                            sessionId: '73ad17',
-                            runId: 'semi-holiday-list',
-                            hypothesisId: 'H2',
-                            location: 'duty-shifts-data.js:getGroupRotationListAtDate',
-                            message: 'rotation list vs live active list',
-                            data: {
-                                groupNum,
-                                listType,
-                                dk,
-                                mode: getActiveGroupMode(),
-                                orderLen: Array.isArray(order) ? order.length : 0,
-                                resultLen: result.length,
-                                liveActiveLen: liveActive.length,
-                                extras: extras.slice(0, 8),
-                                resultTail: result.slice(-5).map((p, i) => ({
-                                    no: result.length - 4 + i,
-                                    p
-                                })),
-                                droppedHome: homeFiltered.length - (Array.isArray(order) ? order.length : 0),
-                                droppedExcl: homeFiltered.length - result.length
-                            },
-                            timestamp: Date.now()
-                        })
-                    }).catch(() => {});
-                }
+                const payload = {
+                    sessionId: '73ad17',
+                    runId: 'semi-holiday-list',
+                    hypothesisId: 'H2',
+                    location: 'duty-shifts-data.js:getGroupRotationListAtDate',
+                    message: 'rotation list snapshot group1',
+                    data: {
+                        groupNum,
+                        listType,
+                        dk,
+                        mode,
+                        orderLen: Array.isArray(order) ? order.length : 0,
+                        resultLen: result.length,
+                        liveLen: live.length,
+                        liveActiveLen: liveActive.length,
+                        extras: extras.slice(0, 8),
+                        resultNos: result.map((p, i) => ({ no: i + 1, p })),
+                        liveActiveNos: liveActive.map((p, i) => ({ no: i + 1, p }))
+                    },
+                    timestamp: Date.now()
+                };
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Debug-Session-Id': '73ad17'
+                    },
+                    body: JSON.stringify(payload)
+                }).catch(() => {});
+                try {
+                    console.info('[DBG-73ad17]', payload.message, payload.data);
+                } catch (_) {}
             }
             // #endregion
             return result;
