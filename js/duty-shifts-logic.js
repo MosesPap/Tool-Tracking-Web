@@ -15600,8 +15600,9 @@
                                     : originalRotationPerson;
                             normalRotationPersons[dateKey][groupNum] = baselineForDisplay;
                             
-                            // If assigned person already served earlier this month, take next unused
-                            // (old 5-day window allowed +7d reuse → same people at month end).
+                            // If baseline already served earlier this month, prefer a still-unused
+                            // eligible person (don't leave anyone behind). If nobody unused remains,
+                            // KEEP the baseline so the visible series continues (no jump to later names).
                             let wasReplacedDueToFiveDayRule = false;
                             if (
                                 !wasDisabledPersonSkipped &&
@@ -15617,24 +15618,91 @@
                                     (currentDate - lastDate) / (1000 * 60 * 60 * 24)
                                 );
                                 if (daysDiff > 0) {
-                                    const candidate = pickNormalCandidateAvoidingMonthDup(
-                                        groupPeople,
-                                        rotationPosition,
-                                        groupNum,
-                                        date,
-                                        dateKey,
-                                        assignedPeoplePreview[monthKey][groupNum],
-                                        assignedPerson
-                                    );
-                                    if (candidate) {
-                                        assignedPerson = candidate;
-                                        wasReplacedDueToFiveDayRule = true;
-                                    } else {
-                                        assignedPerson = null;
+                                    const assignedMapMd = assignedPeoplePreview[monthKey][groupNum] || {};
+                                    const idOf = (n) =>
+                                        typeof getPersonIdentityKey === 'function'
+                                            ? getPersonIdentityKey(n)
+                                            : typeof normalizePersonKey === 'function'
+                                              ? normalizePersonKey(n)
+                                              : String(n || '');
+                                    const isMarkedAssigned = (p) => {
+                                        if (!p) return false;
+                                        if (assignedMapMd[p]) return true;
+                                        const id = idOf(p);
+                                        return Object.keys(assignedMapMd).some((k) => idOf(k) === id);
+                                    };
+                                    const hasUnusedEligible = (groupPeople || []).some((p) => {
+                                        if (!p || p === assignedPerson) return false;
+                                        if (
+                                            typeof isSkippedInBasicRotation === 'function' &&
+                                            isSkippedInBasicRotation(p, groupNum)
+                                        ) {
+                                            return false;
+                                        }
+                                        if (isPersonMissingOnDate(p, groupNum, date, 'normal')) return false;
+                                        if (
+                                            typeof isPersonDisabledForDuty === 'function' &&
+                                            isPersonDisabledForDuty(p, groupNum, 'normal')
+                                        ) {
+                                            return false;
+                                        }
+                                        return !isMarkedAssigned(p);
+                                    });
+                                    // #region agent log
+                                    if (
+                                        dateKey === '2026-12-21' ||
+                                        dateKey === '2026-12-22' ||
+                                        dateKey === '2026-12-28' ||
+                                        dateKey === '2026-12-29'
+                                    ) {
+                                        fetch(
+                                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                            {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                    'X-Debug-Session-Id': '73ad17'
+                                                },
+                                                body: JSON.stringify({
+                                                    sessionId: '73ad17',
+                                                    runId: 'post-fix',
+                                                    hypothesisId: 'H10',
+                                                    location:
+                                                        'duty-shifts-logic.js:monthDupBaselineGate',
+                                                    message: 'month-dup baseline gate',
+                                                    data: {
+                                                        dateKey,
+                                                        groupNum,
+                                                        baseline: assignedPerson,
+                                                        hasUnusedEligible,
+                                                        willDisplace: !!hasUnusedEligible
+                                                    },
+                                                    timestamp: Date.now()
+                                                })
+                                            }
+                                        ).catch(() => {});
                                     }
+                                    // #endregion
+                                    if (hasUnusedEligible) {
+                                        const candidate = pickNormalCandidateAvoidingMonthDup(
+                                            groupPeople,
+                                            rotationPosition,
+                                            groupNum,
+                                            date,
+                                            dateKey,
+                                            assignedMapMd,
+                                            assignedPerson
+                                        );
+                                        if (candidate && !isMarkedAssigned(candidate)) {
+                                            assignedPerson = candidate;
+                                            wasReplacedDueToFiveDayRule = true;
+                                        }
+                                        // else keep baseline (sequence) — do not null out
+                                    }
+                                    // else: everyone eligible already served → keep baseline, continue series
                                 }
                             }
-                            // Keep baseline as basic-series slot (originalRotationPerson); month-dup rule only changes final assignee.
+                            // Keep baseline as basic-series slot (originalRotationPerson); month-dup only steals slot for unused people.
 
                             // #region agent log
                             {
@@ -15674,8 +15742,8 @@
                                         },
                                         body: JSON.stringify({
                                             sessionId: '73ad17',
-                                            runId: 'pre-fix',
-                                            hypothesisId: 'C',
+                                            runId: 'post-fix',
+                                            hypothesisId: 'H10',
                                             location: 'duty-shifts-logic.js:renderStep4_Normal:finalAssign',
                                             message: 'final normal assignee before conflict/swap',
                                             data: {
