@@ -6578,16 +6578,6 @@
                         date,
                         'weekend'
                     );
-                    if (picked.skippedDeferPerson) {
-                        maybeStoreDeferredAlternateSkipWhileReplacing(
-                            dateKey,
-                            groupNum,
-                            picked.person,
-                            picked.skippedDeferPerson,
-                            'weekend',
-                            date
-                        );
-                    }
                     assignedWeekendInMonth[monthKey][groupNum].add(picked.person);
                 }
             }
@@ -6773,24 +6763,36 @@
         }
 
         /**
-         * If candidate is the pending deferred manual-alternate, skip once and clear deferState.
-         * Returns the skipped person name when matched (caller may store defer-fulfillment reason).
+         * Peek: candidate is the pending deferred manual-alternate (does NOT clear deferState).
+         * Defer is consumed only when the rotation cursor lands on them
+         * (resolveRotationPositionWithManualAlternate) — so they wait for a later real turn
+         * instead of appearing immediately after being skipped in a replacement search.
          */
-        function consumeDeferredManualAlternateIfMatches(deferState, groupNum, candidate) {
-            if (!deferState || !groupNum || !candidate) return null;
+        function isDeferredManualAlternateCandidate(deferState, groupNum, candidate) {
+            if (!deferState || !groupNum || !candidate) return false;
             const st = deferState[groupNum];
-            if (!st?.person) return null;
+            if (!st?.person) return false;
             const norm = (s) =>
                 typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
-            if (norm(st.person) !== norm(candidate)) return null;
-            const skipped = st.person;
+            return norm(st.person) === norm(candidate);
+        }
+
+        /**
+         * If candidate is the pending deferred manual-alternate, skip once and clear deferState.
+         * Returns the skipped person name when matched (caller may store defer-fulfillment reason).
+         * Use only on rotation-cursor hit — not inside replacement searches.
+         */
+        function consumeDeferredManualAlternateIfMatches(deferState, groupNum, candidate) {
+            if (!isDeferredManualAlternateCandidate(deferState, groupNum, candidate)) return null;
+            const skipped = deferState[groupNum].person;
             delete deferState[groupNum];
             return skipped;
         }
 
         /**
          * Επόμενος διαθέσιμος στη λίστα weekend μετά το startIndex (απουσία / ειδική / ήδη ανατεθειμένος).
-         * Παραλείπει επίσης μία φορά τον deferred επιλαχόντα προηγούμενου μήνα (όχι μόνο όταν είναι ο cursor).
+         * Παραλείπει τον deferred επιλαχόντα προηγούμενου μήνα χωρίς να καταναλώσει το defer —
+         * το defer μένει για όταν έρθει κανονικά η σειρά τους (cursor).
          * Ίδια λογική για όλες τις ομάδες 1–4.
          */
         function findNextEligibleWeekendPersonInList({
@@ -6811,16 +6813,12 @@
                     : typeof date === 'string'
                       ? date
                       : null;
-            let skippedDeferPerson = null;
             for (let offset = 1; offset < rotationDays; offset++) {
                 const nextIndex = (base + offset) % rotationDays;
                 const candidate = groupPeople[nextIndex];
                 if (!candidate) continue;
-                const deferredHit = consumeDeferredManualAlternateIfMatches(deferState, groupNum, candidate);
-                if (deferredHit) {
-                    skippedDeferPerson = deferredHit;
-                    continue;
-                }
+                // Peek only — do not consume. Cursor path fulfills the one-time skip later.
+                if (isDeferredManualAlternateCandidate(deferState, groupNum, candidate)) continue;
                 if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
                 if (
                     dateKey &&
@@ -6850,7 +6848,7 @@
                 ) {
                     continue;
                 }
-                return { person: candidate, index: nextIndex, skippedDeferPerson };
+                return { person: candidate, index: nextIndex, skippedDeferPerson: null };
             }
             return null;
         }
@@ -7151,16 +7149,6 @@
                                 currentPerson,
                                 null
                             );
-                            if (pickedPhase1?.skippedDeferPerson) {
-                                maybeStoreDeferredAlternateSkipWhileReplacing(
-                                    dateKey,
-                                    groupNum,
-                                    replacementPerson,
-                                    pickedPhase1.skippedDeferPerson,
-                                    'weekend',
-                                    date
-                                );
-                            }
                         } else if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                             dutyWeekendDebug.logStep('phase1-no-replacement', 'Δεν βρέθηκε αντικαταστάτης στη φάση 1.');
                         }
@@ -12087,16 +12075,6 @@
                                             displacedPersonWeekendPreview,
                                             null
                                         );
-                                        if (pickedSpecialPreview?.skippedDeferPerson) {
-                                            maybeStoreDeferredAlternateSkipWhileReplacing(
-                                                dateKey,
-                                                groupNum,
-                                                replacementPerson,
-                                                pickedSpecialPreview.skippedDeferPerson,
-                                                'weekend',
-                                                date
-                                            );
-                                        }
                                         assignedPerson = replacementPerson;
                                         wasReplaced = true;
                                         replacementIndex = groupPeople.indexOf(replacementPerson);
@@ -12164,21 +12142,11 @@
                                         date,
                                         'weekend'
                                     );
-                                    if (pickedMiss.skippedDeferPerson) {
-                                        maybeStoreDeferredAlternateSkipWhileReplacing(
-                                            dateKey,
-                                            groupNum,
-                                            pickedMiss.person,
-                                            pickedMiss.skippedDeferPerson,
-                                            'weekend',
-                                            date
-                                        );
-                                    }
                                     if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                         dutyWeekendDebug.logStep(
                                             tooSoonAfterReturn ? 'phase2-return-cooldown' : 'phase2-missing-inline',
                                             tooSoonAfterReturn
-                                                ? `Επιστροφή ${skippedForCooldown}: ≤E+3 κόβει → ${pickedMiss.person}${pickedMiss.skippedDeferPerson ? ` (παράλειψη επιλαχόντα ${pickedMiss.skippedDeferPerson})` : ''}.`
+                                                ? `Επιστροφή ${skippedForCooldown}: ≤E+3 κόβει → ${pickedMiss.person}.`
                                                 : `Απουσία ${skippedForCooldown} → επόμενος διαθέσιμος ${pickedMiss.person}.`
                                         );
                                     }
@@ -12915,34 +12883,17 @@
                         let eligiblePerson = null;
                         let eligibleIndex = -1;
                         const deferSkipPersonRun = deferManualAlternateSkipSemiRun[groupNum]?.person;
-                        let skippedDeferSemiDisabled = null;
                         for (let offset = 1; offset <= rotationDays * 2; offset++) {
                             const idx = (pos + offset) % rotationDays;
                             const candidate = groupPeople[idx];
                             if (!candidate) continue;
-                            if (deferSkipPersonRun && normSemiRun(candidate) === normSemiRun(deferSkipPersonRun)) {
-                                skippedDeferSemiDisabled = consumeDeferredManualAlternateIfMatches(
-                                    deferManualAlternateSkipSemiRun,
-                                    groupNum,
-                                    candidate
-                                ) || deferSkipPersonRun;
-                                continue;
-                            }
+                            // Peek only — defer consumed when cursor lands on them
+                            if (deferSkipPersonRun && normSemiRun(candidate) === normSemiRun(deferSkipPersonRun)) continue;
                             if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                             eligiblePerson = candidate;
                             eligibleIndex = idx;
                             break;
-                        }
-                        if (eligiblePerson && skippedDeferSemiDisabled) {
-                            maybeStoreDeferredAlternateSkipWhileReplacing(
-                                dateKey,
-                                groupNum,
-                                eligiblePerson,
-                                skippedDeferSemiDisabled,
-                                'semi',
-                                date
-                            );
                         }
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.recordCandidateScan(
@@ -12964,34 +12915,16 @@
                         let eligiblePerson = null;
                         let eligibleIndex = -1;
                         const deferSkipPersonRunMissing = deferManualAlternateSkipSemiRun[groupNum]?.person;
-                        let skippedDeferSemiMissing = null;
                         for (let offset = 1; offset <= rotationDays * 2; offset++) {
                             const idx = (pos + offset) % rotationDays;
                             const candidate = groupPeople[idx];
                             if (!candidate) continue;
-                            if (deferSkipPersonRunMissing && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunMissing)) {
-                                skippedDeferSemiMissing = consumeDeferredManualAlternateIfMatches(
-                                    deferManualAlternateSkipSemiRun,
-                                    groupNum,
-                                    candidate
-                                ) || deferSkipPersonRunMissing;
-                                continue;
-                            }
+                            if (deferSkipPersonRunMissing && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunMissing)) continue;
                             if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                             eligiblePerson = candidate;
                             eligibleIndex = idx;
                             break;
-                        }
-                        if (eligiblePerson && skippedDeferSemiMissing) {
-                            maybeStoreDeferredAlternateSkipWhileReplacing(
-                                dateKey,
-                                groupNum,
-                                eligiblePerson,
-                                skippedDeferSemiMissing,
-                                'semi',
-                                date
-                            );
                         }
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.recordCandidateScan(
@@ -13030,34 +12963,16 @@
                             let eligiblePerson = null;
                             let eligibleIndex = -1;
                             const deferSkipPersonRunFulfilled = deferManualAlternateSkipSemiRun[groupNum]?.person;
-                            let skippedDeferSemiFulfilled = null;
                             for (let offset = 1; offset <= rotationDays * 2; offset++) {
                                 const idx = (pos + offset) % rotationDays;
                                 const candidate = groupPeople[idx];
                                 if (!candidate) continue;
-                                if (deferSkipPersonRunFulfilled && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunFulfilled)) {
-                                    skippedDeferSemiFulfilled = consumeDeferredManualAlternateIfMatches(
-                                        deferManualAlternateSkipSemiRun,
-                                        groupNum,
-                                        candidate
-                                    ) || deferSkipPersonRunFulfilled;
-                                    continue;
-                                }
+                                if (deferSkipPersonRunFulfilled && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunFulfilled)) continue;
                                 if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
                                 if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                                 eligiblePerson = candidate;
                                 eligibleIndex = idx;
                                 break;
-                            }
-                            if (eligiblePerson && skippedDeferSemiFulfilled) {
-                                maybeStoreDeferredAlternateSkipWhileReplacing(
-                                    dateKey,
-                                    groupNum,
-                                    eligiblePerson,
-                                    skippedDeferSemiFulfilled,
-                                    'semi',
-                                    date
-                                );
                             }
                             baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
                             if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
