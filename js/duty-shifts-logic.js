@@ -1535,14 +1535,19 @@
         }
         /** Συγχώνευση baseline: καθαρή σειρά (πριν skip) κυριαρχεί έναντι preview slot. */
         function mergeDutyBaselineMaps(rotationBaseline, previewSlotBaseline) {
+            // Persist / compare «βασική σειρά» = pure rotation only.
+            // previewSlotBaseline may hold display/RFM overlays — never let those replace pure slots
+            // (that caused absent #14 to stick as baseline instead of #12).
             const merged = {};
             const keys = new Set([
                 ...Object.keys(rotationBaseline || {}),
                 ...Object.keys(previewSlotBaseline || {})
             ]);
             for (const dk of keys) {
-                merged[dk] = { ...(previewSlotBaseline?.[dk] || {}) };
-                if (rotationBaseline?.[dk]) Object.assign(merged[dk], rotationBaseline[dk]);
+                merged[dk] = { ...(rotationBaseline?.[dk] || {}) };
+                if (!rotationBaseline?.[dk] && previewSlotBaseline?.[dk]) {
+                    Object.assign(merged[dk], previewSlotBaseline[dk]);
+                }
             }
             return merged;
         }
@@ -3439,9 +3444,10 @@
                 const bp = String(reason.meta?.baselinePerson || '').trim();
                 if (bp) return bp;
             }
-            // Unavailable replacement (missing/disabled): replacement already served this slot — continue after them.
+            // Unavailable replacement (missing/disabled): basic series keeps the absent/disabled slot —
+            // continue after swappedWith (baseline), NOT after the stand-in (avoids anchoring on #14→#15).
             if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
-                return assignedPerson;
+                return reason.swappedWith;
             }
             // Two-person semi/weekend swap (αμοιβαία ή σύγκρουση ημιαργίας): και οι δύο έβγαλαν —
             // συνέχεια μετά τον «μεταγενέστερο» στη λίστα, ώστε να μην ξαναμπεί ο εταίρος αμέσως.
@@ -3566,11 +3572,12 @@
             if (reason && reason.type === 'skip' && reason.meta?.manualAlternateReplacement && reason.swappedWith) {
                 return reason.swappedWith;
             }
-            if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement) {
-                return assignedPerson;
+            // Absent/disabled stand-in: continue after the baseline slot holder, not the replacement.
+            if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
+                return reason.swappedWith;
             }
             // Όλα τα swap καθημερινών (όχι μόνο mutual/thursday) — αλλιώς ο επόμενος μήνας
-            // ξεκινά μετά τον τελικό (#14) αντί μετά τον βασικό της σειράς (#15).
+            // ξεκινά μετά τον τελικό αντί μετά τον βασικό της σειράς.
             if (reason && reason.type === 'swap') {
                 return getPersonForRotationContinuity(
                     dateKey,
@@ -15061,6 +15068,8 @@
             
             // Declare at function level to avoid scope issues
             const globalNormalRotationPosition = {}; // groupNum -> global position (continues across months)
+            // Person-key anchor: remap index each day so filtered-list length changes cannot jump #11→#14.
+            const globalNormalLastBaselinePerson = {}; // groupNum -> last pure baseline person name
             // After "Αντικατάσταση Επιλαχών", skip the replacement's next natural turn in this month (D then B,C,E…).
             let deferManualAlternateSkipNormal = {};
             let prevMonthKeyNormalAlternateDefer = null;
@@ -15068,6 +15077,27 @@
             
             // Track baseline assignments for this preview to detect cascading shifts
             const baselineNormalByDate = {}; // dateKey -> { groupNum -> personName }
+
+            /** Stable normal roster for cursor: keep εξαίρεση in-list (skip via isSkippedInBasicRotation). */
+            const getNormalGroupPeopleForRotation = (groupNum, dateKey) => {
+                const dk = dateKey || null;
+                if (typeof getListOrderAtDate === 'function') {
+                    let order = getListOrderAtDate(groupNum, 'normal', dk) || [];
+                    const mode3 =
+                        typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
+                    if (!mode3 && typeof getPersonHomeGroupAtDate === 'function' && dk) {
+                        order = order.filter(
+                            (p) => getPersonHomeGroupAtDate(p, dk) === groupNum
+                        );
+                    }
+                    return order;
+                }
+                const gd =
+                    (typeof groupsForDuty === 'function'
+                        ? groupsForDuty(groupNum, dateKey)
+                        : groups[groupNum]) || { normal: [] };
+                return gd.normal || [];
+            };
             
             // Check for normal days
             const normalDays = dayTypeLists.normal || [];
@@ -15390,11 +15420,11 @@
                 const swappedPeoplePreview = new Set(); // Set of person names who have already been swapped
                 // NOTE: normalRotationPersons is already declared at function level (above), don't redeclare it here
                 
-                // NEW LOGIC: Pre-process missing/disabled persons and replace their baseline normal duties
-                // Check rotationBaseline to see if missing/disabled persons have normal duties scheduled during their period
-                // Replace them with the next available person and continue rotation from where it left off
+                // Pre-process missing/disabled against STORED rotation baseline was removed as a driver of
+                // baselineNormalByDate: stale #14 slots made live calc «anchor» and pick #15 instead of #12.
+                // Live loop below already replaces absent/disabled from the fresh basic-series slot.
                 try {
-                    if (startDate && endDate && Array.isArray(sortedNormal) && sortedNormal.length > 0) {
+                    if (false && startDate && endDate && Array.isArray(sortedNormal) && sortedNormal.length > 0) {
                         const dateKeyToDate = (dk) => new Date((dk || '') + 'T00:00:00');
                         const calcStartKey = formatDateKey(startDate);
                         const calcEndKey = formatDateKey(endDate);
@@ -15657,12 +15687,16 @@
                             (typeof groupsForDuty === 'function'
                                 ? groupsForDuty(groupNum, dateKey)
                                 : groups[groupNum]) || { normal: [] };
-                        const groupPeople = groupData.normal || [];
+                        const groupPeople = getNormalGroupPeopleForRotation(groupNum, dateKey);
                         
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
                         } else {
                             const rotationDays = groupPeople.length;
+                            const normRot =
+                                typeof normalizePersonKey === 'function'
+                                    ? normalizePersonKey
+                                    : (n) => String(n || '').trim();
                             const maySeedNormal =
                                 typeof shouldRecalculateDutyGroup !== 'function' ||
                                 shouldRecalculateDutyGroup(groupNum);
@@ -15691,23 +15725,37 @@
                                     if (lastLivePerson) break;
                                 }
                                 if (lastLivePerson) {
-                                    const normLive =
-                                        typeof normalizePersonKey === 'function'
-                                            ? normalizePersonKey
-                                            : (n) => String(n || '').trim();
                                     let liveIdx = groupPeople.indexOf(lastLivePerson);
                                     if (liveIdx < 0) {
                                         liveIdx = groupPeople.findIndex(
-                                            (p) => normLive(p) === normLive(lastLivePerson)
+                                            (p) => normRot(p) === normRot(lastLivePerson)
                                         );
                                     }
                                     if (liveIdx >= 0) {
                                         globalNormalRotationPosition[groupNum] =
                                             (liveIdx + 1) % rotationDays;
+                                        globalNormalLastBaselinePerson[groupNum] = lastLivePerson;
                                         console.log(
                                             `[NORMAL ROTATION] Month-boundary continue group ${groupNum} after ${lastLivePerson} → position ${globalNormalRotationPosition[groupNum]}`
                                         );
                                     }
+                                }
+                            }
+
+                            // Remap numeric cursor from last baseline person — prevents #11→#14 when
+                            // today's filtered roster length/order differs from yesterday's.
+                            if (
+                                maySeedNormal &&
+                                globalNormalLastBaselinePerson[groupNum] &&
+                                globalNormalRotationPosition[groupNum] !== undefined
+                            ) {
+                                const anchor = globalNormalLastBaselinePerson[groupNum];
+                                let anchorIdx = groupPeople.findIndex(
+                                    (p) => normRot(p) === normRot(anchor)
+                                );
+                                if (anchorIdx >= 0) {
+                                    globalNormalRotationPosition[groupNum] =
+                                        (anchorIdx + 1) % rotationDays;
                                 }
                             }
                             
@@ -15759,6 +15807,7 @@
                             if (originalRotationPerson) {
                                 if (!pureNormalRotationByDate[dateKey]) pureNormalRotationByDate[dateKey] = {};
                                 pureNormalRotationByDate[dateKey][groupNum] = originalRotationPerson;
+                                globalNormalLastBaselinePerson[groupNum] = originalRotationPerson;
                             }
                             
                             const rotationPerson = originalRotationPerson;
