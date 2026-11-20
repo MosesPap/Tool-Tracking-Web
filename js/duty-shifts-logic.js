@@ -15904,10 +15904,11 @@
                                     : originalRotationPerson;
                             normalRotationPersons[dateKey][groupNum] = baselineForDisplay;
                             
-                            // If baseline already served earlier this month:
-                            // 1) prefer still-unused eligible (don't leave anyone behind);
-                            // 2) else KEEP baseline so the series continues — EXCEPT when their last
-                            //    duty was the previous normal day (would stack consecutive normals, e.g. B 28→29).
+                            // If baseline already served earlier this month: KEEP their natural series
+                            // turn (e.g. 10→11→12). Only displace when their last duty was the previous
+                            // normal day (would stack consecutive normals, e.g. B 28→29).
+                            // Do NOT jump ahead to an unused person (#15) just for "fairness" — that
+                            // breaks rotation order and triggers unnecessary conflict swaps.
                             let wasReplacedDueToFiveDayRule = false;
                             if (
                                 !wasDisabledPersonSkipped &&
@@ -15930,29 +15931,6 @@
                                             : typeof normalizePersonKey === 'function'
                                               ? normalizePersonKey(n)
                                               : String(n || '');
-                                    const isMarkedAssigned = (p) => {
-                                        if (!p) return false;
-                                        if (assignedMapMd[p]) return true;
-                                        const id = idOf(p);
-                                        return Object.keys(assignedMapMd).some((k) => idOf(k) === id);
-                                    };
-                                    const hasUnusedEligible = (groupPeople || []).some((p) => {
-                                        if (!p || p === assignedPerson) return false;
-                                        if (
-                                            typeof isSkippedInBasicRotation === 'function' &&
-                                            isSkippedInBasicRotation(p, groupNum)
-                                        ) {
-                                            return false;
-                                        }
-                                        if (isPersonMissingOnDate(p, groupNum, date, 'normal')) return false;
-                                        if (
-                                            typeof isPersonDisabledForDuty === 'function' &&
-                                            isPersonDisabledForDuty(p, groupNum, 'normal')
-                                        ) {
-                                            return false;
-                                        }
-                                        return !isMarkedAssigned(p);
-                                    });
                                     const prevNormalIdx = sortedNormal.indexOf(dateKey) - 1;
                                     const prevNormalKey =
                                         prevNormalIdx >= 0 ? sortedNormal[prevNormalIdx] : null;
@@ -15964,8 +15942,7 @@
                                     })();
                                     const consecutiveNormal =
                                         !!prevNormalKey && lastKeyForBaseline === prevNormalKey;
-                                    const shouldDisplace = hasUnusedEligible || consecutiveNormal;
-                                    if (shouldDisplace) {
+                                    if (consecutiveNormal) {
                                         const candidate = pickNormalCandidateAvoidingMonthDup(
                                             groupPeople,
                                             rotationPosition,
@@ -15976,22 +15953,14 @@
                                             assignedPerson
                                         );
                                         if (candidate && candidate !== assignedPerson) {
-                                            // Unused path: only accept never-assigned.
-                                            // Consecutive path: reuse OK (pickNormal already skips ≤5d).
-                                            if (
-                                                hasUnusedEligible
-                                                    ? !isMarkedAssigned(candidate)
-                                                    : true
-                                            ) {
-                                                assignedPerson = candidate;
-                                                wasReplacedDueToFiveDayRule = true;
-                                            }
+                                            assignedPerson = candidate;
+                                            wasReplacedDueToFiveDayRule = true;
                                         }
                                     }
-                                    // else: already served, not consecutive, nobody unused → keep baseline
+                                    // else: already served, not consecutive → keep baseline series slot
                                 }
                             }
-                            // Keep baseline as basic-series slot; month-dup steals only for unused or anti-consecutive.
+                            // Keep baseline as basic-series slot; displace only for anti-consecutive.
                             
                             // Check if there's a pending swap for this position
                             if (pendingNormalSwaps[monthKey][groupNum] && pendingNormalSwaps[monthKey][groupNum].swapToPosition === rotationPosition) {
