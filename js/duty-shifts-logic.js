@@ -6599,6 +6599,115 @@
             return false;
         }
 
+        /** Latest absence λήξη strictly before dateKey (the period that triggers E+3 cool-down). */
+        function getLatestAbsenceEndBeforeDateKey(personName, groupNum, dateKey) {
+            if (!personName || !dateKey || !Number.isFinite(groupNum)) return null;
+            const periods =
+                typeof getMissingPeriodsForPersonNorm === 'function'
+                    ? getMissingPeriodsForPersonNorm(groupNum, personName)
+                    : [];
+            if (!Array.isArray(periods) || periods.length === 0) return null;
+            let best = null;
+            for (const p of periods) {
+                const endKey =
+                    typeof inputValueToDateKey === 'function' ? inputValueToDateKey(p?.end) : null;
+                if (!endKey || endKey >= dateKey) continue;
+                if (!best || endKey > best) best = endKey;
+            }
+            return best;
+        }
+
+        /**
+         * First αργία/ΣΚ on/after E+3 that the person can take (not missing, not already targeted).
+         * Used when series turn falls inside the cool-down window (e.g. λήξη 31/12 → όχι 02/01 → επόμενη ≥ E+3).
+         */
+        function findNextEligibleWeekendAfterReturnCooldown(
+            sortedWeekends,
+            personName,
+            groupNum,
+            absenceEndKey,
+            calcStartKey,
+            calcEndKey,
+            occupiedTargets
+        ) {
+            if (!personName || !groupNum || !absenceEndKey || !Array.isArray(sortedWeekends)) return null;
+            const eligibleFrom = addCalendarDaysToDateKey(absenceEndKey, 3);
+            if (!eligibleFrom) return null;
+            for (const wk of sortedWeekends) {
+                if (!wk || !/^\d{4}-\d{2}-\d{2}$/.test(wk)) continue;
+                if (calcStartKey && wk < calcStartKey) continue;
+                if (calcEndKey && wk > calcEndKey) break;
+                if (wk < eligibleFrom) continue;
+                if (occupiedTargets?.[wk]?.[groupNum]) continue;
+                const d = new Date(wk + 'T00:00:00');
+                if (isNaN(d.getTime())) continue;
+                if (
+                    typeof isPersonMissingOnDate === 'function' &&
+                    isPersonMissingOnDate(personName, groupNum, d, 'weekend')
+                ) {
+                    continue;
+                }
+                if (isWeekendDutyTooSoonAfterAbsenceReturn(personName, groupNum, wk)) continue;
+                return wk;
+            }
+            return null;
+        }
+
+        /**
+         * When series αργία is blocked by E+3, queue placement on the next eligible αργία ≥ E+3.
+         * Returns the scheduled date key or null.
+         */
+        function scheduleWeekendPlacementAfterE3Cooldown({
+            personName,
+            groupNum,
+            blockedDateKey,
+            sortedWeekends,
+            returnTargets,
+            calcStartKey,
+            calcEndKey
+        }) {
+            if (!personName || !groupNum || !blockedDateKey || !returnTargets) return null;
+            const pNorm =
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey(personName)
+                    : String(personName || '').trim();
+            for (const dk of Object.keys(returnTargets)) {
+                const ent = returnTargets[dk]?.[groupNum];
+                if (!ent?.personName) continue;
+                const oNorm =
+                    typeof normalizePersonKey === 'function'
+                        ? normalizePersonKey(ent.personName)
+                        : String(ent.personName || '').trim();
+                if (oNorm === pNorm) return dk; // already scheduled
+            }
+            const absenceEndKey = getLatestAbsenceEndBeforeDateKey(personName, groupNum, blockedDateKey);
+            if (!absenceEndKey) return null;
+            const nextWk = findNextEligibleWeekendAfterReturnCooldown(
+                sortedWeekends,
+                personName,
+                groupNum,
+                absenceEndKey,
+                calcStartKey,
+                calcEndKey,
+                returnTargets
+            );
+            if (!nextWk) return null;
+            if (!returnTargets[nextWk]) returnTargets[nextWk] = {};
+            if (returnTargets[nextWk][groupNum]) return null;
+            const fmt = (dk) =>
+                typeof formatDateKeyAsGreekDMY === 'function' ? formatDateKeyAsGreekDMY(dk) : dk;
+            returnTargets[nextWk][groupNum] = {
+                personName,
+                missingEnd: absenceEndKey,
+                isBackwardAssignment: false,
+                deferredFromE3Cooldown: true,
+                blockedDateKey,
+                missingRangeStr: fmt(blockedDateKey),
+                reasonOfMissing: `κανονισμός Ε+3 μετά λήξη απουσίας ${fmt(absenceEndKey)}`
+            };
+            return nextWk;
+        }
+
         /**
          * Ειδική αργία αμέσως μετά επιστροφή από απουσία ή μέσα σε συνεχόμενο μπλοκ ειδικών
          * που αγγίζει τη λήξη/E+1 (π.χ. λήξη 31/12 → όχι 1/1 · λήξη 24 με 24–25 → όχι 25).
@@ -11638,8 +11747,25 @@
                                 const originalIndex = displacedPerson != null ? groupPeople.indexOf(displacedPerson) : -1;
                                 if (globalWeekendRotationPosition[groupNum] === undefined) globalWeekendRotationPosition[groupNum] = 0;
                                 globalWeekendRotationPosition[groupNum] = (originalIndex >= 0 ? originalIndex : (groupPeople.indexOf(assignedPerson) + 1)) % groupPeople.length;
-                                const reasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designatedWeekend.missingRangeStr || ''}) λόγω ${designatedWeekend.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
-                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonText, null, null, { returnFromMissing: true, insertedByShift: true, missingEnd: designatedWeekend.missingEnd, isBackwardAssignment: designatedWeekend.isBackwardAssignment });
+                                const fmtDk = (dk) =>
+                                    typeof formatDateKeyAsGreekDMY === 'function' ? formatDateKeyAsGreekDMY(dk) : dk;
+                                const reasonText = designatedWeekend.deferredFromE3Cooldown
+                                    ? `Ο/Η ${assignedPerson} ανατέθηκε στις ${fmtDk(dateKey)} επειδή η σειρά του/της` +
+                                      (designatedWeekend.blockedDateKey
+                                          ? ` στις ${fmtDk(designatedWeekend.blockedDateKey)}`
+                                          : '') +
+                                      ` έπεφτε εντός Ε+3 μετά τη λήξη απουσίας` +
+                                      (designatedWeekend.missingEnd ? ` ${fmtDk(designatedWeekend.missingEnd)}` : '') +
+                                      `.`
+                                    : `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designatedWeekend.missingRangeStr || ''}) λόγω ${designatedWeekend.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
+                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonText, null, null, {
+                                    returnFromMissing: true,
+                                    insertedByShift: true,
+                                    missingEnd: designatedWeekend.missingEnd,
+                                    isBackwardAssignment: designatedWeekend.isBackwardAssignment,
+                                    deferredFromE3Cooldown: !!designatedWeekend.deferredFromE3Cooldown,
+                                    blockedDateKey: designatedWeekend.blockedDateKey || null
+                                });
                                 if (!weekendRotationPersons[dateKey]) weekendRotationPersons[dateKey] = {};
                                 // Keep baseline = displaced (rotation) person so we always show Βασική Σειρά + Αντικατάσταση
                                 weekendRotationPersons[dateKey][groupNum] = displacedPerson ?? assignedPerson;
@@ -11892,6 +12018,7 @@
                                 }
                             }
                             // Απουσία ή cool-down +3 ημ. μετά επιστροφή: επόμενος διαθέσιμος στην ίδια ημερομηνία.
+                            // E+3: ο παραλειπόμενος μπαίνει στην αμέσως επόμενη αργία ≥ E+3 (όχι απώλεια σειράς).
                             const tooSoonAfterReturn =
                                 assignedPerson &&
                                 isWeekendDutyTooSoonAfterAbsenceReturn(assignedPerson, groupNum, dateKey);
@@ -11901,6 +12028,27 @@
                                     tooSoonAfterReturn)
                             ) {
                                 const skippedForCooldown = assignedPerson;
+                                if (tooSoonAfterReturn) {
+                                    const scheduledWk = scheduleWeekendPlacementAfterE3Cooldown({
+                                        personName: skippedForCooldown,
+                                        groupNum,
+                                        blockedDateKey: dateKey,
+                                        sortedWeekends,
+                                        returnTargets: returnFromMissingWeekendTargets,
+                                        calcStartKey: calcStartKeyW,
+                                        calcEndKey: calcEndKeyW
+                                    });
+                                    if (
+                                        scheduledWk &&
+                                        typeof dutyWeekendDebug !== 'undefined' &&
+                                        dutyWeekendDebug.isEnabled()
+                                    ) {
+                                        dutyWeekendDebug.logStep(
+                                            'phase2-return-cooldown-reschedule',
+                                            `Επιστροφή ${skippedForCooldown}: E+3 κόβει ${dateKey} → προγραμματισμός ${scheduledWk}.`
+                                        );
+                                    }
+                                }
                                 const missIdx = groupPeople.indexOf(assignedPerson);
                                 const pickedMiss = findNextEligibleWeekendPersonInList({
                                     groupPeople,
