@@ -6570,8 +6570,9 @@
         }
 
         /**
-         * Μετά τη λήξη απουσίας: όχι αργία/ΣΚ πριν περάσουν 3 ημερολογιακές μέρες
-         * (λήξη E → πρώτη επιλέξιμη ημερομηνία E+3). Δεν αλλάζει καθημερινές/ημιαργίες/ειδικές.
+         * Μετά τη λήξη απουσίας: όχι αργία/ΣΚ μέχρι και το E+3
+         * (λήξη E → πρώτη επιλέξιμη ημερομηνία E+4, αυστηρά > E+3).
+         * Δεν αλλάζει καθημερινές/ειδικές.
          */
         function addCalendarDaysToDateKey(dateKey, days) {
             if (!dateKey || typeof dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return null;
@@ -6593,8 +6594,9 @@
                 if (!endKey) continue;
                 // Ακόμα εντός/μετά το τέλος ως απουσία: το isPersonMissingOnDate το χειρίζεται.
                 if (endKey >= dateKey) continue;
-                const eligibleFrom = addCalendarDaysToDateKey(endKey, 3);
-                if (eligibleFrom && dateKey < eligibleFrom) return true;
+                const ePlus3 = addCalendarDaysToDateKey(endKey, 3);
+                // Αυστηρά > E+3 → πρώτη επιλέξιμη E+4
+                if (ePlus3 && dateKey <= ePlus3) return true;
             }
             return false;
         }
@@ -6618,8 +6620,8 @@
         }
 
         /**
-         * First αργία/ΣΚ on/after E+3 that the person can take (not missing, not already targeted).
-         * Used when series turn falls inside the cool-down window (e.g. λήξη 31/12 → όχι 02/01 → επόμενη ≥ E+3).
+         * First αργία/ΣΚ strictly after E+3 (on/after E+4) that the person can take.
+         * Used when series turn falls inside the cool-down (e.g. λήξη 31/12 → όχι έως 03/01 → επόμενη ≥ E+4).
          */
         function findNextEligibleWeekendAfterReturnCooldown(
             sortedWeekends,
@@ -6631,7 +6633,7 @@
             occupiedTargets
         ) {
             if (!personName || !groupNum || !absenceEndKey || !Array.isArray(sortedWeekends)) return null;
-            const eligibleFrom = addCalendarDaysToDateKey(absenceEndKey, 3);
+            const eligibleFrom = addCalendarDaysToDateKey(absenceEndKey, 4);
             if (!eligibleFrom) return null;
             for (const wk of sortedWeekends) {
                 if (!wk || !/^\d{4}-\d{2}-\d{2}$/.test(wk)) continue;
@@ -6654,7 +6656,7 @@
         }
 
         /**
-         * When series αργία is blocked by E+3, queue placement on the next eligible αργία ≥ E+3.
+         * When series αργία is blocked by ≤E+3, queue placement on the next eligible αργία ≥ E+4.
          * Returns the scheduled date key or null.
          */
         function scheduleWeekendPlacementAfterE3Cooldown({
@@ -6703,7 +6705,7 @@
                 deferredFromE3Cooldown: true,
                 blockedDateKey,
                 missingRangeStr: fmt(blockedDateKey),
-                reasonOfMissing: `κανονισμός Ε+3 μετά λήξη απουσίας ${fmt(absenceEndKey)}`
+                reasonOfMissing: `κανονισμός >Ε+3 μετά λήξη απουσίας ${fmt(absenceEndKey)}`
             };
             return nextWk;
         }
@@ -11141,12 +11143,12 @@
                     d.setDate(d.getDate() + (days || 0));
                     return formatDateKey(d);
                 };
-                /** Μετά τη λήξη απουσίας: πρώτη επιλέξιμη αργία όταν έχουν περάσει ≥3 ημερολογιακές μέρες (E → E+3). */
+                /** Μετά τη λήξη απουσίας: πρώτη επιλέξιμη αργία αυστηρά μετά το E+3 (E → E+4). */
                 const isWeekendTargetTooSoonAfterAbsenceEnd = (absenceEndKey, candidateWeekendKey) => {
                     if (!absenceEndKey || !candidateWeekendKey) return false;
                     const daysAfter = calendarDaysFromTo(absenceEndKey, candidateWeekendKey);
                     if (daysAfter <= 0) return true;
-                    return daysAfter < 3;
+                    return daysAfter <= 3;
                 };
                 const findSameMonthReturnWeekendTarget = (
                     sorted,
@@ -11161,8 +11163,8 @@
                 ) => {
                     const missed = (missedWeekendKeys || []).slice().sort();
                     const forwardOnly = !!options.forwardOnly;
-                    const eligibleFromKey = absenceEndKey ? addDaysW(absenceEndKey, 3) : null;
-                    // Μήνας αναφοράς: missed anchor, αλλιώς ο μήνας του E+3 (cool-down χωρίς χαμένη αργία).
+                    const eligibleFromKey = absenceEndKey ? addDaysW(absenceEndKey, 4) : null;
+                    // Μήνας αναφοράς: missed anchor, αλλιώς ο μήνας του E+4 (cool-down χωρίς χαμένη αργία).
                     const monthRefKey = missed[0] || eligibleFromKey;
                     if (!monthRefKey) return null;
                     if (!missed.length && !eligibleFromKey) return null;
@@ -11202,7 +11204,7 @@
                         }
                         return { targetWeekendKey: wk, isBackwardAssignment: !!isBackward };
                     };
-                    // Forward: πρώτη αργία του μήνα ≥ λήξη+3.
+                    // Forward: πρώτη αργία του μήνα ≥ λήξη+4 (> E+3).
                     for (const wk of inMonth) {
                         if (eligibleFromKey && wk < eligibleFromKey) continue;
                         const pick = tryPick(wk, false);
@@ -11447,7 +11449,7 @@
                                     }
                                 }
                                 const hadMissedWeekend = missedWeekendKeysForReturn.length > 0;
-                                // Χωρίς χαμένη αργία στην απουσία: ακόμα τοποθέτηση forward μετά E+3
+                                // Χωρίς χαμένη αργία στην απουσία: ακόμα τοποθέτηση forward μετά E+3 (δηλ. ≥ E+4)
                                 // (αλλιώς το cool-down τον κόβει και χάνεται η αργία — π.χ. Πολυβίου).
                                 if (!hadMissedWeekend) {
                                     if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
@@ -11459,7 +11461,7 @@
                                             status: 'info',
                                             reasonCode: 'RETURN_NO_MISSED_WEEKEND_FORWARD_ONLY',
                                             message:
-                                                `Δεν βρέθηκε χαμένη ΣΚ στην ${missingRangeStrForDebug} — δοκιμή πρώτης αργίας ≥ λήξη+3.`
+                                                `Δεν βρέθηκε χαμένη ΣΚ στην ${missingRangeStrForDebug} — δοκιμή πρώτης αργίας ≥ λήξη+4 (>E+3).`
                                         });
                                     }
                                 }
@@ -11496,7 +11498,7 @@
                                 }
                                 if (!targetWeekendKey || targetWeekendKey < calcStartKeyW || targetWeekendKey > calcEndKeyW) {
                                     if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
-                                        const eligibleDbg = addDaysW(pEndKey, 3);
+                                        const eligibleDbg = addDaysW(pEndKey, 4);
                                         const anchorMk =
                                             missedWeekendKeysForReturn.length > 0
                                                 ? (typeof getMonthKeyFromDate === 'function'
@@ -11531,14 +11533,14 @@
                                                 ? `Στόχος ΣΚ ${targetWeekendKey} εκτός ${calcStartKeyW}…${calcEndKeyW}.`
                                                 : hadMissedWeekend
                                                   ? `Χάθηκε ΣΚ (${missedWeekendKeysForReturn.join(', ')}) αλλά δεν βρέθηκε ελεύθερο ΣΚ στον ίδιο μήνα${anchorMk ? ' (' + anchorMk + ')' : ''}.`
-                                                  : `Δεν βρέθηκε αργία ≥ λήξη+3 (${eligibleDbg || '—'}) στον ίδιο μήνα${anchorMk ? ' (' + anchorMk + ')' : ''}.`,
+                                                  : `Δεν βρέθηκε αργία ≥ λήξη+4 (>E+3) (${eligibleDbg || '—'}) στον ίδιο μήνα${anchorMk ? ' (' + anchorMk + ')' : ''}.`,
                                             alternateDateScan: alt
                                         });
                                     }
                                     continue;
                                 }
                                 // Αν η ημέρα-στόχος είναι δεσμευμένη, άλλο ελεύθερο ΣΚ στον ίδιο μήνα (όχι εκτός μήνα)
-                                const eligibleFromBusy = addDaysW(pEndKey, 3);
+                                const eligibleFromBusy = addDaysW(pEndKey, 4);
                                 const anchorKeyBusy = missedWeekendKeysForReturn[0] || eligibleFromBusy;
                                 const anchorMonthKeyBusy =
                                     anchorKeyBusy && typeof getMonthKeyFromDate === 'function'
@@ -11614,7 +11616,7 @@
                                             `Θα ανατεθεί στον ίδιο μήνα στην ${targetWeekendKey}` +
                                             (isBackwardAssignment
                                                 ? ' (πριν την απουσία)'
-                                                : ` (μετά επιστροφή — πρώτη αργία ≥ λήξη+3 ${pEndKey})`) +
+                                                : ` (μετά επιστροφή — πρώτη αργία ≥ λήξη+4 (>E+3) ${pEndKey})`) +
                                             '.'
                                     });
                                 }
@@ -11754,9 +11756,9 @@
                                       (designatedWeekend.blockedDateKey
                                           ? ` στις ${fmtDk(designatedWeekend.blockedDateKey)}`
                                           : '') +
-                                      ` έπεφτε εντός Ε+3 μετά τη λήξη απουσίας` +
+                                      ` έπεφτε ≤Ε+3 μετά τη λήξη απουσίας` +
                                       (designatedWeekend.missingEnd ? ` ${fmtDk(designatedWeekend.missingEnd)}` : '') +
-                                      `.`
+                                      ` (επιλέξιμο από Ε+4).`
                                     : `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designatedWeekend.missingRangeStr || ''}) λόγω ${designatedWeekend.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                                 storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonText, null, null, {
                                     returnFromMissing: true,
@@ -12017,8 +12019,8 @@
                                     }
                                 }
                             }
-                            // Απουσία ή cool-down +3 ημ. μετά επιστροφή: επόμενος διαθέσιμος στην ίδια ημερομηνία.
-                            // E+3: ο παραλειπόμενος μπαίνει στην αμέσως επόμενη αργία ≥ E+3 (όχι απώλεια σειράς).
+                            // Απουσία ή cool-down ≤E+3 μετά επιστροφή: επόμενος διαθέσιμος στην ίδια ημερομηνία.
+                            // Ο παραλειπόμενος μπαίνει στην αμέσως επόμενη αργία ≥ E+4 (όχι απώλεια σειράς).
                             const tooSoonAfterReturn =
                                 assignedPerson &&
                                 isWeekendDutyTooSoonAfterAbsenceReturn(assignedPerson, groupNum, dateKey);
@@ -12045,7 +12047,7 @@
                                     ) {
                                         dutyWeekendDebug.logStep(
                                             'phase2-return-cooldown-reschedule',
-                                            `Επιστροφή ${skippedForCooldown}: E+3 κόβει ${dateKey} → προγραμματισμός ${scheduledWk}.`
+                                            `Επιστροφή ${skippedForCooldown}: ≤E+3 κόβει ${dateKey} → προγραμματισμός ${scheduledWk} (≥E+4).`
                                         );
                                     }
                                 }
@@ -12071,7 +12073,7 @@
                                         dutyWeekendDebug.logStep(
                                             tooSoonAfterReturn ? 'phase2-return-cooldown' : 'phase2-missing-inline',
                                             tooSoonAfterReturn
-                                                ? `Επιστροφή ${skippedForCooldown}: χρειάζονται 3 ημ. → ${pickedMiss.person}.`
+                                                ? `Επιστροφή ${skippedForCooldown}: ≤E+3 κόβει → ${pickedMiss.person}.`
                                                 : `Απουσία ${skippedForCooldown} → επόμενος διαθέσιμος ${pickedMiss.person}.`
                                         );
                                     }
@@ -12571,7 +12573,8 @@
                                 continue;
                             }
                             // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
-                            const thirdDayAfterEnd = addDaysToDateKeyRun(pEndKey, 3);
+                            // Semi: πρώτη επιλέξιμη αυστηρά > E+3 → E+4
+                            const thirdDayAfterEnd = addDaysToDateKeyRun(pEndKey, 4);
                             if (!thirdDayAfterEnd) continue;
                             // Backward: avoid assigning one day before missing period starts
                             const dayBeforeStart = addDaysToDateKeyRun(pStartKey, -1);
@@ -13568,7 +13571,8 @@
                                 if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey, pStartKey)) continue;
                                 
                                 // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
-                                const thirdDayAfterEnd = addDaysToDateKeyLocal(pEndKey, 3);
+                                // Semi: πρώτη επιλέξιμη αυστηρά > E+3 → E+4
+                                const thirdDayAfterEnd = addDaysToDateKeyLocal(pEndKey, 4);
                                 if (!thirdDayAfterEnd) continue;
                                 // Backward: avoid assigning one day before missing period starts
                                 const dayBeforeStart = addDaysToDateKeyLocal(pStartKey, -1);

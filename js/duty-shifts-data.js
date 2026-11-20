@@ -7584,7 +7584,7 @@
 
             /**
              * Επιστροφή από απουσία → όχι αυτόματος επιλαχών πριν τον κανόνα του τύπου
-             * (αργίες/ημιαργίες: E+3 · καθημερινές: 3η καθημερινή από E+1).
+             * (αργίες/ημιαργίες: αυστηρά > E+3 → πρώτη E+4 · καθημερινές: 3η καθημερινή από E+1).
              * Ειδικές: δεν εφαρμόζεται εδώ.
              */
             const isTooSoonAfterAbsenceReturnForType = (personName, dutyType) => {
@@ -7606,14 +7606,14 @@
                                 return true;
                             }
                         } else {
-                            const eligibleFrom = addDaysKeyLocal(endKey, 3);
-                            if (eligibleFrom && firstWk < eligibleFrom) return true;
+                            const ePlus3 = addDaysKeyLocal(endKey, 3);
+                            if (ePlus3 && firstWk <= ePlus3) return true;
                         }
                     } else if (dutyType === 'semi') {
                         const firstSemi = findFirstDutyDateKeyInNextMonth('semi');
                         if (!firstSemi || endKey >= firstSemi) continue;
-                        const eligibleFrom = addDaysKeyLocal(endKey, 3);
-                        if (eligibleFrom && firstSemi < eligibleFrom) return true;
+                        const ePlus3 = addDaysKeyLocal(endKey, 3);
+                        if (ePlus3 && firstSemi <= ePlus3) return true;
                     } else if (dutyType === 'normal') {
                         const returnKey = addDaysKeyLocal(endKey, 1);
                         if (!returnKey || returnKey > nextMonthEndKey) continue;
@@ -8756,8 +8756,8 @@
                                 }
                             } else if (type === 'semi') {
                                 const firstSemi = findFirstDutyInNextMonthPreview('semi');
-                                const eligible = addDaysKeyPreview(eKey, 3);
-                                if (firstSemi && eligible && eKey < firstSemi && firstSemi < eligible) {
+                                const ePlus3 = addDaysKeyPreview(eKey, 3);
+                                if (firstSemi && ePlus3 && eKey < firstSemi && firstSemi <= ePlus3) {
                                     returnTooSoon = true;
                                     break;
                                 }
@@ -8786,7 +8786,7 @@
                             markers.push(
                                 type === 'normal'
                                     ? 'Επιστροφή — μετά 3η καθημερινή'
-                                    : 'Επιστροφή — μετά E+3'
+                                    : 'Επιστροφή — μετά E+3 (από E+4)'
                             );
                             optClass = optClass
                                 ? `${optClass} excel-alt-opt-absent`
