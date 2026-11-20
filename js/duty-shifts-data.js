@@ -2322,15 +2322,39 @@
          * Defer state: in the month after manual alternate, skip replacement person once when rotation reaches them.
          * deferState[groupNum] = { person, skipOnCursorMatch: true }
          */
+        /** True if this month already applied the one-time skip of a prior-month alternate replacement. */
+        function wasManualAlternateDeferFulfilledInMonth(dayTypeCategory, monthKey, groupNum, replacementPerson) {
+            if (!monthKey || !groupNum || !replacementPerson) return false;
+            const norm = normRotPersonName;
+            const target = norm(replacementPerson);
+            for (const dk in assignmentReasons || {}) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || dk.substring(0, 7) !== monthKey) continue;
+                if (getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory) continue;
+                const gmap = getAssignmentReasonsGroupMap(dk, groupNum);
+                if (!gmap) continue;
+                for (const pn in gmap) {
+                    const r = gmap[pn];
+                    if (!r || r.type !== 'skip' || !r.meta?.manualAlternateDeferFulfillment) continue;
+                    const skipped = r.meta.deferSkippedReplacement || r.swappedWith || null;
+                    if (skipped && norm(skipped) === target) return true;
+                }
+            }
+            return false;
+        }
+
         function seedManualAlternateDeferFromPreviousMonth(deferState, dayTypeCategory, dateInMonth, groupNum) {
             if (!deferState || !dateInMonth) return;
             const latest = getManualAlternateDeferFromPreviousMonth(dayTypeCategory, dateInMonth, groupNum);
-            if (latest?.replacementPerson) {
-                deferState[groupNum] = {
-                    person: resolvePersonInGroupRotationList(latest.replacementPerson, groupNum, dayTypeCategory),
-                    skipOnCursorMatch: true
-                };
-            }
+            if (!latest?.replacementPerson) return;
+            const person = resolvePersonInGroupRotationList(latest.replacementPerson, groupNum, dayTypeCategory);
+            if (!person) return;
+            const monthKey = getMonthKeyFromDate(dateInMonth);
+            // Already used once this month (e.g. preview skipped them while replacing E+3/absent person) — do not re-seed.
+            if (wasManualAlternateDeferFulfilledInMonth(dayTypeCategory, monthKey, groupNum, person)) return;
+            deferState[groupNum] = {
+                person,
+                skipOnCursorMatch: true
+            };
         }
 
         function buildAssignmentReasonsSavePayload() {

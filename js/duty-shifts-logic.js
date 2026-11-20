@@ -6515,7 +6515,13 @@
             }
             return results;
         }
-        function applyWeekendMissingOneSidedFallback(sortedWeekends, assignmentsByDate, assignedWeekendInMonth) {
+        function applyWeekendMissingOneSidedFallback(
+            sortedWeekends,
+            assignmentsByDate,
+            assignedWeekendInMonth,
+            deferState = null
+        ) {
+            let prevMonthKeyForDefer = null;
             for (const dateKey of sortedWeekends) {
                 if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                 const date = new Date(dateKey + 'T00:00:00');
@@ -6523,6 +6529,13 @@
                     typeof getMonthKeyFromDate === 'function'
                         ? getMonthKeyFromDate(date)
                         : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                if (deferState && prevMonthKeyForDefer !== monthKey) {
+                    for (const k of Object.keys(deferState)) delete deferState[k];
+                    if (typeof seedManualAlternateDeferAllGroupsForMonthStart === 'function') {
+                        seedManualAlternateDeferAllGroupsForMonthStart(deferState, 'weekend', date);
+                    }
+                    prevMonthKeyForDefer = monthKey;
+                }
                 if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
                 for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const groupData =
@@ -6551,7 +6564,8 @@
                         groupNum,
                         date,
                         assignedSet: assignedWeekendInMonth[monthKey][groupNum],
-                        specialMonthSet: null
+                        specialMonthSet: null,
+                        deferState
                     });
                     if (!picked) continue;
                     if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = {};
@@ -6564,6 +6578,16 @@
                         date,
                         'weekend'
                     );
+                    if (picked.skippedDeferPerson) {
+                        maybeStoreDeferredAlternateSkipWhileReplacing(
+                            dateKey,
+                            groupNum,
+                            picked.person,
+                            picked.skippedDeferPerson,
+                            'weekend',
+                            date
+                        );
+                    }
                     assignedWeekendInMonth[monthKey][groupNum].add(picked.person);
                 }
             }
@@ -6749,7 +6773,24 @@
         }
 
         /**
+         * If candidate is the pending deferred manual-alternate, skip once and clear deferState.
+         * Returns the skipped person name when matched (caller may store defer-fulfillment reason).
+         */
+        function consumeDeferredManualAlternateIfMatches(deferState, groupNum, candidate) {
+            if (!deferState || !groupNum || !candidate) return null;
+            const st = deferState[groupNum];
+            if (!st?.person) return null;
+            const norm = (s) =>
+                typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
+            if (norm(st.person) !== norm(candidate)) return null;
+            const skipped = st.person;
+            delete deferState[groupNum];
+            return skipped;
+        }
+
+        /**
          * Επόμενος διαθέσιμος στη λίστα weekend μετά το startIndex (απουσία / ειδική / ήδη ανατεθειμένος).
+         * Παραλείπει επίσης μία φορά τον deferred επιλαχόντα προηγούμενου μήνα (όχι μόνο όταν είναι ο cursor).
          * Ίδια λογική για όλες τις ομάδες 1–4.
          */
         function findNextEligibleWeekendPersonInList({
@@ -6758,7 +6799,8 @@
             groupNum,
             date,
             assignedSet = null,
-            specialMonthSet = null
+            specialMonthSet = null,
+            deferState = null
         }) {
             const rotationDays = groupPeople.length;
             if (!rotationDays) return null;
@@ -6769,10 +6811,16 @@
                     : typeof date === 'string'
                       ? date
                       : null;
+            let skippedDeferPerson = null;
             for (let offset = 1; offset < rotationDays; offset++) {
                 const nextIndex = (base + offset) % rotationDays;
                 const candidate = groupPeople[nextIndex];
                 if (!candidate) continue;
+                const deferredHit = consumeDeferredManualAlternateIfMatches(deferState, groupNum, candidate);
+                if (deferredHit) {
+                    skippedDeferPerson = deferredHit;
+                    continue;
+                }
                 if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
                 if (
                     dateKey &&
@@ -6802,9 +6850,48 @@
                 ) {
                     continue;
                 }
-                return { person: candidate, index: nextIndex };
+                return { person: candidate, index: nextIndex, skippedDeferPerson };
             }
             return null;
+        }
+
+        /** Store defer-fulfillment reason when alternate was skipped while picking a replacement for someone else. */
+        function maybeStoreDeferredAlternateSkipWhileReplacing(
+            dateKey,
+            groupNum,
+            assignedPerson,
+            skippedDeferPerson,
+            dayTypeCategory,
+            dateObj
+        ) {
+            if (!assignedPerson || !skippedDeferPerson) return false;
+            const date =
+                dateObj instanceof Date && !isNaN(dateObj.getTime())
+                    ? dateObj
+                    : new Date(String(dateKey || '') + 'T00:00:00');
+            const cat = dayTypeCategory || 'weekend';
+            const latest =
+                typeof getManualAlternateDeferFromPreviousMonth === 'function'
+                    ? getManualAlternateDeferFromPreviousMonth(cat, date, groupNum)
+                    : null;
+            const deferFulfillment = {
+                skippedReplacement: skippedDeferPerson,
+                baselinePerson: latest?.baselinePerson || null,
+                sourceDateKey: latest?.dateKey || latest?.sourceDateKey || null,
+                prevMonthKey:
+                    typeof getPreviousMonthKeyFromDate === 'function'
+                        ? getPreviousMonthKeyFromDate(date)
+                        : null
+            };
+            return tryStoreManualAlternateDeferFulfillmentReason(
+                dateKey,
+                groupNum,
+                assignedPerson,
+                deferFulfillment,
+                cat,
+                null,
+                date
+            );
         }
         function buildWeekendPreviewTbodyHtml(rowsMeta, simulatedWeekendAssignments, baselineWeekendByDate, weekendRotationPersons, context) {
             let tbody = '';
@@ -6937,6 +7024,8 @@
                 const skippedInMonth = {}; // monthKey -> { groupNum -> Set of person names }
                 const assignedWeekendInMonth = {}; // monthKey -> { groupNum -> Set of person names } already assigned to a weekend this month (so we don't assign same person twice)
                 const updatedAssignments = {}; // dateKey -> { groupNum -> personName }
+                const deferManualAlternateSkipWeekendSkipPass = {};
+                let prevMonthKeyDeferSkipPass = null;
                 
                 // Load current weekend assignments from preview (tempWeekendAssignments)
                 const tempWeekendAssignments = calculationSteps.tempWeekendAssignments || {};
@@ -6951,6 +7040,19 @@
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
                     const date = new Date(dateKey + 'T00:00:00');
                     const monthKey = typeof getMonthKeyFromDate === 'function' ? getMonthKeyFromDate(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    if (prevMonthKeyDeferSkipPass !== monthKey) {
+                        for (const k of Object.keys(deferManualAlternateSkipWeekendSkipPass)) {
+                            delete deferManualAlternateSkipWeekendSkipPass[k];
+                        }
+                        if (typeof seedManualAlternateDeferAllGroupsForMonthStart === 'function') {
+                            seedManualAlternateDeferAllGroupsForMonthStart(
+                                deferManualAlternateSkipWeekendSkipPass,
+                                'weekend',
+                                date
+                            );
+                        }
+                        prevMonthKeyDeferSkipPass = monthKey;
+                    }
                     if (!skippedInMonth[monthKey]) skippedInMonth[monthKey] = {};
                     if (!assignedWeekendInMonth[monthKey]) assignedWeekendInMonth[monthKey] = {};
                     for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
@@ -7005,31 +7107,16 @@
                         const rotationDays = groupPeople.length;
                         let currentIndex = groupPeople.indexOf(currentPerson);
                         if (currentIndex === -1) currentIndex = 0;
-                        let replacementPerson = null;
-                        // Next eligible person in weekend list order: not special this month, not already assigned this month, not missing, not disabled
-                        for (let offset = 1; offset < rotationDays; offset++) {
-                            const nextIndex = (currentIndex + offset) % rotationDays;
-                            const candidate = groupPeople[nextIndex];
-                            if (!candidate) continue;
-                            if (isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                            if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
-                            const candSpecialSet = simulatedSpecialAssignments[monthKey]?.[groupNum];
-                            const candAssignedSet = assignedWeekendInMonth[monthKey][groupNum];
-                            const candidateHasSpecial = candSpecialSet
-                                ? typeof personSetHasIgnoringRank === 'function'
-                                    ? personSetHasIgnoringRank(candSpecialSet, candidate)
-                                    : candSpecialSet.has(candidate)
-                                : false;
-                            const candidateAlreadyAssigned = candAssignedSet
-                                ? typeof personSetHasIgnoringRank === 'function'
-                                    ? personSetHasIgnoringRank(candAssignedSet, candidate)
-                                    : candAssignedSet.has(candidate)
-                                : false;
-                            if (!candidateHasSpecial && !candidateAlreadyAssigned) {
-                                replacementPerson = candidate;
-                                break;
-                            }
-                        }
+                        const pickedPhase1 = findNextEligibleWeekendPersonInList({
+                            groupPeople,
+                            startIndex: currentIndex,
+                            groupNum,
+                            date,
+                            assignedSet: assignedWeekendInMonth[monthKey][groupNum],
+                            specialMonthSet: simulatedSpecialAssignments[monthKey]?.[groupNum] || null,
+                            deferState: deferManualAlternateSkipWeekendSkipPass
+                        });
+                        const replacementPerson = pickedPhase1?.person || null;
                         if (replacementPerson) {
                             skippedPeople.push({
                                 date: dateKey,
@@ -7064,6 +7151,16 @@
                                 currentPerson,
                                 null
                             );
+                            if (pickedPhase1?.skippedDeferPerson) {
+                                maybeStoreDeferredAlternateSkipWhileReplacing(
+                                    dateKey,
+                                    groupNum,
+                                    replacementPerson,
+                                    pickedPhase1.skippedDeferPerson,
+                                    'weekend',
+                                    date
+                                );
+                            }
                         } else if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                             dutyWeekendDebug.logStep('phase1-no-replacement', 'Δεν βρέθηκε αντικαταστάτης στη φάση 1.');
                         }
@@ -7100,7 +7197,8 @@
                 applyWeekendMissingOneSidedFallback(
                     sortedWeekends,
                     updatedAssignments,
-                    assignedWeekendInMonth
+                    assignedWeekendInMonth,
+                    deferManualAlternateSkipWeekendSkipPass
                 );
                 sortedWeekends.forEach((dateKey) => {
                     if (typeof setDutyCalcContextDateKey === 'function') setDutyCalcContextDateKey(dateKey);
@@ -11949,30 +12047,16 @@
                                     if (hasSpecialHoliday) skippedInMonth[monthKey][groupNum].add(assignedPerson);
                                     let currentIndex = groupPeople.indexOf(assignedPerson);
                                     if (currentIndex === -1) currentIndex = 0;
-                                    let replacementPerson = null;
-                                    for (let offset = 1; offset < rotationDays; offset++) {
-                                        const nextIndex = (currentIndex + offset) % rotationDays;
-                                        const candidate = groupPeople[nextIndex];
-                                        if (!candidate || isPersonMissingOnDate(candidate, groupNum, date, 'weekend')) continue;
-                                        if (isWeekendDutyTooSoonAfterAbsenceReturn(candidate, groupNum, dateKey)) continue;
-                                        if (typeof isPersonDisabledForDuty === 'function' && isPersonDisabledForDuty(candidate, groupNum, 'weekend')) continue;
-                                        const candPrevSpecial = simulatedSpecialAssignments[monthKey]?.[groupNum];
-                                        const candPrevAssigned = assignedWeekendInMonthPreview[monthKey][groupNum];
-                                        const candidateHasSpecial = candPrevSpecial
-                                            ? typeof personSetHasIgnoringRank === 'function'
-                                                ? personSetHasIgnoringRank(candPrevSpecial, candidate)
-                                                : candPrevSpecial.has(candidate)
-                                            : false;
-                                        const candidateAlreadyAssigned = candPrevAssigned
-                                            ? typeof personSetHasIgnoringRank === 'function'
-                                                ? personSetHasIgnoringRank(candPrevAssigned, candidate)
-                                                : candPrevAssigned.has(candidate)
-                                            : false;
-                                        if (!candidateHasSpecial && !candidateAlreadyAssigned) {
-                                            replacementPerson = candidate;
-                                            break;
-                                        }
-                                    }
+                                    const pickedSpecialPreview = findNextEligibleWeekendPersonInList({
+                                        groupPeople,
+                                        startIndex: currentIndex,
+                                        groupNum,
+                                        date,
+                                        assignedSet: assignedWeekendInMonthPreview[monthKey][groupNum],
+                                        specialMonthSet: simulatedSpecialAssignments[monthKey]?.[groupNum] || null,
+                                        deferState: deferManualAlternateSkipWeekend
+                                    });
+                                    const replacementPerson = pickedSpecialPreview?.person || null;
                                     if (replacementPerson) {
                                         const displacedPersonWeekendPreview = assignedPerson;
                                         let skipReasonPreview = '';
@@ -12003,6 +12087,16 @@
                                             displacedPersonWeekendPreview,
                                             null
                                         );
+                                        if (pickedSpecialPreview?.skippedDeferPerson) {
+                                            maybeStoreDeferredAlternateSkipWhileReplacing(
+                                                dateKey,
+                                                groupNum,
+                                                replacementPerson,
+                                                pickedSpecialPreview.skippedDeferPerson,
+                                                'weekend',
+                                                date
+                                            );
+                                        }
                                         assignedPerson = replacementPerson;
                                         wasReplaced = true;
                                         replacementIndex = groupPeople.indexOf(replacementPerson);
@@ -12058,7 +12152,8 @@
                                     groupNum,
                                     date,
                                     assignedSet: assignedWeekendInMonthPreview[monthKey][groupNum],
-                                    specialMonthSet: simulatedSpecialAssignments[monthKey]?.[groupNum] || null
+                                    specialMonthSet: simulatedSpecialAssignments[monthKey]?.[groupNum] || null,
+                                    deferState: deferManualAlternateSkipWeekend
                                 });
                                 if (pickedMiss) {
                                     storeUnavailableReplacementReason(
@@ -12069,11 +12164,21 @@
                                         date,
                                         'weekend'
                                     );
+                                    if (pickedMiss.skippedDeferPerson) {
+                                        maybeStoreDeferredAlternateSkipWhileReplacing(
+                                            dateKey,
+                                            groupNum,
+                                            pickedMiss.person,
+                                            pickedMiss.skippedDeferPerson,
+                                            'weekend',
+                                            date
+                                        );
+                                    }
                                     if (typeof dutyWeekendDebug !== 'undefined' && dutyWeekendDebug.isEnabled()) {
                                         dutyWeekendDebug.logStep(
                                             tooSoonAfterReturn ? 'phase2-return-cooldown' : 'phase2-missing-inline',
                                             tooSoonAfterReturn
-                                                ? `Επιστροφή ${skippedForCooldown}: ≤E+3 κόβει → ${pickedMiss.person}.`
+                                                ? `Επιστροφή ${skippedForCooldown}: ≤E+3 κόβει → ${pickedMiss.person}${pickedMiss.skippedDeferPerson ? ` (παράλειψη επιλαχόντα ${pickedMiss.skippedDeferPerson})` : ''}.`
                                                 : `Απουσία ${skippedForCooldown} → επόμενος διαθέσιμος ${pickedMiss.person}.`
                                         );
                                     }
@@ -12230,10 +12335,12 @@
                 });
 
                 // Απουσίες: μόνο one-sided «επόμενος διαθέσιμος» (όχι cascade — έσπαγε τη σειρά π.χ. 6→2→8→3).
+                // Pass the same defer map so E+3/missing replacements also skip prior-month alternate once.
                 applyWeekendMissingOneSidedFallback(
                     sortedWeekends,
                     simulatedWeekendAssignments,
-                    assignedWeekendInMonthPreview
+                    assignedWeekendInMonthPreview,
+                    deferManualAlternateSkipWeekend
                 );
                 
                 // Store assignments and rotation positions in calculationSteps for saving when Next is pressed
@@ -12808,16 +12915,34 @@
                         let eligiblePerson = null;
                         let eligibleIndex = -1;
                         const deferSkipPersonRun = deferManualAlternateSkipSemiRun[groupNum]?.person;
+                        let skippedDeferSemiDisabled = null;
                         for (let offset = 1; offset <= rotationDays * 2; offset++) {
                             const idx = (pos + offset) % rotationDays;
                             const candidate = groupPeople[idx];
                             if (!candidate) continue;
-                            if (deferSkipPersonRun && normSemiRun(candidate) === normSemiRun(deferSkipPersonRun)) continue;
+                            if (deferSkipPersonRun && normSemiRun(candidate) === normSemiRun(deferSkipPersonRun)) {
+                                skippedDeferSemiDisabled = consumeDeferredManualAlternateIfMatches(
+                                    deferManualAlternateSkipSemiRun,
+                                    groupNum,
+                                    candidate
+                                ) || deferSkipPersonRun;
+                                continue;
+                            }
                             if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                             eligiblePerson = candidate;
                             eligibleIndex = idx;
                             break;
+                        }
+                        if (eligiblePerson && skippedDeferSemiDisabled) {
+                            maybeStoreDeferredAlternateSkipWhileReplacing(
+                                dateKey,
+                                groupNum,
+                                eligiblePerson,
+                                skippedDeferSemiDisabled,
+                                'semi',
+                                date
+                            );
                         }
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.recordCandidateScan(
@@ -12839,16 +12964,34 @@
                         let eligiblePerson = null;
                         let eligibleIndex = -1;
                         const deferSkipPersonRunMissing = deferManualAlternateSkipSemiRun[groupNum]?.person;
+                        let skippedDeferSemiMissing = null;
                         for (let offset = 1; offset <= rotationDays * 2; offset++) {
                             const idx = (pos + offset) % rotationDays;
                             const candidate = groupPeople[idx];
                             if (!candidate) continue;
-                            if (deferSkipPersonRunMissing && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunMissing)) continue;
+                            if (deferSkipPersonRunMissing && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunMissing)) {
+                                skippedDeferSemiMissing = consumeDeferredManualAlternateIfMatches(
+                                    deferManualAlternateSkipSemiRun,
+                                    groupNum,
+                                    candidate
+                                ) || deferSkipPersonRunMissing;
+                                continue;
+                            }
                             if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                             eligiblePerson = candidate;
                             eligibleIndex = idx;
                             break;
+                        }
+                        if (eligiblePerson && skippedDeferSemiMissing) {
+                            maybeStoreDeferredAlternateSkipWhileReplacing(
+                                dateKey,
+                                groupNum,
+                                eligiblePerson,
+                                skippedDeferSemiMissing,
+                                'semi',
+                                date
+                            );
                         }
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.recordCandidateScan(
@@ -12887,16 +13030,34 @@
                             let eligiblePerson = null;
                             let eligibleIndex = -1;
                             const deferSkipPersonRunFulfilled = deferManualAlternateSkipSemiRun[groupNum]?.person;
+                            let skippedDeferSemiFulfilled = null;
                             for (let offset = 1; offset <= rotationDays * 2; offset++) {
                                 const idx = (pos + offset) % rotationDays;
                                 const candidate = groupPeople[idx];
                                 if (!candidate) continue;
-                                if (deferSkipPersonRunFulfilled && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunFulfilled)) continue;
+                                if (deferSkipPersonRunFulfilled && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunFulfilled)) {
+                                    skippedDeferSemiFulfilled = consumeDeferredManualAlternateIfMatches(
+                                        deferManualAlternateSkipSemiRun,
+                                        groupNum,
+                                        candidate
+                                    ) || deferSkipPersonRunFulfilled;
+                                    continue;
+                                }
                                 if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
                                 if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
                                 eligiblePerson = candidate;
                                 eligibleIndex = idx;
                                 break;
+                            }
+                            if (eligiblePerson && skippedDeferSemiFulfilled) {
+                                maybeStoreDeferredAlternateSkipWhileReplacing(
+                                    dateKey,
+                                    groupNum,
+                                    eligiblePerson,
+                                    skippedDeferSemiFulfilled,
+                                    'semi',
+                                    date
+                                );
                             }
                             baseline[dateKey][groupNum] = eligiblePerson != null ? eligiblePerson : person;
                             if (eligiblePerson && rotationPersonAtSlot && normSemiRun(eligiblePerson) !== normSemiRun(rotationPersonAtSlot)) {
