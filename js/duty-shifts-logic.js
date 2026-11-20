@@ -2312,8 +2312,9 @@
 
         /**
          * True when the absence fully covers at least one calendar month (day 1 through last day).
-         * Whole-month absences: no return-from-missing for weekend/special/semi/normal —
-         * person serves again only when their turn comes in the basic series.
+         * Weekend/special/normal: no return-from-missing — wait for basic-series turn.
+         * Semi: multi-month absences still allow RFM only for missed ημιαργίες in the return month
+         * (see getAbsenceReturnMonthScanWindow); they must not burn the next month's series turn.
          */
         function absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey) {
             if (!pStartKey || !pEndKey || pStartKey > pEndKey) return false;
@@ -2331,6 +2332,30 @@
                 cursor.setMonth(cursor.getMonth() + 1);
             }
             return false;
+        }
+
+        /**
+         * Absence overlap with the calendar month of λήξη (return month).
+         * Multi-month absences: only this window is examined for missed ημιαργίες / RFM.
+         */
+        function getAbsenceReturnMonthScanWindow(pStartKey, pEndKey) {
+            const normStart = normalizeReasonDateKey(pStartKey);
+            const normEnd = normalizeReasonDateKey(pEndKey);
+            if (!normStart || !normEnd || normStart > normEnd) return null;
+            const endDate = new Date(normEnd + 'T00:00:00');
+            if (isNaN(endDate.getTime())) return null;
+            const monthStartKey = formatDateKey(new Date(endDate.getFullYear(), endDate.getMonth(), 1));
+            if (!monthStartKey) return null;
+            const scanStartKey = normStart > monthStartKey ? normStart : monthStartKey;
+            if (scanStartKey > normEnd) return null;
+            return { scanStartKey, scanEndKey: normEnd, monthStartKey };
+        }
+
+        /** Missed baseline ημιαργία only in the return-month absence window (not prior full months). */
+        function personMissedBaselineSemiInReturnMonth(person, groupNum, pStartKey, pEndKey) {
+            const win = getAbsenceReturnMonthScanWindow(pStartKey, pEndKey);
+            if (!win) return false;
+            return personMissedBaselineSemiDuringAbsence(person, groupNum, win.scanStartKey, win.scanEndKey);
         }
 
         /**
@@ -2809,39 +2834,67 @@
             });
         }
 
-        /** Confirmed only via returnFromMissing metadata on a saved semi assignment. */
-        function hasReturnFromMissingMetadataForPeriod(personName, groupNum, missingEndKey) {
+        /**
+         * Confirmed only via returnFromMissing metadata on a real semi assignment
+         * outside the absence window (forward ≥ return day, or backward before start).
+         * Never treats dates inside the absence, or reason-only rows without assignment, as covered.
+         */
+        function hasReturnFromMissingMetadataForPeriod(personName, groupNum, missingEndKey, absenceStartKey) {
             if (!personName || !groupNum || !missingEndKey) return false;
             const normEnd = normalizeReasonDateKey(missingEndKey);
+            const normStart = absenceStartKey ? normalizeReasonDateKey(absenceStartKey) : null;
             if (!normEnd) return false;
             const returnKey = typeof addDaysToDateKey === 'function' ? addDaysToDateKey(normEnd, 1) : null;
             const pNorm = normalizePersonKey(personName);
 
-            for (const dk in assignmentReasons || {}) {
-                if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
-                if (returnKey && dk >= returnKey) continue;
-                const gmap = assignmentReasons[dk]?.[groupNum] || assignmentReasons[dk]?.[String(groupNum)];
-                if (!gmap) continue;
-                for (const pn of Object.keys(gmap)) {
-                    if (normalizePersonKey(pn) !== pNorm) continue;
-                    const reason = gmap[pn];
-                    const metaEnd = normalizeReasonDateKey(reason?.meta?.missingEnd);
-                    if (reason?.meta?.returnFromMissing && metaEnd === normEnd) return true;
-                }
-            }
+            const isValidRfmPlacementDate = (dk) => {
+                if (!dk || !/^\d{4}-\d{2}-\d{2}$/.test(dk)) return false;
+                // Still absent — cannot be a fulfilled return placement
+                if (normStart && dk >= normStart && dk <= normEnd) return false;
+                if (!normStart && dk <= normEnd) return false;
+                // Forward after return, or backward before absence start
+                if (returnKey && dk >= returnKey) return true;
+                if (normStart && dk < normStart) return true;
+                return false;
+            };
 
             const semiStores = [semiNormalAssignments];
             if (typeof calculationSteps !== 'undefined' && calculationSteps?.finalSemiAssignments) {
                 semiStores.push(calculationSteps.finalSemiAssignments);
             }
+
+            const personAssignedOnSemiDate = (dk) => {
+                for (const store of semiStores) {
+                    if (!store || typeof store !== 'object') continue;
+                    const assigned = getSemiAssignedPersonFromStore(store, dk, groupNum);
+                    if (assigned && normalizePersonKey(assigned) === pNorm) return true;
+                }
+                return false;
+            };
+
             for (const store of semiStores) {
                 if (!store || typeof store !== 'object') continue;
                 for (const dk in store) {
-                    if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
-                    if (returnKey && dk >= returnKey) continue;
+                    if (!isValidRfmPlacementDate(dk)) continue;
                     const assigned = getSemiAssignedPersonFromStore(store, dk, groupNum);
                     if (!assigned || normalizePersonKey(assigned) !== pNorm) continue;
                     const reason = getAssignmentReason(dk, groupNum, personName);
+                    const metaEnd = normalizeReasonDateKey(reason?.meta?.missingEnd);
+                    if (reason?.meta?.returnFromMissing && !reason?.meta?.semiReturnFulfilledSkip && metaEnd === normEnd) {
+                        return true;
+                    }
+                }
+            }
+
+            for (const dk in assignmentReasons || {}) {
+                if (!isValidRfmPlacementDate(dk)) continue;
+                if (!personAssignedOnSemiDate(dk)) continue;
+                const gmap = assignmentReasons[dk]?.[groupNum] || assignmentReasons[dk]?.[String(groupNum)];
+                if (!gmap) continue;
+                for (const pn of Object.keys(gmap)) {
+                    if (normalizePersonKey(pn) !== pNorm) continue;
+                    const reason = gmap[pn];
+                    if (reason?.meta?.semiReturnFulfilledSkip) continue;
                     const metaEnd = normalizeReasonDateKey(reason?.meta?.missingEnd);
                     if (reason?.meta?.returnFromMissing && metaEnd === normEnd) return true;
                 }
@@ -2849,51 +2902,21 @@
             return false;
         }
 
-        /** True when person already received return-from-missing placement for this absence period (e.g. backward Friday in prior month). */
+        /** True when person already received a real return-from-missing semi for this absence period. */
         function hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, missingEndKey, absenceStartKey) {
             if (!personName || !groupNum || !missingEndKey) return false;
             const normEnd = normalizeReasonDateKey(missingEndKey);
             const normStart = absenceStartKey ? normalizeReasonDateKey(absenceStartKey) : null;
             if (!normEnd) return false;
             if (!personOwnsMissingPeriod(personName, groupNum, normStart, normEnd)) return false;
-            if (!personMissedBaselineSemiDuringAbsence(personName, groupNum, normStart, normEnd)) return false;
 
-            if (hasReturnFromMissingMetadataForPeriod(personName, groupNum, normEnd)) return true;
+            // Multi-month: only return-month misses count; otherwise full absence window
+            const missedInScope = absenceCoversAnyFullCalendarMonth(normStart, normEnd)
+                ? personMissedBaselineSemiInReturnMonth(personName, groupNum, normStart, normEnd)
+                : personMissedBaselineSemiDuringAbsence(personName, groupNum, normStart, normEnd);
+            if (!missedInScope) return false;
 
-            if (!normStart) return false;
-
-            const sortedSemi =
-                typeof calculationSteps !== 'undefined' && Array.isArray(calculationSteps?.dayTypeLists?.semi)
-                    ? [...calculationSteps.dayTypeLists.semi].sort()
-                    : Object.keys(semiNormalAssignments || {})
-                          .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k))
-                          .sort();
-            const backwardTarget = getBackwardSemiReturnDateKey(normStart, sortedSemi);
-            if (!backwardTarget) return false;
-
-            const semiStores = [semiNormalAssignments];
-            if (typeof calculationSteps !== 'undefined' && calculationSteps?.finalSemiAssignments) {
-                semiStores.push(calculationSteps.finalSemiAssignments);
-            }
-            const pNorm = normalizePersonKey(personName);
-            for (const store of semiStores) {
-                const assigned = getSemiAssignedPersonFromStore(store, backwardTarget, groupNum);
-                if (!assigned || normalizePersonKey(assigned) !== pNorm) continue;
-                if (typeof buildExpectedSemiPersonMapForCalendarMonth === 'function') {
-                    const dt = new Date(backwardTarget + 'T00:00:00');
-                    const expectedMap = buildExpectedSemiPersonMapForCalendarMonth(
-                        dt.getFullYear(),
-                        dt.getMonth(),
-                        groupNum
-                    );
-                    const baselineExpected = expectedMap[backwardTarget];
-                    if (!baselineExpected || normalizePersonKey(baselineExpected) === pNorm) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-            return false;
+            return hasReturnFromMissingMetadataForPeriod(personName, groupNum, normEnd, normStart);
         }
 
         function getFulfilledSemiReturnSkipContext(person, groupNum, calcStartKey) {
@@ -2909,6 +2932,8 @@
                 const pEndKey = inputValueToDateKey(period?.end);
                 if (!pStartKey || !pEndKey) continue;
                 if (pEndKey < prevMonthStartKey || pEndKey > prevMonthEndKey) continue;
+                // Long absence covering full month(s): return-month RFM must not skip next month's series turn
+                if (absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey)) continue;
                 if (!personMissedBaselineSemiDuringAbsence(person, groupNum, pStartKey, pEndKey)) continue;
                 if (!hasReturnFromMissingAlreadyPlacedForPeriod(person, groupNum, pEndKey, pStartKey)) continue;
                 return { absenceEndKey: pEndKey, absenceStartKey: pStartKey };
@@ -2927,11 +2952,10 @@
                 `Ο/Η ${replacementPerson} ανατέθηκε αντί του/της ${skippedPerson} στις ${dateStr}` +
                 (dayName ? ` ημέρα ${dayName}` : '') +
                 ` επειδή ο/η ${skippedPerson} είχε ήδη καλύψει την ημιαργία απουσίας` +
-                (endStr ? ` (λήξη ${endStr})` : '') +
+                (endStr ? ` (λήξη απουσίας ${endStr})` : '') +
                 ` στον προηγούμενο μήνα.`;
             storeAssignmentReason(dateKey, groupNum, replacementPerson, 'skip', reason, skippedPerson, null, {
                 semiReturnFulfilledSkip: true,
-                returnFromMissing: true,
                 missingEnd: absenceEndKey || null
             });
         }
@@ -12382,22 +12406,8 @@
                                 }
                                 continue;
                             }
-                            if (absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey)) {
-                                if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
-                                    dutySemiDebug.recordAbsentPlacement({
-                                        groupNum,
-                                        personName,
-                                        absenceEndKey: pEndKey,
-                                        missingRangeStr: formatDDMMYYYYSemiRun(pStartKey) + ' - ' + formatDDMMYYYYSemiRun(pEndKey),
-                                        status: 'skipped',
-                                        reasonCode: 'RETURN_WHOLE_CALENDAR_MONTH',
-                                        message:
-                                            `Απουσία καλύπτει ολόκληρο(ους) ημερολογιακό(ύς) μήνα(ες) — χωρίς ειδική τοποθέτηση· ` +
-                                            `ημιαργία όταν ξαναέρθει η σειρά στη ροή.`
-                                    });
-                                }
-                                continue;
-                            }
+                            // Multi-month absences: scan window is already return-month only.
+                            // If a ημιαργία was missed in that window, allow RFM; otherwise earlier continue.
                             if (hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, pEndKey, pStartKey)) {
                                 if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                                     dutySemiDebug.recordAbsentPlacement({
@@ -13334,8 +13344,7 @@
                                 const pStartKey = inputValueToDateKey(period?.start);
                                 const pEndKey = inputValueToDateKey(period?.end);
                                 if (!pStartKey || !pEndKey) continue;
-                                // Whole-month absence: no return-from-missing — wait for basic-series turn
-                                if (absenceCoversAnyFullCalendarMonth(pStartKey, pEndKey)) continue;
+                                // Multi-month: still evaluate RFM using return-month scan only (below).
                                 // Allow periods that ended within calculation range OR in the month immediately before calcStartKey
                                 // (e.g., if calculating March, also check periods ending in February)
                                 const pEndDate = new Date(pEndKey + 'T00:00:00');
