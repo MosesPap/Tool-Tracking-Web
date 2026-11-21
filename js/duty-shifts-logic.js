@@ -15078,25 +15078,27 @@
             // Track baseline assignments for this preview to detect cascading shifts
             const baselineNormalByDate = {}; // dateKey -> { groupNum -> personName }
 
-            /** Stable normal roster for cursor: keep εξαίρεση in-list (skip via isSkippedInBasicRotation). */
+            /**
+             * Normal cursor roster must match UI νο. order (getSortedGroupListForRotation).
+             * getListOrderAtDate can merge a stale schedule that places #12/#13 AFTER #14/#15
+             * (runtime: after #11 → excluded ΟΜΠΡΑΙΕΝ → #14), so baseline «anchors» on #14.
+             * Keep εξαίρεση in-list; skip them only via isSkippedInBasicRotation.
+             */
             const getNormalGroupPeopleForRotation = (groupNum, dateKey) => {
                 const dk = dateKey || null;
-                if (typeof getListOrderAtDate === 'function') {
-                    let order = getListOrderAtDate(groupNum, 'normal', dk) || [];
-                    const mode3 =
-                        typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
-                    if (!mode3 && typeof getPersonHomeGroupAtDate === 'function' && dk) {
-                        order = order.filter(
-                            (p) => getPersonHomeGroupAtDate(p, dk) === groupNum
-                        );
-                    }
-                    return order;
+                let order =
+                    (typeof getSortedGroupListForRotation === 'function'
+                        ? getSortedGroupListForRotation(groupNum, 'normal')
+                        : null) ||
+                    groups?.[groupNum]?.normal ||
+                    [];
+                order = Array.isArray(order) ? order.slice() : [];
+                const mode3 =
+                    typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
+                if (!mode3 && typeof getPersonHomeGroupAtDate === 'function' && dk) {
+                    order = order.filter((p) => getPersonHomeGroupAtDate(p, dk) === groupNum);
                 }
-                const gd =
-                    (typeof groupsForDuty === 'function'
-                        ? groupsForDuty(groupNum, dateKey)
-                        : groups[groupNum]) || { normal: [] };
-                return gd.normal || [];
+                return order;
             };
             
             // Check for normal days
@@ -15867,8 +15869,8 @@
                                         },
                                         body: JSON.stringify({
                                             sessionId: '15d095',
-                                            runId: 'pre-fix',
-                                            hypothesisId: 'A-E',
+                                            runId: 'post-fix',
+                                            hypothesisId: 'F-list-order',
                                             location: 'duty-shifts-logic.js:normal-baseline',
                                             message: 'g2 normal baseline slot',
                                             data: {
