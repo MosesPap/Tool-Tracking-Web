@@ -15830,37 +15830,6 @@
                                     : null;
 
                             assignedPerson = originalRotationPerson;
-                            // #region agent log
-                            var _dbgG2NormalSlot = null;
-                            if (
-                                groupNum === 2 &&
-                                typeof dateKey === 'string' &&
-                                dateKey >= '2026-12-14' &&
-                                dateKey <= '2026-12-22'
-                            ) {
-                                _dbgG2NormalSlot = {
-                                    dateKey: dateKey,
-                                    rotPos: rotationPosition,
-                                    baseline: originalRotationPerson,
-                                    baselineUi:
-                                        typeof getSortedGroupListForRotation === 'function'
-                                            ? (getSortedGroupListForRotation(2, 'normal') || []).findIndex(
-                                                  (p) => normRot(p) === normRot(originalRotationPerson)
-                                              ) + 1
-                                            : null,
-                                    baselineMissing: !!(
-                                        originalRotationPerson &&
-                                        isPersonMissingOnDate(
-                                            originalRotationPerson,
-                                            2,
-                                            date,
-                                            'normal'
-                                        )
-                                    ),
-                                    precomputedFinal: precomputedFinal || null
-                                };
-                            }
-                            // #endregion
                             
                             // Initialize assigned people tracking for this group if needed
                             if (!assignedPeoplePreview[monthKey][groupNum]) {
@@ -15890,6 +15859,10 @@
 
                             // Final-only replacement when baseline cannot serve (disabled / absent / E+3).
                             // Does NOT advance the basic series past intermediate people.
+                            // #region agent log
+                            let _dbgE3Skipped = [];
+                            let _dbgReplacementIndex = null;
+                            // #endregion
                             if (baselineIsDisabled || baselineIsMissing || baselineTooSoonAfterReturn) {
                                 let foundReplacement = false;
                                 const tryCandidate = (candidate, idx) => {
@@ -15910,6 +15883,9 @@
                                             dateKey
                                         )
                                     ) {
+                                        // #region agent log
+                                        _dbgE3Skipped.push({ name: candidate, idx: idx });
+                                        // #endregion
                                         return false;
                                     }
                                     if (
@@ -15929,6 +15905,9 @@
                                     }
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
+                                    // #region agent log
+                                    _dbgReplacementIndex = idx;
+                                    // #endregion
                                     wasDisabledPersonSkipped = true;
                                     wasReplacedFromBaseline = !!(
                                         precomputedFinal && precomputedFinal === candidate
@@ -15960,6 +15939,9 @@
                                     if (reuseCand) {
                                         assignedPerson = reuseCand;
                                         replacementIndex = groupPeople.indexOf(reuseCand);
+                                        // #region agent log
+                                        _dbgReplacementIndex = replacementIndex;
+                                        // #endregion
                                         wasDisabledPersonSkipped = true;
                                         foundReplacement = true;
                                     }
@@ -15992,86 +15974,6 @@
                                     }
                                 }
                             }
-
-                            // #region agent log
-                            if (_dbgG2NormalSlot) {
-                                const absEnd =
-                                    typeof getLatestAbsenceEndBeforeDateKey === 'function' &&
-                                    assignedPerson
-                                        ? getLatestAbsenceEndBeforeDateKey(
-                                              assignedPerson,
-                                              2,
-                                              dateKey
-                                          )
-                                        : null;
-                                const e3 =
-                                    absEnd && typeof addCalendarDaysToDateKey === 'function'
-                                        ? addCalendarDaysToDateKey(absEnd, 3)
-                                        : null;
-                                const weekendTooSoon =
-                                    typeof isWeekendDutyTooSoonAfterAbsenceReturn === 'function' &&
-                                    assignedPerson
-                                        ? isWeekendDutyTooSoonAfterAbsenceReturn(
-                                              assignedPerson,
-                                              2,
-                                              dateKey
-                                          )
-                                        : null;
-                                const uiNo = (name) => {
-                                    if (!name || typeof getSortedGroupListForRotation !== 'function')
-                                        return null;
-                                    const i = (getSortedGroupListForRotation(2, 'normal') || []).findIndex(
-                                        (p) => normRot(p) === normRot(name)
-                                    );
-                                    return i >= 0 ? i + 1 : null;
-                                };
-                                fetch(
-                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                    {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'X-Debug-Session-Id': '15d095'
-                                        },
-                                        body: JSON.stringify({
-                                            sessionId: '15d095',
-                                            runId: 'post-fix',
-                                            hypothesisId: 'E-normal-e3',
-                                            location: 'duty-shifts-logic.js:g2-dec16-22',
-                                            message: 'g2 normal baseline vs final + E+3',
-                                            data: {
-                                                ..._dbgG2NormalSlot,
-                                                finalPerson: assignedPerson,
-                                                finalUi: uiNo(assignedPerson),
-                                                wasReplaced:
-                                                    !!(
-                                                        assignedPerson &&
-                                                        originalRotationPerson &&
-                                                        normRot(assignedPerson) !==
-                                                            normRot(originalRotationPerson)
-                                                    ),
-                                                assignedPersonAbsenceEnd: absEnd,
-                                                ePlus3: e3,
-                                                withinE3Window: !!(e3 && dateKey <= e3),
-                                                weekendTooSoonCheck: weekendTooSoon,
-                                                normalTryCandidateSkipsE3: false,
-                                                baselineTooSoonAfterReturn: !!(
-                                                    originalRotationPerson &&
-                                                    typeof isWeekendDutyTooSoonAfterAbsenceReturn ===
-                                                        'function' &&
-                                                    isWeekendDutyTooSoonAfterAbsenceReturn(
-                                                        originalRotationPerson,
-                                                        groupNum,
-                                                        dateKey
-                                                    )
-                                                )
-                                            },
-                                            timestamp: Date.now()
-                                        })
-                                    }
-                                ).catch(() => {});
-                            }
-                            // #endregion
 
                             if (
                                 existingManualAlternate &&
@@ -16243,6 +16145,57 @@
                                     globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                 }
                             }
+
+                            // #region agent log
+                            if (
+                                groupNum === 2 &&
+                                typeof dateKey === 'string' &&
+                                dateKey >= '2026-12-16' &&
+                                dateKey <= '2026-12-22'
+                            ) {
+                                const uiNo = (name) => {
+                                    if (!name) return null;
+                                    const i = groupPeople.findIndex(
+                                        (p) => normRot(p) === normRot(name)
+                                    );
+                                    return i >= 0 ? i + 1 : null;
+                                };
+                                const nextPos = globalNormalRotationPosition[groupNum];
+                                fetch(
+                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                    {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-Debug-Session-Id': '15d095'
+                                        },
+                                        body: JSON.stringify({
+                                            sessionId: '15d095',
+                                            runId: 'pre-fix',
+                                            hypothesisId: 'A-D',
+                                            location: 'duty-shifts-logic.js:e3-continuity',
+                                            message: 'g2 advance after E+3/replacement',
+                                            data: {
+                                                dateKey,
+                                                baselineUi: uiNo(originalRotationPerson),
+                                                baseline: originalRotationPerson,
+                                                finalUi: uiNo(assignedPerson),
+                                                finalPerson: assignedPerson,
+                                                e3Skipped: _dbgE3Skipped,
+                                                replacementIndex: _dbgReplacementIndex,
+                                                advancedFromBaselineSlot: rotationPosition,
+                                                nextPos,
+                                                nextPerson: groupPeople[nextPos] || null,
+                                                nextUi: uiNo(groupPeople[nextPos] || null),
+                                                lastBaselineAnchor:
+                                                    globalNormalLastBaselinePerson[groupNum] || null
+                                            },
+                                            timestamp: Date.now()
+                                        })
+                                    }
+                                ).catch(() => {});
+                            }
+                            // #endregion
                             
                             // Store baseline assignment for comparison (original rotation person, not replacement)
                             // Note: baselineNormalByDate may already have a replacement from pre-processing,
