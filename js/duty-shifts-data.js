@@ -1937,11 +1937,75 @@
             return keys;
         }
 
-        /** Last person in previous month for continuity (baseline after manual alternate, not replacement). */
+        /**
+         * Last FINAL continuity person on any date strictly before beforeDateKey (any prior month).
+         * Used so Dec specials continue after e.g. October's last special — not reset to list head
+         * when the previous calendar month had no specials.
+         */
+        function getLastFinalContinuityPersonBeforeDate(dayTypeCategory, beforeDateKey, groupNum) {
+            if (!beforeDateKey || !groupNum) return null;
+            const keys = new Set();
+            const addFrom = (obj) => {
+                if (!obj || typeof obj !== 'object') return;
+                for (const dk in obj) {
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+                    if (dk >= beforeDateKey) continue;
+                    keys.add(dk);
+                }
+            };
+            const inProgress =
+                (typeof calculationSteps !== 'undefined' &&
+                    calculationSteps &&
+                    calculationSteps._inProgressAssignmentsByType &&
+                    calculationSteps._inProgressAssignmentsByType[dayTypeCategory]) ||
+                null;
+            addFrom(inProgress);
+            addFrom(getAssignmentsForDayType(dayTypeCategory));
+            if (!keys.size) return null;
+            let lastKey = null;
+            for (const dk of keys) {
+                if (dayTypeCategory !== 'normal' && getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory) {
+                    continue;
+                }
+                const assigned = getPersonOnDateForRotationContinuityLookup(dayTypeCategory, dk, groupNum);
+                if (!assigned) continue;
+                if (!lastKey || dk > lastKey) lastKey = dk;
+            }
+            if (!lastKey) return null;
+            const assigned = getPersonOnDateForRotationContinuityLookup(dayTypeCategory, lastKey, groupNum);
+            if (!assigned) return null;
+            const store =
+                dayTypeCategory === 'normal'
+                    ? buildNormalRotationContinuityStore()
+                    : getAssignmentsForDayType(dayTypeCategory);
+            if (
+                dayTypeCategory === 'normal' &&
+                typeof getPersonForNormalRotationContinuity === 'function'
+            ) {
+                return getPersonForNormalRotationContinuity(lastKey, groupNum, assigned, store);
+            }
+            if (typeof getPersonForRotationContinuity === 'function') {
+                return getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
+            }
+            return assigned;
+        }
+
+        /** Last person in previous calendar month for continuity (final assignment). */
         function getLastAssignmentContinuityPersonForPreviousMonth(dayTypeCategory, dateInCurrentMonth, groupNum) {
             const prevMonthKey = getPreviousMonthKeyFromDate(dateInCurrentMonth);
             const dateKeys = collectDateKeysForRotationContinuityScan(dayTypeCategory, prevMonthKey);
-            if (!dateKeys.size) return null;
+            if (!dateKeys.size) {
+                // No duty of this type in M-1 — walk further back from the 1st of current month.
+                const monthStartKey =
+                    typeof formatDateKey === 'function'
+                        ? formatDateKey(
+                              new Date(dateInCurrentMonth.getFullYear(), dateInCurrentMonth.getMonth(), 1)
+                          )
+                        : null;
+                return monthStartKey
+                    ? getLastFinalContinuityPersonBeforeDate(dayTypeCategory, monthStartKey, groupNum)
+                    : null;
+            }
             let lastKey = null;
             for (const dk of dateKeys) {
                 if (dayTypeCategory !== 'normal' && getDutyCategoryForDateKeyLocal(dk) !== dayTypeCategory) continue;
@@ -1962,7 +2026,6 @@
             if (typeof getPersonForRotationContinuity === 'function') {
                 return getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
             }
-            // Final-continuity: keep assigned (επιλαχών / stand-in), do not rewrite to baseline.
             return assigned;
         }
 
@@ -2608,14 +2671,21 @@
                 return 0;
             }
 
-            // Final-continuity: seed only from final assignments / stored continuity (never rotationBaseline).
+            // Final-continuity: any prior final before this month (not only M-1), then stored positions.
+            const monthStartKey =
+                typeof formatDateKey === 'function'
+                    ? formatDateKey(new Date(dateInMonth.getFullYear(), dateInMonth.getMonth(), 1))
+                    : null;
+            const fromAnyPrior = monthStartKey
+                ? getLastFinalContinuityPersonBeforeDate(dayTypeCategory, monthStartKey, groupNum)
+                : null;
             const fromAssignments = getLastAssignmentContinuityPersonForPreviousMonth(
                 dayTypeCategory,
                 dateInMonth,
                 groupNum
             );
             const fromStored = getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-            const lastContinuityPerson = fromAssignments || fromStored;
+            const lastContinuityPerson = fromAnyPrior || fromAssignments || fromStored;
             const continuityIdx = findIdx(lastContinuityPerson);
             if (lastContinuityPerson && continuityIdx >= 0) {
                 let cursor = (continuityIdx + 1) % len;
@@ -2741,6 +2811,9 @@
             return cursor;
         }
         window.computeRotationPositionAtMonthStart = computeRotationPositionAtMonthStart;
+        window.getLastFinalContinuityPersonBeforeDate = getLastFinalContinuityPersonBeforeDate;
+        window.getLastAssignmentContinuityPersonForPreviousMonth =
+            getLastAssignmentContinuityPersonForPreviousMonth;
 
         /** Refresh lastRotationPositions for a month/group from assignments (baseline continuity after manual alternate). */
         function refreshLastRotationContinuityForMonth(dayTypeCategory, monthKey, groupNum) {
@@ -2788,6 +2861,14 @@
         function getRotationSeedPersonForMonthStart(dayTypeCategory, monthStartDate, groupNum) {
             const monthSeedKey =
                 monthStartDate && typeof formatDateKey === 'function' ? formatDateKey(monthStartDate) : null;
+            if (monthSeedKey) {
+                const fromAnyPrior = getLastFinalContinuityPersonBeforeDate(
+                    dayTypeCategory,
+                    monthSeedKey,
+                    groupNum
+                );
+                if (fromAnyPrior) return fromAnyPrior;
+            }
             const groupData =
                 typeof groupsForDuty === 'function'
                     ? groupsForDuty(groupNum, monthSeedKey)
@@ -2795,7 +2876,7 @@
             const groupPeople = groupData?.[dayTypeCategory] || groups[groupNum]?.[dayTypeCategory] || [];
             if (groupPeople.length > 0) {
                 const cursor = computeRotationPositionAtMonthStart(dayTypeCategory, monthStartDate, groupNum, groupPeople);
-                if (Number.isFinite(cursor)) {
+                if (Number.isFinite(cursor) && cursor > 0) {
                     const len = groupPeople.length;
                     return groupPeople[(cursor - 1 + len) % len] || null;
                 }

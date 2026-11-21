@@ -5111,29 +5111,24 @@
                 // For missing replacement: keep a simulated set of special assignments so hasConsecutiveDuty can validate neighbors.
                 const simulatedSpecialAssignmentsForConflict = {}; // monthKey -> { groupNum -> Set(person) }
                 
-                // Initialize global rotation from last FINAL special before the period (not rotationBaseline).
+                // Initialize from last FINAL special before the period (any prior month — not list head).
                 const globalSpecialRotationPosition = {}; // groupNum -> position in group list
                 const firstDateKey = sortedSpecial.length > 0 ? sortedSpecial[0] : null;
-                const finalSpecialKeysBeforePeriod = firstDateKey
-                    ? Object.keys(specialHolidayAssignments || {})
-                          .filter((dk) => dk < firstDateKey)
-                          .sort()
-                          .reverse()
-                    : [];
-                const getFinalSpecialPersonForGroup = (dateKey, g) => {
-                    const raw = specialHolidayAssignments?.[dateKey];
-                    if (!raw) return null;
-                    if (
-                        typeof raw === 'object' &&
-                        !Array.isArray(raw) &&
-                        typeof extractGroupAssignmentsMap === 'function'
-                    ) {
-                        return extractGroupAssignmentsMap(raw)[g] || null;
+                const findSpecialListIndex = (groupPeople, personName) => {
+                    if (!personName || !groupPeople?.length) return -1;
+                    const norm =
+                        typeof normalizePersonKey === 'function'
+                            ? normalizePersonKey
+                            : (s) => String(s || '').trim();
+                    const n = norm(personName);
+                    let i = groupPeople.indexOf(personName);
+                    if (i >= 0) return i;
+                    i = groupPeople.findIndex((p) => norm(p) === n);
+                    if (i >= 0) return i;
+                    if (typeof personNamesMatchIgnoringRank === 'function') {
+                        i = groupPeople.findIndex((p) => personNamesMatchIgnoringRank(p, personName));
                     }
-                    if (typeof parseAssignedPersonForGroupFromAssignment === 'function') {
-                        return parseAssignedPersonForGroupFromAssignment(raw, g);
-                    }
-                    return null;
+                    return i;
                 };
                 for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
@@ -5156,63 +5151,44 @@
                                 isAprilStart ? 'April start' : 'February 2026'
                             }`
                         );
-                    } else if (firstDateKey && typeof getRotationSeedPersonForMonthStart === 'function') {
-                        const seedDate = new Date(firstDateKey + 'T00:00:00');
-                        const seedPerson = getRotationSeedPersonForMonthStart('special', seedDate, groupNum);
-                        const seedIdx = seedPerson ? groupPeople.indexOf(seedPerson) : -1;
-                        if (seedPerson && seedIdx >= 0) {
-                            globalSpecialRotationPosition[groupNum] = (seedIdx + 1) % rotationDays;
-                            console.log(`[SPECIAL ROTATION] From manual-alternate seed ${seedPerson} (index ${seedIdx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`);
-                        } else if (typeof computeRotationPositionAtMonthStart === 'function') {
-                            globalSpecialRotationPosition[groupNum] =
-                                computeRotationPositionAtMonthStart(
-                                    'special',
-                                    seedDate,
-                                    groupNum,
-                                    groupPeople
-                                ) % rotationDays;
+                        continue;
+                    }
+
+                    let seeded = false;
+                    if (firstDateKey && typeof getLastFinalContinuityPersonBeforeDate === 'function') {
+                        const lastFinalPerson = getLastFinalContinuityPersonBeforeDate(
+                            'special',
+                            firstDateKey,
+                            groupNum
+                        );
+                        const idx = findSpecialListIndex(groupPeople, lastFinalPerson);
+                        if (lastFinalPerson && idx >= 0) {
+                            globalSpecialRotationPosition[groupNum] = (idx + 1) % rotationDays;
                             console.log(
-                                `[SPECIAL ROTATION] Seed person ${seedPerson || '(none)'} not in group ${groupNum} list — recovered position ${globalSpecialRotationPosition[groupNum]}`
+                                `[SPECIAL ROTATION] Continue after final ${lastFinalPerson} (index ${idx}) → next ${globalSpecialRotationPosition[groupNum]} for group ${groupNum}`
                             );
-                        } else if (finalSpecialKeysBeforePeriod.length > 0) {
-                            let seeded = false;
-                            for (const lastFinalDk of finalSpecialKeysBeforePeriod) {
-                                const lastFinalPerson = getFinalSpecialPersonForGroup(lastFinalDk, groupNum);
-                                const idx = lastFinalPerson ? groupPeople.indexOf(lastFinalPerson) : -1;
-                                if (idx >= 0) {
-                                    globalSpecialRotationPosition[groupNum] = (idx + 1) % rotationDays;
-                                    console.log(
-                                        `[SPECIAL ROTATION] From final ${lastFinalDk} person ${lastFinalPerson} (index ${idx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`
-                                    );
-                                    seeded = true;
-                                    break;
-                                }
-                            }
-                            if (!seeded) globalSpecialRotationPosition[groupNum] = 0;
-                        } else {
-                            globalSpecialRotationPosition[groupNum] = 0;
+                            seeded = true;
                         }
-                    } else if (finalSpecialKeysBeforePeriod.length > 0) {
-                        let seeded = false;
-                        for (const lastFinalDk of finalSpecialKeysBeforePeriod) {
-                            const lastFinalPerson = getFinalSpecialPersonForGroup(lastFinalDk, groupNum);
-                            const idx = lastFinalPerson ? groupPeople.indexOf(lastFinalPerson) : -1;
-                            if (idx >= 0) {
-                                globalSpecialRotationPosition[groupNum] = (idx + 1) % rotationDays;
-                                console.log(
-                                    `[SPECIAL ROTATION] From final ${lastFinalDk} person ${lastFinalPerson} (index ${idx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`
-                                );
-                                seeded = true;
-                                break;
-                            }
-                        }
-                        if (!seeded) {
-                            globalSpecialRotationPosition[groupNum] = 0;
-                            console.log(`[SPECIAL ROTATION] No final person found for group ${groupNum}, starting at 0`);
-                        }
-                    } else {
+                    }
+                    if (!seeded && firstDateKey && typeof computeRotationPositionAtMonthStart === 'function') {
+                        const seedDate = new Date(firstDateKey + 'T00:00:00');
+                        globalSpecialRotationPosition[groupNum] =
+                            computeRotationPositionAtMonthStart(
+                                'special',
+                                seedDate,
+                                groupNum,
+                                groupPeople
+                            ) % rotationDays;
+                        console.log(
+                            `[SPECIAL ROTATION] Month-start cursor ${globalSpecialRotationPosition[groupNum]} for group ${groupNum}`
+                        );
+                        seeded = true;
+                    }
+                    if (!seeded) {
                         globalSpecialRotationPosition[groupNum] = 0;
-                        console.log(`[SPECIAL ROTATION] No final specials before period for group ${groupNum}, starting at 0`);
+                        console.log(
+                            `[SPECIAL ROTATION] No prior final for group ${groupNum} — start at 0`
+                        );
                     }
                 }
 
