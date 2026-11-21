@@ -6591,9 +6591,9 @@
         }
 
         /**
-         * Μετά τη λήξη απουσίας: όχι αργία/ΣΚ μέχρι και το E+3
+         * Μετά τη λήξη απουσίας: όχι υπηρεσία μέχρι και το E+3
          * (λήξη E → πρώτη επιλέξιμη ημερομηνία E+4, αυστηρά > E+3).
-         * Δεν αλλάζει καθημερινές/ειδικές.
+         * Χρησιμοποιείται σε ΣΚ/αργίες και σε καθημερινές (αντικαταστάτης / baseline).
          */
         function addCalendarDaysToDateKey(dateKey, days) {
             if (!dateKey || typeof dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return null;
@@ -15399,6 +15399,16 @@
                             ) {
                                 continue;
                             }
+                            if (
+                                typeof isWeekendDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                isWeekendDutyTooSoonAfterAbsenceReturn(
+                                    cand,
+                                    groupNumLocal,
+                                    dateKeyLocal
+                                )
+                            ) {
+                                continue;
+                            }
                             const lastKey = assignedMapLocal?.[cand];
                             if (lastKey) {
                                 const lastDate = new Date(lastKey + 'T00:00:00');
@@ -15868,10 +15878,19 @@
                             const baselineIsMissing =
                                 originalRotationPerson &&
                                 isPersonMissingOnDate(originalRotationPerson, groupNum, date, 'normal');
+                            // E+3 after absence return: same cool-down as weekend (first eligible E+4).
+                            const baselineTooSoonAfterReturn =
+                                originalRotationPerson &&
+                                typeof isWeekendDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                isWeekendDutyTooSoonAfterAbsenceReturn(
+                                    originalRotationPerson,
+                                    groupNum,
+                                    dateKey
+                                );
 
-                            // Final-only replacement when baseline person cannot serve (disabled or absent).
+                            // Final-only replacement when baseline cannot serve (disabled / absent / E+3).
                             // Does NOT advance the basic series past intermediate people.
-                            if (baselineIsDisabled || baselineIsMissing) {
+                            if (baselineIsDisabled || baselineIsMissing || baselineTooSoonAfterReturn) {
                                 let foundReplacement = false;
                                 const tryCandidate = (candidate, idx) => {
                                     if (!candidate || candidate === originalRotationPerson) return false;
@@ -15883,6 +15902,16 @@
                                     }
                                     if (isPersonDisabledForDuty(candidate, groupNum, 'normal')) return false;
                                     if (isPersonMissingOnDate(candidate, groupNum, date, 'normal')) return false;
+                                    if (
+                                        typeof isWeekendDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                        isWeekendDutyTooSoonAfterAbsenceReturn(
+                                            candidate,
+                                            groupNum,
+                                            dateKey
+                                        )
+                                    ) {
+                                        return false;
+                                    }
                                     if (
                                         assignedPeoplePreview[monthKey][groupNum] &&
                                         assignedPeoplePreview[monthKey][groupNum][candidate]
@@ -16006,8 +16035,8 @@
                                         },
                                         body: JSON.stringify({
                                             sessionId: '15d095',
-                                            runId: 'pre-fix',
-                                            hypothesisId: 'A-E',
+                                            runId: 'post-fix',
+                                            hypothesisId: 'E-normal-e3',
                                             location: 'duty-shifts-logic.js:g2-dec16-22',
                                             message: 'g2 normal baseline vs final + E+3',
                                             data: {
@@ -16025,7 +16054,17 @@
                                                 ePlus3: e3,
                                                 withinE3Window: !!(e3 && dateKey <= e3),
                                                 weekendTooSoonCheck: weekendTooSoon,
-                                                normalTryCandidateSkipsE3: true
+                                                normalTryCandidateSkipsE3: false,
+                                                baselineTooSoonAfterReturn: !!(
+                                                    originalRotationPerson &&
+                                                    typeof isWeekendDutyTooSoonAfterAbsenceReturn ===
+                                                        'function' &&
+                                                    isWeekendDutyTooSoonAfterAbsenceReturn(
+                                                        originalRotationPerson,
+                                                        groupNum,
+                                                        dateKey
+                                                    )
+                                                )
                                             },
                                             timestamp: Date.now()
                                         })
