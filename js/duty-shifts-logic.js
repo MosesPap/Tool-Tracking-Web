@@ -3236,16 +3236,47 @@
                 (typeof getDutyCategoryForDateKey === 'function' ? getDutyCategoryForDateKey(dateKey) : 'normal');
 
             if (existingManualAlternate) {
-                // Apply saved επιλαχών on that date only — continuity after final is handled at advance time.
                 const bi = groupPeople.findIndex(p => norm(p) === norm(existingManualAlternate.baseline));
                 if (bi >= 0) {
                     rotationPosition = bi;
                     globalRotationPosition[groupNum] = rotationPosition;
                 }
+            } else if (deferState) {
+                const st = deferState[groupNum];
+                if (st?.person) {
+                    const dn = norm(st.person);
+                    const atDeferPerson =
+                        groupPeople[rotationPosition] && norm(groupPeople[rotationPosition]) === dn;
+                    if (atDeferPerson && dutyCat) {
+                        const dateInMonth = new Date(dateKey + 'T00:00:00');
+                        const latest =
+                            typeof getManualAlternateDeferFromPreviousMonth === 'function'
+                                ? getManualAlternateDeferFromPreviousMonth(dutyCat, dateInMonth, groupNum)
+                                : typeof findLatestManualAlternateInPreviousMonth === 'function'
+                                  ? findLatestManualAlternateInPreviousMonth(dutyCat, dateInMonth, groupNum)
+                                  : null;
+                        deferFulfillment = {
+                            skippedReplacement: st.person,
+                            baselinePerson: latest?.baselinePerson || null,
+                            sourceDateKey: latest?.dateKey || null,
+                            prevMonthKey:
+                                typeof getPreviousMonthKeyFromDate === 'function'
+                                    ? getPreviousMonthKeyFromDate(dateInMonth)
+                                    : null
+                        };
+                    }
+                    let guard = 0;
+                    while (
+                        guard++ <= rotationDays + 2 &&
+                        groupPeople[rotationPosition] &&
+                        norm(groupPeople[rotationPosition]) === dn
+                    ) {
+                        rotationPosition = (rotationPosition + 1) % rotationDays;
+                        delete deferState[groupNum];
+                    }
+                    globalRotationPosition[groupNum] = rotationPosition;
+                }
             }
-            // Final-continuity model: do NOT one-skip deferred επιλαχών on their next turn.
-            void deferState;
-            void dutyCat;
             return { rotationPosition, existingManualAlternate, deferFulfillment };
         }
 
@@ -3339,50 +3370,13 @@
             deferState,
             opts
         ) {
-            // Final-continuity model: advance after who actually served (or later of a swap pair).
+            // Basic series: always advance one slot from the baseline position.
+            // Final replacements (disabled/absent/swap) must not jump the rotation cursor.
+            void groupPeople;
+            void assignedPerson;
             void deferState;
-            const len = rotationDays || (groupPeople && groupPeople.length) || 0;
-            if (!len || !Array.isArray(groupPeople)) {
-                globalRotationPosition[groupNum] = ((rotationPosition || 0) + 1) % Math.max(len, 1);
-                return;
-            }
-            const norm = (s) =>
-                typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
-            const findIdx = (name) => {
-                if (!name) return -1;
-                const n = norm(name);
-                let i = groupPeople.indexOf(name);
-                if (i >= 0) return i;
-                return groupPeople.findIndex((p) => norm(p) === n);
-            };
-            let anchorPerson = assignedPerson || null;
-            // Paired swap: continue after the person lower on the list.
-            if (opts?.isSwapPair && assignedPerson && opts?.swapOtherPerson) {
-                anchorPerson = pickRotationLaterOfTwo(
-                    groupPeople,
-                    assignedPerson,
-                    opts.swapOtherPerson
-                );
-            }
-            let idx = findIdx(anchorPerson);
-            if (idx < 0) idx = Number.isFinite(rotationPosition) ? rotationPosition : 0;
-            globalRotationPosition[groupNum] = (idx + 1) % len;
-        }
-
-        /** Index after the person who should anchor continuity (final assignee). */
-        function nextRotationIndexAfterPerson(groupPeople, personName, fallbackIndex) {
-            const len = groupPeople?.length || 0;
-            if (!len) return 0;
-            const norm = (s) =>
-                typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
-            if (personName) {
-                const n = norm(personName);
-                let i = groupPeople.indexOf(personName);
-                if (i < 0) i = groupPeople.findIndex((p) => norm(p) === n);
-                if (i >= 0) return (i + 1) % len;
-            }
-            const fb = Number.isFinite(fallbackIndex) ? fallbackIndex : 0;
-            return (fb + 1) % len;
+            void opts;
+                globalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
         }
 
         /**
@@ -3434,35 +3428,34 @@
         }
 
         /**
-         * Final-continuity model (all duty types):
-         * - plain / absence / επιλαχών → continue after who actually served
-         * - swap A↔B → continue after whoever is later on the rotation list
+         * Person name to store in lastRotationPositions / month carry-over: after manual alternate (replacement for baseline),
+         * use baseline (swappedWith) so the next slot is B,C,E… not the replacement's index again.
+         * Mutual / semi holiday-conflict two-day swap: continue after both people who served
+         * (later on the rotation arc), so the partner is not immediately re-seeded next month.
          */
         function getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, assignmentsByDate) {
             if (!assignedPerson) return null;
-            const reason =
-                typeof getAssignmentReason === 'function'
-                    ? getAssignmentReason(dateKey, groupNum, assignedPerson)
-                    : null;
-            const resolveCat = () => {
-                const d = dateKey ? new Date(dateKey + 'T00:00:00') : null;
-                if (d && !isNaN(d.getTime()) && typeof getDayType === 'function') {
-                    const dt = getDayType(d);
-                    if (dt === 'weekend-holiday') return 'weekend';
-                    if (dt === 'special-holiday') return 'special';
-                    if (dt === 'normal-day') return 'normal';
-                    if (dt === 'semi-normal-day') return 'semi';
-                }
-                return 'semi';
-            };
-            const resolveInList = (name, cat) =>
-                typeof resolvePersonInGroupRotationList === 'function'
-                    ? resolvePersonInGroupRotationList(name, groupNum, cat) || name
-                    : name;
-
-            if (reason && reason.type === 'swap') {
-                const cat = resolveCat();
-                let otherPerson = reason.swappedWith || reason.meta?.displacedPerson || null;
+            const reason = getAssignmentReason(dateKey, groupNum, assignedPerson);
+            if (reason && reason.type === 'skip' && reason.meta && reason.meta.manualAlternateReplacement && reason.swappedWith) {
+                return reason.swappedWith;
+            }
+            // Day-modal manual assign: final person differs from calendar but baseline rotation slot unchanged.
+            if (reason && reason.type === 'skip' && reason.meta?.preserveBaseline) {
+                const bp = String(reason.meta?.baselinePerson || '').trim();
+                if (bp) return bp;
+            }
+            // Unavailable replacement (missing/disabled): basic series keeps the absent/disabled slot —
+            // continue after swappedWith (baseline), NOT after the stand-in (avoids anchoring on #14→#15).
+            if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
+                return reason.swappedWith;
+            }
+            // Two-person semi/weekend swap (αμοιβαία ή σύγκρουση ημιαργίας): και οι δύο έβγαλαν —
+            // συνέχεια μετά τον «μεταγενέστερο» στη λίστα, ώστε να μην ξαναμπεί ο εταίρος αμέσως.
+            if (
+                reason &&
+                reason.type === 'swap' &&
+                (reason.meta?.mutualTwoDaySwap || reason.meta?.semiConsecutiveHolidaySwap)
+            ) {
                 const otherKey =
                     (reason.meta?.otherDateKey && String(reason.meta.otherDateKey)) ||
                     (reason.meta?.semiConsecutiveHolidaySwap
@@ -3475,10 +3468,11 @@
                     (reason.swapPairId != null
                         ? findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey)
                         : null);
+                let otherPerson = null;
                 if (otherKey) {
-                    const fromStore = getSemiAssignedPersonFromStore(assignmentsByDate, otherKey, groupNum);
-                    if (fromStore) otherPerson = fromStore;
+                    otherPerson = getSemiAssignedPersonFromStore(assignmentsByDate, otherKey, groupNum);
                 }
+                if (!otherPerson && reason.swappedWith) otherPerson = reason.swappedWith;
                 if (
                     !otherPerson &&
                     reason.meta?.semiConsecutiveHolidaySwap &&
@@ -3497,22 +3491,93 @@
                 if (otherPerson) {
                     const people = getRotationListForContinuityDate(dateKey, groupNum);
                     const later = pickRotationLaterOfTwo(people, assignedPerson, otherPerson);
-                    if (later) return resolveInList(later, cat);
+                    if (later) {
+                        let cat = 'semi';
+                        const d = dateKey ? new Date(dateKey + 'T00:00:00') : null;
+                        if (d && !isNaN(d.getTime()) && typeof getDayType === 'function') {
+                            const dt = getDayType(d);
+                            if (dt === 'weekend-holiday') cat = 'weekend';
+                            else if (dt === 'special-holiday') cat = 'special';
+                            else if (dt === 'normal-day') cat = 'normal';
+                            else if (dt === 'semi-normal-day') cat = 'semi';
+                        }
+                        return typeof resolvePersonInGroupRotationList === 'function'
+                            ? resolvePersonInGroupRotationList(later, groupNum, cat) || later
+                            : later;
+                    }
                 }
-                return resolveInList(assignedPerson, cat);
+                return assignedPerson;
             }
-
-            // Absence, επιλαχών, preserveBaseline, plain: after the final person who served.
+            if (reason && reason.type === 'swap' && reason.swapPairId != null && !reason.meta?.mutualTwoDaySwap) {
+                if (reason.meta?.thursdaySpacing) {
+                    if (dateKey === reason.meta.thursdayDateKey) {
+                        const displaced = reason.meta.displacedPerson || reason.swappedWith;
+                        if (displaced) {
+                            return typeof resolvePersonInGroupRotationList === 'function'
+                                ? resolvePersonInGroupRotationList(displaced, groupNum, 'normal')
+                                : displaced;
+                        }
+                    }
+                    if (dateKey === reason.meta.partnerDateKey && reason.swappedWith) {
+                        return typeof resolvePersonInGroupRotationList === 'function'
+                            ? resolvePersonInGroupRotationList(reason.swappedWith, groupNum, 'normal')
+                            : reason.swappedWith;
+                    }
+                }
+                const otherKey = findSwapOtherDateKey(reason.swapPairId, groupNum, dateKey);
+                if (otherKey) {
+                    const swappedOutPerson = getSemiAssignedPersonFromStore(
+                        assignmentsByDate,
+                        otherKey,
+                        groupNum
+                    );
+                    if (swappedOutPerson) {
+                        return typeof resolvePersonInGroupRotationList === 'function'
+                            ? resolvePersonInGroupRotationList(swappedOutPerson, groupNum, 'normal') ||
+                                  swappedOutPerson
+                            : swappedOutPerson;
+                    }
+                }
+                // Fallback: ο βασικός της σειράς που ανταλλάχθηκε (όχι ο τελικός στην ημέρα)
+                if (reason.swappedWith) {
+                    return typeof resolvePersonInGroupRotationList === 'function'
+                        ? resolvePersonInGroupRotationList(reason.swappedWith, groupNum, 'normal') ||
+                              reason.swappedWith
+                        : reason.swappedWith;
+                }
+                if (reason.meta?.displacedPerson) {
+                    return typeof resolvePersonInGroupRotationList === 'function'
+                        ? resolvePersonInGroupRotationList(reason.meta.displacedPerson, groupNum, 'normal') ||
+                              reason.meta.displacedPerson
+                        : reason.meta.displacedPerson;
+                }
+            }
             return assignedPerson;
         }
 
-        /** Same final-continuity rules for καθημερινές. */
+        /**
+         * Continuity for normal (καθημερινές) month-to-month seed.
+         * - preserveBaseline / plain final: continue after who actually served on the calendar.
+         * - οποιοδήποτε swap (σύγκρουση, αμοιβαία, Ν Πέμπτη): συνέχεια μετά τον «βασικό» της
+         *   σειράς (αυτόν που βγήκε / displaced), όχι μετά τον τελικό που μπήκε με αλλαγή.
+         *   π.χ. Δεκ: #15↔#14 στην τελευταία μέρα → Ιαν μετά τον #15 (όχι μετά τον #14).
+         * - manual-alternate / Thursday-spacing: shared helper rules.
+         */
         function getPersonForNormalRotationContinuity(dateKey, groupNum, assignedPerson, normalAssignmentsByDate) {
             if (!assignedPerson) return null;
             const reason =
                 typeof getAssignmentReason === 'function'
                     ? getAssignmentReason(dateKey, groupNum, assignedPerson)
                     : null;
+            if (reason && reason.type === 'skip' && reason.meta?.manualAlternateReplacement && reason.swappedWith) {
+                return reason.swappedWith;
+            }
+            // Absent/disabled stand-in: continue after the baseline slot holder, not the replacement.
+            if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
+                return reason.swappedWith;
+            }
+            // Όλα τα swap καθημερινών (όχι μόνο mutual/thursday) — αλλιώς ο επόμενος μήνας
+            // ξεκινά μετά τον τελικό αντί μετά τον βασικό της σειράς.
             if (reason && reason.type === 'swap') {
                 return getPersonForRotationContinuity(
                     dateKey,
@@ -3521,6 +3586,7 @@
                     normalAssignmentsByDate
                 );
             }
+            // Fallback: λόγος στο swappedWith / baseline του ζεύγους αν το reason του τελικού χάθηκε
             if (typeof getAssignmentReasonForGroupOnDate === 'function') {
                 const anyReason = getAssignmentReasonForGroupOnDate(dateKey, groupNum, assignedPerson);
                 if (anyReason && anyReason.type === 'swap') {
@@ -5111,24 +5177,20 @@
                 // For missing replacement: keep a simulated set of special assignments so hasConsecutiveDuty can validate neighbors.
                 const simulatedSpecialAssignmentsForConflict = {}; // monthKey -> { groupNum -> Set(person) }
                 
-                // Initialize from last FINAL special before the period (any prior month — not list head).
+                // Initialize global rotation positions from baseline and assignments only (no lastRotationPositions).
                 const globalSpecialRotationPosition = {}; // groupNum -> position in group list
                 const firstDateKey = sortedSpecial.length > 0 ? sortedSpecial[0] : null;
-                const findSpecialListIndex = (groupPeople, personName) => {
-                    if (!personName || !groupPeople?.length) return -1;
-                    const norm =
-                        typeof normalizePersonKey === 'function'
-                            ? normalizePersonKey
-                            : (s) => String(s || '').trim();
-                    const n = norm(personName);
-                    let i = groupPeople.indexOf(personName);
-                    if (i >= 0) return i;
-                    i = groupPeople.findIndex((p) => norm(p) === n);
-                    if (i >= 0) return i;
-                    if (typeof personNamesMatchIgnoringRank === 'function') {
-                        i = groupPeople.findIndex((p) => personNamesMatchIgnoringRank(p, personName));
-                    }
-                    return i;
+                const baselineDateKeysBeforePeriod = firstDateKey
+                    ? Object.keys(rotationBaselineSpecialAssignments || {}).filter(dk => dk < firstDateKey).sort().reverse()
+                    : [];
+                const getBaselinePersonForGroup = (dateKey, g) => {
+                    const raw = rotationBaselineSpecialAssignments?.[dateKey];
+                    if (!raw) return null;
+                    if (typeof raw === 'object' && !Array.isArray(raw) && typeof extractGroupAssignmentsMap === 'function')
+                        return (extractGroupAssignmentsMap(raw)[g] || null);
+                    if (typeof parseAssignedPersonForGroupFromAssignment === 'function')
+                        return parseAssignedPersonForGroupFromAssignment(raw, g);
+                    return null;
                 };
                 for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
                     const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { special: [] };
@@ -5151,44 +5213,51 @@
                                 isAprilStart ? 'April start' : 'February 2026'
                             }`
                         );
-                        continue;
-                    }
-
-                    let seeded = false;
-                    if (firstDateKey && typeof getLastFinalContinuityPersonBeforeDate === 'function') {
-                        const lastFinalPerson = getLastFinalContinuityPersonBeforeDate(
-                            'special',
-                            firstDateKey,
-                            groupNum
-                        );
-                        const idx = findSpecialListIndex(groupPeople, lastFinalPerson);
-                        if (lastFinalPerson && idx >= 0) {
-                            globalSpecialRotationPosition[groupNum] = (idx + 1) % rotationDays;
-                            console.log(
-                                `[SPECIAL ROTATION] Continue after final ${lastFinalPerson} (index ${idx}) → next ${globalSpecialRotationPosition[groupNum]} for group ${groupNum}`
-                            );
-                            seeded = true;
-                        }
-                    }
-                    if (!seeded && firstDateKey && typeof computeRotationPositionAtMonthStart === 'function') {
+                    } else if (firstDateKey && typeof getRotationSeedPersonForMonthStart === 'function') {
                         const seedDate = new Date(firstDateKey + 'T00:00:00');
-                        globalSpecialRotationPosition[groupNum] =
-                            computeRotationPositionAtMonthStart(
-                                'special',
-                                seedDate,
-                                groupNum,
-                                groupPeople
-                            ) % rotationDays;
-                        console.log(
-                            `[SPECIAL ROTATION] Month-start cursor ${globalSpecialRotationPosition[groupNum]} for group ${groupNum}`
-                        );
-                        seeded = true;
-                    }
-                    if (!seeded) {
+                        const seedPerson = getRotationSeedPersonForMonthStart('special', seedDate, groupNum);
+                        const seedIdx = seedPerson ? groupPeople.indexOf(seedPerson) : -1;
+                        if (seedPerson && seedIdx >= 0) {
+                            globalSpecialRotationPosition[groupNum] = (seedIdx + 1) % rotationDays;
+                            console.log(`[SPECIAL ROTATION] From manual-alternate seed ${seedPerson} (index ${seedIdx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`);
+                        } else if (typeof computeRotationPositionAtMonthStart === 'function') {
+                            globalSpecialRotationPosition[groupNum] =
+                                computeRotationPositionAtMonthStart(
+                                    'special',
+                                    seedDate,
+                                    groupNum,
+                                    groupPeople
+                                ) % rotationDays;
+                            console.log(
+                                `[SPECIAL ROTATION] Seed person ${seedPerson || '(none)'} not in group ${groupNum} list — recovered position ${globalSpecialRotationPosition[groupNum]}`
+                            );
+                        } else if (baselineDateKeysBeforePeriod.length > 0) {
+                            const lastBaselineDateKey = baselineDateKeysBeforePeriod[0];
+                            const lastBaselinePerson = getBaselinePersonForGroup(lastBaselineDateKey, groupNum);
+                            const idx = lastBaselinePerson ? groupPeople.indexOf(lastBaselinePerson) : -1;
+                            if (idx >= 0) {
+                                globalSpecialRotationPosition[groupNum] = (idx + 1) % rotationDays;
+                                console.log(`[SPECIAL ROTATION] From baseline ${lastBaselineDateKey} last baseline person ${lastBaselinePerson} (index ${idx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`);
+                            } else {
+                                globalSpecialRotationPosition[groupNum] = 0;
+                            }
+                        } else {
+                            globalSpecialRotationPosition[groupNum] = 0;
+                        }
+                    } else if (baselineDateKeysBeforePeriod.length > 0) {
+                        const lastBaselineDateKey = baselineDateKeysBeforePeriod[0];
+                        const lastBaselinePerson = getBaselinePersonForGroup(lastBaselineDateKey, groupNum);
+                        const idx = lastBaselinePerson ? groupPeople.indexOf(lastBaselinePerson) : -1;
+                        if (idx >= 0) {
+                            globalSpecialRotationPosition[groupNum] = (idx + 1) % rotationDays;
+                            console.log(`[SPECIAL ROTATION] From baseline ${lastBaselineDateKey} last baseline person ${lastBaselinePerson} (index ${idx}) for group ${groupNum}, next position ${globalSpecialRotationPosition[groupNum]}`);
+                        } else {
+                            globalSpecialRotationPosition[groupNum] = 0;
+                            console.log(`[SPECIAL ROTATION] No baseline person found for group ${groupNum} in baseline, starting at 0`);
+                        }
+                    } else {
                         globalSpecialRotationPosition[groupNum] = 0;
-                        console.log(
-                            `[SPECIAL ROTATION] No prior final for group ${groupNum} — start at 0`
-                        );
+                        console.log(`[SPECIAL ROTATION] No baseline dates before period for group ${groupNum}, starting at 0`);
                     }
                 }
 
@@ -12944,12 +13013,7 @@
                     );
                     if (existingManualAlternateSemiRun && baseline[dateKey][groupNum] &&
                         normSemiRun(baseline[dateKey][groupNum]) === normSemiRun(existingManualAlternateSemiRun.replacement)) {
-                        // Final-continuity: continue after επιλαχών who served, not after baseline slot.
-                        nextPos = nextRotationIndexAfterPerson(
-                            groupPeople,
-                            baseline[dateKey][groupNum],
-                            pos
-                        );
+                        nextPos = (pos + 1) % rotationDays;
                     }
                     // Skip whole-month absentees so next ημιαργία is e.g. after #5 → #7 (not #6)
                     nextPos = snapSemiIndexPastWholeMonthAbsent(groupPeople, groupNum, date, nextPos);
@@ -15004,8 +15068,8 @@
             
             // Declare at function level to avoid scope issues
             const globalNormalRotationPosition = {}; // groupNum -> global position (continues across months)
-            // Person-key anchor: remap index each day from last FINAL assignee (final-continuity model).
-            const globalNormalLastBaselinePerson = {}; // groupNum -> last final person who served
+            // Person-key anchor: remap index each day so filtered-list length changes cannot jump #11→#14.
+            const globalNormalLastBaselinePerson = {}; // groupNum -> last pure baseline person name
             // After "Αντικατάσταση Επιλαχών", skip the replacement's next natural turn in this month (D then B,C,E…).
             let deferManualAlternateSkipNormal = {};
             let prevMonthKeyNormalAlternateDefer = null;
@@ -15655,8 +15719,8 @@
                                 for (let pi = curIdx - 1; pi >= 0; pi--) {
                                     const prevDk = sortedNormal[pi];
                                     lastLivePerson =
-                                        normalAssignments[prevDk]?.[groupNum] ||
                                         pureNormalRotationByDate[prevDk]?.[groupNum] ||
+                                        normalAssignments[prevDk]?.[groupNum] ||
                                         null;
                                     if (lastLivePerson) break;
                                 }
@@ -15740,10 +15804,118 @@
                                 }
                             }
                             const originalRotationPerson = groupPeople[rotationPosition];
+                            // #region agent log
+                            const _dbgAnchorBeforeSet = globalNormalLastBaselinePerson[groupNum] || null;
+                            // #endregion
                             if (originalRotationPerson) {
                                 if (!pureNormalRotationByDate[dateKey]) pureNormalRotationByDate[dateKey] = {};
                                 pureNormalRotationByDate[dateKey][groupNum] = originalRotationPerson;
+                                globalNormalLastBaselinePerson[groupNum] = originalRotationPerson;
                             }
+
+                            // #region agent log
+                            if (
+                                groupNum === 2 &&
+                                typeof dateKey === 'string' &&
+                                ['2026-12-01', '2026-12-02', '2026-12-03', '2026-12-07', '2026-12-08'].includes(
+                                    dateKey
+                                )
+                            ) {
+                                const fullUiList =
+                                    (typeof getSortedGroupListForRotation === 'function'
+                                        ? getSortedGroupListForRotation(2, 'normal')
+                                        : groups?.[2]?.normal) || [];
+                                const idxOf = (name) =>
+                                    name
+                                        ? groupPeople.findIndex((p) => normRot(p) === normRot(name))
+                                        : -1;
+                                const uiIdx = (name) =>
+                                    name
+                                        ? fullUiList.findIndex((p) => normRot(p) === normRot(name))
+                                        : -1;
+                                const slot = (i) =>
+                                    i >= 0 && i < fullUiList.length
+                                        ? { uiNo: i + 1, name: fullUiList[i] }
+                                        : null;
+                                const peopleMeta = groupPeople.map((p, i) => ({
+                                    i,
+                                    uiNo: (() => {
+                                        const u = uiIdx(p);
+                                        return u >= 0 ? u + 1 : null;
+                                    })(),
+                                    name: p,
+                                    excluded:
+                                        typeof isPersonExcludedFromDuties === 'function'
+                                            ? isPersonExcludedFromDuties(p, 2)
+                                            : null,
+                                    home:
+                                        typeof getPersonHomeGroupAtDate === 'function'
+                                            ? getPersonHomeGroupAtDate(p, dateKey)
+                                            : null,
+                                    missing:
+                                        typeof isPersonMissingOnDate === 'function'
+                                            ? isPersonMissingOnDate(p, 2, date, 'normal')
+                                            : null
+                                }));
+                                fetch(
+                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                    {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-Debug-Session-Id': '15d095'
+                                        },
+                                        body: JSON.stringify({
+                                            sessionId: '15d095',
+                                            runId: 'pre-fix',
+                                            hypothesisId: 'A-E',
+                                            location: 'duty-shifts-logic.js:normal-baseline',
+                                            message: 'g2 normal baseline slot',
+                                            data: {
+                                                dateKey,
+                                                listLen: groupPeople.length,
+                                                uiListLen: fullUiList.length,
+                                                posAfterResolve:
+                                                    manualAltResolvedNormal.rotationPosition,
+                                                posAfterExcl: rotationPosition,
+                                                deferHit: !!deferFulfillmentNormal,
+                                                deferSkipped:
+                                                    deferFulfillmentNormal?.skippedReplacement ||
+                                                    null,
+                                                anchorPerson: _dbgAnchorBeforeSet,
+                                                baseline: originalRotationPerson,
+                                                baselineUiNo:
+                                                    originalRotationPerson != null
+                                                        ? uiIdx(originalRotationPerson) + 1
+                                                        : null,
+                                                nextAfterBaseline:
+                                                    originalRotationPerson != null
+                                                        ? groupPeople[
+                                                              (rotationPosition + 1) %
+                                                                  rotationDays
+                                                          ] || null
+                                                        : null,
+                                                uiSlots: {
+                                                    11: slot(10),
+                                                    12: slot(11),
+                                                    13: slot(12),
+                                                    14: slot(13),
+                                                    15: slot(14)
+                                                },
+                                                inRotList: {
+                                                    11: idxOf(fullUiList[10]) >= 0,
+                                                    12: idxOf(fullUiList[11]) >= 0,
+                                                    13: idxOf(fullUiList[12]) >= 0,
+                                                    14: idxOf(fullUiList[13]) >= 0
+                                                },
+                                                peopleMeta
+                                            },
+                                            timestamp: Date.now()
+                                        })
+                                    }
+                                ).catch(() => {});
+                            }
+                            // #endregion
                             
                             const rotationPerson = originalRotationPerson;
                             let wasReplacedFromBaseline = false;
@@ -15951,11 +16123,7 @@
                                 // This is the position where the skipped person should be assigned
                                 assignedPerson = pendingNormalSwaps[monthKey][groupNum].skippedPerson;
                                 delete pendingNormalSwaps[monthKey][groupNum];
-                                globalNormalRotationPosition[groupNum] = nextRotationIndexAfterPerson(
-                                    groupPeople,
-                                    assignedPerson,
-                                    rotationPosition
-                                );
+                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                 rotationAlreadyAdvanced = true; // Mark that rotation was already advanced
                             }
                             
@@ -16026,28 +16194,18 @@
                                     
                                     if (hasConflict) {
                                         // Person has conflict - STORE THEM so swap logic can process them.
-                                        // Final-continuity: advance after who was assigned (stand-in / επιλαχών).
+                                        // Basic series always advances by one slot from the baseline position
+                                        // (replacements must not jump the rotation cursor).
                                         markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
-                                        globalNormalRotationPosition[groupNum] = nextRotationIndexAfterPerson(
-                                            groupPeople,
-                                            assignedPerson,
-                                            rotationPosition
-                                        );
-                                    } else {
+                                            globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                        } else {
+                                        // No conflict — same rule: advance basic series by one from baseline slot
                                         markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
-                                        globalNormalRotationPosition[groupNum] = nextRotationIndexAfterPerson(
-                                            groupPeople,
-                                            assignedPerson,
-                                            rotationPosition
-                                        );
+                                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                     }
                                 } else {
-                                    // No usable assignee — advance from baseline slot as last resort
-                                    globalNormalRotationPosition[groupNum] = nextRotationIndexAfterPerson(
-                                        groupPeople,
-                                        null,
-                                        rotationPosition
-                                    );
+                                    // Person is missing or no person assigned - advance rotation position from rotation position
+                                    globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
                                 }
                             }
                             
@@ -16062,11 +16220,6 @@
                                 normalAssignments[dateKey] = {};
                             }
                             normalAssignments[dateKey][groupNum] = assignedPerson;
-                            if (assignedPerson) {
-                                globalNormalLastBaselinePerson[groupNum] = assignedPerson;
-                            } else if (originalRotationPerson) {
-                                globalNormalLastBaselinePerson[groupNum] = originalRotationPerson;
-                            }
                             
                             if (
                                 assignedPerson &&
