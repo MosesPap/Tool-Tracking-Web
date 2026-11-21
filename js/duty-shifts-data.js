@@ -1962,30 +1962,15 @@
             if (typeof getPersonForRotationContinuity === 'function') {
                 return getPersonForRotationContinuity(lastKey, groupNum, assigned, store);
             }
-            const manual = findManualAlternateReplacementForGroup(lastKey, groupNum);
-            if (manual?.replacementPerson && manual?.baselinePerson) {
-                const n = normRotPersonName;
-                if (n(assigned) === n(manual.replacementPerson)) {
-                    return resolvePersonInGroupRotationList(manual.baselinePerson, groupNum, dayTypeCategory);
-                }
-            }
+            // Final-continuity: keep assigned (επιλαχών / stand-in), do not rewrite to baseline.
             return assigned;
         }
 
         function correctLastRotationPersonForManualAlternate(dayType, date, groupNum, personName) {
-            if (!personName) return personName;
-            const latest =
-                (typeof getManualAlternateDeferFromPreviousMonth === 'function'
-                    ? getManualAlternateDeferFromPreviousMonth(dayType, date, groupNum)
-                    : null) ||
-                (typeof findLatestManualAlternateInPreviousMonth === 'function'
-                    ? findLatestManualAlternateInPreviousMonth(dayType, date, groupNum)
-                    : null);
-            if (!latest?.replacementPerson || !latest?.baselinePerson) return personName;
-            const n = normRotPersonName;
-            if (n(personName) === n(latest.replacementPerson)) {
-                return resolvePersonInGroupRotationList(latest.baselinePerson, groupNum, dayType);
-            }
+            // Final-continuity model: seed after who served — no rewrite επιλαχών → baseline.
+            void dayType;
+            void date;
+            void groupNum;
             return personName;
         }
 
@@ -2007,43 +1992,10 @@
                 person = byType[groupNum];
             }
 
-            // Baseline fallback: derive last rotation person from rotationBaseline docs (previous month)
-            if (!person) {
-                let baselineMonth = rotationBaselineLastByType?.[dayType]?.[prevMonthKey];
-                if (baselineMonth && baselineMonth[groupNum]) {
-                    person = baselineMonth[groupNum];
-                }
-            }
-
-            if (!person) {
-                const baselineByType = rotationBaselineLastByType?.[dayType];
-                if (baselineByType && typeof baselineByType === 'object') {
-                    const availableMonths = Object.keys(baselineByType)
-                        .filter(k => isMonthKey(k))
-                        .sort((a, b) => {
-                            const [aYear, aMonth] = a.split('-').map(Number);
-                            const [bYear, bMonth] = b.split('-').map(Number);
-                            if (aYear !== bYear) return bYear - aYear;
-                            return bMonth - aMonth;
-                        });
-
-                    const [targetYear, targetMonth] = prevMonthKey.split('-').map(Number);
-                    for (const monthKey of availableMonths) {
-                        const [year, month] = monthKey.split('-').map(Number);
-                        if (year < targetYear || (year === targetYear && month <= targetMonth)) {
-                            const baselineMonth = baselineByType[monthKey];
-                            if (baselineMonth && baselineMonth[groupNum]) {
-                                console.log(`[ROTATION FALLBACK] Using most recent available month ${monthKey} (instead of ${prevMonthKey}) for group ${groupNum}, person: ${baselineMonth[groupNum]}`);
-                                person = baselineMonth[groupNum];
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
+            // Final-continuity: never seed from stored rotationBaseline* — only finals / lastRotationPositions.
             if (person) {
-                return correctLastRotationPersonForManualAlternate(dayType, date, groupNum, person);
+                // Do not rewrite επιλαχών → baseline; continue after who actually served.
+                return person;
             }
 
             return getLastAssignmentContinuityPersonForPreviousMonth(dayType, date, groupNum);
@@ -2656,20 +2608,14 @@
                 return 0;
             }
 
-            // Prefer actual last assignment / baseline continuity from previous month whenever available.
+            // Final-continuity: seed only from final assignments / stored continuity (never rotationBaseline).
             const fromAssignments = getLastAssignmentContinuityPersonForPreviousMonth(
                 dayTypeCategory,
                 dateInMonth,
                 groupNum
             );
-            const fromBaseline = getLastBaselineRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
             const fromStored = getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-            // Normal: prefer final calendar / stored continuity over baseline last
-            // (baseline can lag behind swaps → wrong next-month seed, e.g. #6 final → start #3).
-            const lastContinuityPerson =
-                dayTypeCategory === 'normal'
-                    ? fromAssignments || fromStored || fromBaseline
-                    : fromAssignments || fromBaseline || fromStored;
+            const lastContinuityPerson = fromAssignments || fromStored;
             const continuityIdx = findIdx(lastContinuityPerson);
             if (lastContinuityPerson && continuityIdx >= 0) {
                 let cursor = (continuityIdx + 1) % len;
@@ -2835,13 +2781,10 @@
                     return;
                 }
             }
-            const baselineLast = rotationBaselineLastByType?.[dayTypeCategory]?.[monthKey]?.[groupNum];
-            if (baselineLast) {
-                setLastRotationPersonForMonth(dayTypeCategory, monthKey, groupNum, baselineLast);
-            }
+            // No rotationBaseline fallback — finals only.
         }
 
-        /** Month-start seed person: last baseline slot holder before the next assignee. */
+        /** Month-start seed person: last final continuity person before the next assignee. */
         function getRotationSeedPersonForMonthStart(dayTypeCategory, monthStartDate, groupNum) {
             const monthSeedKey =
                 monthStartDate && typeof formatDateKey === 'function' ? formatDateKey(monthStartDate) : null;
@@ -2857,8 +2800,6 @@
                     return groupPeople[(cursor - 1 + len) % len] || null;
                 }
             }
-            const fromBaseline = getLastBaselineRotationPersonForDate(dayTypeCategory, monthStartDate, groupNum);
-            if (fromBaseline) return fromBaseline;
             const fromStored = getLastRotationPersonForDate(dayTypeCategory, monthStartDate, groupNum);
             if (fromStored) return fromStored;
             return getLastAssignmentContinuityPersonForPreviousMonth(dayTypeCategory, monthStartDate, groupNum);
