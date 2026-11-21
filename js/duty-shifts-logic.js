@@ -15806,118 +15806,11 @@
                                 }
                             }
                             const originalRotationPerson = groupPeople[rotationPosition];
-                            // #region agent log
-                            const _dbgAnchorBeforeSet = globalNormalLastBaselinePerson[groupNum] || null;
-                            // #endregion
                             if (originalRotationPerson) {
                                 if (!pureNormalRotationByDate[dateKey]) pureNormalRotationByDate[dateKey] = {};
                                 pureNormalRotationByDate[dateKey][groupNum] = originalRotationPerson;
                                 globalNormalLastBaselinePerson[groupNum] = originalRotationPerson;
                             }
-
-                            // #region agent log
-                            if (
-                                groupNum === 2 &&
-                                typeof dateKey === 'string' &&
-                                ['2026-12-01', '2026-12-02', '2026-12-03', '2026-12-07', '2026-12-08'].includes(
-                                    dateKey
-                                )
-                            ) {
-                                const fullUiList =
-                                    (typeof getSortedGroupListForRotation === 'function'
-                                        ? getSortedGroupListForRotation(2, 'normal')
-                                        : groups?.[2]?.normal) || [];
-                                const idxOf = (name) =>
-                                    name
-                                        ? groupPeople.findIndex((p) => normRot(p) === normRot(name))
-                                        : -1;
-                                const uiIdx = (name) =>
-                                    name
-                                        ? fullUiList.findIndex((p) => normRot(p) === normRot(name))
-                                        : -1;
-                                const slot = (i) =>
-                                    i >= 0 && i < fullUiList.length
-                                        ? { uiNo: i + 1, name: fullUiList[i] }
-                                        : null;
-                                const peopleMeta = groupPeople.map((p, i) => ({
-                                    i,
-                                    uiNo: (() => {
-                                        const u = uiIdx(p);
-                                        return u >= 0 ? u + 1 : null;
-                                    })(),
-                                    name: p,
-                                    excluded:
-                                        typeof isPersonExcludedFromDuties === 'function'
-                                            ? isPersonExcludedFromDuties(p, 2)
-                                            : null,
-                                    home:
-                                        typeof getPersonHomeGroupAtDate === 'function'
-                                            ? getPersonHomeGroupAtDate(p, dateKey)
-                                            : null,
-                                    missing:
-                                        typeof isPersonMissingOnDate === 'function'
-                                            ? isPersonMissingOnDate(p, 2, date, 'normal')
-                                            : null
-                                }));
-                                fetch(
-                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                    {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'X-Debug-Session-Id': '15d095'
-                                        },
-                                        body: JSON.stringify({
-                                            sessionId: '15d095',
-                                            runId: 'post-fix',
-                                            hypothesisId: 'F-list-order',
-                                            location: 'duty-shifts-logic.js:normal-baseline',
-                                            message: 'g2 normal baseline slot',
-                                            data: {
-                                                dateKey,
-                                                listLen: groupPeople.length,
-                                                uiListLen: fullUiList.length,
-                                                posAfterResolve:
-                                                    manualAltResolvedNormal.rotationPosition,
-                                                posAfterExcl: rotationPosition,
-                                                deferHit: !!deferFulfillmentNormal,
-                                                deferSkipped:
-                                                    deferFulfillmentNormal?.skippedReplacement ||
-                                                    null,
-                                                anchorPerson: _dbgAnchorBeforeSet,
-                                                baseline: originalRotationPerson,
-                                                baselineUiNo:
-                                                    originalRotationPerson != null
-                                                        ? uiIdx(originalRotationPerson) + 1
-                                                        : null,
-                                                nextAfterBaseline:
-                                                    originalRotationPerson != null
-                                                        ? groupPeople[
-                                                              (rotationPosition + 1) %
-                                                                  rotationDays
-                                                          ] || null
-                                                        : null,
-                                                uiSlots: {
-                                                    11: slot(10),
-                                                    12: slot(11),
-                                                    13: slot(12),
-                                                    14: slot(13),
-                                                    15: slot(14)
-                                                },
-                                                inRotList: {
-                                                    11: idxOf(fullUiList[10]) >= 0,
-                                                    12: idxOf(fullUiList[11]) >= 0,
-                                                    13: idxOf(fullUiList[12]) >= 0,
-                                                    14: idxOf(fullUiList[13]) >= 0
-                                                },
-                                                peopleMeta
-                                            },
-                                            timestamp: Date.now()
-                                        })
-                                    }
-                                ).catch(() => {});
-                            }
-                            // #endregion
                             
                             const rotationPerson = originalRotationPerson;
                             let wasReplacedFromBaseline = false;
@@ -15927,6 +15820,37 @@
                                     : null;
 
                             assignedPerson = originalRotationPerson;
+                            // #region agent log
+                            var _dbgG2NormalSlot = null;
+                            if (
+                                groupNum === 2 &&
+                                typeof dateKey === 'string' &&
+                                dateKey >= '2026-12-14' &&
+                                dateKey <= '2026-12-22'
+                            ) {
+                                _dbgG2NormalSlot = {
+                                    dateKey: dateKey,
+                                    rotPos: rotationPosition,
+                                    baseline: originalRotationPerson,
+                                    baselineUi:
+                                        typeof getSortedGroupListForRotation === 'function'
+                                            ? (getSortedGroupListForRotation(2, 'normal') || []).findIndex(
+                                                  (p) => normRot(p) === normRot(originalRotationPerson)
+                                              ) + 1
+                                            : null,
+                                    baselineMissing: !!(
+                                        originalRotationPerson &&
+                                        isPersonMissingOnDate(
+                                            originalRotationPerson,
+                                            2,
+                                            date,
+                                            'normal'
+                                        )
+                                    ),
+                                    precomputedFinal: precomputedFinal || null
+                                };
+                            }
+                            // #endregion
                             
                             // Initialize assigned people tracking for this group if needed
                             if (!assignedPeoplePreview[monthKey][groupNum]) {
@@ -16039,6 +15963,76 @@
                                     }
                                 }
                             }
+
+                            // #region agent log
+                            if (_dbgG2NormalSlot) {
+                                const absEnd =
+                                    typeof getLatestAbsenceEndBeforeDateKey === 'function' &&
+                                    assignedPerson
+                                        ? getLatestAbsenceEndBeforeDateKey(
+                                              assignedPerson,
+                                              2,
+                                              dateKey
+                                          )
+                                        : null;
+                                const e3 =
+                                    absEnd && typeof addCalendarDaysToDateKey === 'function'
+                                        ? addCalendarDaysToDateKey(absEnd, 3)
+                                        : null;
+                                const weekendTooSoon =
+                                    typeof isWeekendDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                    assignedPerson
+                                        ? isWeekendDutyTooSoonAfterAbsenceReturn(
+                                              assignedPerson,
+                                              2,
+                                              dateKey
+                                          )
+                                        : null;
+                                const uiNo = (name) => {
+                                    if (!name || typeof getSortedGroupListForRotation !== 'function')
+                                        return null;
+                                    const i = (getSortedGroupListForRotation(2, 'normal') || []).findIndex(
+                                        (p) => normRot(p) === normRot(name)
+                                    );
+                                    return i >= 0 ? i + 1 : null;
+                                };
+                                fetch(
+                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                    {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-Debug-Session-Id': '15d095'
+                                        },
+                                        body: JSON.stringify({
+                                            sessionId: '15d095',
+                                            runId: 'pre-fix',
+                                            hypothesisId: 'A-E',
+                                            location: 'duty-shifts-logic.js:g2-dec16-22',
+                                            message: 'g2 normal baseline vs final + E+3',
+                                            data: {
+                                                ..._dbgG2NormalSlot,
+                                                finalPerson: assignedPerson,
+                                                finalUi: uiNo(assignedPerson),
+                                                wasReplaced:
+                                                    !!(
+                                                        assignedPerson &&
+                                                        originalRotationPerson &&
+                                                        normRot(assignedPerson) !==
+                                                            normRot(originalRotationPerson)
+                                                    ),
+                                                assignedPersonAbsenceEnd: absEnd,
+                                                ePlus3: e3,
+                                                withinE3Window: !!(e3 && dateKey <= e3),
+                                                weekendTooSoonCheck: weekendTooSoon,
+                                                normalTryCandidateSkipsE3: true
+                                            },
+                                            timestamp: Date.now()
+                                        })
+                                    }
+                                ).catch(() => {});
+                            }
+                            // #endregion
 
                             if (
                                 existingManualAlternate &&
