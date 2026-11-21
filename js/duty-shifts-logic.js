@@ -15302,9 +15302,57 @@
             
             // Sort normal days by date (define at function scope so it's accessible for swap logic)
             const sortedNormal = [...normalDays].sort();
+            const calcStartKeyNormal = startDate ? formatDateKey(startDate) : null;
+            const calcEndKeyNormal = endDate ? formatDateKey(endDate) : null;
+            /** dateKey -> { groupNum -> { personName, absenceEndKey, blockedDateKey } } — E+3 catch-up on normals */
+            const normalE3ReturnTargets = {};
+            /** After E+3 jump (e.g. #5→#9), series continues after the stand-in, not after the E+3 person. */
+            const normalE3SeriesAnchor = {}; // groupNum -> personName
             if (typeof seedPreservedDutyAssignmentsIntoTemp === 'function') {
                 seedPreservedDutyAssignmentsIntoTemp(normalAssignments, normalDayAssignments, sortedNormal);
             }
+
+            const scheduleNormalPlacementAfterE3Cooldown = (personName, groupNum, blockedDateKey) => {
+                if (!personName || !groupNum || !blockedDateKey) return null;
+                const nrm = (s) =>
+                    typeof normalizePersonKey === 'function'
+                        ? normalizePersonKey(s)
+                        : String(s || '').trim();
+                const pNorm = nrm(personName);
+                for (const dk of Object.keys(normalE3ReturnTargets)) {
+                    const ent = normalE3ReturnTargets[dk]?.[groupNum];
+                    if (!ent?.personName) continue;
+                    if (nrm(ent.personName) === pNorm) return dk;
+                }
+                const absenceEndKey = getLatestAbsenceEndBeforeDateKey(personName, groupNum, blockedDateKey);
+                if (!absenceEndKey) return null;
+                const ePlus3 = addCalendarDaysToDateKey(absenceEndKey, 3);
+                if (!ePlus3) return null;
+                for (const dk of sortedNormal) {
+                    if (calcStartKeyNormal && dk < calcStartKeyNormal) continue;
+                    if (calcEndKeyNormal && dk > calcEndKeyNormal) break;
+                    if (dk <= ePlus3) continue;
+                    if (normalE3ReturnTargets[dk]?.[groupNum]) continue;
+                    const dObj = new Date(dk + 'T00:00:00');
+                    if (isNaN(dObj.getTime())) continue;
+                    if (isPersonMissingOnDate(personName, groupNum, dObj, 'normal')) continue;
+                    if (
+                        typeof isWeekendDutyTooSoonAfterAbsenceReturn === 'function' &&
+                        isWeekendDutyTooSoonAfterAbsenceReturn(personName, groupNum, dk)
+                    ) {
+                        continue;
+                    }
+                    if (!normalE3ReturnTargets[dk]) normalE3ReturnTargets[dk] = {};
+                    normalE3ReturnTargets[dk][groupNum] = {
+                        personName,
+                        absenceEndKey,
+                        blockedDateKey,
+                        deferredFromE3Cooldown: true
+                    };
+                    return dk;
+                }
+                return null;
+            };
             
             // IMPORTANT: Track normal rotation persons (who SHOULD be assigned according to rotation)
             // This is separate from assigned persons (who may have been swapped)
@@ -15816,10 +15864,14 @@
                                 }
                             }
                             const originalRotationPerson = groupPeople[rotationPosition];
+                            const e3DeferredToday = normalE3ReturnTargets[dateKey]?.[groupNum] || null;
                             if (originalRotationPerson) {
                                 if (!pureNormalRotationByDate[dateKey]) pureNormalRotationByDate[dateKey] = {};
                                 pureNormalRotationByDate[dateKey][groupNum] = originalRotationPerson;
-                                globalNormalLastBaselinePerson[groupNum] = originalRotationPerson;
+                                // E+3 catch-up day keeps series anchor (e.g. #9), not the deferred person (#6).
+                                if (!e3DeferredToday?.personName) {
+                                    globalNormalLastBaselinePerson[groupNum] = originalRotationPerson;
+                                }
                             }
                             
                             const rotationPerson = originalRotationPerson;
@@ -15863,6 +15915,8 @@
                             let _dbgE3Skipped = [];
                             let _dbgReplacementIndex = null;
                             // #endregion
+                            let e3JumpReplacementIndex = null;
+                            let e3DeferredPlacementApplied = false;
                             if (baselineIsDisabled || baselineIsMissing || baselineTooSoonAfterReturn) {
                                 let foundReplacement = false;
                                 const tryCandidate = (candidate, idx) => {
@@ -15972,6 +16026,106 @@
                                             rotationPerson: originalRotationPerson
                                         });
                                     }
+                                }
+                                // E+3 skips while filling a slot: jump series past the stand-in (#9),
+                                // schedule skipped people (#6) on first normal ≥ E+4.
+                                if (foundReplacement && _dbgE3Skipped.length > 0 && replacementIndex != null) {
+                                    e3JumpReplacementIndex = replacementIndex;
+                                    const scheduledFor = [];
+                                    for (const sk of _dbgE3Skipped) {
+                                        if (sk?.name) {
+                                            const tgt = scheduleNormalPlacementAfterE3Cooldown(
+                                                sk.name,
+                                                groupNum,
+                                                dateKey
+                                            );
+                                            if (tgt) {
+                                                scheduledFor.push({
+                                                    person: sk.name,
+                                                    idx: sk.idx,
+                                                    targetDateKey: tgt
+                                                });
+                                            }
+                                        }
+                                    }
+                                    if (assignedPerson) {
+                                        normalE3SeriesAnchor[groupNum] = assignedPerson;
+                                        globalNormalLastBaselinePerson[groupNum] = assignedPerson;
+                                    }
+                                    // #region agent log
+                                    if (
+                                        groupNum === 2 &&
+                                        typeof dateKey === 'string' &&
+                                        dateKey >= '2026-12-16' &&
+                                        dateKey <= '2026-12-22'
+                                    ) {
+                                        fetch(
+                                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                            {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                    'X-Debug-Session-Id': '15d095'
+                                                },
+                                                body: JSON.stringify({
+                                                    sessionId: '15d095',
+                                                    runId: 'post-fix',
+                                                    hypothesisId: 'B',
+                                                    location:
+                                                        'duty-shifts-logic.js:e3-schedule',
+                                                    message: 'scheduled E+3 catch-up',
+                                                    data: {
+                                                        dateKey,
+                                                        e3Skipped: _dbgE3Skipped,
+                                                        scheduledFor,
+                                                        seriesAnchor: assignedPerson,
+                                                        jumpToIndex: replacementIndex
+                                                    },
+                                                    timestamp: Date.now()
+                                                })
+                                            }
+                                        ).catch(() => {});
+                                    }
+                                    // #endregion
+                                }
+                            }
+
+                            // Designated E+3 catch-up (e.g. #6 on 21/12): place without re-anchoring series.
+                            if (
+                                e3DeferredToday?.personName &&
+                                !isPersonMissingOnDate(e3DeferredToday.personName, groupNum, date, 'normal') &&
+                                !(
+                                    typeof isWeekendDutyTooSoonAfterAbsenceReturn === 'function' &&
+                                    isWeekendDutyTooSoonAfterAbsenceReturn(
+                                        e3DeferredToday.personName,
+                                        groupNum,
+                                        dateKey
+                                    )
+                                )
+                            ) {
+                                const deferredPerson = e3DeferredToday.personName;
+                                const displaced = assignedPerson;
+                                assignedPerson = deferredPerson;
+                                e3DeferredPlacementApplied = true;
+                                wasDisabledPersonSkipped = true;
+                                if (
+                                    displaced &&
+                                    normRot(displaced) !== normRot(deferredPerson) &&
+                                    !getAssignmentReason(dateKey, groupNum, deferredPerson)
+                                ) {
+                                    storeUnavailableReplacementReason(
+                                        dateKey,
+                                        groupNum,
+                                        deferredPerson,
+                                        displaced,
+                                        date,
+                                        'normal',
+                                        null,
+                                        {
+                                            deferredFromE3Cooldown: true,
+                                            blockedDateKey: e3DeferredToday.blockedDateKey || null
+                                        }
+                                    );
                                 }
                             }
 
@@ -16114,7 +16268,29 @@
                             // This ensures that when Person A is replaced by Person B, next month starts from Person C (after Person B)
                             // BUT: Skip if rotation was already advanced (e.g., by pending swap)
                             if (!rotationAlreadyAdvanced) {
-                                if (assignedPerson && !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')) {
+                                if (e3DeferredPlacementApplied && normalE3SeriesAnchor[groupNum]) {
+                                    // Catch-up day (#6 on 21/12): keep series after E+3 stand-in (#9), not after #6.
+                                    const anchorName = normalE3SeriesAnchor[groupNum];
+                                    const aIdx = groupPeople.findIndex(
+                                        (p) => normRot(p) === normRot(anchorName)
+                                    );
+                                    if (aIdx >= 0) {
+                                        globalNormalLastBaselinePerson[groupNum] = groupPeople[aIdx];
+                                        globalNormalRotationPosition[groupNum] =
+                                            (aIdx + 1) % rotationDays;
+                                    } else {
+                                        globalNormalRotationPosition[groupNum] =
+                                            (rotationPosition + 1) % rotationDays;
+                                    }
+                                    markManualAlternateDeferFulfilled(
+                                        groupNum,
+                                        assignedPerson,
+                                        deferManualAlternateSkipNormal
+                                    );
+                                } else if (
+                                    assignedPerson &&
+                                    !isPersonMissingOnDate(assignedPerson, groupNum, date, 'normal')
+                                ) {
                                     const reasonForAssigned = getAssignmentReason(dateKey, groupNum, assignedPerson);
                                     const isManualAlternateReplacement = !!(reasonForAssigned && reasonForAssigned.type === 'skip' && reasonForAssigned.meta && reasonForAssigned.meta.manualAlternateReplacement);
                                     // Build simulated assignments for conflict checking
@@ -16128,21 +16304,26 @@
                                     
                                     // Check for consecutive conflict
                                     const hasConflict = hasConsecutiveDuty(dateKey, assignedPerson, groupNum, simulatedAssignments);
+                                    // E+3 jump: advance past stand-in (#9), not past baseline (#5).
+                                    const advanceFrom =
+                                        e3JumpReplacementIndex != null
+                                            ? e3JumpReplacementIndex
+                                            : rotationPosition;
                                     
                                     if (hasConflict) {
                                         // Person has conflict - STORE THEM so swap logic can process them.
-                                        // Basic series always advances by one slot from the baseline position
-                                        // (replacements must not jump the rotation cursor).
                                         markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
-                                            globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                            globalNormalRotationPosition[groupNum] = (advanceFrom + 1) % rotationDays;
                                         } else {
-                                        // No conflict — same rule: advance basic series by one from baseline slot
                                         markManualAlternateDeferFulfilled(groupNum, assignedPerson, deferManualAlternateSkipNormal);
-                                                globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                                globalNormalRotationPosition[groupNum] = (advanceFrom + 1) % rotationDays;
                                     }
                                 } else {
-                                    // Person is missing or no person assigned - advance rotation position from rotation position
-                                    globalNormalRotationPosition[groupNum] = (rotationPosition + 1) % rotationDays;
+                                    const advanceFrom =
+                                        e3JumpReplacementIndex != null
+                                            ? e3JumpReplacementIndex
+                                            : rotationPosition;
+                                    globalNormalRotationPosition[groupNum] = (advanceFrom + 1) % rotationDays;
                                 }
                             }
 
@@ -16161,6 +16342,7 @@
                                     return i >= 0 ? i + 1 : null;
                                 };
                                 const nextPos = globalNormalRotationPosition[groupNum];
+                                const schedEnt = normalE3ReturnTargets[dateKey]?.[groupNum] || null;
                                 fetch(
                                     'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
                                     {
@@ -16171,7 +16353,7 @@
                                         },
                                         body: JSON.stringify({
                                             sessionId: '15d095',
-                                            runId: 'pre-fix',
+                                            runId: 'post-fix',
                                             hypothesisId: 'A-D',
                                             location: 'duty-shifts-logic.js:e3-continuity',
                                             message: 'g2 advance after E+3/replacement',
@@ -16183,12 +16365,27 @@
                                                 finalPerson: assignedPerson,
                                                 e3Skipped: _dbgE3Skipped,
                                                 replacementIndex: _dbgReplacementIndex,
+                                                e3JumpReplacementIndex,
+                                                e3DeferredPlacementApplied,
+                                                seriesAnchor: normalE3SeriesAnchor[groupNum] || null,
+                                                seriesAnchorUi: uiNo(
+                                                    normalE3SeriesAnchor[groupNum] || null
+                                                ),
+                                                deferredToday: schedEnt
+                                                    ? {
+                                                          person: schedEnt.personName,
+                                                          ui: uiNo(schedEnt.personName)
+                                                      }
+                                                    : null,
                                                 advancedFromBaselineSlot: rotationPosition,
                                                 nextPos,
                                                 nextPerson: groupPeople[nextPos] || null,
                                                 nextUi: uiNo(groupPeople[nextPos] || null),
                                                 lastBaselineAnchor:
+                                                    globalNormalLastBaselinePerson[groupNum] || null,
+                                                lastBaselineUi: uiNo(
                                                     globalNormalLastBaselinePerson[groupNum] || null
+                                                )
                                             },
                                             timestamp: Date.now()
                                         })
