@@ -2123,6 +2123,62 @@
         }
 
         /**
+         * Semi roster in UI νο. / priority order (same as getSortedGroupListForRotation).
+         * Avoid groupsForDuty while dutyCalcContextDateKey is set — that merges stale listOrders
+         * and can move people (e.g. Αθανάσιου UI#8 → duty#14), so final picks the wrong stand-in.
+         */
+        function getSemiPeopleForRotation(groupNum, dateKey) {
+            // Prefer raw groups[g].semi (UI νο.) — getSortedGroupListForRotation can still
+            // reflect listOrders; groupsForDuty under calc context definitely does.
+            let order = (groups?.[groupNum]?.semi || []).slice();
+            if (!order.length && typeof getSortedGroupListForRotation === 'function') {
+                const sorted = getSortedGroupListForRotation(groupNum, 'semi');
+                if (Array.isArray(sorted) && sorted.length) order = sorted.slice();
+            }
+            if (typeof filterExcludedFromDutyList === 'function') {
+                order = filterExcludedFromDutyList(order, groupNum);
+            }
+            const mode3 =
+                typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
+            const dk =
+                dateKey ||
+                (typeof dutyCalcContextDateKey !== 'undefined' ? dutyCalcContextDateKey : null);
+            if (!mode3 && dk && typeof getPersonHomeGroupAtDate === 'function') {
+                order = order.filter((p) => getPersonHomeGroupAtDate(p, dk) === groupNum);
+            }
+            // #region agent log
+            if (groupNum === 2 && dk === '2026-12-30') {
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Debug-Session-Id': '15d095'
+                    },
+                    body: JSON.stringify({
+                        sessionId: '15d095',
+                        runId: 'post-fix',
+                        hypothesisId: 'H11',
+                        location: 'duty-shifts-logic.js:getSemiPeopleForRotation',
+                        message: 'g2 semi roster for 30/12',
+                        data: {
+                            len: order.length,
+                            ui8: order[7] || null,
+                            ui9: order[8] || null,
+                            ui10: order[9] || null,
+                            ui11: order[10] || null,
+                            athIdx: order.findIndex((p) =>
+                                String(p || '').includes('ΑΘΑΝΑΣΙΟΥ')
+                            )
+                        },
+                        timestamp: Date.now()
+                    })
+                }).catch(() => {});
+            }
+            // #endregion
+            return order;
+        }
+
+        /**
          * Pure rotation map dateKey -> person for every semi-normal day in a calendar month.
          * Mirrors baseline semi seeding (first semi of month + getLastRotationPersonForDate; Feb-2026 / April groups 1–2 hacks).
          * Used when an absence window lies in a month before calculationSteps.startDate — getRotationPosition() is invalid there.
@@ -2142,14 +2198,8 @@
 
         function buildExpectedSemiPersonMapForCalendarMonth(year, monthIndex0, groupNum) {
             const out = {};
-            // Use duty rotation list (excludes εξαίρεση / wrong-home), not raw UI array with νο.14+.
-            const groupPeople =
-                (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : null)?.semi ||
-                (typeof getSortedGroupListForRotation === 'function'
-                    ? getSortedGroupListForRotation(groupNum, 'semi')
-                    : null) ||
-                groups[groupNum]?.semi ||
-                [];
+            // UI νο. order — not groupsForDuty (stale listOrders under calc context date).
+            const groupPeople = getSemiPeopleForRotation(groupNum, null);
             if (!Array.isArray(groupPeople) || groupPeople.length === 0) return out;
             const rotLen = groupPeople.length;
             const semiDays = [];
@@ -12901,8 +12951,7 @@
                         }
                         continue;
                     }
-                    const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { semi: [] };
-                    const groupPeople = groupData.semi || [];
+                    const groupPeople = getSemiPeopleForRotation(groupNum, dateKey);
                     if (groupPeople.length === 0) continue;
                     const rotationDays = groupPeople.length;
                     const designated = returnFromMissingSemiTargetsRun[dateKey]?.[groupNum];
@@ -14190,8 +14239,7 @@
                     
                     // Calculate who will be assigned for each group
                     for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
-                        const groupData = (typeof groupsForDuty === 'function' ? groupsForDuty(groupNum) : groups[groupNum]) || { semi: [] };
-                        const groupPeople = groupData.semi || [];
+                        const groupPeople = getSemiPeopleForRotation(groupNum, dateKey);
                         
                         if (groupPeople.length === 0) {
                             html += '<td class="text-muted">-</td>';
