@@ -2146,35 +2146,6 @@
             if (!mode3 && dk && typeof getPersonHomeGroupAtDate === 'function') {
                 order = order.filter((p) => getPersonHomeGroupAtDate(p, dk) === groupNum);
             }
-            // #region agent log
-            if (groupNum === 2 && dk === '2026-12-30') {
-                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Debug-Session-Id': '15d095'
-                    },
-                    body: JSON.stringify({
-                        sessionId: '15d095',
-                        runId: 'post-fix',
-                        hypothesisId: 'H11',
-                        location: 'duty-shifts-logic.js:getSemiPeopleForRotation',
-                        message: 'g2 semi roster for 30/12',
-                        data: {
-                            len: order.length,
-                            ui8: order[7] || null,
-                            ui9: order[8] || null,
-                            ui10: order[9] || null,
-                            ui11: order[10] || null,
-                            athIdx: order.findIndex((p) =>
-                                String(p || '').includes('ΑΘΑΝΑΣΙΟΥ')
-                            )
-                        },
-                        timestamp: Date.now()
-                    })
-                }).catch(() => {});
-            }
-            // #endregion
             return order;
         }
 
@@ -3354,10 +3325,47 @@
                 globalPos[groupNum] = 0;
                 return;
             }
+            let _dbgSeedPath = null;
+            let _dbgLastPerson = null;
             if (typeof computeRotationPositionAtMonthStart === 'function') {
                 const cursor = computeRotationPositionAtMonthStart(dayTypeCategory, dateInMonth, groupNum, groupPeople);
                 if (Number.isFinite(cursor)) {
                     globalPos[groupNum] = cursor % rotationDays;
+                    _dbgSeedPath = 'computeRotationPositionAtMonthStart';
+                    // #region agent log
+                    if (
+                        dayTypeCategory === 'semi' &&
+                        groupNum === 2 &&
+                        dateInMonth &&
+                        dateInMonth.getFullYear() === 2027 &&
+                        dateInMonth.getMonth() === 0
+                    ) {
+                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Debug-Session-Id': '15d095'
+                            },
+                            body: JSON.stringify({
+                                sessionId: '15d095',
+                                runId: 'jan-seed',
+                                hypothesisId: 'H12-H15',
+                                location: 'duty-shifts-logic.js:reseedGlobalRotationPositionAtMonthStart',
+                                message: 'g2 Jan 2027 semi reseed',
+                                data: {
+                                    path: _dbgSeedPath,
+                                    cursor,
+                                    nextPos: globalPos[groupNum],
+                                    nextPerson: groupPeople[globalPos[groupNum]] || null,
+                                    ui8: groupPeople[7] || null,
+                                    ui11: groupPeople[10] || null,
+                                    ui12: groupPeople[11] || null
+                                },
+                                timestamp: Date.now()
+                            })
+                        }).catch(() => {});
+                    }
+                    // #endregion
                     return;
                 }
             }
@@ -3365,11 +3373,13 @@
             const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
                 ? getRotationSeedPersonForMonthStart(dayTypeCategory, dateInMonth, groupNum)
                 : getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
+            _dbgLastPerson = lastPersonName;
             const lastPersonIndex = lastPersonName
                 ? groupPeople.findIndex(p => norm(p) === norm(lastPersonName))
                 : -1;
             if (lastPersonName && lastPersonIndex >= 0) {
                 globalPos[groupNum] = (lastPersonIndex + 1) % rotationDays;
+                _dbgSeedPath = 'lastPerson+1';
             } else {
                 const daysSinceStart = getRotationPosition(dateInMonth, dayTypeCategory, groupNum);
                 // Prefer continue-after-departed over raw daysSinceStart when last person left the group
@@ -3383,11 +3393,79 @@
                     );
                     if (recovered != null && recovered >= 0) {
                         globalPos[groupNum] = recovered % rotationDays;
+                        _dbgSeedPath = 'departed-recovery';
+                        // #region agent log
+                        if (
+                            dayTypeCategory === 'semi' &&
+                            groupNum === 2 &&
+                            dateInMonth &&
+                            dateInMonth.getFullYear() === 2027 &&
+                            dateInMonth.getMonth() === 0
+                        ) {
+                            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Debug-Session-Id': '15d095'
+                                },
+                                body: JSON.stringify({
+                                    sessionId: '15d095',
+                                    runId: 'jan-seed',
+                                    hypothesisId: 'H12-H15',
+                                    location: 'duty-shifts-logic.js:reseedGlobalRotationPositionAtMonthStart',
+                                    message: 'g2 Jan 2027 semi reseed',
+                                    data: {
+                                        path: _dbgSeedPath,
+                                        lastPersonName: _dbgLastPerson,
+                                        nextPos: globalPos[groupNum],
+                                        nextPerson: groupPeople[globalPos[groupNum]] || null
+                                    },
+                                    timestamp: Date.now()
+                                })
+                            }).catch(() => {});
+                        }
+                        // #endregion
                         return;
                     }
                 }
                 globalPos[groupNum] = daysSinceStart % rotationDays;
+                _dbgSeedPath = 'daysSinceStart';
             }
+            // #region agent log
+            if (
+                dayTypeCategory === 'semi' &&
+                groupNum === 2 &&
+                dateInMonth &&
+                dateInMonth.getFullYear() === 2027 &&
+                dateInMonth.getMonth() === 0
+            ) {
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Debug-Session-Id': '15d095'
+                    },
+                    body: JSON.stringify({
+                        sessionId: '15d095',
+                        runId: 'jan-seed',
+                        hypothesisId: 'H12-H15',
+                        location: 'duty-shifts-logic.js:reseedGlobalRotationPositionAtMonthStart',
+                        message: 'g2 Jan 2027 semi reseed',
+                        data: {
+                            path: _dbgSeedPath,
+                            lastPersonName: _dbgLastPerson,
+                            lastPersonIndex,
+                            nextPos: globalPos[groupNum],
+                            nextPerson: groupPeople[globalPos[groupNum]] || null,
+                            ui4: groupPeople[3] || null,
+                            ui11: groupPeople[10] || null,
+                            ui12: groupPeople[11] || null
+                        },
+                        timestamp: Date.now()
+                    })
+                }).catch(() => {});
+            }
+            // #endregion
         }
 
         function markManualAlternateDeferFulfilled() {
@@ -12970,57 +13048,6 @@
                         const originalIndex = rfmDisp.originalIndex;
                         const designatedIndex = groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(designated.personName));
                         globalSemiPos[groupNum] = (originalIndex >= 0 ? originalIndex : (designatedIndex >= 0 ? designatedIndex + 1 : 0)) % rotationDays;
-                        // #region agent log
-                        if (
-                            groupNum === 2 &&
-                            typeof dateKey === 'string' &&
-                            dateKey >= '2026-12-01' &&
-                            dateKey <= '2026-12-31'
-                        ) {
-                            const uiNo = (name) => {
-                                if (!name) return null;
-                                const i = groupPeople.findIndex(
-                                    (p) => normSemiRun(p) === normSemiRun(name)
-                                );
-                                return i >= 0 ? i + 1 : null;
-                            };
-                            fetch(
-                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-Debug-Session-Id': '15d095'
-                                    },
-                                    body: JSON.stringify({
-                                        sessionId: '15d095',
-                                        runId: 'post-fix',
-                                        hypothesisId: 'H1-H3',
-                                        location: 'duty-shifts-logic.js:semi-rfm-run',
-                                        message: 'semi RFM designated (run)',
-                                        data: {
-                                            dateKey,
-                                            designated: designated.personName,
-                                            designatedUi: uiNo(designated.personName),
-                                            mapBaseline,
-                                            mapBaselineUi: uiNo(mapBaseline),
-                                            displacedPerson,
-                                            displacedUi: uiNo(displacedPerson),
-                                            fromLive: rfmDisp.fromLive,
-                                            livePos: rfmDisp.livePos,
-                                            liveUi: uiNo(rfmDisp.livePerson),
-                                            originalIndex,
-                                            designatedIndex,
-                                            nextPos: globalSemiPos[groupNum],
-                                            nextUi: uiNo(groupPeople[globalSemiPos[groupNum]]),
-                                            fallbackAfterDesignated: originalIndex < 0
-                                        },
-                                        timestamp: Date.now()
-                                    })
-                                }
-                            ).catch(() => {});
-                        }
-                        // #endregion
                         const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                         storeAssignmentReason(
                             dateKey,
@@ -13103,9 +13130,6 @@
                     let person = groupPeople[pos];
                     const rotationPersonAtSlot = person;
                     let nextPos = (pos + 1) % rotationDays; // default: next slot goes to person after current pos
-                    // #region agent log
-                    let _dbgSemiSkipReason = null;
-                    // #endregion
                     if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                         dutySemiDebug.startSlot('semi-build', dateKey, groupNum, {
                             rotationPerson: rotationPersonAtSlot,
@@ -13114,9 +13138,6 @@
                     }
                     // DISABLED: When rotation person is disabled, whole baseline shifts – store eligible person, no replacement line.
                     if (person && isPersonDisabledForDuty(person, groupNum, 'semi')) {
-                        // #region agent log
-                        _dbgSemiSkipReason = 'disabled';
-                        // #endregion
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.logStep('disabled-baseline', `${person} απενεργοποιημένος — αναζήτηση επόμενου.`);
                         }
@@ -13149,9 +13170,6 @@
                         // After a stand-in, continue after them so they are not assigned on the next ημιαργία.
                         if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays;
                     } else if (person && isPersonMissingOnDate(person, groupNum, date, 'semi')) {
-                        // #region agent log
-                        _dbgSemiSkipReason = 'missing';
-                        // #endregion
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.logStep('phase-missing', `Απουσία ${person} — αναζήτηση αντικαταστάτη στη σειρά ημιαργίας.`);
                         }
@@ -13159,108 +13177,23 @@
                         let eligiblePerson = null;
                         let eligibleIndex = -1;
                         const deferSkipPersonRunMissing = deferManualAlternateSkipSemiRun[groupNum]?.person;
-                        // #region agent log
-                        const _dbgMissScan = [];
-                        // #endregion
                         for (let offset = 1; offset <= rotationDays * 2; offset++) {
                             const idx = (pos + offset) % rotationDays;
                             const candidate = groupPeople[idx];
                             if (!candidate) continue;
-                            // #region agent log
-                            const _scanEntry = {
-                                offset,
-                                idx,
-                                ui: idx + 1,
-                                candidate,
-                                defer: !!(
-                                    deferSkipPersonRunMissing &&
-                                    normSemiRun(candidate) ===
-                                        normSemiRun(deferSkipPersonRunMissing)
-                                ),
-                                disabled: isPersonDisabledForDuty(candidate, groupNum, 'semi'),
-                                missing: isPersonMissingOnDate(
-                                    candidate,
-                                    groupNum,
-                                    date,
-                                    'semi'
-                                )
-                            };
-                            // #endregion
                             if (deferSkipPersonRunMissing && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunMissing)) {
-                                // #region agent log
-                                _dbgMissScan.push({ ..._scanEntry, rejected: 'defer' });
-                                // #endregion
                                 continue;
                             }
                             if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) {
-                                // #region agent log
-                                _dbgMissScan.push({ ..._scanEntry, rejected: 'disabled' });
-                                // #endregion
                                 continue;
                             }
                             if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) {
-                                // #region agent log
-                                _dbgMissScan.push({ ..._scanEntry, rejected: 'missing' });
-                                // #endregion
                                 continue;
                             }
                             eligiblePerson = candidate;
                             eligibleIndex = idx;
-                            // #region agent log
-                            _dbgMissScan.push({ ..._scanEntry, rejected: null, chosen: true });
-                            // #endregion
                             break;
                         }
-                        // #region agent log
-                        if (
-                            groupNum === 2 &&
-                            typeof dateKey === 'string' &&
-                            dateKey === '2026-12-30'
-                        ) {
-                            const uiList = (groups?.[2]?.semi || []).map((p, i) => ({
-                                ui: i + 1,
-                                p
-                            }));
-                            fetch(
-                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-Debug-Session-Id': '15d095'
-                                    },
-                                    body: JSON.stringify({
-                                        sessionId: '15d095',
-                                        runId: 'post-fix',
-                                        hypothesisId: 'H11',
-                                        location:
-                                            'duty-shifts-logic.js:semi-missing-scan',
-                                        message: 'g2 30/12 missing replacement scan',
-                                        data: {
-                                            rot: person,
-                                            rotUi: pos + 1,
-                                            periods: (
-                                                getMissingPeriodsForPersonNorm(
-                                                    groupNum,
-                                                    person
-                                                ) || []
-                                            ).map((p) => ({ start: p.start, end: p.end })),
-                                            scan: _dbgMissScan.slice(0, 15),
-                                            chosen: eligiblePerson,
-                                            chosenUi:
-                                                eligibleIndex >= 0 ? eligibleIndex + 1 : null,
-                                            dutyList: groupPeople.map((p, i) => ({
-                                                ui: i + 1,
-                                                p
-                                            })),
-                                            rawUiList: uiList
-                                        },
-                                        timestamp: Date.now()
-                                    })
-                                }
-                            ).catch(() => {});
-                        }
-                        // #endregion
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.recordCandidateScan(
                                 'semi-missing',
@@ -13288,9 +13221,6 @@
                             !semiFulfilledReturnDeferUsedRun[fulfilledDeferKey] &&
                             getFulfilledSemiReturnSkipContext(person, groupNum, calcStartKey);
                         if (fulfilledSkipCtx) {
-                            // #region agent log
-                            _dbgSemiSkipReason = 'fulfilled-return-skip';
-                            // #endregion
                             semiFulfilledReturnDeferUsedRun[fulfilledDeferKey] = true;
                             if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                                 dutySemiDebug.logStep(
@@ -13349,79 +13279,6 @@
                     // Skip whole-month absentees so next ημιαργία is e.g. after #5 → #7 (not #6)
                     nextPos = snapSemiIndexPastWholeMonthAbsent(groupPeople, groupNum, date, nextPos);
                     globalSemiPos[groupNum] = nextPos;
-                    // #region agent log
-                    if (
-                        groupNum === 2 &&
-                        typeof dateKey === 'string' &&
-                        dateKey >= '2026-12-18' &&
-                        dateKey <= '2026-12-30'
-                    ) {
-                        const uiNo = (name) => {
-                            if (!name) return null;
-                            const i = groupPeople.findIndex(
-                                (p) => normSemiRun(p) === normSemiRun(name)
-                            );
-                            return i >= 0 ? i + 1 : null;
-                        };
-                        fetch(
-                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                            {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-Debug-Session-Id': '15d095'
-                                },
-                                body: JSON.stringify({
-                                    sessionId: '15d095',
-                                    runId: 'post-fix',
-                                    hypothesisId: 'H7-H10',
-                                    location: 'duty-shifts-logic.js:semi-run-slot',
-                                    message: 'semi g2 slot resolve',
-                                    data: {
-                                        dateKey,
-                                        pos,
-                                        rotUi: uiNo(rotationPersonAtSlot),
-                                        rot: rotationPersonAtSlot,
-                                        skipReason: _dbgSemiSkipReason,
-                                        missing: !!(
-                                            rotationPersonAtSlot &&
-                                            isPersonMissingOnDate(
-                                                rotationPersonAtSlot,
-                                                groupNum,
-                                                date,
-                                                'semi'
-                                            )
-                                        ),
-                                        disabled: !!(
-                                            rotationPersonAtSlot &&
-                                            isPersonDisabledForDuty(
-                                                rotationPersonAtSlot,
-                                                groupNum,
-                                                'semi'
-                                            )
-                                        ),
-                                        periods: rotationPersonAtSlot
-                                            ? (
-                                                  getMissingPeriodsForPersonNorm(
-                                                      groupNum,
-                                                      rotationPersonAtSlot
-                                                  ) || []
-                                              ).map((p) => ({
-                                                  start: p.start,
-                                                  end: p.end
-                                              }))
-                                            : [],
-                                        finalUi: uiNo(baseline[dateKey][groupNum]),
-                                        final: baseline[dateKey][groupNum],
-                                        nextPos,
-                                        nextUi: uiNo(groupPeople[nextPos])
-                                    },
-                                    timestamp: Date.now()
-                                })
-                            }
-                        ).catch(() => {});
-                    }
-                    // #endregion
                 }
             }
 
@@ -13470,51 +13327,6 @@
             for (const dk of Object.keys(baseline)) {
                 finalAssignments[dk] = { ...baseline[dk] };
             }
-            // #region agent log
-            {
-                const g2Dec = ['2026-12-18', '2026-12-23', '2026-12-30'].map((dk) => {
-                    const p = baseline[dk]?.[2] || null;
-                    const gd =
-                        (typeof groupsForDuty === 'function' ? groupsForDuty(2) : groups[2]) ||
-                        {};
-                    const people = gd.semi || [];
-                    const ui =
-                        p && people.length
-                            ? people.findIndex(
-                                  (x) =>
-                                      (typeof normalizePersonKey === 'function'
-                                          ? normalizePersonKey(x)
-                                          : String(x || '').trim()) ===
-                                      (typeof normalizePersonKey === 'function'
-                                          ? normalizePersonKey(p)
-                                          : String(p || '').trim())
-                              ) + 1
-                            : null;
-                    return {
-                        dateKey: dk,
-                        person: p,
-                        ui: ui > 0 ? ui : null,
-                        mapBase: baselineSemiByDate[dk]?.[2] || null
-                    };
-                });
-                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Debug-Session-Id': '15d095'
-                    },
-                    body: JSON.stringify({
-                        sessionId: '15d095',
-                        runId: 'post-fix',
-                        hypothesisId: 'H6',
-                        location: 'duty-shifts-logic.js:semi-run-baseline-summary',
-                        message: 'g2 Dec semi baseline after build',
-                        data: { g2Dec },
-                        timestamp: Date.now()
-                    })
-                }).catch(() => {});
-            }
-            // #endregion
             const swapInfo = {}; // dateKey -> { groupNum -> { otherDateKey, otherDateStr } }
             const swappedSet = new Set(); // 'dateKey:groupNum' already swapped (skip when iterating)
             let semiSwapPairId = 0; // for assignmentReasons so results modal can show swap pairs
@@ -13633,6 +13445,9 @@
 
             // 4) Last rotation positions: use final assignments (after swaps) per month
             const lastSemiRotationPositionsByMonth = {};
+            // #region agent log
+            const _dbgG2ContChain = [];
+            // #endregion
             for (const dateKey of sortedSemi) {
                 const m = semiMeta[dateKey];
                 if (!m) continue;
@@ -13645,42 +13460,54 @@
                             ? getPersonForRotationContinuity(dateKey, groupNum, g[groupNum], finalAssignments)
                             : g[groupNum];
                         if (personForRotation) lastSemiRotationPositionsByMonth[m.monthKey][groupNum] = personForRotation;
+                        // #region agent log
+                        if (
+                            groupNum === 2 &&
+                            typeof dateKey === 'string' &&
+                            dateKey >= '2026-12-01' &&
+                            dateKey <= '2026-12-31'
+                        ) {
+                            const people = getSemiPeopleForRotation(2, dateKey);
+                            const uiNo = (name) => {
+                                if (!name) return null;
+                                const i = people.findIndex(
+                                    (p) =>
+                                        (typeof normalizePersonKey === 'function'
+                                            ? normalizePersonKey(p)
+                                            : String(p || '').trim()) ===
+                                        (typeof normalizePersonKey === 'function'
+                                            ? normalizePersonKey(name)
+                                            : String(name || '').trim())
+                                );
+                                return i >= 0 ? i + 1 : null;
+                            };
+                            const reason =
+                                typeof getAssignmentReason === 'function'
+                                    ? getAssignmentReason(dateKey, 2, g[2])
+                                    : null;
+                            _dbgG2ContChain.push({
+                                dateKey,
+                                final: g[2],
+                                finalUi: uiNo(g[2]),
+                                continuity: personForRotation,
+                                contUi: uiNo(personForRotation),
+                                reasonType: reason?.type || null,
+                                rfm: !!reason?.meta?.returnFromMissing,
+                                unavail: !!reason?.meta?.unavailableReplacement,
+                                swappedWith: reason?.swappedWith || null,
+                                displaced: reason?.meta?.displacedPerson || null
+                            });
+                        }
+                        // #endregion
                     }
                 }
             }
-
             // #region agent log
-            {
-                const gd =
-                    (typeof groupsForDuty === 'function' ? groupsForDuty(2) : groups[2]) || {};
-                const people = gd.semi || [];
-                const uiNo = (name) => {
-                    if (!name || !people.length) return null;
-                    const i = people.findIndex(
-                        (x) =>
-                            (typeof normalizePersonKey === 'function'
-                                ? normalizePersonKey(x)
-                                : String(x || '').trim()) ===
-                            (typeof normalizePersonKey === 'function'
-                                ? normalizePersonKey(name)
-                                : String(name || '').trim())
-                    );
-                    return i >= 0 ? i + 1 : null;
-                };
-                const g2Final = ['2026-12-18', '2026-12-23', '2026-12-30'].map((dk) => {
-                    const p = finalAssignments[dk]?.[2] || null;
-                    const cont =
-                        p && typeof getPersonForRotationContinuity === 'function'
-                            ? getPersonForRotationContinuity(dk, 2, p, finalAssignments)
-                            : null;
-                    return {
-                        dateKey: dk,
-                        final: p,
-                        finalUi: uiNo(p),
-                        continuity: cont,
-                        continuityUi: uiNo(cont)
-                    };
-                });
+            if (_dbgG2ContChain.length) {
+                const decKey = Object.keys(lastSemiRotationPositionsByMonth).find((k) =>
+                    k.startsWith('2026-11') || k.includes('2026') && (k === '2026-11' || k === '2026-12' || k.endsWith('-11') || /2026-12/.test(k) || k === '2026-11' )
+                );
+                const monthKeys = Object.keys(lastSemiRotationPositionsByMonth);
                 fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
                     method: 'POST',
                     headers: {
@@ -13689,25 +13516,24 @@
                     },
                     body: JSON.stringify({
                         sessionId: '15d095',
-                        runId: 'post-fix',
-                        hypothesisId: 'H6',
-                        location: 'duty-shifts-logic.js:semi-run-final-summary',
-                        message: 'g2 Dec semi final after swaps',
+                        runId: 'jan-seed',
+                        hypothesisId: 'H12-H14',
+                        location: 'duty-shifts-logic.js:semi-run-cont-summary',
+                        message: 'g2 Dec semi final→continuity chain',
                         data: {
-                            g2Final,
-                            lastContDec: lastSemiRotationPositionsByMonth['2026-11']
-                                ? null
-                                : lastSemiRotationPositionsByMonth[
-                                      Object.keys(lastSemiRotationPositionsByMonth).find((k) =>
-                                          k.includes('2026')
-                                      ) || ''
-                                  ]?.[2] || null
+                            chain: _dbgG2ContChain,
+                            monthKeys,
+                            lastContByMonth: monthKeys.reduce((acc, mk) => {
+                                acc[mk] = lastSemiRotationPositionsByMonth[mk]?.[2] || null;
+                                return acc;
+                            }, {})
                         },
                         timestamp: Date.now()
                     })
                 }).catch(() => {});
             }
             // #endregion
+
 
             const mergedSemiBaseline = finalizeSemiPreview(finalAssignments, baselineSemiByDate, baseline);
 
@@ -14266,65 +14092,6 @@
                                 const displacedPerson = rfmDisp.displacedPerson;
                                 const originalIndex = rfmDisp.originalIndex;
                                 globalSemiRotationPosition[groupNum] = (originalIndex >= 0 ? originalIndex : (groupPeople.indexOf(assignedPerson) + 1)) % rotationDays;
-                                // #region agent log
-                                if (
-                                    groupNum === 2 &&
-                                    typeof dateKey === 'string' &&
-                                    dateKey >= '2026-12-01' &&
-                                    dateKey <= '2026-12-31'
-                                ) {
-                                    const normP = (s) =>
-                                        typeof normalizePersonKey === 'function'
-                                            ? normalizePersonKey(s)
-                                            : String(s || '').trim();
-                                    const uiNo = (name) => {
-                                        if (!name) return null;
-                                        const i = groupPeople.findIndex(
-                                            (p) => normP(p) === normP(name)
-                                        );
-                                        return i >= 0 ? i + 1 : null;
-                                    };
-                                    fetch(
-                                        'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                        {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type': 'application/json',
-                                                'X-Debug-Session-Id': '15d095'
-                                            },
-                                            body: JSON.stringify({
-                                                sessionId: '15d095',
-                                                runId: 'post-fix',
-                                                hypothesisId: 'H1-H3',
-                                                location:
-                                                    'duty-shifts-logic.js:semi-rfm-preview',
-                                                message: 'semi RFM designated (preview)',
-                                                data: {
-                                                    dateKey,
-                                                    designated: assignedPerson,
-                                                    designatedUi: uiNo(assignedPerson),
-                                                    mapBaseline,
-                                                    mapBaselineUi: uiNo(mapBaseline),
-                                                    displacedPerson,
-                                                    displacedUi: uiNo(displacedPerson),
-                                                    fromLive: rfmDisp.fromLive,
-                                                    livePos: rfmDisp.livePos,
-                                                    liveUi: uiNo(rfmDisp.livePerson),
-                                                    originalIndex,
-                                                    nextPos: globalSemiRotationPosition[groupNum],
-                                                    nextUi: uiNo(
-                                                        groupPeople[
-                                                            globalSemiRotationPosition[groupNum]
-                                                        ]
-                                                    ),
-                                                    fallbackAfterDesignated: originalIndex < 0
-                                                },
-                                                timestamp: Date.now()
-                                            })
-                                        }
-                                    ).catch(() => {});
-                                }
-                                // #endregion
                                 const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                                 storeAssignmentReason(
                                     dateKey,
@@ -14667,60 +14434,6 @@
                                     date,
                                     globalSemiRotationPosition[groupNum]
                                 );
-                                // #region agent log
-                                if (
-                                    groupNum === 2 &&
-                                    typeof dateKey === 'string' &&
-                                    dateKey >= '2026-12-01' &&
-                                    dateKey <= '2026-12-31'
-                                ) {
-                                    const normP = (s) =>
-                                        typeof normalizePersonKey === 'function'
-                                            ? normalizePersonKey(s)
-                                            : String(s || '').trim();
-                                    const uiNo = (name) => {
-                                        if (!name) return null;
-                                        const i = groupPeople.findIndex(
-                                            (p) => normP(p) === normP(name)
-                                        );
-                                        return i >= 0 ? i + 1 : null;
-                                    };
-                                    fetch(
-                                        'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                        {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type': 'application/json',
-                                                'X-Debug-Session-Id': '15d095'
-                                            },
-                                            body: JSON.stringify({
-                                                sessionId: '15d095',
-                                                runId: 'post-fix',
-                                                hypothesisId: 'H2',
-                                                location:
-                                                    'duty-shifts-logic.js:semi-advance-preview',
-                                                message: 'semi g2 advance (non-RFM)',
-                                                data: {
-                                                    dateKey,
-                                                    rotPos: rotationPosition,
-                                                    rotUi: uiNo(rotationPerson),
-                                                    finalUi: uiNo(assignedPerson),
-                                                    final: assignedPerson,
-                                                    nextPos: globalSemiRotationPosition[groupNum],
-                                                    nextUi: uiNo(
-                                                        groupPeople[
-                                                            globalSemiRotationPosition[groupNum]
-                                                        ]
-                                                    ),
-                                                    wasReplaced,
-                                                    replacementIndex
-                                                },
-                                                timestamp: Date.now()
-                                            })
-                                        }
-                                    ).catch(() => {});
-                                }
-                                // #endregion
                             }
                             
                             // Store assignment for potential future swaps
