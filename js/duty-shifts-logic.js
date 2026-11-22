@@ -13244,6 +13244,51 @@
             for (const dk of Object.keys(baseline)) {
                 finalAssignments[dk] = { ...baseline[dk] };
             }
+            // #region agent log
+            {
+                const g2Dec = ['2026-12-18', '2026-12-23', '2026-12-30'].map((dk) => {
+                    const p = baseline[dk]?.[2] || null;
+                    const gd =
+                        (typeof groupsForDuty === 'function' ? groupsForDuty(2) : groups[2]) ||
+                        {};
+                    const people = gd.semi || [];
+                    const ui =
+                        p && people.length
+                            ? people.findIndex(
+                                  (x) =>
+                                      (typeof normalizePersonKey === 'function'
+                                          ? normalizePersonKey(x)
+                                          : String(x || '').trim()) ===
+                                      (typeof normalizePersonKey === 'function'
+                                          ? normalizePersonKey(p)
+                                          : String(p || '').trim())
+                              ) + 1
+                            : null;
+                    return {
+                        dateKey: dk,
+                        person: p,
+                        ui: ui > 0 ? ui : null,
+                        mapBase: baselineSemiByDate[dk]?.[2] || null
+                    };
+                });
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Debug-Session-Id': '15d095'
+                    },
+                    body: JSON.stringify({
+                        sessionId: '15d095',
+                        runId: 'post-fix',
+                        hypothesisId: 'H6',
+                        location: 'duty-shifts-logic.js:semi-run-baseline-summary',
+                        message: 'g2 Dec semi baseline after build',
+                        data: { g2Dec },
+                        timestamp: Date.now()
+                    })
+                }).catch(() => {});
+            }
+            // #endregion
             const swapInfo = {}; // dateKey -> { groupNum -> { otherDateKey, otherDateStr } }
             const swappedSet = new Set(); // 'dateKey:groupNum' already swapped (skip when iterating)
             let semiSwapPairId = 0; // for assignmentReasons so results modal can show swap pairs
@@ -13377,6 +13422,66 @@
                     }
                 }
             }
+
+            // #region agent log
+            {
+                const gd =
+                    (typeof groupsForDuty === 'function' ? groupsForDuty(2) : groups[2]) || {};
+                const people = gd.semi || [];
+                const uiNo = (name) => {
+                    if (!name || !people.length) return null;
+                    const i = people.findIndex(
+                        (x) =>
+                            (typeof normalizePersonKey === 'function'
+                                ? normalizePersonKey(x)
+                                : String(x || '').trim()) ===
+                            (typeof normalizePersonKey === 'function'
+                                ? normalizePersonKey(name)
+                                : String(name || '').trim())
+                    );
+                    return i >= 0 ? i + 1 : null;
+                };
+                const g2Final = ['2026-12-18', '2026-12-23', '2026-12-30'].map((dk) => {
+                    const p = finalAssignments[dk]?.[2] || null;
+                    const cont =
+                        p && typeof getPersonForRotationContinuity === 'function'
+                            ? getPersonForRotationContinuity(dk, 2, p, finalAssignments)
+                            : null;
+                    return {
+                        dateKey: dk,
+                        final: p,
+                        finalUi: uiNo(p),
+                        continuity: cont,
+                        continuityUi: uiNo(cont)
+                    };
+                });
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Debug-Session-Id': '15d095'
+                    },
+                    body: JSON.stringify({
+                        sessionId: '15d095',
+                        runId: 'post-fix',
+                        hypothesisId: 'H6',
+                        location: 'duty-shifts-logic.js:semi-run-final-summary',
+                        message: 'g2 Dec semi final after swaps',
+                        data: {
+                            g2Final,
+                            lastContDec: lastSemiRotationPositionsByMonth['2026-11']
+                                ? null
+                                : lastSemiRotationPositionsByMonth[
+                                      Object.keys(lastSemiRotationPositionsByMonth).find((k) =>
+                                          k.includes('2026')
+                                      ) || ''
+                                  ]?.[2] || null
+                        },
+                        timestamp: Date.now()
+                    })
+                }).catch(() => {});
+            }
+            // #endregion
 
             const mergedSemiBaseline = finalizeSemiPreview(finalAssignments, baselineSemiByDate, baseline);
 
