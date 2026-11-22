@@ -13097,8 +13097,8 @@
                         if (eligiblePerson && rotationPersonAtSlot) {
                             storeSemiUnavailableReplacementIfNeeded(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date);
                         }
-                        // Basic series: advance one from the baseline slot (not past the stand-in).
-                        nextPos = (pos + 1) % rotationDays;
+                        // After a stand-in, continue after them so they are not assigned on the next ημιαργία.
+                        if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays;
                     } else if (person && isPersonMissingOnDate(person, groupNum, date, 'semi')) {
                         // #region agent log
                         _dbgSemiSkipReason = 'missing';
@@ -13106,7 +13106,7 @@
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.logStep('phase-missing', `Απουσία ${person} — αναζήτηση αντικαταστάτη στη σειρά ημιαργίας.`);
                         }
-                        // MISSING: replace for final only; series cursor stays after this baseline slot.
+                        // MISSING: assign next eligible; then continue after the stand-in (no double assignment).
                         let eligiblePerson = null;
                         let eligibleIndex = -1;
                         const deferSkipPersonRunMissing = deferManualAlternateSkipSemiRun[groupNum]?.person;
@@ -13141,9 +13141,7 @@
                                 );
                             }
                         }
-                        // Do not jump series past the stand-in (#10) — continue after baseline (#8).
-                        nextPos = (pos + 1) % rotationDays;
-                        void eligibleIndex;
+                        if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays;
                     } else if (person) {
                         const fulfilledDeferKey = `${monthKey}:${groupNum}:${normalizePersonKey(person)}`;
                         const fulfilledSkipCtx =
@@ -13185,8 +13183,7 @@
                                     fulfilledSkipCtx.absenceEndKey
                                 );
                             }
-                            nextPos = (pos + 1) % rotationDays;
-                            void eligibleIndex;
+                            if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays;
                         } else {
                             baseline[dateKey][groupNum] = person;
                         }
