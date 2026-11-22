@@ -6497,7 +6497,8 @@
                     r.meta.mutualTwoDaySwap ||
                     r.meta.preserveBaseline ||
                     r.meta.manualAssignMonthScope ||
-                    r.meta.manualAssignMonthReflow)
+                    r.meta.manualAssignMonthReflow ||
+                    r.meta.manualReasonEdit)
             );
         }
 

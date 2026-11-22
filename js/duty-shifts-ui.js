@@ -9846,7 +9846,9 @@
                 }
                 let reasonDisplayText;
                 let reasonDisplayHtml = null;
-                if (reason && reason.type === 'skip' && reason.meta?.preserveBaseline) {
+                if (reason?.meta?.manualReasonEdit && reason.reason) {
+                    reasonDisplayText = String(reason.reason).trim();
+                } else if (reason && reason.type === 'skip' && reason.meta?.preserveBaseline) {
                     const rawManual = String(reason.reason || '').trim();
                     if (rawManual) {
                         reasonDisplayText =
@@ -9948,12 +9950,26 @@
                 } else {
                     reasonDisplayText = derivedReasonText;
                 }
+                const editableReasonText = String(
+                    (reason && reason.reason != null && String(reason.reason).trim())
+                        ? String(reason.reason).trim()
+                        : (reasonDisplayText || '')
+                ).trim();
+                const canEditReason = !!(person.name && person.group && (reason || derivedReasonText));
                 const reasonDisplay = (reason || derivedReasonText)
-                    ? `<div class="mt-1 reason-card small text-muted"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong> ${
+                    ? `<div class="mt-1 reason-card small text-muted${canEditReason ? ' reason-card-editable' : ''}"${
+                          canEditReason
+                              ? ` role="button" tabindex="0" title="Κλικ για επεξεργασία λόγου" data-reason-edit="1" data-day-key="${escapeHtml(key)}" data-group="${person.group}" data-person="${escapeHtml(person.name)}" data-reason-raw="${escapeHtml(editableReasonText)}"`
+                              : ''
+                      }><div class="reason-card-view"><i class="fas fa-info-circle me-1"></i><strong>Λόγος:</strong>${
+                          canEditReason
+                              ? ' <span class="reason-card-edit-hint"><i class="fas fa-pen"></i></span>'
+                              : ''
+                      } ${
                           reasonDisplayHtml != null
                               ? reasonDisplayHtml
                               : escapeHtml(reasonDisplayText || '')
-                      }</div>`
+                      }</div></div>`
                     : '';
                 
                 const curNameNorm = person.name ? normPick(person.name) : '';
@@ -10068,6 +10084,7 @@
                 if (!monthLocked) {
                     wireDayDetailsManualChangeValidation();
                 }
+                wireDayDetailsReasonEditing();
                 const saveBtn = document.getElementById('dayDetailsSaveBtn');
                 if (saveBtn) {
                     saveBtn.disabled = monthLocked;
@@ -11017,6 +11034,138 @@
             select.dataset.lastValidValue = newVal;
             refreshDutyPersonSelectConflictStyle(select);
             return true;
+        }
+
+        function updateStoredAssignmentReasonText(dayKey, groupNum, personName, newText) {
+            const text = String(newText || '').trim();
+            if (!dayKey || !Number.isFinite(groupNum) || !personName || !text) return false;
+            const existing =
+                typeof getAssignmentReason === 'function'
+                    ? getAssignmentReason(dayKey, groupNum, personName)
+                    : null;
+            if (existing && typeof existing === 'object') {
+                existing.reason = text;
+                if (!existing.meta || typeof existing.meta !== 'object') existing.meta = {};
+                existing.meta.manualReasonEdit = true;
+                // Ensure the object is written under normalized key in the store.
+                if (typeof storeAssignmentReason === 'function') {
+                    storeAssignmentReason(
+                        dayKey,
+                        groupNum,
+                        personName,
+                        existing.type || 'skip',
+                        text,
+                        existing.swappedWith || null,
+                        existing.swapPairId != null ? existing.swapPairId : null,
+                        existing.meta
+                    );
+                }
+                return true;
+            }
+            if (typeof storeAssignmentReason === 'function') {
+                storeAssignmentReason(dayKey, groupNum, personName, 'skip', text, null, null, {
+                    manualReasonEdit: true,
+                    manualDayModal: true
+                });
+                return true;
+            }
+            return false;
+        }
+
+        function beginDayDetailsReasonEdit(cardEl) {
+            if (!cardEl || cardEl.classList.contains('reason-card-editing')) return;
+            const dayKey = cardEl.getAttribute('data-day-key') || '';
+            const groupNum = parseInt(cardEl.getAttribute('data-group'), 10);
+            const personName = cardEl.getAttribute('data-person') || '';
+            const raw = cardEl.getAttribute('data-reason-raw') || '';
+            if (!dayKey || !Number.isFinite(groupNum) || !personName) return;
+
+            cardEl.classList.add('reason-card-editing');
+            cardEl.classList.remove('reason-card-editable');
+            cardEl.removeAttribute('role');
+            cardEl.innerHTML = `
+                <div class="reason-card-editor">
+                    <label class="form-label mb-1 small"><strong>Επεξεργασία λόγου</strong></label>
+                    <textarea class="form-control reason-card-textarea" rows="3">${escapeHtml(raw)}</textarea>
+                    <div class="d-flex gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-primary reason-card-save-btn">
+                            <i class="fas fa-save me-1"></i>Αποθήκευση
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary reason-card-cancel-btn">
+                            Ακύρωση
+                        </button>
+                    </div>
+                </div>
+            `;
+            const textarea = cardEl.querySelector('.reason-card-textarea');
+            const saveBtn = cardEl.querySelector('.reason-card-save-btn');
+            const cancelBtn = cardEl.querySelector('.reason-card-cancel-btn');
+            if (textarea) {
+                textarea.focus();
+                const len = textarea.value.length;
+                try {
+                    textarea.setSelectionRange(len, len);
+                } catch (_) {}
+            }
+            const restoreView = () => {
+                // Re-open day details so display text / badges refresh from store.
+                const d =
+                    typeof currentEditingDayDate !== 'undefined' && currentEditingDayDate
+                        ? currentEditingDayDate
+                        : new Date(dayKey + 'T00:00:00');
+                if (d && !isNaN(d.getTime()) && typeof showDayDetails === 'function') {
+                    showDayDetails(d);
+                }
+            };
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    restoreView();
+                });
+            }
+            if (saveBtn) {
+                saveBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const next = textarea ? String(textarea.value || '').trim() : '';
+                    if (!next) {
+                        alert('Ο λόγος δεν μπορεί να είναι κενός.');
+                        return;
+                    }
+                    const ok = updateStoredAssignmentReasonText(dayKey, groupNum, personName, next);
+                    if (!ok) {
+                        alert('Αποτυχία ενημέρωσης λόγου.');
+                        return;
+                    }
+                    try {
+                        if (typeof saveData === 'function') await saveData();
+                    } catch (err) {
+                        console.warn('Failed saving edited reason:', err);
+                    }
+                    if (typeof renderCalendar === 'function') renderCalendar();
+                    restoreView();
+                });
+            }
+        }
+
+        function wireDayDetailsReasonEditing() {
+            const container = document.getElementById('dutyPersonsContainer');
+            if (!container) return;
+            container.querySelectorAll('.reason-card[data-reason-edit="1"]').forEach((card) => {
+                if (card.dataset.reasonEditWired === '1') return;
+                card.dataset.reasonEditWired = '1';
+                const open = (e) => {
+                    if (card.classList.contains('reason-card-editing')) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    beginDayDetailsReasonEdit(card);
+                };
+                card.addEventListener('click', open);
+                card.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') open(e);
+                });
+            });
         }
 
         function wireDayDetailsManualChangeValidation() {

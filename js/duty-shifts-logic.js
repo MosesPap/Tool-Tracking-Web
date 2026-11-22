@@ -1250,6 +1250,14 @@
         function buildCombinedAssignmentReasonParts(reason, dateKey, groupNum, personName, dayTypeCategory) {
             const parts = [];
             if (!personName || !dateKey) return parts;
+            // Manual edit in day modal: always show the saved free-text reason.
+            if (reason?.meta?.manualReasonEdit && reason.reason) {
+                const manualText = String(reason.reason).trim();
+                if (manualText) {
+                    parts.push(manualText);
+                    return parts;
+                }
+            }
             const dateObj = new Date(dateKey + 'T00:00:00');
             const inDisabledSlot = personIsReplacementInDisabledBaselineSlot(
                 dateKey,
@@ -2583,6 +2591,9 @@
         }
         function resolveSemiHolidayConflictSwapDisplayText(reason) {
             if (!reason) return '';
+            if (reason.meta?.manualReasonEdit && reason.reason) {
+                return String(reason.reason).trim();
+            }
             const m = reason.meta;
             if (m?.semiConsecutiveHolidaySwap && m.changerName && m.conflictedName && m.conflictDateKey && m.placementDateKey) {
                 const rebuilt =
@@ -2628,6 +2639,9 @@
         }
         function resolveNormalConsecutiveDutySwapDisplayText(reason) {
             if (!reason) return '';
+            if (reason.meta?.manualReasonEdit && reason.reason) {
+                return String(reason.reason).trim();
+            }
             const m = reason.meta;
             if (m?.normalConsecutiveDutySwap && m.changerName && m.conflictedName && m.conflictDateKey && m.placementDateKey) {
                 const rebuilt =
