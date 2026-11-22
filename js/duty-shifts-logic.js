@@ -3546,6 +3546,10 @@
                 else if (dt === 'weekend-holiday') cat = 'weekend';
                 else if (dt === 'special-holiday') cat = 'special';
             }
+            if (cat === 'semi' && typeof getSemiPeopleForRotation === 'function') {
+                const uiOrder = getSemiPeopleForRotation(groupNum, dateKey);
+                if (Array.isArray(uiOrder) && uiOrder.length) return uiOrder;
+            }
             const gd =
                 typeof groupsForDuty === 'function'
                     ? groupsForDuty(groupNum, dateKey)
@@ -3634,10 +3638,11 @@
                 const bp = String(reason.meta?.baselinePerson || '').trim();
                 if (bp) return bp;
             }
-            // Unavailable replacement (missing/disabled): basic series keeps the absent/disabled slot —
-            // continue after swappedWith (baseline), NOT after the stand-in (avoids anchoring on #14→#15).
-            if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
-                return reason.swappedWith;
+            // Unavailable replacement (επιλαχών): month-to-month continuity follows who actually served
+            // (the stand-in). Anchoring on swappedWith (absent) made Jan restart after RFM #4 while
+            // Dec closed on επιλαχών #11.
+            if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement) {
+                return assignedPerson;
             }
             // RFM / E+3 insert: do not lock series on the returning person — keep continuity on
             // the displaced series slot's predecessor so next seed = displaced (due) person.
@@ -13504,9 +13509,6 @@
             }
             // #region agent log
             if (_dbgG2ContChain.length) {
-                const decKey = Object.keys(lastSemiRotationPositionsByMonth).find((k) =>
-                    k.startsWith('2026-11') || k.includes('2026') && (k === '2026-11' || k === '2026-12' || k.endsWith('-11') || /2026-12/.test(k) || k === '2026-11' )
-                );
                 const monthKeys = Object.keys(lastSemiRotationPositionsByMonth);
                 fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
                     method: 'POST',
@@ -13534,8 +13536,39 @@
             }
             // #endregion
 
+            // Sync in-memory store + lastRotationPositions immediately (do not wait on Firestore).
+            // Otherwise Jan seed still reads stale Dec finals (e.g. #11 Ιωάννου) and old continuity (#4).
+            {
+                const formattedFinalSync = formatGroupAssignmentsToStringMap(finalAssignments);
+                if (typeof semiNormalAssignments === 'object' && semiNormalAssignments) {
+                    Object.assign(semiNormalAssignments, formattedFinalSync);
+                }
+                if (!calculationSteps._inProgressAssignmentsByType) {
+                    calculationSteps._inProgressAssignmentsByType = {};
+                }
+                calculationSteps._inProgressAssignmentsByType.semi = finalAssignments;
+                for (const monthKey in lastSemiRotationPositionsByMonth) {
+                    const gmap = lastSemiRotationPositionsByMonth[monthKey];
+                    for (let groupNum = 1; groupNum <= getDutyGroupCount(); groupNum++) {
+                        if (gmap[groupNum] !== undefined && typeof setLastRotationPersonForMonth === 'function') {
+                            setLastRotationPersonForMonth('semi', monthKey, groupNum, gmap[groupNum]);
+                        }
+                    }
+                }
+            }
 
             const mergedSemiBaseline = finalizeSemiPreview(finalAssignments, baselineSemiByDate, baseline);
+            {
+                const formattedBaselineSync = formatGroupAssignmentsToStringMap(
+                    calculationSteps.tempSemiBaselineAssignments || mergedSemiBaseline
+                );
+                if (typeof rotationBaselineSemiAssignments === 'object' && rotationBaselineSemiAssignments) {
+                    Object.assign(rotationBaselineSemiAssignments, formattedBaselineSync);
+                }
+                if (typeof rebuildRotationBaselineLastByType === 'function') {
+                    rebuildRotationBaselineLastByType();
+                }
+            }
 
             // Καθάρισε stale unavailable λόγους ΜΟΝΟ όταν η τελική = καθαρή σειρά
             // (baselineSemiByDate), όχι το merged preview — αλλιώς σβήνεται ο λόγος

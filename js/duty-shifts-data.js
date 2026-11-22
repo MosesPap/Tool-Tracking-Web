@@ -1935,6 +1935,44 @@
             const assigned = getPersonOnDateForRotationContinuityLookup(dayTypeCategory, lastKey, groupNum);
             const store =
                 dayTypeCategory === 'normal' ? buildNormalRotationContinuityStore() : getAssignmentsForDayType(dayTypeCategory);
+            // #region agent log
+            if (
+                dayTypeCategory === 'semi' &&
+                groupNum === 2 &&
+                dateInCurrentMonth &&
+                dateInCurrentMonth.getFullYear() === 2027 &&
+                dateInCurrentMonth.getMonth() === 0
+            ) {
+                const reason =
+                    typeof getAssignmentReason === 'function'
+                        ? getAssignmentReason(lastKey, groupNum, assigned)
+                        : null;
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Debug-Session-Id': '15d095'
+                    },
+                    body: JSON.stringify({
+                        sessionId: '15d095',
+                        runId: 'post-fix',
+                        hypothesisId: 'H21',
+                        location: 'duty-shifts-data.js:getLastAssignmentContinuityPersonForPreviousMonth',
+                        message: 'g2 Jan prev-month last day reason',
+                        data: {
+                            lastKey,
+                            assigned,
+                            reasonType: reason?.type || null,
+                            unavail: !!reason?.meta?.unavailableReplacement,
+                            rfm: !!reason?.meta?.returnFromMissing,
+                            swappedWith: reason?.swappedWith || null,
+                            displaced: reason?.meta?.displacedPerson || null
+                        },
+                        timestamp: Date.now()
+                    })
+                }).catch(() => {});
+            }
+            // #endregion
             if (
                 dayTypeCategory === 'normal' &&
                 typeof getPersonForNormalRotationContinuity === 'function'
