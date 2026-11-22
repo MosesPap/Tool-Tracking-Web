@@ -10561,12 +10561,52 @@
             return str || null;
         }
 
-        function findNextAvailableManualAssignPerson(people, startIdx, groupNum, dateObj, typeCategory, skipNormSet) {
+        /** True if placing person on dateKey (same group) would create ±2-day consecutive conflict. */
+        function wouldManualAssignCauseConsecutiveConflict(dateKey, person, groupNum, replacePerson) {
+            const checkFn =
+                typeof hasConsecutiveDutySavedOnly === 'function'
+                    ? hasConsecutiveDutySavedOnly
+                    : typeof hasConsecutiveDuty === 'function'
+                      ? hasConsecutiveDuty
+                      : null;
+            if (!checkFn || !dateKey || !person || !Number.isFinite(groupNum)) return false;
+            const norm = (s) =>
+                typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
+            if (replacePerson && norm(replacePerson) === norm(person)) return false;
+
+            const applyCheck = () => !!checkFn(dateKey, person, groupNum);
+            if (typeof withTemporaryAssignmentPatches !== 'function') {
+                return applyCheck();
+            }
+            if (typeof buildAssignmentStringForGroupPatch !== 'function') {
+                return applyCheck();
+            }
+            const patched = buildAssignmentStringForGroupPatch(dateKey, groupNum, person);
+            return !!withTemporaryAssignmentPatches({ [dateKey]: patched }, applyCheck);
+        }
+
+        /**
+         * Next available person from rotation list: not excluded/disabled/missing,
+         * and (when dateKey given) without ±2-day consecutive conflict.
+         */
+        function findNextAvailableManualAssignPerson(
+            people,
+            startIdx,
+            groupNum,
+            dateObj,
+            typeCategory,
+            skipNormSet,
+            options = {}
+        ) {
             const norm = (s) =>
                 typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
             const len = people.length;
-            if (!len) return { person: null, index: -1 };
+            if (!len) return { person: null, index: -1, skippedForConflict: false };
             const start = ((Number(startIdx) || 0) % len + len) % len;
+            const dateKey = options.dateKey || null;
+            const replacePerson = options.replacePerson || null;
+            const checkConflict = options.checkConflict !== false && !!dateKey;
+            let sawConflictSkip = false;
             for (let off = 0; off < len; off++) {
                 const idx = (start + off) % len;
                 const cand = people[idx];
@@ -10591,9 +10631,16 @@
                 ) {
                     continue;
                 }
-                return { person: cand, index: idx };
+                if (
+                    checkConflict &&
+                    wouldManualAssignCauseConsecutiveConflict(dateKey, cand, groupNum, replacePerson)
+                ) {
+                    sawConflictSkip = true;
+                    continue;
+                }
+                return { person: cand, index: idx, skippedForConflict: sawConflictSkip };
             }
-            return { person: null, index: -1 };
+            return { person: null, index: -1, skippedForConflict: sawConflictSkip };
         }
 
         /**
@@ -10663,7 +10710,12 @@
                     groupNum,
                     dateObj,
                     typeCategory,
-                    null
+                    null,
+                    {
+                        dateKey: laterKey,
+                        replacePerson: existingPerson,
+                        checkConflict: true
+                    }
                 );
                 if (!picked.person) continue;
 
@@ -10693,16 +10745,21 @@
                     year: 'numeric'
                 });
                 const typeLabel = getManualAssignDutyTypeLabel(typeCategory);
+                const conflictNote = picked.skippedForConflict
+                    ? ' Παράκαμψη προηγούμενων λόγω σύγκρουσης ±2 ημερών.'
+                    : '';
                 const reason =
                     `Επαναϋπολογισμός μετά χειροκίνητη ανάθεση (${typeLabel}): ` +
                     `ο/η ${picked.person} μετά τον/την ${seed} ` +
-                    `(από ${formatDutyDateLabel(dayKey)}). ${getGreekDayName(dateObj)} ${dateStr}.`;
+                    `(από ${formatDutyDateLabel(dayKey)}). ${getGreekDayName(dateObj)} ${dateStr}.` +
+                    conflictNote;
                 if (typeof storeAssignmentReason === 'function') {
                     storeAssignmentReason(laterKey, groupNum, picked.person, 'skip', reason, existingPerson || null, null, {
                         manualDayModal: true,
                         manualAssignMonthReflow: true,
                         reflowFromDate: dayKey,
-                        reflowSeedPerson: seed
+                        reflowSeedPerson: seed,
+                        autoConflictSkip: !!picked.skippedForConflict
                     });
                 }
 
@@ -10780,7 +10837,7 @@
                         <label class="form-check-label" for="manualAssignScopeMonth">
                             Ολόκληρο τον μήνα
                         </label>
-                        <div class="form-text">Από αυτή την ανάθεση και μετά, οι υπόλοιπες ${escapeHtml(typeLabel)} του μήνα επαναϋπολογίζονται με τη σειρά της λίστας μετά τον/την ${escapeHtml(plan.newPerson)}.</div>
+                        <div class="form-text">Από αυτή την ανάθεση και μετά, οι υπόλοιπες ${escapeHtml(typeLabel)} του μήνα επαναϋπολογίζονται με τη σειρά της λίστας μετά τον/την ${escapeHtml(plan.newPerson)}. Γίνεται αυτόματος έλεγχος σύγκρουσης ±2 ημερών και παράκαμψη όσων συγκρούονται.</div>
                     </div>
                 </div>
                 <div class="alert alert-info mb-0" id="manualAssignScopeHint">
@@ -10871,7 +10928,7 @@
                     if (hintEl) {
                         if (scope === 'month') {
                             hintEl.innerHTML =
-                                `<i class="fas fa-info-circle me-1"></i>Θα αλλάξει η σειρά για τις υπόλοιπες <strong>${escapeHtml(typeLabel)}</strong> του μήνα μετά την ${escapeHtml(formatDutyDateLabel(plan.dayKey))}, ξεκινώντας μετά τον/την <strong>${escapeHtml(plan.newPerson)}</strong>.`;
+                                `<i class="fas fa-info-circle me-1"></i>Θα αλλάξει η σειρά για τις υπόλοιπες <strong>${escapeHtml(typeLabel)}</strong> του μήνα μετά την ${escapeHtml(formatDutyDateLabel(plan.dayKey))}, ξεκινώντας μετά τον/την <strong>${escapeHtml(plan.newPerson)}</strong>. Όποιος συγκρούεται (±2 ημέρες) παρακάμπτεται αυτόματα και μπαίνει ο επόμενος διαθέσιμος.`;
                         } else {
                             hintEl.innerHTML =
                                 '<i class="fas fa-info-circle me-1"></i>Η βασική σειρά περιστροφής <strong>δεν αλλάζει</strong> — αλλάζει μόνο ποιος εμφανίζεται αυτή την ημέρα.';
