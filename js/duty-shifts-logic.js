@@ -13110,17 +13110,108 @@
                         let eligiblePerson = null;
                         let eligibleIndex = -1;
                         const deferSkipPersonRunMissing = deferManualAlternateSkipSemiRun[groupNum]?.person;
+                        // #region agent log
+                        const _dbgMissScan = [];
+                        // #endregion
                         for (let offset = 1; offset <= rotationDays * 2; offset++) {
                             const idx = (pos + offset) % rotationDays;
                             const candidate = groupPeople[idx];
                             if (!candidate) continue;
-                            if (deferSkipPersonRunMissing && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunMissing)) continue;
-                            if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) continue;
-                            if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) continue;
+                            // #region agent log
+                            const _scanEntry = {
+                                offset,
+                                idx,
+                                ui: idx + 1,
+                                candidate,
+                                defer: !!(
+                                    deferSkipPersonRunMissing &&
+                                    normSemiRun(candidate) ===
+                                        normSemiRun(deferSkipPersonRunMissing)
+                                ),
+                                disabled: isPersonDisabledForDuty(candidate, groupNum, 'semi'),
+                                missing: isPersonMissingOnDate(
+                                    candidate,
+                                    groupNum,
+                                    date,
+                                    'semi'
+                                )
+                            };
+                            // #endregion
+                            if (deferSkipPersonRunMissing && normSemiRun(candidate) === normSemiRun(deferSkipPersonRunMissing)) {
+                                // #region agent log
+                                _dbgMissScan.push({ ..._scanEntry, rejected: 'defer' });
+                                // #endregion
+                                continue;
+                            }
+                            if (isPersonDisabledForDuty(candidate, groupNum, 'semi')) {
+                                // #region agent log
+                                _dbgMissScan.push({ ..._scanEntry, rejected: 'disabled' });
+                                // #endregion
+                                continue;
+                            }
+                            if (isPersonMissingOnDate(candidate, groupNum, date, 'semi')) {
+                                // #region agent log
+                                _dbgMissScan.push({ ..._scanEntry, rejected: 'missing' });
+                                // #endregion
+                                continue;
+                            }
                             eligiblePerson = candidate;
                             eligibleIndex = idx;
+                            // #region agent log
+                            _dbgMissScan.push({ ..._scanEntry, rejected: null, chosen: true });
+                            // #endregion
                             break;
                         }
+                        // #region agent log
+                        if (
+                            groupNum === 2 &&
+                            typeof dateKey === 'string' &&
+                            dateKey === '2026-12-30'
+                        ) {
+                            const uiList = (groups?.[2]?.semi || []).map((p, i) => ({
+                                ui: i + 1,
+                                p
+                            }));
+                            fetch(
+                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-Debug-Session-Id': '15d095'
+                                    },
+                                    body: JSON.stringify({
+                                        sessionId: '15d095',
+                                        runId: 'post-fix',
+                                        hypothesisId: 'H11',
+                                        location:
+                                            'duty-shifts-logic.js:semi-missing-scan',
+                                        message: 'g2 30/12 missing replacement scan',
+                                        data: {
+                                            rot: person,
+                                            rotUi: pos + 1,
+                                            periods: (
+                                                getMissingPeriodsForPersonNorm(
+                                                    groupNum,
+                                                    person
+                                                ) || []
+                                            ).map((p) => ({ start: p.start, end: p.end })),
+                                            scan: _dbgMissScan.slice(0, 15),
+                                            chosen: eligiblePerson,
+                                            chosenUi:
+                                                eligibleIndex >= 0 ? eligibleIndex + 1 : null,
+                                            dutyList: groupPeople.map((p, i) => ({
+                                                ui: i + 1,
+                                                p
+                                            })),
+                                            rawUiList: uiList
+                                        },
+                                        timestamp: Date.now()
+                                    })
+                                }
+                            ).catch(() => {});
+                        }
+                        // #endregion
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.recordCandidateScan(
                                 'semi-missing',
