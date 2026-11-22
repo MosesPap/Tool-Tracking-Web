@@ -1032,7 +1032,7 @@
                             },
                             body: JSON.stringify({
                                 sessionId: '15d095',
-                                runId: 'pre-fix',
+                                runId: 'post-fix',
                                 hypothesisId: 'C',
                                 location: 'duty-shifts-ui.js:renderGroups',
                                 message: 'Christodoulou in rendered group lists',
@@ -4929,7 +4929,7 @@
                 },
                 body: JSON.stringify({
                     sessionId: '15d095',
-                    runId: 'pre-fix',
+                    runId: 'post-fix',
                     hypothesisId: 'A',
                     location: 'duty-shifts-ui.js:mergeDuplicatePeople:before',
                     message: 'Christodoulou identity variants before merge',
@@ -4945,15 +4945,94 @@
             }).catch(() => {});
             // #endregion
 
+            const exactNameInBucket = (bucket, name) => {
+                if (!bucket || !name) return false;
+                const nk =
+                    typeof normalizePersonKey === 'function'
+                        ? normalizePersonKey(name)
+                        : String(name).trim();
+                for (const listType of ['special', 'weekend', 'semi', 'normal']) {
+                    for (const p of bucket[listType] || []) {
+                        const pn =
+                            typeof normalizePersonKey === 'function'
+                                ? normalizePersonKey(p)
+                                : String(p || '').trim();
+                        if (pn === nk) return true;
+                    }
+                }
+                return false;
+            };
+            const exactGroupsInSet = (groupSet, maxG, name) => {
+                const out = [];
+                if (!groupSet) return out;
+                for (let g = 1; g <= maxG; g++) {
+                    if (exactNameInBucket(groupSet[g], name)) out.push(g);
+                }
+                return out;
+            };
+            /** Same surname+first in different groups = two people; do not collapse. */
+            const isCrossGroupDistinctPair = (other, preferred) => {
+                const check = (groupSet, maxG) => {
+                    const og = exactGroupsInSet(groupSet, maxG, other);
+                    const pg = exactGroupsInSet(groupSet, maxG, preferred);
+                    if (!og.length || !pg.length) return false;
+                    return !og.some((g) => pg.includes(g));
+                };
+                const activeMax =
+                    typeof getDutyGroupCount === 'function' ? getDutyGroupCount() : 4;
+                return (
+                    check(four, 4) ||
+                    check(three, 3) ||
+                    check(groups, activeMax)
+                );
+            };
+
             for (const [, variants] of byId) {
                 const uniq = [...new Set(variants)];
                 if (uniq.length < 2) continue;
                 const preferred = pickPreferredLivePersonName(uniq);
                 if (!preferred) continue;
-                preferredNames.push(preferred);
 
                 for (const other of uniq) {
                     if (other === preferred) continue;
+
+                    if (isCrossGroupDistinctPair(other, preferred)) {
+                        // #region agent log
+                        if (
+                            String(preferred || '')
+                                .toUpperCase()
+                                .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ') ||
+                            String(other || '')
+                                .toUpperCase()
+                                .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
+                        ) {
+                            fetch(
+                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-Debug-Session-Id': '15d095'
+                                    },
+                                    body: JSON.stringify({
+                                        sessionId: '15d095',
+                                        runId: 'post-fix',
+                                        hypothesisId: 'A',
+                                        location:
+                                            'duty-shifts-ui.js:mergeDuplicatePeople:skip',
+                                        message:
+                                            'skipped cross-group distinct identity pair',
+                                        data: { preferred, other, identity: idFn(preferred) },
+                                        timestamp: Date.now()
+                                    })
+                                }
+                            ).catch(() => {});
+                        }
+                        // #endregion
+                        continue;
+                    }
+
+                    preferredNames.push(preferred);
 
                     // #region agent log
                     const _isChristoPair =
@@ -4974,10 +5053,10 @@
                                 },
                                 body: JSON.stringify({
                                     sessionId: '15d095',
-                                    runId: 'pre-fix',
+                                    runId: 'post-fix',
                                     hypothesisId: 'A',
                                     location: 'duty-shifts-ui.js:mergeDuplicatePeople:pair',
-                                    message: 'merging identity pair (rank-stripped)',
+                                    message: 'merging same-group identity pair',
                                     data: {
                                         preferred,
                                         other,
@@ -5031,7 +5110,7 @@
                 },
                 body: JSON.stringify({
                     sessionId: '15d095',
-                    runId: 'pre-fix',
+                    runId: 'post-fix',
                     hypothesisId: 'A-B',
                     location: 'duty-shifts-ui.js:mergeDuplicatePeople:after',
                     message: 'Christodoulou lists after merge',

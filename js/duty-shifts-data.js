@@ -1144,19 +1144,12 @@
             if (!g) return false;
             const map = g.excludedFromDuties || {};
             const pk = personScheduleKey(person);
-            const matchesExclKey = (k) => {
-                if (!k || map[k] !== true) return false;
-                if (k === person || (pk && k === pk)) return true;
-                if (personScheduleKey(k) === pk) return true;
-                // Rank may differ after προαγωγή (ΕΣΜΙΑΣ vs ΣΜΙΑΣ) — match identity.
-                if (typeof personNamesMatchIgnoringRank === 'function') {
-                    return personNamesMatchIgnoringRank(k, person);
-                }
-                return identityKeyIgnoringRankLocal(k) === identityKeyIgnoringRankLocal(person);
-            };
+            // Exact full name only (βαθμός included). Different ranks = different people
+            // (e.g. ΣΓΟΣ vs ΑΝΘΣΤΗΣ ΧΡΙΣΤΟΔΟΥΛΟΥ ΚΥΡΙΑΚΟΣ must not share εξαίρεση).
             if (map[person] === true || (pk && map[pk] === true)) return true;
             for (const k of Object.keys(map)) {
-                if (matchesExclKey(k)) return true;
+                if (map[k] !== true) continue;
+                if (personScheduleKey(k) === pk) return true;
             }
             return false;
         }
@@ -1165,14 +1158,7 @@
             if (candidate === personName) return true;
             const pk = personScheduleKey(personName);
             const ck = personScheduleKey(candidate);
-            if (pk && ck && pk === ck) return true;
-            if (typeof personNamesMatchIgnoringRank === 'function') {
-                return personNamesMatchIgnoringRank(candidate, personName);
-            }
-            if (typeof getPersonIdentityKey === 'function') {
-                return getPersonIdentityKey(candidate) === getPersonIdentityKey(personName);
-            }
-            return false;
+            return !!(pk && ck && pk === ck);
         }
 
         function isPersonExcludedInBucket(bucket, person) {
@@ -1183,10 +1169,6 @@
             for (const k of Object.keys(map)) {
                 if (map[k] !== true) continue;
                 if (pk && personScheduleKey(k) === pk) return true;
-                if (typeof personNamesMatchIgnoringRank === 'function' && personNamesMatchIgnoringRank(k, person)) {
-                    return true;
-                }
-                if (identityKeyIgnoringRankLocal(k) === identityKeyIgnoringRankLocal(person)) return true;
             }
             return false;
         }
@@ -1299,10 +1281,10 @@
                     },
                     body: JSON.stringify({
                         sessionId: '15d095',
-                        runId: 'pre-fix',
+                        runId: 'post-fix',
                         hypothesisId: 'B',
                         location: 'duty-shifts-data.js:setPersonExcludedInGroupSet',
-                        message: 'exclusion mirror by identity (Christodoulou)',
+                        message: 'exclusion mirror by exact name (Christodoulou)',
                         data: {
                             personName,
                             excluded,
