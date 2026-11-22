@@ -7763,6 +7763,362 @@
             // Semi-normal baseline + conflict + swap now run in renderStep3_SemiNormal (after OK on weekend).
             return;
         }
+
+        /** Date keys of a duty category inside YYYY-MM (calendar scan). */
+        function collectDutyDateKeysInMonth(monthKey, typeCategory) {
+            if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) return [];
+            const [y, m] = monthKey.split('-').map(Number);
+            if (!y || !m) return [];
+            const daysInMonth = new Date(y, m, 0).getDate();
+            const keys = [];
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dk = `${monthKey}-${String(d).padStart(2, '0')}`;
+                const cat =
+                    typeof getDutyCategoryForDateKey === 'function'
+                        ? getDutyCategoryForDateKey(dk)
+                        : null;
+                if (cat === typeCategory) keys.push(dk);
+            }
+            return keys;
+        }
+
+        function getLiveAssigneeForGroupOnDate(dateKey, groupNum) {
+            if (!dateKey || !Number.isFinite(groupNum)) return null;
+            const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dateKey) : null;
+            if (!raw) return null;
+            if (typeof parseAssignedPersonForGroupFromAssignment === 'function') {
+                return (parseAssignedPersonForGroupFromAssignment(raw, groupNum) || '').trim() || null;
+            }
+            return null;
+        }
+
+        function isCriticalAssignmentForGroupOnDate(dateKey, groupNum) {
+            const list = criticalAssignments?.[dateKey];
+            if (!Array.isArray(list) || !Number.isFinite(groupNum)) return false;
+            return list.some((entry) => {
+                const m = String(entry).match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                return m && parseInt(m[2], 10) === groupNum;
+            });
+        }
+
+        function patchLiveAssignmentForGroup(dateKey, groupNum, personName) {
+            if (!dateKey || !Number.isFinite(groupNum) || typeof setAssignmentForDate !== 'function') return;
+            let newStr = null;
+            if (typeof buildAssignmentStringForGroupPatch === 'function') {
+                newStr = buildAssignmentStringForGroupPatch(dateKey, groupNum, personName);
+            } else if (typeof extractGroupAssignmentsMap === 'function' && typeof groupMapToAssignmentString === 'function') {
+                const raw = typeof getAssignmentForDate === 'function' ? getAssignmentForDate(dateKey) : null;
+                const map = extractGroupAssignmentsMap(raw || '');
+                if (personName) map[groupNum] = String(personName).trim();
+                else delete map[groupNum];
+                newStr = groupMapToAssignmentString(map);
+            }
+            if (newStr != null) setAssignmentForDate(dateKey, newStr);
+        }
+
+        /**
+         * Semi vs weekend/special (±1 day) — same rules as renderStep3_SemiNormal conflict pass.
+         * Mutates live semi assignments + assignmentReasons. Does not move special/weekend.
+         */
+        function resolveSemiConflictsWithHigherTypesForMonth(monthKey, groupNum) {
+            if (!monthKey || !Number.isFinite(groupNum)) return { swaps: 0 };
+            const sortedSemi = collectDutyDateKeysInMonth(monthKey, 'semi');
+            if (!sortedSemi.length) return { swaps: 0 };
+
+            const finalAssignments = {};
+            for (const dk of sortedSemi) {
+                const person = getLiveAssigneeForGroupOnDate(dk, groupNum);
+                if (!person) continue;
+                if (!finalAssignments[dk]) finalAssignments[dk] = {};
+                finalAssignments[dk][groupNum] = person;
+            }
+
+            const hasConflict = (semiDateKey, person) => {
+                if (!semiDateKey || !person) return false;
+                const date = new Date(semiDateKey + 'T00:00:00');
+                if (isNaN(date.getTime())) return false;
+                const before = new Date(date);
+                before.setDate(before.getDate() - 1);
+                const after = new Date(date);
+                after.setDate(after.getDate() + 1);
+                const keyBefore = formatDateKey(before);
+                const keyAfter = formatDateKey(after);
+                const typeBefore = getDayType(before);
+                const typeAfter = getDayType(after);
+                if (typeBefore === 'weekend-holiday') {
+                    const w = getLiveAssigneeForGroupOnDate(keyBefore, groupNum);
+                    if (isSameDutyPersonName(w, person)) return true;
+                }
+                if (typeBefore === 'special-holiday') {
+                    if (
+                        typeof personHasSpecialDutyOnDate === 'function'
+                            ? personHasSpecialDutyOnDate(keyBefore, person, groupNum)
+                            : isSameDutyPersonName(getLiveAssigneeForGroupOnDate(keyBefore, groupNum), person)
+                    ) {
+                        return true;
+                    }
+                }
+                if (typeAfter === 'weekend-holiday') {
+                    const w = getLiveAssigneeForGroupOnDate(keyAfter, groupNum);
+                    if (isSameDutyPersonName(w, person)) return true;
+                }
+                if (typeAfter === 'special-holiday') {
+                    if (
+                        typeof personHasSpecialDutyOnDate === 'function'
+                            ? personHasSpecialDutyOnDate(keyAfter, person, groupNum)
+                            : isSameDutyPersonName(getLiveAssigneeForGroupOnDate(keyAfter, groupNum), person)
+                    ) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            const swappedSet = new Set();
+            let swaps = 0;
+            for (let i = 0; i < sortedSemi.length; i++) {
+                const dateKey = sortedSemi[i];
+                if (swappedSet.has(`${dateKey}:${groupNum}`)) continue;
+                if (isCriticalAssignmentForGroupOnDate(dateKey, groupNum)) continue;
+                const person = finalAssignments[dateKey]?.[groupNum];
+                if (!person || !hasConflict(dateKey, person)) continue;
+
+                let swapped = false;
+                const trySwapWith = (dk2) => {
+                    if (!dk2 || dk2 === dateKey) return false;
+                    if (swappedSet.has(`${dk2}:${groupNum}`)) return false;
+                    if (isCriticalAssignmentForGroupOnDate(dk2, groupNum)) return false;
+                    const other = finalAssignments[dk2]?.[groupNum];
+                    if (!other || isSameDutyPersonName(other, person)) return false;
+                    if (hasConflict(dk2, other)) return false;
+                    if (hasConflict(dk2, person)) return false;
+                    if (hasConflict(dateKey, other)) return false;
+
+                    if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
+                        clearAssignmentReasonForPersonOnDate(dateKey, groupNum, person);
+                        clearAssignmentReasonForPersonOnDate(dk2, groupNum, other);
+                    }
+                    finalAssignments[dateKey][groupNum] = other;
+                    finalAssignments[dk2][groupNum] = person;
+                    patchLiveAssignmentForGroup(dateKey, groupNum, other);
+                    patchLiveAssignmentForGroup(dk2, groupNum, person);
+
+                    const pairId =
+                        typeof getNextSwapPairIdForAssignmentReasons === 'function'
+                            ? getNextSwapPairIdForAssignmentReasons()
+                            : Date.now();
+                    const reason = buildSemiHolidayConflictSwapReason(other, person, dateKey, dk2);
+                    const meta = {
+                        ...getSemiHolidayConflictSwapMeta(other, person, dateKey, dk2),
+                        manualMonthConflictFix: true
+                    };
+                    if (typeof storeAssignmentReason === 'function') {
+                        storeAssignmentReason(dateKey, groupNum, other, 'swap', reason, person, pairId, meta);
+                        storeAssignmentReason(dk2, groupNum, person, 'swap', reason, other, pairId, meta);
+                    }
+                    swappedSet.add(`${dateKey}:${groupNum}`);
+                    swappedSet.add(`${dk2}:${groupNum}`);
+                    swaps++;
+                    return true;
+                };
+
+                // Forward same month, then backward same month (calc order).
+                for (let j = i + 1; j < sortedSemi.length && !swapped; j++) {
+                    swapped = trySwapWith(sortedSemi[j]);
+                }
+                for (let j = i - 1; j >= 0 && !swapped; j--) {
+                    swapped = trySwapWith(sortedSemi[j]);
+                }
+            }
+
+            if (swaps > 0 && typeof refreshLastRotationContinuityForMonth === 'function') {
+                refreshLastRotationContinuityForMonth('semi', monthKey, groupNum);
+            }
+            return { swaps };
+        }
+
+        /**
+         * Normal vs semi/weekend/special (±1 day) — ASAP two-slot swap (same outcome as runNormalSwapLogic).
+         * Mutates live normal assignments only.
+         */
+        function resolveNormalConflictsWithHigherTypesForMonth(monthKey, groupNum) {
+            if (!monthKey || !Number.isFinite(groupNum)) return { swaps: 0 };
+            const sortedNormal = collectDutyDateKeysInMonth(monthKey, 'normal');
+            if (!sortedNormal.length) return { swaps: 0 };
+
+            const assignments = {};
+            for (const dk of sortedNormal) {
+                const person = getLiveAssigneeForGroupOnDate(dk, groupNum);
+                if (!person) continue;
+                if (!assignments[dk]) assignments[dk] = {};
+                assignments[dk][groupNum] = person;
+            }
+
+            const swappedSet = new Set();
+            let swaps = 0;
+            const useWeekPair =
+                typeof shouldApplyNormalWeekPairSwapLogicForGroup === 'function' &&
+                shouldApplyNormalWeekPairSwapLogicForGroup(groupNum);
+
+            for (let i = 0; i < sortedNormal.length; i++) {
+                const dateKey = sortedNormal[i];
+                if (swappedSet.has(`${dateKey}:${groupNum}`)) continue;
+                if (isCriticalAssignmentForGroupOnDate(dateKey, groupNum)) continue;
+                const currentPerson = assignments[dateKey]?.[groupNum];
+                if (!currentPerson) continue;
+                if (typeof hasConsecutiveDuty !== 'function' || !hasConsecutiveDuty(dateKey, currentPerson, groupNum, null)) {
+                    continue;
+                }
+
+                const date = new Date(dateKey + 'T00:00:00');
+                const dayOfWeek = date.getDay();
+                let swapDayKey = null;
+                let swapCandidate = null;
+
+                const candidateOk = (candidateKey) => {
+                    if (!candidateKey || candidateKey === dateKey) return null;
+                    if (swappedSet.has(`${candidateKey}:${groupNum}`)) return null;
+                    if (isCriticalAssignmentForGroupOnDate(candidateKey, groupNum)) return null;
+                    const cand = assignments[candidateKey]?.[groupNum];
+                    if (!cand || isSameDutyPersonName(cand, currentPerson)) return null;
+                    const candDate = new Date(candidateKey + 'T00:00:00');
+                    if (isNaN(candDate.getTime()) || getDayType(candDate) !== 'normal-day') return null;
+                    if (
+                        typeof isPersonDisabledForDuty === 'function' &&
+                        isPersonDisabledForDuty(cand, groupNum, 'normal', candDate)
+                    ) {
+                        return null;
+                    }
+                    if (
+                        typeof isPersonMissingOnDate === 'function' &&
+                        isPersonMissingOnDate(cand, groupNum, candDate, 'normal')
+                    ) {
+                        return null;
+                    }
+                    // Same gates as runNormalSwapLogic / Step 3 semi:
+                    // candidate already free; candidate OK on conflict day; conflicted OK on candidate day.
+                    if (hasConsecutiveDuty(candidateKey, cand, groupNum, null)) return null;
+                    if (hasConsecutiveDuty(dateKey, cand, groupNum, null)) return null;
+                    if (hasConsecutiveDuty(candidateKey, currentPerson, groupNum, null)) return null;
+                    return cand;
+                };
+
+                if (useWeekPair) {
+                    // Mon↔Wed or Tue↔Thu within same week when possible, else ASAP.
+                    let partnerOffset = null;
+                    if (dayOfWeek === 1) partnerOffset = 2; // Mon -> Wed
+                    else if (dayOfWeek === 3) partnerOffset = -2; // Wed -> Mon
+                    else if (dayOfWeek === 2) partnerOffset = 2; // Tue -> Thu
+                    else if (dayOfWeek === 4) partnerOffset = -2; // Thu -> Tue
+                    if (partnerOffset != null) {
+                        const partner = new Date(date);
+                        partner.setDate(partner.getDate() + partnerOffset);
+                        const pk = formatDateKey(partner);
+                        if (pk.substring(0, 7) === monthKey) {
+                            const cand = candidateOk(pk);
+                            if (cand) {
+                                swapDayKey = pk;
+                                swapCandidate = cand;
+                            }
+                        }
+                    }
+                }
+
+                if (!swapDayKey) {
+                    for (let j = i + 1; j < sortedNormal.length && !swapDayKey; j++) {
+                        const cand = candidateOk(sortedNormal[j]);
+                        if (cand) {
+                            swapDayKey = sortedNormal[j];
+                            swapCandidate = cand;
+                        }
+                    }
+                }
+                if (!swapDayKey) {
+                    for (let j = i - 1; j >= 0 && !swapDayKey; j--) {
+                        const cand = candidateOk(sortedNormal[j]);
+                        if (cand) {
+                            swapDayKey = sortedNormal[j];
+                            swapCandidate = cand;
+                        }
+                    }
+                }
+
+                if (!swapDayKey || !swapCandidate) continue;
+
+                if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
+                    clearAssignmentReasonForPersonOnDate(dateKey, groupNum, currentPerson);
+                    clearAssignmentReasonForPersonOnDate(swapDayKey, groupNum, swapCandidate);
+                }
+                assignments[dateKey][groupNum] = swapCandidate;
+                assignments[swapDayKey][groupNum] = currentPerson;
+                patchLiveAssignmentForGroup(dateKey, groupNum, swapCandidate);
+                patchLiveAssignmentForGroup(swapDayKey, groupNum, currentPerson);
+
+                const neighborInfo =
+                    typeof getConsecutiveConflictNeighborInfo === 'function'
+                        ? getConsecutiveConflictNeighborInfo(dateKey, currentPerson, groupNum, null)
+                        : null;
+                const conflictWithLabel = neighborInfo?.conflictWithLabel || 'Αργία';
+                const pairId =
+                    typeof getNextSwapPairIdForAssignmentReasons === 'function'
+                        ? getNextSwapPairIdForAssignmentReasons()
+                        : Date.now();
+                const reason = buildNormalConsecutiveDutySwapReason(
+                    swapCandidate,
+                    currentPerson,
+                    dateKey,
+                    swapDayKey,
+                    conflictWithLabel
+                );
+                const meta = {
+                    ...getNormalConsecutiveDutySwapMeta(
+                        swapCandidate,
+                        currentPerson,
+                        dateKey,
+                        swapDayKey,
+                        conflictWithLabel
+                    ),
+                    manualMonthConflictFix: true
+                };
+                if (typeof storeAssignmentReason === 'function') {
+                    storeAssignmentReason(dateKey, groupNum, swapCandidate, 'swap', reason, currentPerson, pairId, meta);
+                    storeAssignmentReason(swapDayKey, groupNum, currentPerson, 'swap', reason, swapCandidate, pairId, meta);
+                }
+                swappedSet.add(`${dateKey}:${groupNum}`);
+                swappedSet.add(`${swapDayKey}:${groupNum}`);
+                swaps++;
+            }
+
+            if (swaps > 0 && typeof refreshLastRotationContinuityForMonth === 'function') {
+                refreshLastRotationContinuityForMonth('normal', monthKey, groupNum);
+            }
+            return { swaps };
+        }
+
+        /**
+         * After month-scope χειροκίνητη ανάθεση: apply cross-type conflict fixes
+         * with calc precedence (special/weekend fixed → adjust semi → adjust normal).
+         */
+        function resolveCrossTypeConflictsAfterManualMonthAssign(typeCategory, monthKey, groupNum) {
+            const result = { semiSwaps: 0, normalSwaps: 0 };
+            if (!monthKey || !Number.isFinite(groupNum) || !typeCategory) return result;
+
+            if (typeCategory === 'special' || typeCategory === 'weekend' || typeCategory === 'semi') {
+                const semi = resolveSemiConflictsWithHigherTypesForMonth(monthKey, groupNum);
+                result.semiSwaps = semi?.swaps || 0;
+            }
+            if (
+                typeCategory === 'special' ||
+                typeCategory === 'weekend' ||
+                typeCategory === 'semi' ||
+                typeCategory === 'normal'
+            ) {
+                const normal = resolveNormalConflictsWithHigherTypesForMonth(monthKey, groupNum);
+                result.normalSwaps = normal?.swaps || 0;
+            }
+            return result;
+        }
+
         function _runSemiNormalSwapLogic_REMOVED() {
             try {
                 const dayTypeLists = calculationSteps.dayTypeLists || { semi: [], special: [], weekend: [] };

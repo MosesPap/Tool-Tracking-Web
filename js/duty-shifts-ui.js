@@ -10561,52 +10561,12 @@
             return str || null;
         }
 
-        /** True if placing person on dateKey (same group) would create ±2-day consecutive conflict. */
-        function wouldManualAssignCauseConsecutiveConflict(dateKey, person, groupNum, replacePerson) {
-            const checkFn =
-                typeof hasConsecutiveDutySavedOnly === 'function'
-                    ? hasConsecutiveDutySavedOnly
-                    : typeof hasConsecutiveDuty === 'function'
-                      ? hasConsecutiveDuty
-                      : null;
-            if (!checkFn || !dateKey || !person || !Number.isFinite(groupNum)) return false;
-            const norm = (s) =>
-                typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
-            if (replacePerson && norm(replacePerson) === norm(person)) return false;
-
-            const applyCheck = () => !!checkFn(dateKey, person, groupNum);
-            if (typeof withTemporaryAssignmentPatches !== 'function') {
-                return applyCheck();
-            }
-            if (typeof buildAssignmentStringForGroupPatch !== 'function') {
-                return applyCheck();
-            }
-            const patched = buildAssignmentStringForGroupPatch(dateKey, groupNum, person);
-            return !!withTemporaryAssignmentPatches({ [dateKey]: patched }, applyCheck);
-        }
-
-        /**
-         * Next available person from rotation list: not excluded/disabled/missing,
-         * and (when dateKey given) without ±2-day consecutive conflict.
-         */
-        function findNextAvailableManualAssignPerson(
-            people,
-            startIdx,
-            groupNum,
-            dateObj,
-            typeCategory,
-            skipNormSet,
-            options = {}
-        ) {
+        function findNextAvailableManualAssignPerson(people, startIdx, groupNum, dateObj, typeCategory, skipNormSet) {
             const norm = (s) =>
                 typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
             const len = people.length;
-            if (!len) return { person: null, index: -1, skippedForConflict: false };
+            if (!len) return { person: null, index: -1 };
             const start = ((Number(startIdx) || 0) % len + len) % len;
-            const dateKey = options.dateKey || null;
-            const replacePerson = options.replacePerson || null;
-            const checkConflict = options.checkConflict !== false && !!dateKey;
-            let sawConflictSkip = false;
             for (let off = 0; off < len; off++) {
                 const idx = (start + off) % len;
                 const cand = people[idx];
@@ -10631,16 +10591,9 @@
                 ) {
                     continue;
                 }
-                if (
-                    checkConflict &&
-                    wouldManualAssignCauseConsecutiveConflict(dateKey, cand, groupNum, replacePerson)
-                ) {
-                    sawConflictSkip = true;
-                    continue;
-                }
-                return { person: cand, index: idx, skippedForConflict: sawConflictSkip };
+                return { person: cand, index: idx };
             }
-            return { person: null, index: -1, skippedForConflict: sawConflictSkip };
+            return { person: null, index: -1 };
         }
 
         /**
@@ -10710,12 +10663,7 @@
                     groupNum,
                     dateObj,
                     typeCategory,
-                    null,
-                    {
-                        dateKey: laterKey,
-                        replacePerson: existingPerson,
-                        checkConflict: true
-                    }
+                    null
                 );
                 if (!picked.person) continue;
 
@@ -10745,21 +10693,16 @@
                     year: 'numeric'
                 });
                 const typeLabel = getManualAssignDutyTypeLabel(typeCategory);
-                const conflictNote = picked.skippedForConflict
-                    ? ' Παράκαμψη προηγούμενων λόγω σύγκρουσης ±2 ημερών.'
-                    : '';
                 const reason =
                     `Επαναϋπολογισμός μετά χειροκίνητη ανάθεση (${typeLabel}): ` +
                     `ο/η ${picked.person} μετά τον/την ${seed} ` +
-                    `(από ${formatDutyDateLabel(dayKey)}). ${getGreekDayName(dateObj)} ${dateStr}.` +
-                    conflictNote;
+                    `(από ${formatDutyDateLabel(dayKey)}). ${getGreekDayName(dateObj)} ${dateStr}.`;
                 if (typeof storeAssignmentReason === 'function') {
                     storeAssignmentReason(laterKey, groupNum, picked.person, 'skip', reason, existingPerson || null, null, {
                         manualDayModal: true,
                         manualAssignMonthReflow: true,
                         reflowFromDate: dayKey,
-                        reflowSeedPerson: seed,
-                        autoConflictSkip: !!picked.skippedForConflict
+                        reflowSeedPerson: seed
                     });
                 }
 
@@ -10773,6 +10716,21 @@
             const monthKey = dayKey.substring(0, 7);
             if (typeof refreshLastRotationContinuityForMonth === 'function') {
                 refreshLastRotationContinuityForMonth(typeCategory, monthKey, groupNum);
+            }
+
+            // Cross-type conflicts: same precedence as month calc
+            // (αργίες σταθερές → αλλάζουν ημιαργίες → αλλάζουν καθημερινές).
+            let conflictFix = { semiSwaps: 0, normalSwaps: 0 };
+            try {
+                if (typeof resolveCrossTypeConflictsAfterManualMonthAssign === 'function') {
+                    conflictFix = resolveCrossTypeConflictsAfterManualMonthAssign(
+                        typeCategory,
+                        monthKey,
+                        groupNum
+                    ) || conflictFix;
+                }
+            } catch (e) {
+                console.warn('Cross-type conflict fix after manual-assign month reflow failed:', e);
             }
 
             // Persist baseline patches (saveData does not write rotation baselines).
@@ -10806,7 +10764,7 @@
                 console.warn('Failed to persist baseline after manual-assign month reflow:', e);
             }
 
-            return { ok: true, changedKeys, ...(options || {}) };
+            return { ok: true, changedKeys, conflictFix, ...(options || {}) };
         }
 
         function buildManualAssignConfirmHtml(plan) {
@@ -10837,7 +10795,7 @@
                         <label class="form-check-label" for="manualAssignScopeMonth">
                             Ολόκληρο τον μήνα
                         </label>
-                        <div class="form-text">Από αυτή την ανάθεση και μετά, οι υπόλοιπες ${escapeHtml(typeLabel)} του μήνα επαναϋπολογίζονται με τη σειρά της λίστας μετά τον/την ${escapeHtml(plan.newPerson)}. Γίνεται αυτόματος έλεγχος σύγκρουσης ±2 ημερών και παράκαμψη όσων συγκρούονται.</div>
+                        <div class="form-text">Από αυτή την ανάθεση και μετά, οι υπόλοιπες ${escapeHtml(typeLabel)} του μήνα επαναϋπολογίζονται με τη σειρά της λίστας μετά τον/την ${escapeHtml(plan.newPerson)}. Αυτόματα ελέγχονται και διορθώνονται συγκρούσεις με τους άλλους τύπους υπηρεσίας (όπως στον υπολογισμό μήνα).</div>
                     </div>
                 </div>
                 <div class="alert alert-info mb-0" id="manualAssignScopeHint">
@@ -10928,7 +10886,7 @@
                     if (hintEl) {
                         if (scope === 'month') {
                             hintEl.innerHTML =
-                                `<i class="fas fa-info-circle me-1"></i>Θα αλλάξει η σειρά για τις υπόλοιπες <strong>${escapeHtml(typeLabel)}</strong> του μήνα μετά την ${escapeHtml(formatDutyDateLabel(plan.dayKey))}, ξεκινώντας μετά τον/την <strong>${escapeHtml(plan.newPerson)}</strong>. Όποιος συγκρούεται (±2 ημέρες) παρακάμπτεται αυτόματα και μπαίνει ο επόμενος διαθέσιμος.`;
+                                `<i class="fas fa-info-circle me-1"></i>Θα αλλάξει η σειρά για τις υπόλοιπες <strong>${escapeHtml(typeLabel)}</strong> του μήνα μετά την ${escapeHtml(formatDutyDateLabel(plan.dayKey))}, ξεκινώντας μετά τον/την <strong>${escapeHtml(plan.newPerson)}</strong>. Θα ελεγχθούν και θα διορθωθούν αυτόματα συγκρούσεις με ημιαργίες / αργίες / καθημερινές (ίδιοι κανόνες με τον υπολογισμό).`;
                         } else {
                             hintEl.innerHTML =
                                 '<i class="fas fa-info-circle me-1"></i>Η βασική σειρά περιστροφής <strong>δεν αλλάζει</strong> — αλλάζει μόνο ποιος εμφανίζεται αυτή την ημέρα.';
