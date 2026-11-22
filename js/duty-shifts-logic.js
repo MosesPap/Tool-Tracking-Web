@@ -13097,7 +13097,8 @@
                         if (eligiblePerson && rotationPersonAtSlot) {
                             storeSemiUnavailableReplacementIfNeeded(dateKey, groupNum, eligiblePerson, rotationPersonAtSlot, date);
                         }
-                        if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays; // next semi goes to person after the one we assigned
+                        // Basic series: advance one from the baseline slot (not past the stand-in).
+                        nextPos = (pos + 1) % rotationDays;
                     } else if (person && isPersonMissingOnDate(person, groupNum, date, 'semi')) {
                         // #region agent log
                         _dbgSemiSkipReason = 'missing';
@@ -13105,7 +13106,7 @@
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.logStep('phase-missing', `Απουσία ${person} — αναζήτηση αντικαταστάτη στη σειρά ημιαργίας.`);
                         }
-                        // MISSING: At the missing semi date assign the next person in rotation; next semi must go to person AFTER them (no double assignment)
+                        // MISSING: replace for final only; series cursor stays after this baseline slot.
                         let eligiblePerson = null;
                         let eligibleIndex = -1;
                         const deferSkipPersonRunMissing = deferManualAlternateSkipSemiRun[groupNum]?.person;
@@ -13140,7 +13141,9 @@
                                 );
                             }
                         }
-                        if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays; // next semi goes to person after the one we assigned
+                        // Do not jump series past the stand-in (#10) — continue after baseline (#8).
+                        nextPos = (pos + 1) % rotationDays;
+                        void eligibleIndex;
                     } else if (person) {
                         const fulfilledDeferKey = `${monthKey}:${groupNum}:${normalizePersonKey(person)}`;
                         const fulfilledSkipCtx =
@@ -13182,7 +13185,8 @@
                                     fulfilledSkipCtx.absenceEndKey
                                 );
                             }
-                            if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays;
+                            nextPos = (pos + 1) % rotationDays;
+                            void eligibleIndex;
                         } else {
                             baseline[dateKey][groupNum] = person;
                         }
@@ -13259,6 +13263,17 @@
                                                 'semi'
                                             )
                                         ),
+                                        periods: rotationPersonAtSlot
+                                            ? (
+                                                  getMissingPeriodsForPersonNorm(
+                                                      groupNum,
+                                                      rotationPersonAtSlot
+                                                  ) || []
+                                              ).map((p) => ({
+                                                  start: p.start,
+                                                  end: p.end
+                                              }))
+                                            : [],
                                         finalUi: uiNo(baseline[dateKey][groupNum]),
                                         final: baseline[dateKey][groupNum],
                                         nextPos,
