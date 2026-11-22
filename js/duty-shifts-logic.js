@@ -13054,6 +13054,9 @@
                     let person = groupPeople[pos];
                     const rotationPersonAtSlot = person;
                     let nextPos = (pos + 1) % rotationDays; // default: next slot goes to person after current pos
+                    // #region agent log
+                    let _dbgSemiSkipReason = null;
+                    // #endregion
                     if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                         dutySemiDebug.startSlot('semi-build', dateKey, groupNum, {
                             rotationPerson: rotationPersonAtSlot,
@@ -13062,6 +13065,9 @@
                     }
                     // DISABLED: When rotation person is disabled, whole baseline shifts – store eligible person, no replacement line.
                     if (person && isPersonDisabledForDuty(person, groupNum, 'semi')) {
+                        // #region agent log
+                        _dbgSemiSkipReason = 'disabled';
+                        // #endregion
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.logStep('disabled-baseline', `${person} απενεργοποιημένος — αναζήτηση επόμενου.`);
                         }
@@ -13093,6 +13099,9 @@
                         }
                         if (eligibleIndex >= 0) nextPos = (eligibleIndex + 1) % rotationDays; // next semi goes to person after the one we assigned
                     } else if (person && isPersonMissingOnDate(person, groupNum, date, 'semi')) {
+                        // #region agent log
+                        _dbgSemiSkipReason = 'missing';
+                        // #endregion
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.logStep('phase-missing', `Απουσία ${person} — αναζήτηση αντικαταστάτη στη σειρά ημιαργίας.`);
                         }
@@ -13138,6 +13147,9 @@
                             !semiFulfilledReturnDeferUsedRun[fulfilledDeferKey] &&
                             getFulfilledSemiReturnSkipContext(person, groupNum, calcStartKey);
                         if (fulfilledSkipCtx) {
+                            // #region agent log
+                            _dbgSemiSkipReason = 'fulfilled-return-skip';
+                            // #endregion
                             semiFulfilledReturnDeferUsedRun[fulfilledDeferKey] = true;
                             if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                                 dutySemiDebug.logStep(
@@ -13196,6 +13208,68 @@
                     // Skip whole-month absentees so next ημιαργία is e.g. after #5 → #7 (not #6)
                     nextPos = snapSemiIndexPastWholeMonthAbsent(groupPeople, groupNum, date, nextPos);
                     globalSemiPos[groupNum] = nextPos;
+                    // #region agent log
+                    if (
+                        groupNum === 2 &&
+                        typeof dateKey === 'string' &&
+                        dateKey >= '2026-12-18' &&
+                        dateKey <= '2026-12-30'
+                    ) {
+                        const uiNo = (name) => {
+                            if (!name) return null;
+                            const i = groupPeople.findIndex(
+                                (p) => normSemiRun(p) === normSemiRun(name)
+                            );
+                            return i >= 0 ? i + 1 : null;
+                        };
+                        fetch(
+                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                            {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Debug-Session-Id': '15d095'
+                                },
+                                body: JSON.stringify({
+                                    sessionId: '15d095',
+                                    runId: 'post-fix',
+                                    hypothesisId: 'H7-H10',
+                                    location: 'duty-shifts-logic.js:semi-run-slot',
+                                    message: 'semi g2 slot resolve',
+                                    data: {
+                                        dateKey,
+                                        pos,
+                                        rotUi: uiNo(rotationPersonAtSlot),
+                                        rot: rotationPersonAtSlot,
+                                        skipReason: _dbgSemiSkipReason,
+                                        missing: !!(
+                                            rotationPersonAtSlot &&
+                                            isPersonMissingOnDate(
+                                                rotationPersonAtSlot,
+                                                groupNum,
+                                                date,
+                                                'semi'
+                                            )
+                                        ),
+                                        disabled: !!(
+                                            rotationPersonAtSlot &&
+                                            isPersonDisabledForDuty(
+                                                rotationPersonAtSlot,
+                                                groupNum,
+                                                'semi'
+                                            )
+                                        ),
+                                        finalUi: uiNo(baseline[dateKey][groupNum]),
+                                        final: baseline[dateKey][groupNum],
+                                        nextPos,
+                                        nextUi: uiNo(groupPeople[nextPos])
+                                    },
+                                    timestamp: Date.now()
+                                })
+                            }
+                        ).catch(() => {});
+                    }
+                    // #endregion
                 }
             }
 
