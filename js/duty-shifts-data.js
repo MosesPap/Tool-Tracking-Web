@@ -2653,6 +2653,65 @@
                     ? fromAssignments || fromStored || fromBaseline
                     : fromAssignments || fromBaseline || fromStored;
             const continuityIdx = findIdx(lastContinuityPerson);
+            // #region agent log
+            if (
+                dayTypeCategory === 'semi' &&
+                groupNum === 2 &&
+                dateInMonth &&
+                dateInMonth.getFullYear() === 2027 &&
+                dateInMonth.getMonth() === 0
+            ) {
+                const prevMonthKey = getPreviousMonthKeyFromDate(dateInMonth);
+                const dateKeys = [
+                    ...collectDateKeysForRotationContinuityScan(dayTypeCategory, prevMonthKey)
+                ].sort();
+                const lastDecKey = dateKeys.length ? dateKeys[dateKeys.length - 1] : null;
+                const lastDecAssigned = lastDecKey
+                    ? getPersonOnDateForRotationContinuityLookup(
+                          dayTypeCategory,
+                          lastDecKey,
+                          groupNum
+                      )
+                    : null;
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Debug-Session-Id': '15d095'
+                    },
+                    body: JSON.stringify({
+                        sessionId: '15d095',
+                        runId: 'jan-seed',
+                        hypothesisId: 'H17-H20',
+                        location: 'duty-shifts-data.js:computeRotationPositionAtMonthStart',
+                        message: 'g2 Jan 2027 semi seed sources',
+                        data: {
+                            fromAssignments,
+                            fromBaseline,
+                            fromStored,
+                            lastContinuityPerson,
+                            continuityIdx,
+                            cursorIfFound:
+                                continuityIdx >= 0 ? (continuityIdx + 1) % len : null,
+                            nextIfFound:
+                                continuityIdx >= 0
+                                    ? groupPeople[(continuityIdx + 1) % len]
+                                    : null,
+                            ui1to12: groupPeople.slice(0, 12).map((p, i) => ({
+                                ui: i + 1,
+                                p
+                            })),
+                            prevMonthKey,
+                            decKeyCount: dateKeys.length,
+                            lastDecKey,
+                            lastDecAssigned,
+                            decKeysSample: dateKeys.slice(-5)
+                        },
+                        timestamp: Date.now()
+                    })
+                }).catch(() => {});
+            }
+            // #endregion
             if (lastContinuityPerson && continuityIdx >= 0) {
                 let cursor = (continuityIdx + 1) % len;
                 // Semi/weekend/special: if prev month ended on a two-person swap (αμοιβαία ή
