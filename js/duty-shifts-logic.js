@@ -2460,39 +2460,7 @@
             if (typeof set[Symbol.iterator] !== 'function') return false;
             for (const p of set) {
                 if (!p) continue;
-                if (personNamesMatchIgnoringRank(p, personName)) {
-                    // #region agent log
-                    if (
-                        String(personName || '')
-                            .toUpperCase()
-                            .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ') ||
-                        String(p || '')
-                            .toUpperCase()
-                            .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
-                    ) {
-                        fetch(
-                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                            {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-Debug-Session-Id': '15d095'
-                                },
-                                body: JSON.stringify({
-                                    sessionId: '15d095',
-                                    runId: 'pre-fix',
-                                    hypothesisId: 'H4',
-                                    location: 'duty-shifts-logic.js:personSetHasIgnoringRank',
-                                    message: 'identity set hit Christodoulou',
-                                    data: { personName, matchedAs: p },
-                                    timestamp: Date.now()
-                                })
-                            }
-                        ).catch(() => {});
-                    }
-                    // #endregion
-                    return true;
-                }
+                if (personNamesMatchIgnoringRank(p, personName)) return true;
             }
             return false;
         }
@@ -12840,6 +12808,52 @@
                         const originalIndex = displacedPerson != null ? groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(displacedPerson)) : -1;
                         const designatedIndex = groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(designated.personName));
                         globalSemiPos[groupNum] = (originalIndex >= 0 ? originalIndex : (designatedIndex >= 0 ? designatedIndex + 1 : 0)) % rotationDays;
+                        // #region agent log
+                        if (
+                            groupNum === 2 &&
+                            typeof dateKey === 'string' &&
+                            dateKey >= '2026-12-01' &&
+                            dateKey <= '2026-12-31'
+                        ) {
+                            const uiNo = (name) => {
+                                if (!name) return null;
+                                const i = groupPeople.findIndex(
+                                    (p) => normSemiRun(p) === normSemiRun(name)
+                                );
+                                return i >= 0 ? i + 1 : null;
+                            };
+                            fetch(
+                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-Debug-Session-Id': '15d095'
+                                    },
+                                    body: JSON.stringify({
+                                        sessionId: '15d095',
+                                        runId: 'pre-fix',
+                                        hypothesisId: 'H1-H3',
+                                        location: 'duty-shifts-logic.js:semi-rfm-run',
+                                        message: 'semi RFM designated (run)',
+                                        data: {
+                                            dateKey,
+                                            designated: designated.personName,
+                                            designatedUi: uiNo(designated.personName),
+                                            displacedPerson,
+                                            displacedUi: uiNo(displacedPerson),
+                                            originalIndex,
+                                            designatedIndex,
+                                            nextPos: globalSemiPos[groupNum],
+                                            nextUi: uiNo(groupPeople[globalSemiPos[groupNum]]),
+                                            fallbackAfterDesignated: originalIndex < 0
+                                        },
+                                        timestamp: Date.now()
+                                    })
+                                }
+                            ).catch(() => {});
+                        }
+                        // #endregion
                         const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                         storeAssignmentReason(dateKey, groupNum, designated.personName, 'skip', semiReasonText, null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
@@ -13779,12 +13793,69 @@
                                 const originalIndex = displacedPerson != null ? groupPeople.indexOf(displacedPerson) : -1;
                                 if (globalSemiRotationPosition[groupNum] === undefined) globalSemiRotationPosition[groupNum] = 0;
                                 globalSemiRotationPosition[groupNum] = (originalIndex >= 0 ? originalIndex : (groupPeople.indexOf(assignedPerson) + 1)) % rotationDays;
+                                // #region agent log
+                                if (
+                                    groupNum === 2 &&
+                                    typeof dateKey === 'string' &&
+                                    dateKey >= '2026-12-01' &&
+                                    dateKey <= '2026-12-31'
+                                ) {
+                                    const normP = (s) =>
+                                        typeof normalizePersonKey === 'function'
+                                            ? normalizePersonKey(s)
+                                            : String(s || '').trim();
+                                    const uiNo = (name) => {
+                                        if (!name) return null;
+                                        const i = groupPeople.findIndex(
+                                            (p) => normP(p) === normP(name)
+                                        );
+                                        return i >= 0 ? i + 1 : null;
+                                    };
+                                    fetch(
+                                        'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                        {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'X-Debug-Session-Id': '15d095'
+                                            },
+                                            body: JSON.stringify({
+                                                sessionId: '15d095',
+                                                runId: 'pre-fix',
+                                                hypothesisId: 'H1-H3',
+                                                location:
+                                                    'duty-shifts-logic.js:semi-rfm-preview',
+                                                message: 'semi RFM designated (preview)',
+                                                data: {
+                                                    dateKey,
+                                                    designated: assignedPerson,
+                                                    designatedUi: uiNo(assignedPerson),
+                                                    displacedPerson,
+                                                    displacedUi: uiNo(displacedPerson),
+                                                    originalIndex,
+                                                    nextPos: globalSemiRotationPosition[groupNum],
+                                                    nextUi: uiNo(
+                                                        groupPeople[
+                                                            globalSemiRotationPosition[groupNum]
+                                                        ]
+                                                    ),
+                                                    fallbackAfterDesignated: originalIndex < 0
+                                                },
+                                                timestamp: Date.now()
+                                            })
+                                        }
+                                    ).catch(() => {});
+                                }
+                                // #endregion
                                 const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
                                 storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', semiReasonText, null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
                                 if (!assignedPeoplePreviewSemi[monthKey][groupNum]) assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
                                 assignedPeoplePreviewSemi[monthKey][groupNum].add(assignedPerson);
                                 if (!semiAssignments[dateKey]) semiAssignments[dateKey] = {};
                                 semiAssignments[dateKey][groupNum] = assignedPerson;
+                                if (!semiRotationPersons[dateKey]) semiRotationPersons[dateKey] = {};
+                                semiRotationPersons[dateKey][groupNum] =
+                                    displacedPerson ?? assignedPerson;
                                 let lastDutyInfo = ''; let daysCountInfo = '';
                                 if (assignedPerson) {
                                     const daysSince = countDaysSinceLastDuty(dateKey, assignedPerson, groupNum, 'semi', dayTypeLists, startDate);
@@ -13793,7 +13864,7 @@
                                     if (daysSince !== null && daysSince !== Infinity) daysCountInfo = ` <span class="text-info">${daysSince}/${rotationDays} ημέρες</span>`;
                                     else if (daysSince === Infinity) daysCountInfo = ' <span class="text-success">πρώτη φορά</span>';
                                 }
-                                html += `<td>${buildBaselineComputedCellHtml(assignedPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
+                                html += `<td>${buildBaselineComputedCellHtml(displacedPerson ?? assignedPerson, assignedPerson, daysCountInfo, lastDutyInfo)}</td>`;
                             } else {
                             if (globalSemiRotationPosition[groupNum] === undefined) {
                                 // If start date is February 2026, always start from first person (position 0)
@@ -14104,6 +14175,60 @@
                                     date,
                                     globalSemiRotationPosition[groupNum]
                                 );
+                                // #region agent log
+                                if (
+                                    groupNum === 2 &&
+                                    typeof dateKey === 'string' &&
+                                    dateKey >= '2026-12-01' &&
+                                    dateKey <= '2026-12-31'
+                                ) {
+                                    const normP = (s) =>
+                                        typeof normalizePersonKey === 'function'
+                                            ? normalizePersonKey(s)
+                                            : String(s || '').trim();
+                                    const uiNo = (name) => {
+                                        if (!name) return null;
+                                        const i = groupPeople.findIndex(
+                                            (p) => normP(p) === normP(name)
+                                        );
+                                        return i >= 0 ? i + 1 : null;
+                                    };
+                                    fetch(
+                                        'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                        {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'X-Debug-Session-Id': '15d095'
+                                            },
+                                            body: JSON.stringify({
+                                                sessionId: '15d095',
+                                                runId: 'pre-fix',
+                                                hypothesisId: 'H2',
+                                                location:
+                                                    'duty-shifts-logic.js:semi-advance-preview',
+                                                message: 'semi g2 advance (non-RFM)',
+                                                data: {
+                                                    dateKey,
+                                                    rotPos: rotationPosition,
+                                                    rotUi: uiNo(rotationPerson),
+                                                    finalUi: uiNo(assignedPerson),
+                                                    final: assignedPerson,
+                                                    nextPos: globalSemiRotationPosition[groupNum],
+                                                    nextUi: uiNo(
+                                                        groupPeople[
+                                                            globalSemiRotationPosition[groupNum]
+                                                        ]
+                                                    ),
+                                                    wasReplaced,
+                                                    replacementIndex
+                                                },
+                                                timestamp: Date.now()
+                                            })
+                                        }
+                                    ).catch(() => {});
+                                }
+                                // #endregion
                             }
                             
                             // Store assignment for potential future swaps
@@ -15125,66 +15250,11 @@
                     groups?.[groupNum]?.normal ||
                     [];
                 order = Array.isArray(order) ? order.slice() : [];
-                const beforeHome = order.slice();
                 const mode3 =
                     typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
                 if (!mode3 && typeof getPersonHomeGroupAtDate === 'function' && dk) {
                     order = order.filter((p) => getPersonHomeGroupAtDate(p, dk) === groupNum);
                 }
-                // #region agent log
-                if (groupNum === 4) {
-                    const christo = (arr) =>
-                        (arr || []).filter((p) =>
-                            String(p || '')
-                                .toUpperCase()
-                                .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
-                        );
-                    const cBefore = christo(beforeHome);
-                    const cAfter = christo(order);
-                    if (cBefore.length || cAfter.length) {
-                        fetch(
-                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                            {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-Debug-Session-Id': '15d095'
-                                },
-                                body: JSON.stringify({
-                                    sessionId: '15d095',
-                                    runId: 'pre-fix',
-                                    hypothesisId: 'H2',
-                                    location:
-                                        'duty-shifts-logic.js:getNormalGroupPeopleForRotation',
-                                    message: 'g4 normal roster Christodoulou',
-                                    data: {
-                                        dk,
-                                        before: cBefore.map((p) => ({
-                                            p,
-                                            home:
-                                                typeof getPersonHomeGroupAtDate === 'function'
-                                                    ? getPersonHomeGroupAtDate(p, dk)
-                                                    : null,
-                                            excluded:
-                                                typeof isPersonExcludedFromDuties ===
-                                                'function'
-                                                    ? isPersonExcludedFromDuties(p, 4)
-                                                    : null,
-                                            skipped:
-                                                typeof isSkippedInBasicRotation === 'function'
-                                                    ? isSkippedInBasicRotation(p, 4)
-                                                    : null
-                                        })),
-                                        afterHome: cAfter,
-                                        rosterLen: order.length
-                                    },
-                                    timestamp: Date.now()
-                                })
-                            }
-                        ).catch(() => {});
-                    }
-                }
-                // #endregion
                 return order;
             };
             
