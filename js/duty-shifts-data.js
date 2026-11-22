@@ -1241,6 +1241,12 @@
         function setPersonExcludedInGroupSet(groupSet, maxGroups, personName, excluded) {
             if (!groupSet || !personName) return 0;
             let updated = 0;
+            // #region agent log
+            const _dbgExclChristo = String(personName || '')
+                .toUpperCase()
+                .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ');
+            const _dbgExclHits = [];
+            // #endregion
             for (let g = 1; g <= maxGroups; g++) {
                 const bucket = groupSet[g];
                 if (!bucket) continue;
@@ -1249,6 +1255,15 @@
                     const list = bucket[listType] || [];
                     if (list.some((p) => personMatchesExclusionKey(p, personName))) {
                         found = true;
+                        // #region agent log
+                        if (_dbgExclChristo) {
+                            _dbgExclHits.push({
+                                g,
+                                listType,
+                                matches: list.filter((p) => personMatchesExclusionKey(p, personName))
+                            });
+                        }
+                        // #endregion
                         break;
                     }
                 }
@@ -1274,6 +1289,32 @@
                 }
                 if (setExclusionFlagInBucket(bucket, liveName, excluded)) updated++;
             }
+            // #region agent log
+            if (_dbgExclChristo) {
+                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Debug-Session-Id': '15d095'
+                    },
+                    body: JSON.stringify({
+                        sessionId: '15d095',
+                        runId: 'pre-fix',
+                        hypothesisId: 'B',
+                        location: 'duty-shifts-data.js:setPersonExcludedInGroupSet',
+                        message: 'exclusion mirror by identity (Christodoulou)',
+                        data: {
+                            personName,
+                            excluded,
+                            maxGroups,
+                            updated,
+                            hits: _dbgExclHits
+                        },
+                        timestamp: Date.now()
+                    })
+                }).catch(() => {});
+            }
+            // #endregion
             return updated;
         }
 

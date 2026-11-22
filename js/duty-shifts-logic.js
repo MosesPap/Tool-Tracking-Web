@@ -15911,10 +15911,7 @@
 
                             // Final-only replacement when baseline cannot serve (disabled / absent / E+3).
                             // Does NOT advance the basic series past intermediate people.
-                            // #region agent log
-                            let _dbgE3Skipped = [];
-                            let _dbgReplacementIndex = null;
-                            // #endregion
+                            const e3SkippedCandidates = [];
                             let e3JumpReplacementIndex = null;
                             let e3DeferredPlacementApplied = false;
                             if (baselineIsDisabled || baselineIsMissing || baselineTooSoonAfterReturn) {
@@ -15937,9 +15934,7 @@
                                             dateKey
                                         )
                                     ) {
-                                        // #region agent log
-                                        _dbgE3Skipped.push({ name: candidate, idx: idx });
-                                        // #endregion
+                                        e3SkippedCandidates.push({ name: candidate, idx: idx });
                                         return false;
                                     }
                                     if (
@@ -15959,9 +15954,6 @@
                                     }
                                     assignedPerson = candidate;
                                     replacementIndex = idx;
-                                    // #region agent log
-                                    _dbgReplacementIndex = idx;
-                                    // #endregion
                                     wasDisabledPersonSkipped = true;
                                     wasReplacedFromBaseline = !!(
                                         precomputedFinal && precomputedFinal === candidate
@@ -15993,9 +15985,6 @@
                                     if (reuseCand) {
                                         assignedPerson = reuseCand;
                                         replacementIndex = groupPeople.indexOf(reuseCand);
-                                        // #region agent log
-                                        _dbgReplacementIndex = replacementIndex;
-                                        // #endregion
                                         wasDisabledPersonSkipped = true;
                                         foundReplacement = true;
                                     }
@@ -16029,64 +16018,21 @@
                                 }
                                 // E+3 skips while filling a slot: jump series past the stand-in (#9),
                                 // schedule skipped people (#6) on first normal ≥ E+4.
-                                if (foundReplacement && _dbgE3Skipped.length > 0 && replacementIndex != null) {
+                                if (foundReplacement && e3SkippedCandidates.length > 0 && replacementIndex != null) {
                                     e3JumpReplacementIndex = replacementIndex;
-                                    const scheduledFor = [];
-                                    for (const sk of _dbgE3Skipped) {
+                                    for (const sk of e3SkippedCandidates) {
                                         if (sk?.name) {
-                                            const tgt = scheduleNormalPlacementAfterE3Cooldown(
+                                            scheduleNormalPlacementAfterE3Cooldown(
                                                 sk.name,
                                                 groupNum,
                                                 dateKey
                                             );
-                                            if (tgt) {
-                                                scheduledFor.push({
-                                                    person: sk.name,
-                                                    idx: sk.idx,
-                                                    targetDateKey: tgt
-                                                });
-                                            }
                                         }
                                     }
                                     if (assignedPerson) {
                                         normalE3SeriesAnchor[groupNum] = assignedPerson;
                                         globalNormalLastBaselinePerson[groupNum] = assignedPerson;
                                     }
-                                    // #region agent log
-                                    if (
-                                        groupNum === 2 &&
-                                        typeof dateKey === 'string' &&
-                                        dateKey >= '2026-12-16' &&
-                                        dateKey <= '2026-12-22'
-                                    ) {
-                                        fetch(
-                                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                            {
-                                                method: 'POST',
-                                                headers: {
-                                                    'Content-Type': 'application/json',
-                                                    'X-Debug-Session-Id': '15d095'
-                                                },
-                                                body: JSON.stringify({
-                                                    sessionId: '15d095',
-                                                    runId: 'post-fix',
-                                                    hypothesisId: 'B',
-                                                    location:
-                                                        'duty-shifts-logic.js:e3-schedule',
-                                                    message: 'scheduled E+3 catch-up',
-                                                    data: {
-                                                        dateKey,
-                                                        e3Skipped: _dbgE3Skipped,
-                                                        scheduledFor,
-                                                        seriesAnchor: assignedPerson,
-                                                        jumpToIndex: replacementIndex
-                                                    },
-                                                    timestamp: Date.now()
-                                                })
-                                            }
-                                        ).catch(() => {});
-                                    }
-                                    // #endregion
                                 }
                             }
 
@@ -16326,73 +16272,6 @@
                                     globalNormalRotationPosition[groupNum] = (advanceFrom + 1) % rotationDays;
                                 }
                             }
-
-                            // #region agent log
-                            if (
-                                groupNum === 2 &&
-                                typeof dateKey === 'string' &&
-                                dateKey >= '2026-12-16' &&
-                                dateKey <= '2026-12-22'
-                            ) {
-                                const uiNo = (name) => {
-                                    if (!name) return null;
-                                    const i = groupPeople.findIndex(
-                                        (p) => normRot(p) === normRot(name)
-                                    );
-                                    return i >= 0 ? i + 1 : null;
-                                };
-                                const nextPos = globalNormalRotationPosition[groupNum];
-                                const schedEnt = normalE3ReturnTargets[dateKey]?.[groupNum] || null;
-                                fetch(
-                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                    {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'X-Debug-Session-Id': '15d095'
-                                        },
-                                        body: JSON.stringify({
-                                            sessionId: '15d095',
-                                            runId: 'post-fix',
-                                            hypothesisId: 'A-D',
-                                            location: 'duty-shifts-logic.js:e3-continuity',
-                                            message: 'g2 advance after E+3/replacement',
-                                            data: {
-                                                dateKey,
-                                                baselineUi: uiNo(originalRotationPerson),
-                                                baseline: originalRotationPerson,
-                                                finalUi: uiNo(assignedPerson),
-                                                finalPerson: assignedPerson,
-                                                e3Skipped: _dbgE3Skipped,
-                                                replacementIndex: _dbgReplacementIndex,
-                                                e3JumpReplacementIndex,
-                                                e3DeferredPlacementApplied,
-                                                seriesAnchor: normalE3SeriesAnchor[groupNum] || null,
-                                                seriesAnchorUi: uiNo(
-                                                    normalE3SeriesAnchor[groupNum] || null
-                                                ),
-                                                deferredToday: schedEnt
-                                                    ? {
-                                                          person: schedEnt.personName,
-                                                          ui: uiNo(schedEnt.personName)
-                                                      }
-                                                    : null,
-                                                advancedFromBaselineSlot: rotationPosition,
-                                                nextPos,
-                                                nextPerson: groupPeople[nextPos] || null,
-                                                nextUi: uiNo(groupPeople[nextPos] || null),
-                                                lastBaselineAnchor:
-                                                    globalNormalLastBaselinePerson[groupNum] || null,
-                                                lastBaselineUi: uiNo(
-                                                    globalNormalLastBaselinePerson[groupNum] || null
-                                                )
-                                            },
-                                            timestamp: Date.now()
-                                        })
-                                    }
-                                ).catch(() => {});
-                            }
-                            // #endregion
                             
                             // Store baseline assignment for comparison (original rotation person, not replacement)
                             // Note: baselineNormalByDate may already have a replacement from pre-processing,
