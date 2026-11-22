@@ -3389,47 +3389,10 @@
                 globalPos[groupNum] = 0;
                 return;
             }
-            let _dbgSeedPath = null;
-            let _dbgLastPerson = null;
             if (typeof computeRotationPositionAtMonthStart === 'function') {
                 const cursor = computeRotationPositionAtMonthStart(dayTypeCategory, dateInMonth, groupNum, groupPeople);
                 if (Number.isFinite(cursor)) {
                     globalPos[groupNum] = cursor % rotationDays;
-                    _dbgSeedPath = 'computeRotationPositionAtMonthStart';
-                    // #region agent log
-                    if (
-                        dayTypeCategory === 'semi' &&
-                        groupNum === 2 &&
-                        dateInMonth &&
-                        dateInMonth.getFullYear() === 2027 &&
-                        dateInMonth.getMonth() === 0
-                    ) {
-                        fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Debug-Session-Id': '15d095'
-                            },
-                            body: JSON.stringify({
-                                sessionId: '15d095',
-                                runId: 'jan-seed',
-                                hypothesisId: 'H12-H15',
-                                location: 'duty-shifts-logic.js:reseedGlobalRotationPositionAtMonthStart',
-                                message: 'g2 Jan 2027 semi reseed',
-                                data: {
-                                    path: _dbgSeedPath,
-                                    cursor,
-                                    nextPos: globalPos[groupNum],
-                                    nextPerson: groupPeople[globalPos[groupNum]] || null,
-                                    ui8: groupPeople[7] || null,
-                                    ui11: groupPeople[10] || null,
-                                    ui12: groupPeople[11] || null
-                                },
-                                timestamp: Date.now()
-                            })
-                        }).catch(() => {});
-                    }
-                    // #endregion
                     return;
                 }
             }
@@ -3437,13 +3400,11 @@
             const lastPersonName = typeof getRotationSeedPersonForMonthStart === 'function'
                 ? getRotationSeedPersonForMonthStart(dayTypeCategory, dateInMonth, groupNum)
                 : getLastRotationPersonForDate(dayTypeCategory, dateInMonth, groupNum);
-            _dbgLastPerson = lastPersonName;
             const lastPersonIndex = lastPersonName
                 ? groupPeople.findIndex(p => norm(p) === norm(lastPersonName))
                 : -1;
             if (lastPersonName && lastPersonIndex >= 0) {
                 globalPos[groupNum] = (lastPersonIndex + 1) % rotationDays;
-                _dbgSeedPath = 'lastPerson+1';
             } else {
                 const daysSinceStart = getRotationPosition(dateInMonth, dayTypeCategory, groupNum);
                 // Prefer continue-after-departed over raw daysSinceStart when last person left the group
@@ -3457,79 +3418,11 @@
                     );
                     if (recovered != null && recovered >= 0) {
                         globalPos[groupNum] = recovered % rotationDays;
-                        _dbgSeedPath = 'departed-recovery';
-                        // #region agent log
-                        if (
-                            dayTypeCategory === 'semi' &&
-                            groupNum === 2 &&
-                            dateInMonth &&
-                            dateInMonth.getFullYear() === 2027 &&
-                            dateInMonth.getMonth() === 0
-                        ) {
-                            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-Debug-Session-Id': '15d095'
-                                },
-                                body: JSON.stringify({
-                                    sessionId: '15d095',
-                                    runId: 'jan-seed',
-                                    hypothesisId: 'H12-H15',
-                                    location: 'duty-shifts-logic.js:reseedGlobalRotationPositionAtMonthStart',
-                                    message: 'g2 Jan 2027 semi reseed',
-                                    data: {
-                                        path: _dbgSeedPath,
-                                        lastPersonName: _dbgLastPerson,
-                                        nextPos: globalPos[groupNum],
-                                        nextPerson: groupPeople[globalPos[groupNum]] || null
-                                    },
-                                    timestamp: Date.now()
-                                })
-                            }).catch(() => {});
-                        }
-                        // #endregion
                         return;
                     }
                 }
                 globalPos[groupNum] = daysSinceStart % rotationDays;
-                _dbgSeedPath = 'daysSinceStart';
             }
-            // #region agent log
-            if (
-                dayTypeCategory === 'semi' &&
-                groupNum === 2 &&
-                dateInMonth &&
-                dateInMonth.getFullYear() === 2027 &&
-                dateInMonth.getMonth() === 0
-            ) {
-                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Debug-Session-Id': '15d095'
-                    },
-                    body: JSON.stringify({
-                        sessionId: '15d095',
-                        runId: 'jan-seed',
-                        hypothesisId: 'H12-H15',
-                        location: 'duty-shifts-logic.js:reseedGlobalRotationPositionAtMonthStart',
-                        message: 'g2 Jan 2027 semi reseed',
-                        data: {
-                            path: _dbgSeedPath,
-                            lastPersonName: _dbgLastPerson,
-                            lastPersonIndex,
-                            nextPos: globalPos[groupNum],
-                            nextPerson: groupPeople[globalPos[groupNum]] || null,
-                            ui4: groupPeople[3] || null,
-                            ui11: groupPeople[10] || null,
-                            ui12: groupPeople[11] || null
-                        },
-                        timestamp: Date.now()
-                    })
-                }).catch(() => {});
-            }
-            // #endregion
         }
 
         function markManualAlternateDeferFulfilled() {
@@ -13009,32 +12902,6 @@
                                     calcStartKey
                                 )
                             ) {
-                                // #region agent log
-                                if (
-                                    groupNum === 2 &&
-                                    String(personName || '').includes('ΒΙΟΛΑΡΗΣ')
-                                ) {
-                                    fetch(
-                                        'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                        {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type': 'application/json',
-                                                'X-Debug-Session-Id': '15d095'
-                                            },
-                                            body: JSON.stringify({
-                                                sessionId: '15d095',
-                                                runId: 'post-fix',
-                                                hypothesisId: 'H22',
-                                                location: 'duty-shifts-logic.js:semi-rfm-block-prev',
-                                                message: 'g2 RFM blocked — prev month alt/RFM',
-                                                data: { personName, calcStartKey, pEndKey },
-                                                timestamp: Date.now()
-                                            })
-                                        }
-                                    ).catch(() => {});
-                                }
-                                // #endregion
                                 continue;
                             }
                             // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
@@ -13106,52 +12973,6 @@
                                 reasonOfMissing: reasonOfMissingSemi,
                                 missedSemiKeys: missedSemiKeys.slice()
                             };
-                            // #region agent log
-                            if (
-                                groupNum === 2 &&
-                                String(personName || '').includes('ΒΙΟΛΑΡΗΣ') &&
-                                typeof calcStartKey === 'string' &&
-                                calcStartKey.startsWith('2027-01')
-                            ) {
-                                fetch(
-                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                    {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'X-Debug-Session-Id': '15d095'
-                                        },
-                                        body: JSON.stringify({
-                                            sessionId: '15d095',
-                                            runId: 'post-fix',
-                                            hypothesisId: 'H22',
-                                            location: 'duty-shifts-logic.js:semi-rfm-plan',
-                                            message: 'g2 Jan RFM planned for Βιολάρης (should be blocked)',
-                                            data: {
-                                                personName,
-                                                pStartKey,
-                                                pEndKey,
-                                                targetSemiKey,
-                                                missedSemiKeys,
-                                                alreadyPlaced: hasReturnFromMissingAlreadyPlacedForPeriod(
-                                                    personName,
-                                                    groupNum,
-                                                    pEndKey,
-                                                    pStartKey
-                                                ),
-                                                metaOnly: hasReturnFromMissingMetadataForPeriod(
-                                                    personName,
-                                                    groupNum,
-                                                    pEndKey,
-                                                    pStartKey
-                                                )
-                                            },
-                                            timestamp: Date.now()
-                                        })
-                                    }
-                                ).catch(() => {});
-                            }
-                            // #endregion
                             if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                                 dutySemiDebug.recordAbsentPlacement({
                                     groupNum,
@@ -13232,41 +13053,6 @@
                     const designatedInList = designated && groupPeople.find(p => normSemiRun(p) === normSemiRun(designated.personName));
                     if (designated && designatedInList && !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi')) {
                         baseline[dateKey][groupNum] = designatedInList;
-                        // #region agent log
-                        if (
-                            groupNum === 2 &&
-                            typeof dateKey === 'string' &&
-                            dateKey >= '2027-01-01' &&
-                            dateKey <= '2027-01-10'
-                        ) {
-                            fetch(
-                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-Debug-Session-Id': '15d095'
-                                    },
-                                    body: JSON.stringify({
-                                        sessionId: '15d095',
-                                        runId: 'post-fix',
-                                        hypothesisId: 'H22',
-                                        location: 'duty-shifts-logic.js:semi-rfm-apply',
-                                        message: 'g2 Jan early semi RFM applied',
-                                        data: {
-                                            dateKey,
-                                            designated: designated.personName,
-                                            livePos: globalSemiPos[groupNum],
-                                            livePerson:
-                                                groupPeople[globalSemiPos[groupNum] % rotationDays] ||
-                                                null
-                                        },
-                                        timestamp: Date.now()
-                                    })
-                                }
-                            ).catch(() => {});
-                        }
-                        // #endregion
                         const mapBaseline = baselineSemiByDate[dateKey]?.[groupNum];
                         const rfmDisp = resolveRfmDisplacedFromLiveCursor(
                             groupPeople,
@@ -13676,9 +13462,6 @@
 
             // 4) Last rotation positions: use final assignments (after swaps) per month
             const lastSemiRotationPositionsByMonth = {};
-            // #region agent log
-            const _dbgG2ContChain = [];
-            // #endregion
             for (const dateKey of sortedSemi) {
                 const m = semiMeta[dateKey];
                 if (!m) continue;
@@ -13691,76 +13474,9 @@
                             ? getPersonForRotationContinuity(dateKey, groupNum, g[groupNum], finalAssignments)
                             : g[groupNum];
                         if (personForRotation) lastSemiRotationPositionsByMonth[m.monthKey][groupNum] = personForRotation;
-                        // #region agent log
-                        if (
-                            groupNum === 2 &&
-                            typeof dateKey === 'string' &&
-                            dateKey >= '2026-12-01' &&
-                            dateKey <= '2026-12-31'
-                        ) {
-                            const people = getSemiPeopleForRotation(2, dateKey);
-                            const uiNo = (name) => {
-                                if (!name) return null;
-                                const i = people.findIndex(
-                                    (p) =>
-                                        (typeof normalizePersonKey === 'function'
-                                            ? normalizePersonKey(p)
-                                            : String(p || '').trim()) ===
-                                        (typeof normalizePersonKey === 'function'
-                                            ? normalizePersonKey(name)
-                                            : String(name || '').trim())
-                                );
-                                return i >= 0 ? i + 1 : null;
-                            };
-                            const reason =
-                                typeof getAssignmentReason === 'function'
-                                    ? getAssignmentReason(dateKey, 2, g[2])
-                                    : null;
-                            _dbgG2ContChain.push({
-                                dateKey,
-                                final: g[2],
-                                finalUi: uiNo(g[2]),
-                                continuity: personForRotation,
-                                contUi: uiNo(personForRotation),
-                                reasonType: reason?.type || null,
-                                rfm: !!reason?.meta?.returnFromMissing,
-                                unavail: !!reason?.meta?.unavailableReplacement,
-                                swappedWith: reason?.swappedWith || null,
-                                displaced: reason?.meta?.displacedPerson || null
-                            });
-                        }
-                        // #endregion
                     }
                 }
             }
-            // #region agent log
-            if (_dbgG2ContChain.length) {
-                const monthKeys = Object.keys(lastSemiRotationPositionsByMonth);
-                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Debug-Session-Id': '15d095'
-                    },
-                    body: JSON.stringify({
-                        sessionId: '15d095',
-                        runId: 'jan-seed',
-                        hypothesisId: 'H12-H14',
-                        location: 'duty-shifts-logic.js:semi-run-cont-summary',
-                        message: 'g2 Dec semi final→continuity chain',
-                        data: {
-                            chain: _dbgG2ContChain,
-                            monthKeys,
-                            lastContByMonth: monthKeys.reduce((acc, mk) => {
-                                acc[mk] = lastSemiRotationPositionsByMonth[mk]?.[2] || null;
-                                return acc;
-                            }, {})
-                        },
-                        timestamp: Date.now()
-                    })
-                }).catch(() => {});
-            }
-            // #endregion
 
             // Sync in-memory store + lastRotationPositions immediately (do not wait on Firestore).
             // Otherwise Jan seed still reads stale Dec finals (e.g. #11 Ιωάννου) and old continuity (#4).

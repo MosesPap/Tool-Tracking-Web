@@ -10489,10 +10489,274 @@
             return html;
         }
 
+        function getManualAssignDutyTypeLabel(typeCategory) {
+            if (typeCategory === 'special') return 'ειδικές αργίες';
+            if (typeCategory === 'weekend') return 'αργίες Σαββατοκύριακου';
+            if (typeCategory === 'semi') return 'ημιαργίες';
+            return 'καθημερινές';
+        }
+
+        function getManualAssignRotationPeople(groupNum, typeCategory, dateKey) {
+            let order = [];
+            if (typeCategory === 'semi' && typeof getSemiPeopleForRotation === 'function') {
+                order = getSemiPeopleForRotation(groupNum, dateKey) || [];
+            } else if (typeof getListOrderAtDate === 'function') {
+                order = getListOrderAtDate(groupNum, typeCategory, dateKey) || [];
+            } else {
+                order = (groups?.[groupNum]?.[typeCategory] || []).slice();
+            }
+            if (!Array.isArray(order)) order = [];
+            if (typeof filterExcludedFromDutyList === 'function') {
+                order = filterExcludedFromDutyList(order.slice(), groupNum);
+            } else {
+                order = order.slice();
+            }
+            return order;
+        }
+
+        function collectLaterSameTypeDateKeysInMonth(dayKey, typeCategory) {
+            if (!dayKey || !/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return [];
+            const monthPrefix = dayKey.slice(0, 7);
+            const [y, m] = monthPrefix.split('-').map(Number);
+            if (!y || !m) return [];
+            const daysInMonth = new Date(y, m, 0).getDate();
+            const keys = [];
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dk = `${monthPrefix}-${String(d).padStart(2, '0')}`;
+                if (dk <= dayKey) continue;
+                const cat =
+                    typeof getDutyCategoryForDateKey === 'function'
+                        ? getDutyCategoryForDateKey(dk)
+                        : null;
+                if (cat === typeCategory) keys.push(dk);
+            }
+            return keys;
+        }
+
+        function getRotationBaselineStoreForType(typeCategory) {
+            if (typeCategory === 'special') return rotationBaselineSpecialAssignments;
+            if (typeCategory === 'weekend') return rotationBaselineWeekendAssignments;
+            if (typeCategory === 'semi') return rotationBaselineSemiAssignments;
+            return rotationBaselineNormalAssignments;
+        }
+
+        function setRotationBaselinePersonForDateGroup(typeCategory, dateKey, groupNum, personName) {
+            const baselineObj = getRotationBaselineStoreForType(typeCategory);
+            if (!baselineObj || !dateKey || !Number.isFinite(groupNum)) return null;
+            const map =
+                typeof extractGroupAssignmentsMap === 'function'
+                    ? extractGroupAssignmentsMap(baselineObj[dateKey] || '')
+                    : {};
+            if (personName) map[groupNum] = String(personName).trim();
+            else delete map[groupNum];
+            const str =
+                typeof groupMapToAssignmentString === 'function'
+                    ? groupMapToAssignmentString(map)
+                    : Object.keys(map)
+                          .sort((a, b) => Number(a) - Number(b))
+                          .map((g) => `${map[g]} (Ομάδα ${g})`)
+                          .join(', ');
+            if (str && String(str).trim()) baselineObj[dateKey] = str;
+            else delete baselineObj[dateKey];
+            return str || null;
+        }
+
+        function findNextAvailableManualAssignPerson(people, startIdx, groupNum, dateObj, typeCategory, skipNormSet) {
+            const norm = (s) =>
+                typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
+            const len = people.length;
+            if (!len) return { person: null, index: -1 };
+            const start = ((Number(startIdx) || 0) % len + len) % len;
+            for (let off = 0; off < len; off++) {
+                const idx = (start + off) % len;
+                const cand = people[idx];
+                if (!cand) continue;
+                const n = norm(cand);
+                if (skipNormSet && skipNormSet.has(n)) continue;
+                if (
+                    typeof isPersonExcludedFromDuties === 'function' &&
+                    isPersonExcludedFromDuties(cand, groupNum)
+                ) {
+                    continue;
+                }
+                if (
+                    typeof isPersonDisabledForDuty === 'function' &&
+                    isPersonDisabledForDuty(cand, groupNum, typeCategory, dateObj)
+                ) {
+                    continue;
+                }
+                if (
+                    typeof isPersonMissingOnDate === 'function' &&
+                    isPersonMissingOnDate(cand, groupNum, dateObj, typeCategory)
+                ) {
+                    continue;
+                }
+                return { person: cand, index: idx };
+            }
+            return { person: null, index: -1 };
+        }
+
+        /**
+         * Month-scope χειροκίνητη ανάθεση: το επιλεγμένο άτομο «κλειδώνει» τη θέση
+         * και οι επόμενες ίδιου τύπου ημέρες του μήνα ακολουθούν τη λίστα μετά από αυτό.
+         */
+        async function applyManualAssignMonthReflow(groupNum, dayKey, seedPerson, typeCategory, options = {}) {
+            const norm = (s) =>
+                typeof normalizePersonKey === 'function' ? normalizePersonKey(s) : String(s || '').trim();
+            const seed = String(seedPerson || '').trim();
+            if (!seed || !dayKey || !Number.isFinite(groupNum)) return { ok: false, changedKeys: [] };
+
+            const people = getManualAssignRotationPeople(groupNum, typeCategory, dayKey);
+            if (!people.length) return { ok: false, changedKeys: [] };
+
+            const seedIdx = people.findIndex((p) => norm(p) === norm(seed));
+            if (seedIdx < 0) {
+                console.warn('[manual-assign-month] seed person not in rotation list', seed, groupNum, typeCategory);
+            }
+
+            // Seed day: baseline follows the manually chosen person (rotation continues after them).
+            setRotationBaselinePersonForDateGroup(typeCategory, dayKey, groupNum, seed);
+
+            const laterKeys = collectLaterSameTypeDateKeysInMonth(dayKey, typeCategory);
+            const changedKeys = [];
+            const baselinePatches = { [dayKey]: getRotationBaselineStoreForType(typeCategory)?.[dayKey] || null };
+            let nextIdx = seedIdx >= 0 ? (seedIdx + 1) % people.length : 0;
+
+            for (const laterKey of laterKeys) {
+                const critList = criticalAssignments?.[laterKey];
+                const isCriticalGroup =
+                    Array.isArray(critList) &&
+                    critList.some((entry) => {
+                        const m = String(entry).match(/^(.+?)\s*\(Ομάδα\s*(\d+)\)\s*$/);
+                        return m && parseInt(m[2], 10) === groupNum;
+                    });
+                if (isCriticalGroup) {
+                    // Critical slot for this group — leave untouched; advance cursor past current holder.
+                    const critRaw =
+                        typeof getAssignmentForDate === 'function' ? getAssignmentForDate(laterKey) : null;
+                    const critPerson =
+                        typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                            ? parseAssignedPersonForGroupFromAssignment(critRaw, groupNum)
+                            : null;
+                    if (critPerson) {
+                        const cIdx = people.findIndex((p) => norm(p) === norm(critPerson));
+                        if (cIdx >= 0) nextIdx = (cIdx + 1) % people.length;
+                    }
+                    continue;
+                }
+
+                // Skip days with no existing assignment for this group (month not calculated there).
+                const existingRaw =
+                    typeof getAssignmentForDate === 'function' ? getAssignmentForDate(laterKey) : null;
+                const existingPerson =
+                    typeof parseAssignedPersonForGroupFromAssignment === 'function'
+                        ? (parseAssignedPersonForGroupFromAssignment(existingRaw, groupNum) || '').trim()
+                        : '';
+                if (!existingPerson) continue;
+
+                const dateObj = new Date(laterKey + 'T00:00:00');
+                if (isNaN(dateObj.getTime())) continue;
+
+                const picked = findNextAvailableManualAssignPerson(
+                    people,
+                    nextIdx,
+                    groupNum,
+                    dateObj,
+                    typeCategory,
+                    null
+                );
+                if (!picked.person) continue;
+
+                if (typeof clearAssignmentReasonForPersonOnDate === 'function' && existingPerson) {
+                    clearAssignmentReasonForPersonOnDate(laterKey, groupNum, existingPerson);
+                }
+
+                const newStr =
+                    typeof buildAssignmentStringForGroupPatch === 'function'
+                        ? buildAssignmentStringForGroupPatch(laterKey, groupNum, picked.person)
+                        : null;
+                if (newStr != null && typeof setAssignmentForDate === 'function') {
+                    setAssignmentForDate(laterKey, newStr);
+                }
+
+                const baselineStr = setRotationBaselinePersonForDateGroup(
+                    typeCategory,
+                    laterKey,
+                    groupNum,
+                    picked.person
+                );
+                baselinePatches[laterKey] = baselineStr;
+
+                const dateStr = dateObj.toLocaleDateString('el-GR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                });
+                const typeLabel = getManualAssignDutyTypeLabel(typeCategory);
+                const reason =
+                    `Επαναϋπολογισμός μετά χειροκίνητη ανάθεση (${typeLabel}): ` +
+                    `ο/η ${picked.person} μετά τον/την ${seed} ` +
+                    `(από ${formatDutyDateLabel(dayKey)}). ${getGreekDayName(dateObj)} ${dateStr}.`;
+                if (typeof storeAssignmentReason === 'function') {
+                    storeAssignmentReason(laterKey, groupNum, picked.person, 'skip', reason, existingPerson || null, null, {
+                        manualDayModal: true,
+                        manualAssignMonthReflow: true,
+                        reflowFromDate: dayKey,
+                        reflowSeedPerson: seed
+                    });
+                }
+
+                changedKeys.push(laterKey);
+                nextIdx = (picked.index + 1) % people.length;
+            }
+
+            if (typeof rebuildRotationBaselineLastByType === 'function') {
+                rebuildRotationBaselineLastByType();
+            }
+            const monthKey = dayKey.substring(0, 7);
+            if (typeof refreshLastRotationContinuityForMonth === 'function') {
+                refreshLastRotationContinuityForMonth(typeCategory, monthKey, groupNum);
+            }
+
+            // Persist baseline patches (saveData does not write rotation baselines).
+            try {
+                if (window.db && firebase?.firestore && typeof mergeAndSaveMonthOrganizedAssignmentsDoc === 'function') {
+                    const db = window.db || firebase.firestore();
+                    const user = window.auth?.currentUser;
+                    const monthName =
+                        typeof getMonthNameFromDateKey === 'function' ? getMonthNameFromDateKey(dayKey) : null;
+                    const docId =
+                        typeCategory === 'special'
+                            ? 'rotationBaselineSpecialAssignments'
+                            : typeCategory === 'weekend'
+                              ? 'rotationBaselineWeekendAssignments'
+                              : typeCategory === 'semi'
+                                ? 'rotationBaselineSemiAssignments'
+                                : 'rotationBaselineNormalAssignments';
+                    if (user && monthName) {
+                        const monthPatch = {};
+                        for (const dk of Object.keys(baselinePatches)) {
+                            monthPatch[dk] = baselinePatches[dk];
+                        }
+                        if (Object.keys(monthPatch).length) {
+                            await mergeAndSaveMonthOrganizedAssignmentsDoc(db, user, docId, {
+                                [monthName]: monthPatch
+                            });
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to persist baseline after manual-assign month reflow:', e);
+            }
+
+            return { ok: true, changedKeys, ...(options || {}) };
+        }
+
         function buildManualAssignConfirmHtml(plan) {
             const dateLabel = formatDutyDateLabel(plan.dayKey);
             const groupLabel =
                 typeof getGroupName === 'function' ? getGroupName(plan.groupNum) : `Ομάδα ${plan.groupNum}`;
+            const typeLabel = getManualAssignDutyTypeLabel(plan.typeCategory || 'normal');
             return `
                 <p class="mb-3">Θα πραγματοποιηθεί <strong>χειροκίνητη ανάθεση</strong> στην <strong>${escapeHtml(groupLabel)}</strong>:</p>
                 <ul class="list-group mb-3">
@@ -10502,7 +10766,26 @@
                         <span class="text-muted">Σε:</span> <span class="text-primary"><strong>${escapeHtml(plan.newPerson)}</strong></span>
                     </li>
                 </ul>
-                <div class="alert alert-info mb-0"><i class="fas fa-info-circle me-1"></i>Η βασική σειρά περιστροφής <strong>δεν αλλάζει</strong> — αλλάζει μόνο ποιος εμφανίζεται αυτή την ημέρα.</div>
+                <div class="mb-3">
+                    <div class="fw-semibold mb-2">Εμβέλεια ανάθεσης</div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="manualAssignScope" id="manualAssignScopeDay" value="day" checked>
+                        <label class="form-check-label" for="manualAssignScopeDay">
+                            Μόνο αυτή την ημέρα
+                        </label>
+                        <div class="form-text">Το επιλεγμένο άτομο μπαίνει στη θέση του άλλου μόνο για την ${escapeHtml(dateLabel)}. Η βασική σειρά δεν αλλάζει.</div>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="radio" name="manualAssignScope" id="manualAssignScopeMonth" value="month">
+                        <label class="form-check-label" for="manualAssignScopeMonth">
+                            Ολόκληρο τον μήνα
+                        </label>
+                        <div class="form-text">Από αυτή την ανάθεση και μετά, οι υπόλοιπες ${escapeHtml(typeLabel)} του μήνα επαναϋπολογίζονται με τη σειρά της λίστας μετά τον/την ${escapeHtml(plan.newPerson)}.</div>
+                    </div>
+                </div>
+                <div class="alert alert-info mb-0" id="manualAssignScopeHint">
+                    <i class="fas fa-info-circle me-1"></i>Η βασική σειρά περιστροφής <strong>δεν αλλάζει</strong> — αλλάζει μόνο ποιος εμφανίζεται αυτή την ημέρα.
+                </div>
             `;
         }
 
@@ -10559,13 +10842,54 @@
                 const okBtn = document.getElementById('manualAssignConfirmOkBtn');
                 const defaultReason = options.defaultReason || buildDefaultManualAssignReason(plan);
                 if (!modalEl || !bodyEl || !okBtn || typeof bootstrap === 'undefined') {
-                    resolve({ ok: true, reason: defaultReason });
+                    resolve({ ok: true, reason: defaultReason, scope: 'day' });
                     return;
                 }
+                const typeLabel = getManualAssignDutyTypeLabel(plan.typeCategory || 'normal');
+                const dateStr =
+                    plan.dateObj && !isNaN(plan.dateObj.getTime())
+                        ? plan.dateObj.toLocaleDateString('el-GR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric'
+                          })
+                        : formatDutyDateLabel(plan.dayKey);
+                const dayDefaultReason = defaultReason;
+                const monthDefaultReason =
+                    `Χειροκίνητη ανάθεση (ολόκληρος μήνας): ο/η ${plan.newPerson} στη θέση του/της ${plan.prevPerson}` +
+                    ` στις ${dateStr}. Οι υπόλοιπες ${typeLabel} του μήνα ακολουθούν τη λίστα μετά τον/την ${plan.newPerson}.`;
                 bodyEl.innerHTML =
                     buildManualAssignConfirmHtml(plan) +
-                    buildDutyChangeReasonSectionHtml(defaultReason, 'manualAssignReasonInput');
+                    buildDutyChangeReasonSectionHtml(dayDefaultReason, 'manualAssignReasonInput');
                 okBtn.innerHTML = '<i class="fas fa-check me-1"></i>Επιβεβαίωση';
+                const hintEl = bodyEl.querySelector('#manualAssignScopeHint');
+                const reasonInput = bodyEl.querySelector('#manualAssignReasonInput');
+                let lastAutoReason = dayDefaultReason;
+                const updateScopeHint = () => {
+                    const scopeEl = bodyEl.querySelector('input[name="manualAssignScope"]:checked');
+                    const scope = scopeEl ? scopeEl.value : 'day';
+                    if (hintEl) {
+                        if (scope === 'month') {
+                            hintEl.innerHTML =
+                                `<i class="fas fa-info-circle me-1"></i>Θα αλλάξει η σειρά για τις υπόλοιπες <strong>${escapeHtml(typeLabel)}</strong> του μήνα μετά την ${escapeHtml(formatDutyDateLabel(plan.dayKey))}, ξεκινώντας μετά τον/την <strong>${escapeHtml(plan.newPerson)}</strong>.`;
+                        } else {
+                            hintEl.innerHTML =
+                                '<i class="fas fa-info-circle me-1"></i>Η βασική σειρά περιστροφής <strong>δεν αλλάζει</strong> — αλλάζει μόνο ποιος εμφανίζεται αυτή την ημέρα.';
+                        }
+                    }
+                    if (reasonInput) {
+                        const current = String(reasonInput.value || '').trim();
+                        if (!current || current === String(lastAutoReason || '').trim()) {
+                            const nextReason = scope === 'month' ? monthDefaultReason : dayDefaultReason;
+                            reasonInput.value = nextReason;
+                            lastAutoReason = nextReason;
+                        }
+                    }
+                };
+                bodyEl.querySelectorAll('input[name="manualAssignScope"]').forEach((radio) => {
+                    radio.addEventListener('change', updateScopeHint);
+                });
+                updateScopeHint();
                 let settled = false;
                 const finish = (val) => {
                     if (settled) return;
@@ -10574,14 +10898,17 @@
                 };
                 const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
                 const onOk = () => {
-                    const reason = readDutyChangeReasonFromModal('manualAssignReasonInput', defaultReason);
+                    const scopeEl = bodyEl.querySelector('input[name="manualAssignScope"]:checked');
+                    const scope = scopeEl && scopeEl.value === 'month' ? 'month' : 'day';
+                    const fallback = scope === 'month' ? monthDefaultReason : dayDefaultReason;
+                    const reason = readDutyChangeReasonFromModal('manualAssignReasonInput', fallback);
                     modal.hide();
-                    finish({ ok: true, reason });
+                    finish({ ok: true, reason, scope });
                 };
                 const onHidden = () => {
                     modalEl.removeEventListener('hidden.bs.modal', onHidden);
                     okBtn.removeEventListener('click', onOk);
-                    if (!settled) finish({ ok: false, reason: '' });
+                    if (!settled) finish({ ok: false, reason: '', scope: 'day' });
                 };
                 okBtn.addEventListener('click', onOk);
                 modalEl.addEventListener('hidden.bs.modal', onHidden);
@@ -10947,6 +11274,7 @@
             }
 
             const manualAssignReasons = new Map();
+            const manualAssignScopes = new Map();
             for (const p of manualAssignPlans) {
                 const baselineStr =
                     typeof getRotationBaselineAssignmentForType === 'function'
@@ -10962,10 +11290,12 @@
                     prevPerson: p.prevPerson,
                     newPerson: p.newVal,
                     baselinePerson,
-                    dateObj: editDate
+                    dateObj: editDate,
+                    typeCategory: editCat
                 });
                 if (!confirmResult?.ok) return;
                 manualAssignReasons.set(p.group, confirmResult.reason || '');
+                manualAssignScopes.set(p.group, confirmResult.scope === 'month' ? 'month' : 'day');
             }
 
             // Ίδια λογική με «Αντικατάσταση επιλαχών» (Ενέργειες ατόμου): baseline, reason, reflow
@@ -11038,22 +11368,59 @@
                     if (typeof clearAssignmentReasonForPersonOnDate === 'function') {
                         clearAssignmentReasonForPersonOnDate(dayKey, p.group, p.prevPerson);
                     }
-                    const reason =
-                        manualAssignReasons.get(p.group) ||
-                        buildDefaultManualAssignReason({
-                            dayKey,
-                            groupNum: p.group,
-                            prevPerson: p.prevPerson,
-                            newPerson: p.newVal,
-                            baselinePerson,
-                            dateObj: editDate
+                    const scope = manualAssignScopes.get(p.group) === 'month' ? 'month' : 'day';
+                    let reason = manualAssignReasons.get(p.group) || '';
+                    if (!reason) {
+                        if (scope === 'month') {
+                            const typeLabel = getManualAssignDutyTypeLabel(editCat);
+                            const dateStr = editDate.toLocaleDateString('el-GR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric'
+                            });
+                            reason =
+                                `Χειροκίνητη ανάθεση (ολόκληρος μήνας): ο/η ${p.newVal} στη θέση του/της ${p.prevPerson}` +
+                                ` στις ${dateStr}. Οι υπόλοιπες ${typeLabel} του μήνα ακολουθούν τη λίστα μετά τον/την ${p.newVal}.`;
+                        } else {
+                            reason = buildDefaultManualAssignReason({
+                                dayKey,
+                                groupNum: p.group,
+                                prevPerson: p.prevPerson,
+                                newPerson: p.newVal,
+                                baselinePerson,
+                                dateObj: editDate
+                            });
+                        }
+                    }
+                    if (scope === 'month') {
+                        storeAssignmentReason(dayKey, p.group, p.newVal, 'skip', reason, p.prevPerson, null, {
+                            manualDayModal: true,
+                            manualAssignMonthScope: true,
+                            displacedPerson: p.prevPerson,
+                            baselinePerson: p.newVal
                         });
-                    storeAssignmentReason(dayKey, p.group, p.newVal, 'skip', reason, p.prevPerson, null, {
-                        manualDayModal: true,
-                        preserveBaseline: true,
-                        displacedPerson: p.prevPerson,
-                        baselinePerson: baselinePerson || null
-                    });
+                    } else {
+                        storeAssignmentReason(dayKey, p.group, p.newVal, 'skip', reason, p.prevPerson, null, {
+                            manualDayModal: true,
+                            preserveBaseline: true,
+                            displacedPerson: p.prevPerson,
+                            baselinePerson: baselinePerson || null
+                        });
+                    }
+                }
+            }
+
+            // Month-scope: reflow remaining same-type duties after the manually chosen person.
+            let monthReflowWarning = '';
+            for (const p of manualAssignPlans) {
+                if (manualAssignScopes.get(p.group) !== 'month') continue;
+                try {
+                    await applyManualAssignMonthReflow(p.group, dayKey, p.newVal, editCat, {});
+                } catch (e) {
+                    console.warn('Manual assign month reflow failed:', e);
+                    monthReflowWarning =
+                        'Η ανάθεση της ημέρας αποθηκεύτηκε, αλλά απέτυχε ο επαναϋπολογισμός των υπόλοιπων ημερών του μήνα: ' +
+                        (e?.message || e);
                 }
             }
             
@@ -11112,7 +11479,11 @@
                 modal.hide();
             }
             
-            alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
+            if (monthReflowWarning) {
+                alert(monthReflowWarning);
+            } else {
+                alert('Οι αλλαγές αποθηκεύτηκαν επιτυχώς!');
+            }
         }
 
         let missingPeriodDateRangeListenersBound = false;
