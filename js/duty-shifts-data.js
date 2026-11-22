@@ -1935,6 +1935,10 @@
             const assigned = getPersonOnDateForRotationContinuityLookup(dayTypeCategory, lastKey, groupNum);
             const store =
                 dayTypeCategory === 'normal' ? buildNormalRotationContinuityStore() : getAssignmentsForDayType(dayTypeCategory);
+            const reasonForLast =
+                typeof getAssignmentReason === 'function'
+                    ? getAssignmentReason(lastKey, groupNum, assigned)
+                    : null;
             // #region agent log
             if (
                 dayTypeCategory === 'semi' &&
@@ -1943,10 +1947,6 @@
                 dateInCurrentMonth.getFullYear() === 2027 &&
                 dateInCurrentMonth.getMonth() === 0
             ) {
-                const reason =
-                    typeof getAssignmentReason === 'function'
-                        ? getAssignmentReason(lastKey, groupNum, assigned)
-                        : null;
                 fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
                     method: 'POST',
                     headers: {
@@ -1962,17 +1962,28 @@
                         data: {
                             lastKey,
                             assigned,
-                            reasonType: reason?.type || null,
-                            unavail: !!reason?.meta?.unavailableReplacement,
-                            rfm: !!reason?.meta?.returnFromMissing,
-                            swappedWith: reason?.swappedWith || null,
-                            displaced: reason?.meta?.displacedPerson || null
+                            reasonType: reasonForLast?.type || null,
+                            unavail: !!reasonForLast?.meta?.unavailableReplacement,
+                            manualAlt: !!reasonForLast?.meta?.manualAlternateReplacement,
+                            rfm: !!reasonForLast?.meta?.returnFromMissing,
+                            swappedWith: reasonForLast?.swappedWith || null,
+                            displaced: reasonForLast?.meta?.displacedPerson || null
                         },
                         timestamp: Date.now()
                     })
                 }).catch(() => {});
             }
             // #endregion
+            // Month-boundary: manual επιλαχών closing the month → continue after who served
+            // (e.g. #11), not after RFM baseline (#4) that was swapped/replaced by hand.
+            if (
+                dayTypeCategory === 'semi' &&
+                reasonForLast &&
+                reasonForLast.type === 'skip' &&
+                reasonForLast.meta?.manualAlternateReplacement
+            ) {
+                return assigned;
+            }
             if (
                 dayTypeCategory === 'normal' &&
                 typeof getPersonForNormalRotationContinuity === 'function'

@@ -3627,10 +3627,53 @@
             };
         }
 
+        /**
+         * True if person had return-from-missing (RFM) ημιαργία in the same calendar month as dateKey.
+         * Used so manual επιλαχών after RFM+swap continues after the stand-in, not the RFM returnee.
+         */
+        function personHadSemiReturnFromMissingInMonth(dateKey, groupNum, personName) {
+            if (!dateKey || !personName || !groupNum) return false;
+            const monthPrefix = String(dateKey).slice(0, 7);
+            if (!/^\d{4}-\d{2}$/.test(monthPrefix)) return false;
+            const norm = (s) =>
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey(s)
+                    : String(s || '').trim();
+            const target = norm(personName);
+            if (!target) return false;
+            const reasonsRoot =
+                typeof assignmentReasons !== 'undefined' && assignmentReasons
+                    ? assignmentReasons
+                    : null;
+            if (!reasonsRoot) return false;
+            for (const dk of Object.keys(reasonsRoot)) {
+                if (!dk || dk.slice(0, 7) !== monthPrefix) continue;
+                const r =
+                    typeof getAssignmentReason === 'function'
+                        ? getAssignmentReason(dk, groupNum, personName)
+                        : null;
+                if (r && r.type === 'skip' && r.meta?.returnFromMissing) return true;
+                const gmap = reasonsRoot[dk]?.[groupNum] || reasonsRoot[dk]?.[String(groupNum)];
+                if (!gmap || typeof gmap !== 'object') continue;
+                for (const pn of Object.keys(gmap)) {
+                    if (norm(pn) !== target) continue;
+                    const rr = gmap[pn];
+                    if (rr && rr.type === 'skip' && rr.meta?.returnFromMissing) return true;
+                }
+            }
+            return false;
+        }
+
         function getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, assignmentsByDate) {
             if (!assignedPerson) return null;
             const reason = getAssignmentReason(dateKey, groupNum, assignedPerson);
+            // Manual επιλαχών: normally continue after baseline (swappedWith) so series keeps A→B→C.
+            // Exception: baseline was RFM-return in this month (then mutual-swapped / replaced) —
+            // #4 already "used" Dec; Jan must continue after επιλαχών (#11 → next #12), not after #4.
             if (reason && reason.type === 'skip' && reason.meta && reason.meta.manualAlternateReplacement && reason.swappedWith) {
+                if (personHadSemiReturnFromMissingInMonth(dateKey, groupNum, reason.swappedWith)) {
+                    return assignedPerson;
+                }
                 return reason.swappedWith;
             }
             // Day-modal manual assign: final person differs from calendar but baseline rotation slot unchanged.
