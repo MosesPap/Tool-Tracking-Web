@@ -3433,6 +3433,68 @@
          * Mutual / semi holiday-conflict two-day swap: continue after both people who served
          * (later on the rotation arc), so the partner is not immediately re-seeded next month.
          */
+        /**
+         * RFM / E+3 insert: who the live series was about to assign (not the pure expected map,
+         * which can drift and re-anchor the cursor on the wrong νο.).
+         */
+        function resolveRfmDisplacedFromLiveCursor(
+            groupPeople,
+            globalPosMap,
+            groupNum,
+            baselinePerson,
+            normFn
+        ) {
+            const nrm =
+                typeof normFn === 'function'
+                    ? normFn
+                    : (s) =>
+                          typeof normalizePersonKey === 'function'
+                              ? normalizePersonKey(s)
+                              : String(s || '').trim();
+            const rotationDays = Array.isArray(groupPeople) ? groupPeople.length : 0;
+            if (!rotationDays) {
+                return {
+                    displacedPerson: null,
+                    originalIndex: -1,
+                    livePos: null,
+                    livePerson: null,
+                    fromLive: false
+                };
+            }
+            let livePos = null;
+            let livePerson = null;
+            if (
+                globalPosMap &&
+                globalPosMap[groupNum] !== undefined &&
+                Number.isFinite(globalPosMap[groupNum])
+            ) {
+                livePos =
+                    ((globalPosMap[groupNum] % rotationDays) + rotationDays) % rotationDays;
+                livePerson = groupPeople[livePos] || null;
+            }
+            if (livePerson) {
+                return {
+                    displacedPerson: livePerson,
+                    originalIndex: livePos,
+                    livePos,
+                    livePerson,
+                    fromLive: true
+                };
+            }
+            const displacedPerson = baselinePerson || null;
+            const originalIndex =
+                displacedPerson != null
+                    ? groupPeople.findIndex((p) => nrm(p) === nrm(displacedPerson))
+                    : -1;
+            return {
+                displacedPerson,
+                originalIndex,
+                livePos,
+                livePerson,
+                fromLive: false
+            };
+        }
+
         function getPersonForRotationContinuity(dateKey, groupNum, assignedPerson, assignmentsByDate) {
             if (!assignedPerson) return null;
             const reason = getAssignmentReason(dateKey, groupNum, assignedPerson);
@@ -3448,6 +3510,37 @@
             // continue after swappedWith (baseline), NOT after the stand-in (avoids anchoring on #14→#15).
             if (reason && reason.type === 'skip' && reason.meta?.unavailableReplacement && reason.swappedWith) {
                 return reason.swappedWith;
+            }
+            // RFM / E+3 insert: do not lock series on the returning person — keep continuity on
+            // the displaced series slot's predecessor so next seed = displaced (due) person.
+            if (reason && reason.type === 'skip' && reason.meta?.returnFromMissing) {
+                const displaced =
+                    reason.swappedWith ||
+                    reason.meta.displacedPerson ||
+                    reason.meta.baselinePerson ||
+                    null;
+                if (displaced) {
+                    const people = getRotationListForContinuityDate(dateKey, groupNum);
+                    if (Array.isArray(people) && people.length) {
+                        const norm = (s) =>
+                            typeof normalizePersonKey === 'function'
+                                ? normalizePersonKey(s)
+                                : String(s || '').trim();
+                        let di = people.findIndex((p) => norm(p) === norm(displaced));
+                        if (di < 0 && typeof personNamesMatchIgnoringRank === 'function') {
+                            di = people.findIndex((p) =>
+                                personNamesMatchIgnoringRank(p, displaced)
+                            );
+                        }
+                        if (di >= 0) {
+                            const pred = people[(di - 1 + people.length) % people.length];
+                            return typeof resolvePersonInGroupRotationList === 'function'
+                                ? resolvePersonInGroupRotationList(pred, groupNum, 'semi') || pred
+                                : pred;
+                        }
+                    }
+                    return displaced;
+                }
             }
             // Two-person semi/weekend swap (αμοιβαία ή σύγκρουση ημιαργίας): και οι δύο έβγαλαν —
             // συνέχεια μετά τον «μεταγενέστερο» στη λίστα, ώστε να μην ξαναμπεί ο εταίρος αμέσως.
@@ -11837,10 +11930,21 @@
                                 const assignedPerson = matchingPerson;
                                 if (!assignedByReturnFromMissingWeekend[groupNum]) assignedByReturnFromMissingWeekend[groupNum] = new Set();
                                 assignedByReturnFromMissingWeekend[groupNum].add(assignedPerson);
-                                // Next slot goes to the displaced (baseline) person – set position to displaced person's index so we get F, A, B, C
-                                const displacedPerson = baselineWeekendByDate[dateKey]?.[groupNum];
-                                const originalIndex = displacedPerson != null ? groupPeople.indexOf(displacedPerson) : -1;
+                                // Next slot = live series person due today (keeps E+3 insert from re-anchoring).
+                                const mapBaselineWk = baselineWeekendByDate[dateKey]?.[groupNum];
                                 if (globalWeekendRotationPosition[groupNum] === undefined) globalWeekendRotationPosition[groupNum] = 0;
+                                const rfmDispWk = resolveRfmDisplacedFromLiveCursor(
+                                    groupPeople,
+                                    globalWeekendRotationPosition,
+                                    groupNum,
+                                    mapBaselineWk,
+                                    (s) =>
+                                        typeof normalizePersonKey === 'function'
+                                            ? normalizePersonKey(s)
+                                            : String(s || '').trim()
+                                );
+                                const displacedPerson = rfmDispWk.displacedPerson;
+                                const originalIndex = rfmDispWk.originalIndex;
                                 globalWeekendRotationPosition[groupNum] = (originalIndex >= 0 ? originalIndex : (groupPeople.indexOf(assignedPerson) + 1)) % groupPeople.length;
                                 const fmtDk = (dk) =>
                                     typeof formatDateKeyAsGreekDMY === 'function' ? formatDateKeyAsGreekDMY(dk) : dk;
@@ -11853,13 +11957,14 @@
                                       (designatedWeekend.missingEnd ? ` ${fmtDk(designatedWeekend.missingEnd)}` : '') +
                                       ` (επιλέξιμο από Ε+4).`
                                     : `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designatedWeekend.missingRangeStr || ''}) λόγω ${designatedWeekend.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
-                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonText, null, null, {
+                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', reasonText, displacedPerson || null, null, {
                                     returnFromMissing: true,
                                     insertedByShift: true,
                                     missingEnd: designatedWeekend.missingEnd,
                                     isBackwardAssignment: designatedWeekend.isBackwardAssignment,
                                     deferredFromE3Cooldown: !!designatedWeekend.deferredFromE3Cooldown,
-                                    blockedDateKey: designatedWeekend.blockedDateKey || null
+                                    blockedDateKey: designatedWeekend.blockedDateKey || null,
+                                    displacedPerson: displacedPerson || null
                                 });
                                 if (!weekendRotationPersons[dateKey]) weekendRotationPersons[dateKey] = {};
                                 // Keep baseline = displaced (rotation) person so we always show Βασική Σειρά + Αντικατάσταση
@@ -12804,8 +12909,16 @@
                     const designatedInList = designated && groupPeople.find(p => normSemiRun(p) === normSemiRun(designated.personName));
                     if (designated && designatedInList && !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi')) {
                         baseline[dateKey][groupNum] = designatedInList;
-                        const displacedPerson = baselineSemiByDate[dateKey]?.[groupNum];
-                        const originalIndex = displacedPerson != null ? groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(displacedPerson)) : -1;
+                        const mapBaseline = baselineSemiByDate[dateKey]?.[groupNum];
+                        const rfmDisp = resolveRfmDisplacedFromLiveCursor(
+                            groupPeople,
+                            globalSemiPos,
+                            groupNum,
+                            mapBaseline,
+                            normSemiRun
+                        );
+                        const displacedPerson = rfmDisp.displacedPerson;
+                        const originalIndex = rfmDisp.originalIndex;
                         const designatedIndex = groupPeople.findIndex(p => normSemiRun(p) === normSemiRun(designated.personName));
                         globalSemiPos[groupNum] = (originalIndex >= 0 ? originalIndex : (designatedIndex >= 0 ? designatedIndex + 1 : 0)) % rotationDays;
                         // #region agent log
@@ -12832,7 +12945,7 @@
                                     },
                                     body: JSON.stringify({
                                         sessionId: '15d095',
-                                        runId: 'pre-fix',
+                                        runId: 'post-fix',
                                         hypothesisId: 'H1-H3',
                                         location: 'duty-shifts-logic.js:semi-rfm-run',
                                         message: 'semi RFM designated (run)',
@@ -12840,8 +12953,13 @@
                                             dateKey,
                                             designated: designated.personName,
                                             designatedUi: uiNo(designated.personName),
+                                            mapBaseline,
+                                            mapBaselineUi: uiNo(mapBaseline),
                                             displacedPerson,
                                             displacedUi: uiNo(displacedPerson),
+                                            fromLive: rfmDisp.fromLive,
+                                            livePos: rfmDisp.livePos,
+                                            liveUi: uiNo(rfmDisp.livePerson),
                                             originalIndex,
                                             designatedIndex,
                                             nextPos: globalSemiPos[groupNum],
@@ -12855,7 +12973,21 @@
                         }
                         // #endregion
                         const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
-                        storeAssignmentReason(dateKey, groupNum, designated.personName, 'skip', semiReasonText, null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
+                        storeAssignmentReason(
+                            dateKey,
+                            groupNum,
+                            designated.personName,
+                            'skip',
+                            semiReasonText,
+                            displacedPerson || null,
+                            null,
+                            {
+                                returnFromMissing: true,
+                                insertedByShift: true,
+                                missingEnd: designated.missingEnd,
+                                displacedPerson: displacedPerson || null
+                            }
+                        );
                         if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                             dutySemiDebug.recordAbsentPlacement({
                                 groupNum,
@@ -13788,10 +13920,21 @@
                                 const assignedPerson = designated.personName;
                                 if (!assignedByReturnFromMissingSemi[groupNum]) assignedByReturnFromMissingSemi[groupNum] = new Set();
                                 assignedByReturnFromMissingSemi[groupNum].add(assignedPerson);
-                                // Next slot goes to the displaced (baseline) person – set position to displaced person's index so we get F, A, B, C
-                                const displacedPerson = baselineSemiByDate[dateKey]?.[groupNum];
-                                const originalIndex = displacedPerson != null ? groupPeople.indexOf(displacedPerson) : -1;
+                                // Next slot = live series person due today (not pure expected map).
+                                const mapBaseline = baselineSemiByDate[dateKey]?.[groupNum];
                                 if (globalSemiRotationPosition[groupNum] === undefined) globalSemiRotationPosition[groupNum] = 0;
+                                const rfmDisp = resolveRfmDisplacedFromLiveCursor(
+                                    groupPeople,
+                                    globalSemiRotationPosition,
+                                    groupNum,
+                                    mapBaseline,
+                                    (s) =>
+                                        typeof normalizePersonKey === 'function'
+                                            ? normalizePersonKey(s)
+                                            : String(s || '').trim()
+                                );
+                                const displacedPerson = rfmDisp.displacedPerson;
+                                const originalIndex = rfmDisp.originalIndex;
                                 globalSemiRotationPosition[groupNum] = (originalIndex >= 0 ? originalIndex : (groupPeople.indexOf(assignedPerson) + 1)) % rotationDays;
                                 // #region agent log
                                 if (
@@ -13821,7 +13964,7 @@
                                             },
                                             body: JSON.stringify({
                                                 sessionId: '15d095',
-                                                runId: 'pre-fix',
+                                                runId: 'post-fix',
                                                 hypothesisId: 'H1-H3',
                                                 location:
                                                     'duty-shifts-logic.js:semi-rfm-preview',
@@ -13830,8 +13973,13 @@
                                                     dateKey,
                                                     designated: assignedPerson,
                                                     designatedUi: uiNo(assignedPerson),
+                                                    mapBaseline,
+                                                    mapBaselineUi: uiNo(mapBaseline),
                                                     displacedPerson,
                                                     displacedUi: uiNo(displacedPerson),
+                                                    fromLive: rfmDisp.fromLive,
+                                                    livePos: rfmDisp.livePos,
+                                                    liveUi: uiNo(rfmDisp.livePerson),
                                                     originalIndex,
                                                     nextPos: globalSemiRotationPosition[groupNum],
                                                     nextUi: uiNo(
@@ -13848,7 +13996,21 @@
                                 }
                                 // #endregion
                                 const semiReasonText = `Τοποθετήθηκε σε υπηρεσία γιατί θα απουσιάζει (${designated.missingRangeStr || ''}) λόγω ${designated.reasonOfMissing || '(δεν αναφέρεται λόγος)'}`;
-                                storeAssignmentReason(dateKey, groupNum, assignedPerson, 'skip', semiReasonText, null, null, { returnFromMissing: true, missingEnd: designated.missingEnd });
+                                storeAssignmentReason(
+                                    dateKey,
+                                    groupNum,
+                                    assignedPerson,
+                                    'skip',
+                                    semiReasonText,
+                                    displacedPerson || null,
+                                    null,
+                                    {
+                                        returnFromMissing: true,
+                                        insertedByShift: true,
+                                        missingEnd: designated.missingEnd,
+                                        displacedPerson: displacedPerson || null
+                                    }
+                                );
                                 if (!assignedPeoplePreviewSemi[monthKey][groupNum]) assignedPeoplePreviewSemi[monthKey][groupNum] = new Set();
                                 assignedPeoplePreviewSemi[monthKey][groupNum].add(assignedPerson);
                                 if (!semiAssignments[dateKey]) semiAssignments[dateKey] = {};
@@ -14203,7 +14365,7 @@
                                             },
                                             body: JSON.stringify({
                                                 sessionId: '15d095',
-                                                runId: 'pre-fix',
+                                                runId: 'post-fix',
                                                 hypothesisId: 'H2',
                                                 location:
                                                     'duty-shifts-logic.js:semi-advance-preview',
