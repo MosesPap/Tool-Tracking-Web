@@ -2943,6 +2943,48 @@
             return false;
         }
 
+        /**
+         * True if previous calendar month (relative to calcStartKey) has RFM reason for person
+         * or a manual επιλαχών whose baseline (swappedWith) is this person.
+         */
+        function personHadSemiReturnOrManualAltBaselineInPreviousMonth(personName, groupNum, calcStartKey) {
+            if (!personName || !groupNum || !calcStartKey) return false;
+            const calcStart = new Date(calcStartKey + 'T00:00:00');
+            if (isNaN(calcStart.getTime())) return false;
+            const prevPrefix = formatDateKey(
+                new Date(calcStart.getFullYear(), calcStart.getMonth() - 1, 1)
+            ).slice(0, 7);
+            const norm = (s) =>
+                typeof normalizePersonKey === 'function'
+                    ? normalizePersonKey(s)
+                    : String(s || '').trim();
+            const target = norm(personName);
+            if (!target || !/^\d{4}-\d{2}$/.test(prevPrefix)) return false;
+            const root =
+                typeof assignmentReasons !== 'undefined' && assignmentReasons
+                    ? assignmentReasons
+                    : null;
+            if (!root) return false;
+            for (const dk of Object.keys(root)) {
+                if (!dk || dk.slice(0, 7) !== prevPrefix) continue;
+                const gmap = root[dk]?.[groupNum] || root[dk]?.[String(groupNum)];
+                if (!gmap || typeof gmap !== 'object') continue;
+                for (const pn of Object.keys(gmap)) {
+                    const r = gmap[pn];
+                    if (!r || r.type !== 'skip') continue;
+                    if (r.meta?.returnFromMissing && norm(pn) === target) return true;
+                    if (
+                        r.meta?.manualAlternateReplacement &&
+                        r.swappedWith &&
+                        norm(r.swappedWith) === target
+                    ) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         /** True when person already received a real return-from-missing semi for this absence period. */
         function hasReturnFromMissingAlreadyPlacedForPeriod(personName, groupNum, missingEndKey, absenceStartKey) {
             if (!personName || !groupNum || !missingEndKey) return false;
@@ -2951,13 +2993,20 @@
             if (!normEnd) return false;
             if (!personOwnsMissingPeriod(personName, groupNum, normStart, normEnd)) return false;
 
+            // Metadata / επιλαχών evidence FIRST — multi-month missedInScope can disagree with
+            // the RFM planner's miss list and would skip this check, re-inserting #4 in January
+            // after Dec RFM + αμοιβαία + επιλαχών (H22: alreadyPlaced false, target 2027-01-05).
+            if (hasReturnFromMissingMetadataForPeriod(personName, groupNum, normEnd, normStart)) {
+                return true;
+            }
+
             // Multi-month: only return-month misses count; otherwise full absence window
             const missedInScope = absenceCoversAnyFullCalendarMonth(normStart, normEnd)
                 ? personMissedBaselineSemiInReturnMonth(personName, groupNum, normStart, normEnd)
                 : personMissedBaselineSemiDuringAbsence(personName, groupNum, normStart, normEnd);
             if (!missedInScope) return false;
 
-            return hasReturnFromMissingMetadataForPeriod(personName, groupNum, normEnd, normStart);
+            return false;
         }
 
         function getFulfilledSemiReturnSkipContext(person, groupNum, calcStartKey) {
@@ -12950,6 +12999,44 @@
                                 }
                                 continue;
                             }
+                            // Prev-month επιλαχών/RFM: even if metadata helpers disagree, do not re-RFM
+                            // when calc starts after a month where they were baseline of manualAlt or had RFM.
+                            if (
+                                calcStartKey &&
+                                personHadSemiReturnOrManualAltBaselineInPreviousMonth(
+                                    personName,
+                                    groupNum,
+                                    calcStartKey
+                                )
+                            ) {
+                                // #region agent log
+                                if (
+                                    groupNum === 2 &&
+                                    String(personName || '').includes('ΒΙΟΛΑΡΗΣ')
+                                ) {
+                                    fetch(
+                                        'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                        {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'X-Debug-Session-Id': '15d095'
+                                            },
+                                            body: JSON.stringify({
+                                                sessionId: '15d095',
+                                                runId: 'post-fix',
+                                                hypothesisId: 'H22',
+                                                location: 'duty-shifts-logic.js:semi-rfm-block-prev',
+                                                message: 'g2 RFM blocked — prev month alt/RFM',
+                                                data: { personName, calcStartKey, pEndKey },
+                                                timestamp: Date.now()
+                                            })
+                                        }
+                                    ).catch(() => {});
+                                }
+                                // #endregion
+                                continue;
+                            }
                             // Forward: 3 consecutive days (any day) after return day, then assign to first appropriate semi-normal
                             // Semi: πρώτη επιλέξιμη αυστηρά > E+3 → E+4
                             const thirdDayAfterEnd = addDaysToDateKeyRun(pEndKey, 4);
@@ -13047,6 +13134,12 @@
                                                 targetSemiKey,
                                                 missedSemiKeys,
                                                 alreadyPlaced: hasReturnFromMissingAlreadyPlacedForPeriod(
+                                                    personName,
+                                                    groupNum,
+                                                    pEndKey,
+                                                    pStartKey
+                                                ),
+                                                metaOnly: hasReturnFromMissingMetadataForPeriod(
                                                     personName,
                                                     groupNum,
                                                     pEndKey,
