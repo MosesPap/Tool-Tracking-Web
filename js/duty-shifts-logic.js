@@ -2912,17 +2912,32 @@
                 }
             }
 
+            // RFM reason alone counts — even if αμοιβαία / επιλαχών / χειροκίνητη later
+            // removed them from that day. Manual edits must not erase "already returned in Dec"
+            // or January re-inserts them (e.g. #4 on 05/01 instead of continuing after #11).
             for (const dk in assignmentReasons || {}) {
                 if (!isValidRfmPlacementDate(dk)) continue;
-                if (!personAssignedOnSemiDate(dk)) continue;
                 const gmap = assignmentReasons[dk]?.[groupNum] || assignmentReasons[dk]?.[String(groupNum)];
                 if (!gmap) continue;
                 for (const pn of Object.keys(gmap)) {
-                    if (normalizePersonKey(pn) !== pNorm) continue;
                     const reason = gmap[pn];
+                    if (!reason) continue;
                     if (reason?.meta?.semiReturnFulfilledSkip) continue;
-                    const metaEnd = normalizeReasonDateKey(reason?.meta?.missingEnd);
-                    if (reason?.meta?.returnFromMissing && metaEnd === normEnd) return true;
+                    // Direct RFM reason on this person (may no longer be calendar assignee).
+                    if (normalizePersonKey(pn) === pNorm) {
+                        const metaEnd = normalizeReasonDateKey(reason?.meta?.missingEnd);
+                        if (reason?.meta?.returnFromMissing && metaEnd === normEnd) return true;
+                    }
+                    // Επιλαχών replaced them on a post-return day → they had held the slot
+                    // (RFM or after αμοιβαία); do not re-RFM next month.
+                    if (
+                        reason.type === 'skip' &&
+                        reason.meta?.manualAlternateReplacement &&
+                        reason.swappedWith &&
+                        normalizePersonKey(reason.swappedWith) === pNorm
+                    ) {
+                        return true;
+                    }
                 }
             }
             return false;
@@ -13004,6 +13019,46 @@
                                 reasonOfMissing: reasonOfMissingSemi,
                                 missedSemiKeys: missedSemiKeys.slice()
                             };
+                            // #region agent log
+                            if (
+                                groupNum === 2 &&
+                                String(personName || '').includes('ΒΙΟΛΑΡΗΣ') &&
+                                typeof calcStartKey === 'string' &&
+                                calcStartKey.startsWith('2027-01')
+                            ) {
+                                fetch(
+                                    'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                    {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-Debug-Session-Id': '15d095'
+                                        },
+                                        body: JSON.stringify({
+                                            sessionId: '15d095',
+                                            runId: 'post-fix',
+                                            hypothesisId: 'H22',
+                                            location: 'duty-shifts-logic.js:semi-rfm-plan',
+                                            message: 'g2 Jan RFM planned for Βιολάρης (should be blocked)',
+                                            data: {
+                                                personName,
+                                                pStartKey,
+                                                pEndKey,
+                                                targetSemiKey,
+                                                missedSemiKeys,
+                                                alreadyPlaced: hasReturnFromMissingAlreadyPlacedForPeriod(
+                                                    personName,
+                                                    groupNum,
+                                                    pEndKey,
+                                                    pStartKey
+                                                )
+                                            },
+                                            timestamp: Date.now()
+                                        })
+                                    }
+                                ).catch(() => {});
+                            }
+                            // #endregion
                             if (typeof dutySemiDebug !== 'undefined' && dutySemiDebug.isEnabled()) {
                                 dutySemiDebug.recordAbsentPlacement({
                                     groupNum,
@@ -13084,6 +13139,41 @@
                     const designatedInList = designated && groupPeople.find(p => normSemiRun(p) === normSemiRun(designated.personName));
                     if (designated && designatedInList && !isPersonMissingOnDate(designated.personName, groupNum, date, 'semi')) {
                         baseline[dateKey][groupNum] = designatedInList;
+                        // #region agent log
+                        if (
+                            groupNum === 2 &&
+                            typeof dateKey === 'string' &&
+                            dateKey >= '2027-01-01' &&
+                            dateKey <= '2027-01-10'
+                        ) {
+                            fetch(
+                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                                {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-Debug-Session-Id': '15d095'
+                                    },
+                                    body: JSON.stringify({
+                                        sessionId: '15d095',
+                                        runId: 'post-fix',
+                                        hypothesisId: 'H22',
+                                        location: 'duty-shifts-logic.js:semi-rfm-apply',
+                                        message: 'g2 Jan early semi RFM applied',
+                                        data: {
+                                            dateKey,
+                                            designated: designated.personName,
+                                            livePos: globalSemiPos[groupNum],
+                                            livePerson:
+                                                groupPeople[globalSemiPos[groupNum] % rotationDays] ||
+                                                null
+                                        },
+                                        timestamp: Date.now()
+                                    })
+                                }
+                            ).catch(() => {});
+                        }
+                        // #endregion
                         const mapBaseline = baselineSemiByDate[dateKey]?.[groupNum];
                         const rfmDisp = resolveRfmDisplacedFromLiveCursor(
                             groupPeople,
