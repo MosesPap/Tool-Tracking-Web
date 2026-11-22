@@ -2460,7 +2460,39 @@
             if (typeof set[Symbol.iterator] !== 'function') return false;
             for (const p of set) {
                 if (!p) continue;
-                if (personNamesMatchIgnoringRank(p, personName)) return true;
+                if (personNamesMatchIgnoringRank(p, personName)) {
+                    // #region agent log
+                    if (
+                        String(personName || '')
+                            .toUpperCase()
+                            .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ') ||
+                        String(p || '')
+                            .toUpperCase()
+                            .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
+                    ) {
+                        fetch(
+                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                            {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Debug-Session-Id': '15d095'
+                                },
+                                body: JSON.stringify({
+                                    sessionId: '15d095',
+                                    runId: 'pre-fix',
+                                    hypothesisId: 'H4',
+                                    location: 'duty-shifts-logic.js:personSetHasIgnoringRank',
+                                    message: 'identity set hit Christodoulou',
+                                    data: { personName, matchedAs: p },
+                                    timestamp: Date.now()
+                                })
+                            }
+                        ).catch(() => {});
+                    }
+                    // #endregion
+                    return true;
+                }
             }
             return false;
         }
@@ -15093,11 +15125,66 @@
                     groups?.[groupNum]?.normal ||
                     [];
                 order = Array.isArray(order) ? order.slice() : [];
+                const beforeHome = order.slice();
                 const mode3 =
                     typeof getActiveGroupMode === 'function' && getActiveGroupMode() === '3';
                 if (!mode3 && typeof getPersonHomeGroupAtDate === 'function' && dk) {
                     order = order.filter((p) => getPersonHomeGroupAtDate(p, dk) === groupNum);
                 }
+                // #region agent log
+                if (groupNum === 4) {
+                    const christo = (arr) =>
+                        (arr || []).filter((p) =>
+                            String(p || '')
+                                .toUpperCase()
+                                .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
+                        );
+                    const cBefore = christo(beforeHome);
+                    const cAfter = christo(order);
+                    if (cBefore.length || cAfter.length) {
+                        fetch(
+                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                            {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Debug-Session-Id': '15d095'
+                                },
+                                body: JSON.stringify({
+                                    sessionId: '15d095',
+                                    runId: 'pre-fix',
+                                    hypothesisId: 'H2',
+                                    location:
+                                        'duty-shifts-logic.js:getNormalGroupPeopleForRotation',
+                                    message: 'g4 normal roster Christodoulou',
+                                    data: {
+                                        dk,
+                                        before: cBefore.map((p) => ({
+                                            p,
+                                            home:
+                                                typeof getPersonHomeGroupAtDate === 'function'
+                                                    ? getPersonHomeGroupAtDate(p, dk)
+                                                    : null,
+                                            excluded:
+                                                typeof isPersonExcludedFromDuties ===
+                                                'function'
+                                                    ? isPersonExcludedFromDuties(p, 4)
+                                                    : null,
+                                            skipped:
+                                                typeof isSkippedInBasicRotation === 'function'
+                                                    ? isSkippedInBasicRotation(p, 4)
+                                                    : null
+                                        })),
+                                        afterHome: cAfter,
+                                        rosterLen: order.length
+                                    },
+                                    timestamp: Date.now()
+                                })
+                            }
+                        ).catch(() => {});
+                    }
+                }
+                // #endregion
                 return order;
             };
             

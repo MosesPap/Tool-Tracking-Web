@@ -1223,12 +1223,6 @@
         function setPersonExcludedInGroupSet(groupSet, maxGroups, personName, excluded) {
             if (!groupSet || !personName) return 0;
             let updated = 0;
-            // #region agent log
-            const _dbgExclChristo = String(personName || '')
-                .toUpperCase()
-                .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ');
-            const _dbgExclHits = [];
-            // #endregion
             for (let g = 1; g <= maxGroups; g++) {
                 const bucket = groupSet[g];
                 if (!bucket) continue;
@@ -1237,15 +1231,6 @@
                     const list = bucket[listType] || [];
                     if (list.some((p) => personMatchesExclusionKey(p, personName))) {
                         found = true;
-                        // #region agent log
-                        if (_dbgExclChristo) {
-                            _dbgExclHits.push({
-                                g,
-                                listType,
-                                matches: list.filter((p) => personMatchesExclusionKey(p, personName))
-                            });
-                        }
-                        // #endregion
                         break;
                     }
                 }
@@ -1271,32 +1256,6 @@
                 }
                 if (setExclusionFlagInBucket(bucket, liveName, excluded)) updated++;
             }
-            // #region agent log
-            if (_dbgExclChristo) {
-                fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Debug-Session-Id': '15d095'
-                    },
-                    body: JSON.stringify({
-                        sessionId: '15d095',
-                        runId: 'post-fix',
-                        hypothesisId: 'B',
-                        location: 'duty-shifts-data.js:setPersonExcludedInGroupSet',
-                        message: 'exclusion mirror by exact name (Christodoulou)',
-                        data: {
-                            personName,
-                            excluded,
-                            maxGroups,
-                            updated,
-                            hits: _dbgExclHits
-                        },
-                        timestamp: Date.now()
-                    })
-                }).catch(() => {});
-            }
-            // #endregion
             return updated;
         }
 
@@ -1339,7 +1298,55 @@
             const homeFiltered = (Array.isArray(order) ? order : []).filter(
                 (person) => getPersonHomeGroupAtDate(person, dk) === groupNum
             );
-            return filterExcludedFromDutyList(homeFiltered, groupNum);
+            const result = filterExcludedFromDutyList(homeFiltered, groupNum);
+            // #region agent log
+            if (
+                (groupNum === 3 || groupNum === 4) &&
+                (listType === 'special' || listType === 'normal')
+            ) {
+                const christo = (arr) =>
+                    (arr || []).filter((p) =>
+                        String(p || '')
+                            .toUpperCase()
+                            .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
+                    );
+                const cOrder = christo(order);
+                if (cOrder.length || christo(homeFiltered).length || christo(result).length) {
+                    fetch(
+                        'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Debug-Session-Id': '15d095'
+                            },
+                            body: JSON.stringify({
+                                sessionId: '15d095',
+                                runId: 'pre-fix',
+                                hypothesisId: 'H1-H3',
+                                location: 'duty-shifts-data.js:getGroupRotationListAtDate',
+                                message: 'Christodoulou rotation list filter',
+                                data: {
+                                    groupNum,
+                                    listType,
+                                    dk,
+                                    inOrder: cOrder,
+                                    homes: cOrder.map((p) => ({
+                                        p,
+                                        home: getPersonHomeGroupAtDate(p, dk),
+                                        excluded: isPersonExcludedFromDuties(p, groupNum)
+                                    })),
+                                    afterHome: christo(homeFiltered),
+                                    afterExcl: christo(result)
+                                },
+                                timestamp: Date.now()
+                            })
+                        }
+                    ).catch(() => {});
+                }
+            }
+            // #endregion
+            return result;
         }
         function groupsForDuty(groupNum, dateKey) {
             const g = groups[groupNum] || {
@@ -2153,7 +2160,45 @@
             // Προαγωγή/αλλαγή βαθμού: ίδιο άτομο με διαφορετικό rank στη λίστα.
             if (typeof personNamesMatchIgnoringRank === 'function') {
                 const byId = list.find((p) => personNamesMatchIgnoringRank(p, personName));
-                if (byId) return byId;
+                if (byId) {
+                    // #region agent log
+                    if (
+                        String(personName || '')
+                            .toUpperCase()
+                            .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ') ||
+                        String(byId || '')
+                            .toUpperCase()
+                            .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
+                    ) {
+                        fetch(
+                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
+                            {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Debug-Session-Id': '15d095'
+                                },
+                                body: JSON.stringify({
+                                    sessionId: '15d095',
+                                    runId: 'pre-fix',
+                                    hypothesisId: 'H5',
+                                    location:
+                                        'duty-shifts-data.js:resolvePersonInGroupRotationList',
+                                    message: 'resolved via rank-ignore (Christodoulou)',
+                                    data: {
+                                        personName,
+                                        resolvedTo: byId,
+                                        groupNum,
+                                        dayTypeCategory
+                                    },
+                                    timestamp: Date.now()
+                                })
+                            }
+                        ).catch(() => {});
+                    }
+                    // #endregion
+                    return byId;
+                }
             } else if (typeof identityKeyIgnoringRankLocal === 'function') {
                 const id = identityKeyIgnoringRankLocal(personName);
                 if (id) {

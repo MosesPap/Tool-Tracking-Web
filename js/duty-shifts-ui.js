@@ -1013,48 +1013,6 @@
                 container.innerHTML = '';
                 
                 const groupData = groups[i] || { special: [], weekend: [], semi: [], normal: [], lastDuties: {}, priorities: {} };
-
-                // #region agent log
-                if (i === 3 || i === 4) {
-                    const hit = (arr) =>
-                        (arr || []).filter((p) =>
-                            String(p || '')
-                                .toUpperCase()
-                                .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
-                        );
-                    fetch(
-                        'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                        {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Debug-Session-Id': '15d095'
-                            },
-                            body: JSON.stringify({
-                                sessionId: '15d095',
-                                runId: 'post-fix',
-                                hypothesisId: 'C',
-                                location: 'duty-shifts-ui.js:renderGroups',
-                                message: 'Christodoulou in rendered group lists',
-                                data: {
-                                    groupNum: i,
-                                    special: hit(groupData.special),
-                                    weekend: hit(groupData.weekend),
-                                    semi: hit(groupData.semi),
-                                    normal: hit(groupData.normal),
-                                    excl: Object.keys(groupData.excludedFromDuties || {}).filter(
-                                        (k) =>
-                                            String(k || '')
-                                                .toUpperCase()
-                                                .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
-                                    )
-                                },
-                                timestamp: Date.now()
-                            })
-                        }
-                    ).catch(() => {});
-                }
-                // #endregion
                 
                 // Ensure priorities exist
                 if (!groupData.priorities) groupData.priorities = {};
@@ -4891,60 +4849,6 @@
             let merged = 0;
             const preferredNames = [];
 
-            // #region agent log
-            const _dbgSnapChristo = (label, gset, gnum) => {
-                const b = gset?.[gnum];
-                if (!b) return { label, gnum, missing: true };
-                const hit = (arr) =>
-                    (arr || []).filter((p) =>
-                        String(p || '')
-                            .toUpperCase()
-                            .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
-                    );
-                return {
-                    label,
-                    gnum,
-                    special: hit(b.special),
-                    weekend: hit(b.weekend),
-                    semi: hit(b.semi),
-                    normal: hit(b.normal),
-                    excl: Object.keys(b.excludedFromDuties || {}).filter((k) =>
-                        String(k || '')
-                            .toUpperCase()
-                            .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
-                    )
-                };
-            };
-            const _dbgChristoVariants = [];
-            for (const [id, variants] of byId) {
-                if (String(id || '').toUpperCase().includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')) {
-                    _dbgChristoVariants.push({ id, variants: [...new Set(variants)] });
-                }
-            }
-            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Debug-Session-Id': '15d095'
-                },
-                body: JSON.stringify({
-                    sessionId: '15d095',
-                    runId: 'post-fix',
-                    hypothesisId: 'A',
-                    location: 'duty-shifts-ui.js:mergeDuplicatePeople:before',
-                    message: 'Christodoulou identity variants before merge',
-                    data: {
-                        christoVariants: _dbgChristoVariants,
-                        g3: _dbgSnapChristo('four', four, 3),
-                        g4: _dbgSnapChristo('four', four, 4),
-                        activeG3: _dbgSnapChristo('groups', groups, 3),
-                        activeG4: _dbgSnapChristo('groups', groups, 4)
-                    },
-                    timestamp: Date.now()
-                })
-            }).catch(() => {});
-            // #endregion
-
             const exactNameInBucket = (bucket, name) => {
                 if (!bucket || !name) return false;
                 const nk =
@@ -4997,79 +4901,10 @@
                     if (other === preferred) continue;
 
                     if (isCrossGroupDistinctPair(other, preferred)) {
-                        // #region agent log
-                        if (
-                            String(preferred || '')
-                                .toUpperCase()
-                                .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ') ||
-                            String(other || '')
-                                .toUpperCase()
-                                .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
-                        ) {
-                            fetch(
-                                'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                                {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-Debug-Session-Id': '15d095'
-                                    },
-                                    body: JSON.stringify({
-                                        sessionId: '15d095',
-                                        runId: 'post-fix',
-                                        hypothesisId: 'A',
-                                        location:
-                                            'duty-shifts-ui.js:mergeDuplicatePeople:skip',
-                                        message:
-                                            'skipped cross-group distinct identity pair',
-                                        data: { preferred, other, identity: idFn(preferred) },
-                                        timestamp: Date.now()
-                                    })
-                                }
-                            ).catch(() => {});
-                        }
-                        // #endregion
                         continue;
                     }
 
                     preferredNames.push(preferred);
-
-                    // #region agent log
-                    const _isChristoPair =
-                        String(preferred || '')
-                            .toUpperCase()
-                            .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ') ||
-                        String(other || '')
-                            .toUpperCase()
-                            .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ');
-                    if (_isChristoPair) {
-                        fetch(
-                            'http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2',
-                            {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-Debug-Session-Id': '15d095'
-                                },
-                                body: JSON.stringify({
-                                    sessionId: '15d095',
-                                    runId: 'post-fix',
-                                    hypothesisId: 'A',
-                                    location: 'duty-shifts-ui.js:mergeDuplicatePeople:pair',
-                                    message: 'merging same-group identity pair',
-                                    data: {
-                                        preferred,
-                                        other,
-                                        identity: idFn(preferred),
-                                        prefSeniority: liveMilitaryRankSeniority(preferred),
-                                        otherSeniority: liveMilitaryRankSeniority(other)
-                                    },
-                                    timestamp: Date.now()
-                                })
-                            }
-                        ).catch(() => {});
-                    }
-                    // #endregion
 
                     merged += mergePersonKeysInGroupSet(four, 4, other, preferred);
                     merged += mergePersonKeysInGroupSet(three, 3, other, preferred);
@@ -5100,37 +4935,6 @@
                     }
                 }
             }
-
-            // #region agent log
-            fetch('http://127.0.0.1:7486/ingest/0b52f18e-79ce-438e-99a8-3b8e8845b3f2', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Debug-Session-Id': '15d095'
-                },
-                body: JSON.stringify({
-                    sessionId: '15d095',
-                    runId: 'post-fix',
-                    hypothesisId: 'A-B',
-                    location: 'duty-shifts-ui.js:mergeDuplicatePeople:after',
-                    message: 'Christodoulou lists after merge',
-                    data: {
-                        merged,
-                        preferredNames: preferredNames.filter((n) =>
-                            String(n || '')
-                                .toUpperCase()
-                                .includes('ΧΡΙΣΤΟΔΟΥΛΟΥ')
-                        ),
-                        g3: _dbgSnapChristo('four', four, 3),
-                        g4: _dbgSnapChristo('four', four, 4),
-                        activeG3: _dbgSnapChristo('groups', groups, 3),
-                        activeG4: _dbgSnapChristo('groups', groups, 4)
-                    },
-                    timestamp: Date.now()
-                })
-            }).catch(() => {});
-            // #endregion
-
 
             // Keep mode pointers consistent with mutated sets
             try {
